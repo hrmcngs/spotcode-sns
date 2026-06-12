@@ -23,14 +23,17 @@ export function renderIdeaForm({ spot = 'somewhere', user = null } = {}) {
       '<form class="idea-form" data-spot="' + spot + '">' +
         '<textarea name="text" placeholder="What did you ship today?" rows="1" required></textarea>' +
         '<div class="compose-meta">' +
-          '<span class="spot-chip">' + icon('pin', { size: 12, className: 'icon--inline' }) + spot + '</span>' +
+          '<button type="button" class="spot-chip spot-chip--btn" id="compose-spot-btn" data-spot-label="' + spot + '">' +
+            icon('pin', { size: 12, className: 'icon--inline' }) +
+            '<span data-spot-text>' + spot + '</span>' +
+          '</button>' +
           '<input name="github" placeholder="github.com/owner/repo/blob/...">' +
         '</div>' +
         '<div class="compose-actions">' +
           '<div class="compose-tools">' +
             '<button type="button" class="compose-tool" title="image">' + icon('image', { size: 18 }) + '</button>' +
             '<button type="button" class="compose-tool" title="code">'  + icon('code',  { size: 18 }) + '</button>' +
-            '<button type="button" class="compose-tool" title="spot">'  + icon('pin',   { size: 18 }) + '</button>' +
+            '<button type="button" class="compose-tool" data-spot-pick title="場所を選ぶ">' + icon('pin', { size: 18 }) + '</button>' +
             '<button type="button" class="compose-tool" title="poll">'  + icon('chart', { size: 18 }) + '</button>' +
           '</div>' +
           '<button type="submit" title="⌘/Ctrl + Enter">Push</button>' +
