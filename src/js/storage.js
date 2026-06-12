@@ -3,9 +3,11 @@
 // implementation here when a backend is wired up.
 
 export const KEYS = {
-  users:   'spotcode:users',
-  posts:   'spotcode:posts',
-  session: 'spotcode:session',
+  users:    'spotcode:users',
+  posts:    'spotcode:posts',
+  session:  'spotcode:session',
+  supaUrl:  'spotcode:supa_url',
+  supaAnon: 'spotcode:supa_anon',
 };
 
 export function read(key, fallback) {
