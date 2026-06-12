@@ -83,6 +83,7 @@ export function renderPost(p) {
   const me = currentUser();
   const liked = me && isLiked(p.id, me.handle);
   const likes = (a.likes || 0) + likeCount(p.id);
+  const isOwn = me && p.authorHandle === me.handle;
   return (
     '<article class="post" data-post-id="' + escape(p.id) + '" data-base-likes="' + (a.likes || 0) + '">' +
       renderAvatar(u, { tag: 'a', href: profileUrl }) +
@@ -109,7 +110,9 @@ export function renderPost(p) {
           '<button class="act act--star"  title="star">'  + icon('star',  { size: 16 }) + '<span>' + (a.stars   || 0) + '</span></button>' +
           '<button class="act act--like' + (liked ? ' is-liked' : '') + '" title="like">'  + icon('heart', { size: 16 }) + '<span>'  + likes + '</span></button>' +
           '<button class="act act--share" title="share">' + icon('share', { size: 16 }) + '</button>' +
-          '<button class="act act--report" title="report">' + icon('flag', { size: 16 }) + '</button>' +
+          (isOwn
+            ? '<button class="act act--delete" title="この投稿を削除">' + icon('trash', { size: 16 }) + '</button>'
+            : '<button class="act act--report" title="report">' + icon('flag', { size: 16 }) + '</button>') +
         '</div>' +
       '</div>' +
     '</article>'
