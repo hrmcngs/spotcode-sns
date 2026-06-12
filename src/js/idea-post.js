@@ -6,6 +6,7 @@
 // button to keep the main row from looking like a second text input.
 
 import { icon } from './icons.js';
+import { renderAvatar } from './avatar.js';
 
 export function renderIdeaForm({ user = null } = {}) {
   if (!user) {
@@ -22,10 +23,9 @@ export function renderIdeaForm({ user = null } = {}) {
     );
   }
 
-  const av = user.avatar || (user.name?.[0] || '?').toUpperCase();
   return (
     '<div class="composer">' +
-      '<div class="avatar avatar--lg">' + av + '</div>' +
+      renderAvatar(user, { size: 'lg' }) +
       '<form class="idea-form">' +
         '<div class="composer-body">' +
           '<textarea name="text" placeholder="いまどうしてる？" rows="2"></textarea>' +

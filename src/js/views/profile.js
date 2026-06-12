@@ -5,6 +5,7 @@ import { currentUser }             from '../auth.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, followerCount, followingCount } from '../interactions.js';
 import { getBadges } from '../badges.js';
+import { renderAvatar } from '../avatar.js';
 
 function notFound(handle) {
   return (
@@ -33,7 +34,7 @@ export function renderProfile(handle) {
     '<header class="profile-header">' +
       '<div class="profile-cover"></div>' +
       '<div class="profile-top">' +
-        '<div class="avatar avatar--xl">' + u.avatar + '</div>' +
+        renderAvatar(u, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
           (isMe
             ? '<button class="btn btn--ghost" id="logout-btn">Log out</button>' +

@@ -6,6 +6,7 @@ import { url }              from './router.js';
 import { icon }             from './icons.js';
 import { isLiked, likeCount } from './interactions.js';
 import { currentUser }      from './auth.js';
+import { renderAvatar }     from './avatar.js';
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -84,7 +85,7 @@ export function renderPost(p) {
   const likes = (a.likes || 0) + likeCount(p.id);
   return (
     '<article class="post" data-post-id="' + escape(p.id) + '" data-base-likes="' + (a.likes || 0) + '">' +
-      '<a class="avatar" href="' + profileUrl + '">' + escape(u.avatar) + '</a>' +
+      renderAvatar(u, { tag: 'a', href: profileUrl }) +
       '<div class="post__main">' +
         '<div class="post__head">' +
           '<a class="post__name" href="' + profileUrl + '">' + escape(u.name) + '</a>' +
