@@ -1,0 +1,18 @@
+{
+  "name": "spotcode-sns",
+  "version": "0.0.1",
+  "private": true,
+  "description": "スポット紐付け型の開発者 SNS（Electron + Web）",
+  "main": "electron/main.js",
+  "scripts": {
+    "start:web": "npx http-server src -p 8080 -o",
+    "start:electron": "electron .",
+    "build:electron": "electron-builder"
+  },
+  "author": "hrmcngs",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}
