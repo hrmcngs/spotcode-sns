@@ -14,6 +14,7 @@ import { currentUser, logout, onAuthChange } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing } from './interactions.js';
+import { renderAvatar } from './avatar.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -74,7 +75,7 @@ function renderRail() {
             const f = me && isFollowing(me.handle, u.handle);
             return (
               '<div class="followlist__row">' +
-                '<a class="avatar" href="' + url('/' + u.handle) + '">' + u.avatar + '</a>' +
+                renderAvatar(u, { tag: 'a', href: url('/' + u.handle) }) +
                 '<div>' +
                   '<a class="followlist__name" href="' + url('/' + u.handle) + '">' + u.name + '</a>' +
                   '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
@@ -105,8 +106,7 @@ function renderAuthArea() {
   if (!slot) return;
   const me = currentUser();
   if (me) {
-    slot.innerHTML =
-      '<a class="avatar avatar--me" href="' + url('/' + me.handle) + '" title="' + me.name + '">' + me.avatar + '</a>';
+    slot.innerHTML = renderAvatar(me, { tag: 'a', href: url('/' + me.handle), size: 'me', title: me.name });
   } else {
     slot.innerHTML =
       '<button class="btn btn--primary btn--sm" data-auth="login">Log in</button>';
@@ -120,7 +120,7 @@ function renderSideMe() {
   if (me) {
     slot.innerHTML =
       '<a class="me-card" href="' + url('/' + me.handle) + '">' +
-        '<div class="avatar avatar--lg">' + me.avatar + '</div>' +
+        renderAvatar(me, { size: 'lg' }) +
         '<div class="me-card__text">' +
           '<div class="me-card__name">' + me.name + '</div>' +
           '<div class="me-card__handle">@' + me.handle + '</div>' +

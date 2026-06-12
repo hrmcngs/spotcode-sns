@@ -134,9 +134,17 @@ button { font: inherit; cursor: pointer; }
   color: #fff; font-weight: 800; font-size: .9rem;
   display: inline-flex; align-items: center; justify-content: center;
   flex: 0 0 auto;
+  overflow: hidden;          /* clip image to the rounded mask */
+  background-size: cover;
+  background-position: center;
+  text-decoration: none;     /* in case rendered as <a> */
 }
 .avatar--lg { width: 42px; height: 42px; }
 .avatar--me { width: 32px; height: 32px; font-size: .8rem; }
+/* Square (rounded-rect) variant — used when user.avatarShape === 'square' */
+.avatar--square { border-radius: 8px; }
+.avatar--square.avatar--lg { border-radius: 9px; }
+.avatar--square.avatar--xl { border-radius: 14px; }
 
 /* ---------- center timeline (Twitter) ---------- */
 .timeline {
@@ -821,3 +829,33 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 .picker-address__main { display: inline-block; color: var(--text); font-weight: 600; }
 .picker-address__hn   { color: var(--green); font-weight: 600; }
 .picker-address__warn { color: var(--warn); font-size: .82rem; }
+
+/* ---------- avatar edit section in profile modal ---------- */
+.avatar-edit {
+  display: flex; align-items: center; gap: 1rem;
+  padding: .5rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+.avatar-edit__preview .avatar { width: 72px; height: 72px; font-size: 1.6rem; }
+.avatar-edit__preview .avatar--square { border-radius: 12px; }
+.avatar-edit__controls {
+  display: flex; flex-direction: column; gap: .55rem;
+  flex: 1; min-width: 0;
+}
+.avatar-edit__controls label { cursor: pointer; }
+.avatar-shape {
+  display: flex; gap: .4rem; flex-wrap: wrap;
+}
+.shape-opt {
+  display: inline-flex; align-items: center; gap: .35em;
+  cursor: pointer; padding: .25em .65em;
+  border: 1px solid var(--border); border-radius: 999px;
+  font-size: .8rem; color: var(--muted);
+}
+.shape-opt:has(input:checked) {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.shape-opt input { display: none; }

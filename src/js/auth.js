@@ -118,8 +118,26 @@ export function updateProfile(patch) {
   if (patch.bio      != null) next.bio      = String(patch.bio).slice(0, 280);
   if (patch.location != null) next.location = String(patch.location).slice(0, 60);
 
+  // Avatar image: pass a data: URL to set, an empty string ('' / null) to clear.
+  if (patch.avatarImage !== undefined) {
+    const v = patch.avatarImage;
+    if (!v) delete next.avatarImage;
+    else if (typeof v === 'string' && /^data:image\//.test(v)) next.avatarImage = v;
+    else throw new Error('画像データが不正です');
+  }
+  // Avatar shape: 'round' (default) or 'square'.
+  if (patch.avatarShape != null) {
+    const s = String(patch.avatarShape);
+    if (s !== 'round' && s !== 'square') throw new Error('shape は round / square のみ');
+    next.avatarShape = s;
+  }
+
   users[handle] = next;
-  write(KEYS.users, users);
+  try {
+    write(KEYS.users, users);
+  } catch (err) {
+    throw new Error('保存に失敗しました（画像が大きすぎる可能性: ' + (err.message || err) + '）');
+  }
   emit();
   return next;
 }
