@@ -271,6 +271,17 @@ onAuthChange(() => {
 
 // ----- delegated UI events -----
 
+// When the composer textarea takes focus (click, tab key, or the
+// New idea button), scroll it into view so the sticky topbar + tab
+// bar don't cover its top half. `scroll-margin-top` on the element
+// itself takes care of the offset.
+document.addEventListener('focusin', (e) => {
+  const ta = e.target;
+  if (!(ta instanceof HTMLTextAreaElement)) return;
+  if (!ta.closest('.composer')) return;
+  ta.scrollIntoView({ block: 'start', behavior: 'smooth' });
+});
+
 document.getElementById('open-compose')?.addEventListener('click', () => {
   if (!currentUser()) return openAuth('register');
   navigate('/');
