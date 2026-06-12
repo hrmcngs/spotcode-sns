@@ -7,6 +7,7 @@ import { renderStub }      from './views/stub.js';
 import { renderSettings, bindSettings } from './views/settings.js';
 import { pickSpot }        from './views/spot-picker.js';
 import { openAuth }        from './views/auth-modal.js';
+import { openEditProfile } from './views/edit-profile-modal.js';
 import { allUsers, addPost } from './data.js';
 import { currentUser, logout, onAuthChange } from './auth.js';
 import { icon }            from './icons.js';
@@ -219,6 +220,12 @@ document.addEventListener('click', (e) => {
     e.preventDefault();
     logout();
     navigate('/');
+    return;
+  }
+  if (e.target.closest('#edit-profile-btn')) {
+    e.preventDefault();
+    if (!currentUser()) return openAuth('login');
+    openEditProfile();
     return;
   }
 
