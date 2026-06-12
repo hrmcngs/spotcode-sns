@@ -294,6 +294,19 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Toggle the GitHub URL input on / off.
+  const linkToggle = e.target.closest('#compose-link-toggle');
+  if (linkToggle) {
+    e.preventDefault();
+    const row = document.getElementById('compose-link-row');
+    if (!row) return;
+    const willOpen = row.hidden;
+    row.hidden = !willOpen;
+    linkToggle.setAttribute('aria-expanded', String(willOpen));
+    if (willOpen) row.querySelector('input')?.focus();
+    return;
+  }
+
   // Clear the picked spot (the small × next to the chip).
   if (e.target.closest('#compose-spot-clear')) {
     e.preventDefault();
@@ -336,8 +349,14 @@ document.addEventListener('submit', (e) => {
   if (!me) return openAuth('register');
   const ta = form.querySelector('textarea[name="text"]');
   const text = ta.value.trim();
-  if (!text) return;
-  const gh = form.querySelector('input[name="github"]').value.trim();
+  if (!text) {
+    ta.classList.add('is-error');
+    ta.focus();
+    return;
+  }
+  ta.classList.remove('is-error');
+  const ghInput = form.querySelector('input[name="github"]');
+  const gh = ghInput ? ghInput.value.trim() : '';
   const spotValue = pendingSpot
     ? {
         lat: pendingSpot.lat,
@@ -363,11 +382,13 @@ document.addEventListener('submit', (e) => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
-// Auto-grow the composer textarea as the user types.
+// Auto-grow the composer textarea as the user types, and drop the
+// "this field can't be empty" error state once they start typing again.
 document.addEventListener('input', (e) => {
   const ta = e.target;
   if (!(ta instanceof HTMLTextAreaElement)) return;
   if (!ta.closest('.composer')) return;
+  ta.classList.remove('is-error');
   ta.style.height = 'auto';
   ta.style.height = Math.min(ta.scrollHeight, 320) + 'px';
 });

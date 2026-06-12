@@ -173,25 +173,32 @@ button { font: inherit; cursor: pointer; }
 }
 .composer > .avatar { margin-top: .25rem; }
 .composer .idea-form { display: flex; flex-direction: column; gap: .7rem; max-width: none; margin: 0; min-width: 0; }
+.composer-body {
+  border-bottom: 1px solid var(--border);
+  padding: .25em 0 .55em;
+}
 .composer textarea {
+  display: block;
   width: 100%;
   background: transparent; color: var(--text);
   border: 0; outline: 0;
-  font: inherit; font-size: 1.15rem; line-height: 1.5;
-  padding: .35em 0;
-  min-height: 3.4rem;
+  font: inherit; font-size: 1.2rem; line-height: 1.5;
+  padding: .25em 0;
+  min-height: 4rem;
 }
-.composer textarea::placeholder { color: var(--muted); opacity: 1; }
+.composer textarea::placeholder {
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+  opacity: 1;
+}
+.composer textarea.is-error {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-radius: 6px;
+  padding-left: .5em; padding-right: .5em;
+}
+.composer textarea.is-error::placeholder { color: var(--danger); }
 .composer .compose-meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
-  padding-top: .4rem; border-top: 1px dashed var(--border);
-}
-.composer input[name="github"] {
-  flex: 1; min-width: 160px;
-  background: var(--bg); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px;
-  padding: .4em .6em; font: inherit;
-  font-family: var(--mono); font-size: .85rem;
+  padding-top: .2rem;
 }
 .composer input[name="github"]::placeholder { color: var(--muted); }
 .spot-chip {
@@ -217,6 +224,44 @@ button { font: inherit; cursor: pointer; }
   font-weight: 700;
 }
 .composer button[type="submit"]:hover { background: var(--accent-hover); }
+
+/* Optional link row: collapsed by default so the textarea stays the only
+   obvious place to type. */
+.compose-link-toggle {
+  display: inline-flex; align-items: center; gap: .3em;
+  background: transparent; border: 1px dashed var(--border);
+  color: var(--muted); cursor: pointer;
+  padding: .2em .65em; border-radius: 999px;
+  font-size: .78rem; font-weight: 600;
+}
+.compose-link-toggle:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.compose-link-toggle[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-style: solid;
+}
+.compose-link {
+  display: flex; flex-direction: column; gap: .25rem;
+  padding: .3rem 0;
+}
+.compose-link__label {
+  font-size: .75rem; color: var(--muted); font-weight: 600;
+}
+.compose-link input[name="github"] {
+  width: 100%;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: .45em .65em; font: inherit;
+  font-family: var(--mono); font-size: .85rem;
+}
+.compose-link input[name="github"]:focus {
+  outline: 0; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
 
 /* ---------- posts (Twitter card × GitHub commit) ---------- */
 .post {
