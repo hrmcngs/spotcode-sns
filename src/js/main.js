@@ -309,9 +309,18 @@ document.addEventListener('click', (e) => {
     if (!post) return;
     if (!confirm('この投稿を削除しますか？元に戻せません。')) return;
     deleteBtn.disabled = true;
+    // Optimistically fade the card so the user sees an immediate response,
+    // then drop it from the DOM on success or restore on error.
+    post.style.opacity = '.4';
+    post.style.pointerEvents = 'none';
     removePost(post.getAttribute('data-post-id'))
-      .then(() => refresh())
-      .catch((err) => { alert('削除に失敗しました: ' + err.message); deleteBtn.disabled = false; });
+      .then(() => { post.remove(); })
+      .catch((err) => {
+        alert('削除に失敗しました: ' + err.message);
+        post.style.opacity = '';
+        post.style.pointerEvents = '';
+        deleteBtn.disabled = false;
+      });
     return;
   }
 
