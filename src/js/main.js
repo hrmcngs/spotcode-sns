@@ -401,3 +401,11 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
+
+// ----- service worker (PWA) -----
+// Register only on http(s); file:// (Electron) doesn't support SW.
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
