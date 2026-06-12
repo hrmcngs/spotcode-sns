@@ -1,5 +1,5 @@
 import { loadMaps } from '../gmap.js';
-import { getConfig, setConfig, isConfigured, ping } from '../supa.js';
+import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping } from '../supa.js';
 
 function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
@@ -7,11 +7,17 @@ function attr(s) {
   }[c]));
 }
 
+function maskHost(url) {
+  try {
+    const u = new URL(url);
+    return u.host;
+  } catch { return url; }
+}
+
 export function renderSettings() {
   const cfg = getConfig();
-  const maskedKey = cfg.anonKey
-    ? cfg.anonKey.slice(0, 6) + '…' + cfg.anonKey.slice(-4)
-    : '';
+  const override = getOverride();
+  const usingOverride = isUsingOverride();
 
   return (
     '<div class="settings">' +
@@ -22,37 +28,52 @@ export function renderSettings() {
           (isConfigured() ? ' <span class="settings-tag is-ok">connected</span>'
                           : ' <span class="settings-tag">未設定</span>') + '</h2>' +
         '<p class="settings__hint">' +
-          '別端末からアカウントを引き継いだり、他のユーザを検索したりするには ' +
-          '<a href="https://supabase.com" target="_blank" rel="noopener">Supabase</a>' +
-          ' のプロジェクトが必要です。<strong>無料枠で十分</strong>、課金カードも不要。' +
+          (usingOverride
+            ? '現在は <strong>あなたが /settings で設定した独自プロジェクト</strong>に接続しています。'
+            : '現在は <strong>spotcode-sns に標準同梱の共有プロジェクト</strong>に接続しています。' +
+              'アカウント・投稿・いいね等が他のユーザーと同じ DB に保存されるので、' +
+              '別端末からのログインや他のユーザーの検索が動きます。何も設定する必要はありません。') +
         '</p>' +
-        '<ol class="settings__steps">' +
-          '<li><a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> でサインアップ (GitHub アカウントで OK)</li>' +
-          '<li>「New project」 → 名前を入れて Region は <code>Northeast Asia (Tokyo)</code> 推奨</li>' +
-          '<li>プロジェクトが起動したら左メニュー <strong>Project Settings → API</strong></li>' +
-          '<li>「Project URL」と「Project API keys → anon public」を下にコピー</li>' +
-        '</ol>' +
-        '<form class="settings-form" id="supa-form">' +
+        '<dl class="settings-kv">' +
+          '<dt>Project URL</dt><dd><code>' + attr(maskHost(cfg.url)) + '</code></dd>' +
+          '<dt>Mode</dt><dd>' +
+            (usingOverride
+              ? '<span class="settings-tag">自分の Supabase で上書き中</span>'
+              : '<span class="settings-tag is-ok">共有プロジェクト (default)</span>') +
+          '</dd>' +
+        '</dl>' +
+        '<div class="settings-form__actions">' +
+          '<button type="button" class="btn btn--ghost btn--sm" id="supa-test">接続テスト</button>' +
+          '<button type="button" class="btn btn--ghost btn--sm" id="supa-toggle-override">' +
+            (usingOverride ? '上書きをやめて共有 DB に戻す' : '自分の Supabase に上書きする (上級者向け)') +
+          '</button>' +
+        '</div>' +
+        '<p class="settings-status" id="supa-status">未確認</p>' +
+
+        '<form class="settings-form" id="supa-form" hidden>' +
+          '<p class="settings__hint">自分の Supabase プロジェクトに切り替えるには、' +
+            '<a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a>' +
+            ' で Free プロジェクトを作って Project Settings → API から URL と Publishable key をコピーして貼ってください。' +
+          '</p>' +
           '<label>Project URL' +
             '<input name="url" type="url" autocomplete="off" spellcheck="false" ' +
-              'placeholder="https://xxxx.supabase.co" value="' + attr(cfg.url) + '">' +
+              'placeholder="https://xxxx.supabase.co" value="' + attr(override.url) + '">' +
           '</label>' +
-          '<label>anon public key' +
+          '<label>anon / publishable key' +
             '<input name="anonKey" type="password" autocomplete="off" spellcheck="false" ' +
-              'placeholder="' + (maskedKey || 'eyJhbGciOi…') + '">' +
+              'placeholder="sb_publishable_…">' +
           '</label>' +
           '<div class="settings-form__actions">' +
-            '<button type="submit" class="btn btn--primary">Save</button>' +
-            (isConfigured() ? '<button type="button" class="btn btn--ghost" id="supa-clear">Clear</button>' : '') +
-            '<button type="button" class="btn btn--ghost" id="supa-test">接続テスト</button>' +
+            '<button type="submit" class="btn btn--primary">保存して上書き</button>' +
+            (usingOverride
+              ? '<button type="button" class="btn btn--ghost" id="supa-clear">上書きを削除</button>'
+              : '') +
           '</div>' +
-          '<p class="settings-status" id="supa-status">' +
-            (isConfigured() ? '保存済み: ' + attr(cfg.url) : 'まだ設定されていません') +
-          '</p>' +
         '</form>' +
+
         '<p class="settings__note">' +
-          '※ ここに貼るのは <strong>anon public key</strong> です。' +
-          '<code>service_role</code> キーは絶対に貼らないでください — このアプリは静的サイトなので、貼った瞬間に丸見えになります。' +
+          '⚠️ <strong>secret / service_role</strong> キーは絶対に貼らないでください。このアプリは静的サイトなので、貼った瞬間に丸見えになり DB を破壊される可能性があります。' +
+          '貼っていいのは <code>sb_publishable_…</code> または旧形式の <code>anon public</code> JWT のみです。' +
         '</p>' +
       '</section>' +
 
@@ -77,7 +98,7 @@ export function renderSettings() {
         '<h2>About</h2>' +
         '<p class="settings__hint">' +
           'spotcode-sns は、歩いた場所に紐づくアイデアを残すための SNS のプロトタイプです。' +
-          'Supabase 未設定時は全データがこの端末のブラウザに、設定済みなら Supabase 側に保存されます。' +
+          'アカウント・投稿は Supabase に保存され、地図関連の一時データはこの端末のブラウザに保存されます。' +
         '</p>' +
       '</section>' +
     '</div>'
@@ -102,45 +123,51 @@ export function bindSettings() {
     });
   }
 
-  // Supabase config
-  const supaForm = document.getElementById('supa-form');
-  if (supaForm) {
-    const supaStatus = document.getElementById('supa-status');
-    const show = (t, k = '') => {
-      supaStatus.textContent = t;
-      supaStatus.className = 'settings-status' + (k ? ' is-' + k : '');
-    };
-    supaForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const fd = new FormData(supaForm);
-      const url = String(fd.get('url') || '').trim();
-      const anonKey = String(fd.get('anonKey') || '').trim();
-      if (!url || !anonKey) { show('Project URL と anon key の両方を入れてください', 'bad'); return; }
-      if (!/^https:\/\/.+\.supabase\.(co|in)/i.test(url)) {
-        show('URL は https://xxxx.supabase.co 形式で入力してください', 'bad');
-        return;
-      }
-      setConfig({ url, anonKey });
-      supaForm.querySelector('input[name="anonKey"]').value = '';
-      show('保存しました。「接続テスト」で動作確認してください。', 'ok');
-    });
-    document.getElementById('supa-clear')?.addEventListener('click', () => {
-      if (!confirm('保存済みの Supabase 設定を削除しますか？')) return;
-      setConfig({ url: '', anonKey: '' });
-      show('削除しました', '');
-      setTimeout(() => location.reload(), 200);
-    });
-    document.getElementById('supa-test')?.addEventListener('click', async () => {
-      show('Supabase に接続中…', '');
-      try {
-        await ping();
-        show('OK — Supabase に接続できました。次のステップで auth を移行します。', 'ok');
-      } catch (err) {
-        const msg = err.message === 'NO_CONFIG' ? 'URL / anon key を保存してください'
-                  : err.message === 'AUTH_FAILED' ? 'anon key が無効です'
-                  : '接続に失敗しました: ' + err.message;
-        show(msg, 'bad');
-      }
-    });
-  }
+  // Supabase
+  const supaForm   = document.getElementById('supa-form');
+  const supaStatus = document.getElementById('supa-status');
+  const show = (t, k = '') => {
+    if (!supaStatus) return;
+    supaStatus.textContent = t;
+    supaStatus.className = 'settings-status' + (k ? ' is-' + k : '');
+  };
+
+  document.getElementById('supa-toggle-override')?.addEventListener('click', () => {
+    if (supaForm) supaForm.hidden = !supaForm.hidden;
+  });
+
+  supaForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(supaForm);
+    const url = String(fd.get('url') || '').trim();
+    const anonKey = String(fd.get('anonKey') || '').trim();
+    if (!url || !anonKey) { show('Project URL と key の両方を入れてください', 'bad'); return; }
+    if (!/^https:\/\/.+\.supabase\.(co|in)/i.test(url)) {
+      show('URL は https://xxxx.supabase.co 形式で入力してください', 'bad');
+      return;
+    }
+    setConfig({ url, anonKey });
+    show('上書き保存しました。リロードして反映します…', 'ok');
+    setTimeout(() => location.reload(), 400);
+  });
+
+  document.getElementById('supa-clear')?.addEventListener('click', () => {
+    if (!confirm('上書きを削除して共有プロジェクトに戻しますか？')) return;
+    setConfig({ url: '', anonKey: '' });
+    show('上書きを削除しました。リロードします…', 'ok');
+    setTimeout(() => location.reload(), 400);
+  });
+
+  document.getElementById('supa-test')?.addEventListener('click', async () => {
+    show('Supabase に接続中…', '');
+    try {
+      await ping();
+      show('OK — Supabase に接続できました', 'ok');
+    } catch (err) {
+      const msg = err.message === 'NO_CONFIG' ? 'URL / anon key を保存してください'
+                : err.message === 'AUTH_FAILED' ? 'anon key が無効です'
+                : '接続に失敗しました: ' + err.message;
+      show(msg, 'bad');
+    }
+  });
 }

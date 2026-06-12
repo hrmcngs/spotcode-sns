@@ -735,6 +735,22 @@ a.trend-item:hover { background: var(--surface-2); }
   background: color-mix(in srgb, var(--green) 15%, transparent);
   border-color: color-mix(in srgb, var(--green) 35%, transparent);
 }
+.settings-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .3rem 1rem;
+  margin: .8rem 0;
+  font-size: .85rem;
+}
+.settings-kv dt { color: var(--muted); }
+.settings-kv dd code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 .4em;
+  font-family: var(--mono);
+  font-size: .85em;
+}
 .settings-status.is-bad { color: var(--danger); }
 
 /* ---------- spot picker modal (map) ---------- */
