@@ -1,7 +1,7 @@
 // Spot picker modal. Uses Leaflet + OpenStreetMap tiles + Nominatim
 // for reverse geocoding. No API key required, no account, no age gate.
 
-import { loadMaps, reverseGeocode, pickBuildingName } from '../gmap.js';
+import { loadMaps, reverseGeocode, pickBuildingName, formatJapanAddress } from '../gmap.js';
 import { icon } from '../icons.js';
 
 let rootEl    = null;
@@ -10,6 +10,7 @@ let markerInst = null;
 let resolveFn = null;
 let pickedPos = null;
 let pickedAddress = '';
+let pickedAddressDetails = null;
 let geocodeSeq = 0;
 
 const TOKYO = { lat: 35.681236, lng: 139.767125 };
@@ -67,6 +68,7 @@ function mount() {
       lng: pickedPos.lng,
       label,
       ...(pickedAddress ? { address: pickedAddress } : {}),
+      ...(pickedAddressDetails ? { addressDetails: pickedAddressDetails } : {}),
     });
   });
   document.getElementById('picker-geo').addEventListener('click', useGeolocation);
@@ -93,6 +95,7 @@ function setPick(lat, lng, { autoFillLabel = false } = {}) {
   document.getElementById('picker-confirm').disabled = false;
 
   pickedAddress = '';
+  pickedAddressDetails = null;
   const addrEl = document.getElementById('picker-address');
   if (addrEl) {
     addrEl.textContent = '住所を取得中…';
@@ -117,23 +120,35 @@ async function doReverseGeocode(lat, lng, autoFillLabel) {
   }
   if (seq !== geocodeSeq) return;
 
-  const address  = data.display_name || '';
   const building = pickBuildingName(data);
+  const det      = formatJapanAddress(data);
+  // Prefer the structured Japan-format string (with 〒postcode and 番地)
+  // because Nominatim's display_name sometimes drops the house_number
+  // or reorders fields in English style.
+  const address  = det.full || data.display_name || '';
   pickedAddress = address;
+  pickedAddressDetails = det;
 
   const addrEl = document.getElementById('picker-address');
   if (addrEl) {
-    addrEl.innerHTML =
-      (building ? '<strong>' + escapeHtml(building) + '</strong>' : '') +
-      (building && address ? '<br>' : '') +
-      (address ? '<span>' + escapeHtml(address) + '</span>' : '住所が見つかりません');
+    const lines = [];
+    if (building) lines.push('<strong>' + escapeHtml(building) + '</strong>');
+    if (address)  lines.push('<span class="picker-address__main">' + escapeHtml(address) + '</span>');
+    else          lines.push('住所が見つかりません');
+
+    if (det.houseNumber) {
+      lines.push('<span class="picker-address__hn">番地: ' + escapeHtml(det.houseNumber) + '</span>');
+    } else if (address) {
+      lines.push('<span class="picker-address__warn">⚠ 番地情報なし — ラベル欄に「○○ビル 3F」など補足してください</span>');
+    }
+    addrEl.innerHTML = lines.join('<br>');
     addrEl.className = 'picker-address';
   }
 
   if (autoFillLabel) {
     const labelInput = document.getElementById('picker-label');
     if (labelInput && !labelInput.value.trim()) {
-      labelInput.value = building || (address.split(/[、,]\s*/)[0] || '');
+      labelInput.value = building || (address.split(/[、,\s]\s*/)[0] || '');
     }
   }
 }
@@ -200,14 +215,17 @@ function close(result) {
   if (resolveFn) { resolveFn(result); resolveFn = null; }
   pickedPos = null;
   pickedAddress = '';
+  pickedAddressDetails = null;
 }
 
-// Open the picker. Resolves with { lat, lng, label, address } or null on cancel.
+// Open the picker. Resolves with { lat, lng, label, address, addressDetails }
+// or null on cancel.
 export function pickSpot() {
   mount();
   showError('');
   pickedPos = null;
   pickedAddress = '';
+  pickedAddressDetails = null;
   geocodeSeq++;
   document.getElementById('picker-confirm').disabled = true;
   document.getElementById('picker-coords').textContent  = '';

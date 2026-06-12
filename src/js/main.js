@@ -345,6 +345,7 @@ document.addEventListener('submit', (e) => {
         lng: pendingSpot.lng,
         label: pendingSpot.label || '',
         ...(pendingSpot.address ? { address: pendingSpot.address } : {}),
+        ...(pendingSpot.addressDetails ? { addressDetails: pendingSpot.addressDetails } : {}),
       }
     : null;
   const post = {

@@ -754,3 +754,25 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 .badge-chip--danger { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
 .badge-chip--boost  { background: color-mix(in srgb, var(--boost)  16%, transparent); color: var(--boost);  border-color: color-mix(in srgb, var(--boost)  35%, transparent); }
 .badge-chip--like   { background: color-mix(in srgb, var(--like)   16%, transparent); color: var(--like);   border-color: color-mix(in srgb, var(--like)   35%, transparent); }
+
+/* ---------- post address line ---------- */
+.post__addr {
+  margin-top: .4rem;
+  font-size: .82rem;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .35em .55em;
+  word-break: break-word;
+}
+.post__addr-warn {
+  color: var(--warn);
+  font-size: .78rem;
+  margin-left: .3em;
+}
+
+/* ---------- picker address breakdown ---------- */
+.picker-address__main { display: inline-block; color: var(--text); font-weight: 600; }
+.picker-address__hn   { color: var(--green); font-weight: 600; }
+.picker-address__warn { color: var(--warn); font-size: .82rem; }
