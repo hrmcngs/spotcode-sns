@@ -19,16 +19,8 @@ const TTL_MS    = 24 * 60 * 60 * 1000;
 //   minBytes  — minimum file size in bytes to qualify
 //   tone      — chip color (accent / green / warn / danger / boost / like)
 const BADGES = [
-  { id: 'lisper',     name: '始めたて Lisper',     tooltip: '.lisp / .cl ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['lisp','cl'],          minFiles: 2, minBytes: 100, tone: 'warn' },
-  { id: 'pythonista', name: '始めたて Pythonista', tooltip: '.py ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['py'],                  minFiles: 2, minBytes: 100, tone: 'accent' },
-  { id: 'ruster',     name: '始めたて Ruster',     tooltip: '.rs ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['rs'],                  minFiles: 2, minBytes: 100, tone: 'danger' },
-  { id: 'jser',       name: '始めたて JS-er',       tooltip: '.js / .ts ファイルが 5 つ以上、各 100 バイト以上',
-    exts: ['js','ts','jsx','tsx'], minFiles: 5, minBytes: 100, tone: 'boost' },
-  { id: 'goer',       name: '始めたて Goer',       tooltip: '.go ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['go'],                  minFiles: 2, minBytes: 100, tone: 'green' },
+  { id: 'lisper', name: '始めたて Lisper', tooltip: '.lisp / .cl ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['lisp','cl'], minFiles: 2, minBytes: 100, tone: 'warn' },
 ];
 
 function readCache() { return read(CACHE_KEY, {}); }
