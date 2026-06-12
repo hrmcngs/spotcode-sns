@@ -6,10 +6,62 @@
   <title>spotcode-sns</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="css/style.css">
+  <script>
+    // Restore the real path that 404.html stashed into the query string,
+    // so deep links like /spotcode-sns/hrmcngs work on GH Pages.
+    (function (l) {
+      if (l.search[1] === '/') {
+        var decoded = l.search.slice(1).split('&').map(function (s) {
+          return s.replace(/~and~/g, '&');
+        }).join('?');
+        window.history.replaceState(null, null,
+          l.pathname.slice(0, -1) + decoded + l.hash
+        );
+      }
+    }(window.location));
+  </script>
 </head>
 <body>
-  <header class="site-header"><h1>spotcode-sns</h1><button id="theme-toggle" class="theme-toggle">◐</button></header>
-  <main id="app"></main>
+  <nav class="topbar">
+    <a class="topbar__brand" href="/">
+      <svg viewBox="0 0 16 16" width="22" height="22" aria-hidden="true" class="brand-mark">
+        <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.33c-2.23.49-2.7-1.08-2.7-1.08-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.22.83 1.22.83.72 1.23 1.88.88 2.34.67.07-.52.28-.88.5-1.08-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.11 0 0 .67-.22 2.2.82A7.6 7.6 0 0 1 8 4.42a7.6 7.6 0 0 1 2-.27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.91.08 2.11.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.19c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      <span class="brand-name">spotcode</span>
+      <span class="brand-slash">/</span>
+      <span class="brand-repo">sns</span>
+    </a>
+    <div class="topbar__search">
+      <span class="search-icon" id="ic-search"></span>
+      <input type="text" placeholder="Search spots, ideas, repos…">
+      <kbd>/</kbd>
+    </div>
+    <div class="topbar__actions">
+      <button id="theme-toggle" class="theme-toggle" title="Toggle theme"></button>
+      <a class="icon-btn" href="/notifications" title="Notifications" id="ic-bell"></a>
+      <div id="auth-area" class="auth-area"></div>
+    </div>
+  </nav>
+
+  <div class="app-grid">
+    <aside class="left-rail">
+      <nav class="side-nav">
+        <a class="side-nav__item" data-route="/"              href="/"              data-ico="home"><span class="side-nav__label">Home</span></a>
+        <a class="side-nav__item" data-route="/explore"       href="/explore"       data-ico="compass"><span class="side-nav__label">Explore</span></a>
+        <a class="side-nav__item" data-route="/spots"         href="/spots"         data-ico="pin"><span class="side-nav__label">Spots</span></a>
+        <a class="side-nav__item" data-route="/repos"         href="/repos"         data-ico="repo"><span class="side-nav__label">Repos</span></a>
+        <a class="side-nav__item" data-route="/notifications" href="/notifications" data-ico="bell"><span class="side-nav__label">Notifications</span></a>
+        <a class="side-nav__item" data-nav="profile"          href="/"              data-ico="user"><span class="side-nav__label">Profile</span></a>
+      </nav>
+      <button class="compose-cta" id="open-compose"><span class="compose-cta__ico"></span>New idea</button>
+      <div class="side-foot" id="side-me"></div>
+    </aside>
+
+    <main class="timeline" id="app"></main>
+
+    <aside class="right-rail" id="rail"></aside>
+  </div>
+
   <script src="js/main.js" type="module"></script>
 </body>
 </html>
