@@ -1,11 +1,13 @@
 -- spotcode-sns Supabase schema (cumulative, applied incrementally per stage).
--- Run sections in your project's SQL Editor as each PR lands.
+-- Each block is re-runnable: tables use `if not exists`, and every policy
+-- is preceded by `drop policy if exists` because Postgres has no
+-- `create policy if not exists` syntax.
 
 -- ===================================================================
 -- Stage 2 / 3 — profiles
 -- ===================================================================
--- Mirror of auth.users one row per user, with the social fields the
--- UI displays. The row is created by a trigger on auth.user insert.
+-- Mirror of auth.users — one row per user with the social fields the UI
+-- needs. The row is created by a trigger on auth.users insert.
 
 create table if not exists public.profiles (
   id            uuid primary key references auth.users on delete cascade,
@@ -21,17 +23,17 @@ create table if not exists public.profiles (
 );
 alter table public.profiles enable row level security;
 
--- Everyone can read profiles (for search / public pages)
+drop policy if exists "profiles are public"           on public.profiles;
+drop policy if exists "owner can insert own profile"  on public.profiles;
+drop policy if exists "owner can update own profile"  on public.profiles;
+
 create policy "profiles are public"
   on public.profiles for select using (true);
-
--- Only the owner can insert / update their own row
 create policy "owner can insert own profile"
   on public.profiles for insert with check (auth.uid() = id);
 create policy "owner can update own profile"
   on public.profiles for update using (auth.uid() = id);
 
--- Auto-create a profile shell on new sign-up so the app can fill it in.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer as $$
 begin
@@ -61,10 +63,16 @@ create table if not exists public.posts (
   status      text default 'wip' check (status in ('wip','active','released','abandoned')),
   created_at  timestamptz default now()
 );
-create index if not exists posts_author_idx on public.posts (author_id, created_at desc);
+create index if not exists posts_author_idx  on public.posts (author_id, created_at desc);
 create index if not exists posts_created_idx on public.posts (created_at desc);
 
 alter table public.posts enable row level security;
+
+drop policy if exists "posts are public"                on public.posts;
+drop policy if exists "authors can insert their posts"  on public.posts;
+drop policy if exists "authors can update their posts"  on public.posts;
+drop policy if exists "authors can delete their posts"  on public.posts;
+
 create policy "posts are public"
   on public.posts for select using (true);
 create policy "authors can insert their posts"
@@ -85,6 +93,9 @@ create table if not exists public.likes (
   primary key (post_id, user_id)
 );
 alter table public.likes enable row level security;
+drop policy if exists "likes are public"             on public.likes;
+drop policy if exists "users manage their own likes" on public.likes;
+drop policy if exists "users delete their own likes" on public.likes;
 create policy "likes are public"
   on public.likes for select using (true);
 create policy "users manage their own likes"
@@ -99,6 +110,9 @@ create table if not exists public.follows (
   primary key (follower_id, target_id)
 );
 alter table public.follows enable row level security;
+drop policy if exists "follows are public"               on public.follows;
+drop policy if exists "users insert their own follows"   on public.follows;
+drop policy if exists "users delete their own follows"   on public.follows;
 create policy "follows are public"
   on public.follows for select using (true);
 create policy "users insert their own follows"
@@ -117,8 +131,8 @@ create table if not exists public.reports (
   unique (post_id, reporter_id)
 );
 alter table public.reports enable row level security;
--- Only the reporter sees their own reports, plus the post author can see
--- counts on their posts (handled via a future view in stage 5).
+drop policy if exists "reporters see their own reports" on public.reports;
+drop policy if exists "anyone can file a report"        on public.reports;
 create policy "reporters see their own reports"
   on public.reports for select using (auth.uid() = reporter_id);
 create policy "anyone can file a report"
@@ -131,6 +145,10 @@ create policy "anyone can file a report"
 -- Run via Storage UI or:
 --   insert into storage.buckets (id, name, public) values ('avatars','avatars', true);
 -- Then policies:
+--
+-- drop policy if exists "avatars are public"             on storage.objects;
+-- drop policy if exists "users upload their own avatar"  on storage.objects;
+-- drop policy if exists "users update their own avatar"  on storage.objects;
 --
 -- create policy "avatars are public"
 --   on storage.objects for select using (bucket_id = 'avatars');
