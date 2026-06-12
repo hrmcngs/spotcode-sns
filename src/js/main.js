@@ -8,6 +8,8 @@ import { openAuth }        from './views/auth-modal.js';
 import { allUsers, addPost } from './data.js';
 import { currentUser, logout, onAuthChange } from './auth.js';
 import { icon }            from './icons.js';
+import { toggleLike, isLiked, likeCount,
+         toggleFollow, isFollowing } from './interactions.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -63,16 +65,21 @@ function renderRail() {
       '<section class="card">' +
         '<h3>Who to follow</h3>' +
         '<div class="followlist">' +
-          others.slice(0, 5).map(u => (
-            '<div class="followlist__row">' +
-              '<a class="avatar" href="' + url('/' + u.handle) + '">' + u.avatar + '</a>' +
-              '<div>' +
-                '<a class="followlist__name" href="' + url('/' + u.handle) + '">' + u.name + '</a>' +
-                '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
-              '</div>' +
-              '<button class="followlist__follow" data-target="' + u.handle + '">Follow</button>' +
-            '</div>'
-          )).join('') +
+          others.slice(0, 5).map(u => {
+            const f = me && isFollowing(me.handle, u.handle);
+            return (
+              '<div class="followlist__row">' +
+                '<a class="avatar" href="' + url('/' + u.handle) + '">' + u.avatar + '</a>' +
+                '<div>' +
+                  '<a class="followlist__name" href="' + url('/' + u.handle) + '">' + u.name + '</a>' +
+                  '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
+                '</div>' +
+                '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
+                  (f ? 'Following' : 'Follow') +
+                '</button>' +
+              '</div>'
+            );
+          }).join('') +
         '</div>' +
       '</section>'
     );
@@ -188,6 +195,57 @@ document.addEventListener('click', (e) => {
     e.preventDefault();
     logout();
     navigate('/');
+    return;
+  }
+
+  // Like a post (heart button).
+  const likeBtn = e.target.closest('.act--like');
+  if (likeBtn) {
+    e.preventDefault();
+    const me = currentUser();
+    if (!me) return openAuth('login');
+    const post = likeBtn.closest('[data-post-id]');
+    if (!post) return;
+    const postId = post.getAttribute('data-post-id');
+    const now = toggleLike(postId, me.handle);
+    likeBtn.classList.toggle('is-liked', now);
+    const span = likeBtn.querySelector('span');
+    if (span) {
+      const article = likeBtn.closest('article');
+      const base = Number(article?.dataset.baseLikes || 0);
+      span.textContent = base + likeCount(postId);
+    }
+    return;
+  }
+
+  // Follow / unfollow (profile + Who-to-follow).
+  const followBtn = e.target.closest('.btn--follow, .followlist__follow');
+  if (followBtn) {
+    e.preventDefault();
+    const me = currentUser();
+    if (!me) return openAuth('login');
+    const target = followBtn.getAttribute('data-target');
+    if (!target || target === me.handle) return;
+    const now = toggleFollow(me.handle, target);
+    followBtn.classList.toggle('is-following', now);
+    followBtn.classList.toggle('btn--primary', !now);
+    followBtn.classList.toggle('btn--ghost', now);
+    followBtn.textContent = now ? 'Following' : 'Follow';
+    // Refresh the route so any visible follower/following counts re-read.
+    refresh();
+    return;
+  }
+
+  // Push button fallback: in case form submit gets eaten elsewhere,
+  // explicitly trigger the form when the submit button is clicked.
+  const pushBtn = e.target.closest('.composer button[type="submit"]');
+  if (pushBtn) {
+    const form = pushBtn.closest('form.idea-form');
+    if (form && !form.checkValidity()) return; // let HTML5 validation show
+    if (form) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
   }
 });
 
@@ -214,6 +272,7 @@ document.addEventListener('submit', (e) => {
   });
   ta.value = '';
   refresh();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 // Auto-grow the composer textarea as the user types.

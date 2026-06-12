@@ -3,6 +3,7 @@ import { renderPost }              from '../post.js';
 import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
 import { icon }                    from '../icons.js';
+import { isFollowing, followerCount, followingCount } from '../interactions.js';
 
 function notFound(handle) {
   return (
@@ -23,6 +24,9 @@ export function renderProfile(handle) {
   const list = postsByHandle(handle);
   const postCount = list.length;
   const ghLink = u.github?.url || (u.github?.handle ? 'https://github.com/' + u.github.handle : null);
+  const followingN = (u.following || 0) + followingCount(u.handle);
+  const followersN = (u.followers || 0) + followerCount(u.handle);
+  const followed = me && !isMe && isFollowing(me.handle, u.handle);
 
   const header = (
     '<header class="profile-header">' +
@@ -34,7 +38,9 @@ export function renderProfile(handle) {
             ? '<button class="btn btn--ghost" id="logout-btn">Log out</button>' +
               '<button class="btn btn--ghost">Edit profile</button>'
             : '<button class="btn btn--ghost">More</button>' +
-              '<button class="btn btn--primary btn--follow" data-target="' + u.handle + '">Follow</button>') +
+              '<button class="btn ' + (followed ? 'btn--ghost is-following' : 'btn--primary') + ' btn--follow" data-target="' + u.handle + '">' +
+                (followed ? 'Following' : 'Follow') +
+              '</button>') +
         '</div>' +
       '</div>' +
       '<div class="profile-id">' +
@@ -51,8 +57,8 @@ export function renderProfile(handle) {
                     icon('github', { size: 14, fill: true, className: 'icon--inline' }) + (u.github.handle || '') + '</a>' : '') +
       '</div>' +
       '<div class="profile-stats">' +
-        '<span><b>' + (u.following || 0) + '</b> Following</span>' +
-        '<span><b>' + (u.followers || 0) + '</b> Followers</span>' +
+        '<span><b>' + followingN + '</b> Following</span>' +
+        '<span><b>' + followersN + '</b> Followers</span>' +
         '<span><b>' + postCount + '</b> Posts</span>' +
       '</div>' +
     '</header>'
