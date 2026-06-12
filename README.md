@@ -1,24 +1,34 @@
 # spotcode-sns
 
 スポット（位置情報）に紐付くアイデアと、それを実装した GitHub リポを残せる開発者 SNS。
+**Web + Electron** デュアルターゲット。
 
-## コンセプト
+## 機能（実装中）
 
-- **ファイルサイズで色が変化** — 編集量が一目で分かる
-- **GitHub バッジ風ステータス** — プロジェクトの状態を可視化
-- **活動の草** — GitHub 風の contribution heatmap
-- **スポットでアイデア** — 特定の場所でアイデアを書き残し、他の人も見られる
-- **GitHub リンク埋め込み** — どう実装したかを共有
+- 📊 **ファイルサイズで色が変化** — 一目で編集量
+- 🟢 **ステータスバッジ** — active / WIP / released …
+- 🌱 **活動の草** — 53週分の heatmap
+- 📍 **スポット紐付け** — 位置でアイデアを残す
+- 💡 **アイデア投稿** — その場で思いついた事を書き込み
+- 🔗 **GitHub リンク** — 実装方法を共有
 
-WIP / Under development.
+## 起動
+
+```bash
+# Web
+npm run start:web         # http://localhost:8080
+
+# Electron (要: npm install で electron をインストール)
+npm install
+npm run start:electron
+```
 
 ## 構成
 
 ```
-src/
-  index.html        — エントリポイント
-  css/              — スタイル
-  js/               — フロントエンドロジック
-data/               — モックデータ
-docs/               — 設計メモ
+src/        ← Web/Electron 共通のフロントエンド
+electron/   ← Electron ラッパ（main.js / preload.js）
+data/       ← モックデータ
+docs/       ← 設計メモ
+.github/    ← Pages デプロイ workflow
 ```
