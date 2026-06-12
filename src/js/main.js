@@ -222,3 +222,33 @@ document.addEventListener('input', (e) => {
   ta.style.height = 'auto';
   ta.style.height = Math.min(ta.scrollHeight, 320) + 'px';
 });
+
+// ----- keyboard shortcuts -----
+function isTyping(el) {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+document.addEventListener('keydown', (e) => {
+  // "/" focuses the topbar search (matches the kbd hint shown next to it).
+  if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping(e.target)) {
+    const search = document.querySelector('.topbar__search input');
+    if (search) {
+      e.preventDefault();
+      search.focus();
+      search.select();
+    }
+    return;
+  }
+
+  // Cmd/Ctrl+Enter submits the composer while focused inside the textarea.
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    const ta = e.target;
+    if (ta instanceof HTMLTextAreaElement && ta.closest('.idea-form')) {
+      e.preventDefault();
+      ta.form?.requestSubmit();
+    }
+  }
+});

@@ -33,7 +33,7 @@ export function renderIdeaForm({ spot = 'somewhere', user = null } = {}) {
             '<button type="button" class="compose-tool" title="spot">'  + icon('pin',   { size: 18 }) + '</button>' +
             '<button type="button" class="compose-tool" title="poll">'  + icon('chart', { size: 18 }) + '</button>' +
           '</div>' +
-          '<button type="submit">Push</button>' +
+          '<button type="submit" title="⌘/Ctrl + Enter">Push</button>' +
         '</div>' +
       '</form>' +
     '</div>'
