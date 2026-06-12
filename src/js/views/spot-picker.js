@@ -194,18 +194,39 @@ function useGeolocation() {
     return;
   }
   showError('現在地を取得中…');
+
+  function onSuccess(pos) {
+    showError('');
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    if (mapInst) mapInst.setView([lat, lng], 18);
+    setPick(lat, lng, { autoFillLabel: true });
+  }
+
+  // First pass: fast WiFi / IP geolocation (no GPS), allow a 5-min
+  // cached fix. Most desktops can't do GPS at all, so this is the only
+  // thing that ever resolves there.
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      showError('');
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      if (mapInst) mapInst.setView([lat, lng], 18);
-      setPick(lat, lng, { autoFillLabel: true });
-    },
+    onSuccess,
     (err) => {
-      showError('現在地を取得できませんでした: ' + err.message);
+      // PERMISSION_DENIED (code 1) won't get any better with a retry.
+      if (err.code === 1) {
+        showError('位置情報の利用が許可されていません。ブラウザの設定を確認してください。');
+        return;
+      }
+      // Position unavailable / timeout → retry with high accuracy and
+      // a much longer window. On phones this kicks the GPS in.
+      showError('現在地を再取得中…（高精度モード）');
+      navigator.geolocation.getCurrentPosition(
+        onSuccess,
+        (err2) => {
+          showError('現在地を取得できませんでした: ' + (err2.message || 'timeout') +
+                    '。手動で地図上をクリックして場所を選んでください。');
+        },
+        { enableHighAccuracy: true, timeout: 25000, maximumAge: 60000 }
+      );
     },
-    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
   );
 }
 
