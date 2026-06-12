@@ -9,6 +9,10 @@ import { getBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
 
+// Monotonic version so async hydrations can detect a newer renderProfile
+// has superseded them and bail out before clobbering the DOM.
+let renderVersion = 0;
+
 function notFound(handle) {
   return (
     '<div class="stub">' +
@@ -29,6 +33,7 @@ function loading(handle) {
 }
 
 export function renderProfile(handle) {
+  renderVersion++;
   const u = getUser(handle);
   // No local cache yet — show a loading skeleton; hydrateProfile() will
   // fetch from Supabase and re-render this card.
@@ -104,11 +109,22 @@ export function renderProfile(handle) {
 
 // Look up the profile + follow counts in Supabase if needed, render the
 // finalised profile shell, then hydrate the posts list. 404 → notFound.
+// Every DOM write is gated on `renderVersion` so a newer navigation
+// can't be silently overwritten by a stale fetch.
 export async function hydrateProfile(handle) {
+  const myVersion = renderVersion;
   const me = currentUser();
   const haveLocal = (me && me.handle === handle) || getUser(handle)?._fetched;
   if (!haveLocal) {
-    const fetched = await fetchProfileByHandle(handle);
+    let fetched;
+    try { fetched = await fetchProfileByHandle(handle); }
+    catch (err) {
+      if (myVersion !== renderVersion) return;
+      const app = document.getElementById('app');
+      if (app) app.innerHTML = '<div class="stub"><h2 class="stub__title">読み込みに失敗しました</h2><p class="stub__sub">' + (err.message || '') + '</p></div>';
+      return;
+    }
+    if (myVersion !== renderVersion) return;
     if (!fetched) {
       const app = document.getElementById('app');
       if (app) app.innerHTML = notFound(handle);
@@ -116,24 +132,36 @@ export async function hydrateProfile(handle) {
     }
   }
   await hydrateProfileFollow(handle);
+  if (myVersion !== renderVersion) return;
   const app = document.getElementById('app');
   if (app) app.innerHTML = renderProfile(handle);
-  await hydrateProfilePosts(handle);
+  // renderProfile bumped renderVersion — capture the new value for the
+  // posts hydration below.
+  await hydrateProfilePosts(handle, renderVersion);
 }
 
-async function hydrateProfilePosts(handle) {
+async function hydrateProfilePosts(handle, myVersion) {
   const list = document.getElementById('profile-posts');
   if (!list) return;
-  const posts = await postsByHandle(handle);
-  const count = posts.length;
+  let posts;
+  try { posts = await postsByHandle(handle); }
+  catch (err) {
+    if (myVersion !== renderVersion) return;
+    console.error('hydrateProfilePosts', err);
+    list.innerHTML = '<div class="stub"><p class="stub__sub">投稿の取得に失敗しました: ' + (err.message || '') + '</p></div>';
+    return;
+  }
+  if (myVersion !== renderVersion) return;
   const countEl = document.getElementById('profile-postcount');
-  if (countEl) countEl.textContent = String(count);
-  if (!count) {
+  if (countEl) countEl.textContent = String(posts.length);
+  if (!posts.length) {
     list.innerHTML = '<div class="stub"><p class="stub__sub">まだ投稿がありません。</p></div>';
     return;
   }
   list.innerHTML = posts.map(renderPost).join('');
-  await hydratePostLikes(posts.map(p => p.id));
+  try { await hydratePostLikes(posts.map(p => p.id)); }
+  catch (err) { console.warn('hydratePostLikes (profile)', err); return; }
+  if (myVersion !== renderVersion) return;
   list.innerHTML = posts.map(renderPost).join('');
 }
 
