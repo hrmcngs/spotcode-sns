@@ -9,6 +9,7 @@ import { pickSpot }        from './views/spot-picker.js';
 import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
+import { initSearch }      from './views/search-dropdown.js';
 import { allUsers, addPost } from './data.js';
 import { currentUser, logout, onAuthChange } from './auth.js';
 import { icon }            from './icons.js';
@@ -208,6 +209,7 @@ initThemeToggle(document.getElementById('theme-toggle'));
 onRoute(dispatch);
 renderAuthArea();
 renderSideMe();
+initSearch();
 
 onAuthChange(() => {
   renderAuthArea();
