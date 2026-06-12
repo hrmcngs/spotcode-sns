@@ -168,16 +168,20 @@ button { font: inherit; cursor: pointer; }
 /* ---------- composer (Twitter-ish "What's happening?") ---------- */
 .composer {
   display: grid; grid-template-columns: 42px 1fr; gap: .8rem;
+  align-items: start;
   padding: 1rem; border-bottom: 1px solid var(--border);
 }
-.composer .idea-form { display: flex; flex-direction: column; gap: .6rem; max-width: none; margin: 0; }
+.composer > .avatar { margin-top: .25rem; }
+.composer .idea-form { display: flex; flex-direction: column; gap: .7rem; max-width: none; margin: 0; min-width: 0; }
 .composer textarea {
+  width: 100%;
   background: transparent; color: var(--text);
-  border: 0; outline: 0; resize: vertical;
-  font: inherit; font-size: 1.1rem;
-  min-height: 2.6rem;
+  border: 0; outline: 0;
+  font: inherit; font-size: 1.15rem; line-height: 1.5;
+  padding: .35em 0;
+  min-height: 3.4rem;
 }
-.composer textarea::placeholder { color: var(--muted); }
+.composer textarea::placeholder { color: var(--muted); opacity: 1; }
 .composer .compose-meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
   padding-top: .4rem; border-top: 1px dashed var(--border);
@@ -294,9 +298,10 @@ button { font: inherit; cursor: pointer; }
   padding: .55rem 0; border-top: 1px dashed var(--border);
 }
 .trend-item:first-child { border-top: 0; }
-.trend-item__main { display: flex; flex-direction: column; }
+.trend-item__main { display: flex; flex-direction: column; gap: .15rem; }
 .trend-item__cat { font-size: .72rem; color: var(--muted); }
-.trend-item__name { font-weight: 700; }
+.trend-item__name { display: inline-flex; align-items: center; gap: .35em; font-weight: 700; }
+.trend-item__name .icon--inline { margin-right: 0; vertical-align: middle; }
 .trend-item__sub { font-size: .8rem; color: var(--muted); }
 .trend-item__count { color: var(--green); font-family: var(--mono); font-size: .85rem; }
 
@@ -538,12 +543,8 @@ html[data-theme='light'] .profile-cover {
 .icon-btn:hover { background: var(--surface-2); }
 .search-icon { display: inline-flex; }
 
-/* Composer textarea: auto-grow */
-.composer textarea {
-  overflow: hidden;
-  min-height: 2.2rem;
-  resize: none;
-}
+/* Composer textarea: prevent scrollbars during JS auto-grow */
+.composer textarea { overflow: hidden; resize: none; }
 
 /* Inline code inside post body */
 .post__body code {
