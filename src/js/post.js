@@ -81,11 +81,11 @@ export function renderPost(p) {
   const a = p.actions || {};
   const profileUrl = url('/' + u.handle);
   const me = currentUser();
-  const liked = me && isLiked(p.id, me.handle);
-  const likes = (a.likes || 0) + likeCount(p.id);
+  const liked = me && isLiked(p.id);
+  const likes = likeCount(p.id);
   const isOwn = me && p.authorHandle === me.handle;
   return (
-    '<article class="post" data-post-id="' + escape(p.id) + '" data-base-likes="' + (a.likes || 0) + '">' +
+    '<article class="post" data-post-id="' + escape(p.id) + '">' +
       renderAvatar(u, { tag: 'a', href: profileUrl }) +
       '<div class="post__main">' +
         '<div class="post__head">' +
