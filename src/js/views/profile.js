@@ -35,8 +35,6 @@ export function renderProfile(handle) {
 
   const me = currentUser();
   const isMe = me && me.handle === u.handle;
-  const list = postsByHandle(handle);
-  const postCount = list.length;
   const ghLink = u.github?.url || (u.github?.handle ? 'https://github.com/' + u.github.handle : null);
   const followingN = (u.following || 0) + followingCount(u.handle);
   const followersN = (u.followers || 0) + followerCount(u.handle);
@@ -73,7 +71,7 @@ export function renderProfile(handle) {
       '<div class="profile-stats">' +
         '<span><b>' + followingN + '</b> Following</span>' +
         '<span><b>' + followersN + '</b> Followers</span>' +
-        '<span><b>' + postCount + '</b> Posts</span>' +
+        '<span><b id="profile-postcount">…</b> Posts</span>' +
       '</div>' +
       (u.github?.handle
         ? '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
@@ -92,9 +90,11 @@ export function renderProfile(handle) {
     '</div>'
   );
 
-  const body = list.length
-    ? list.map(renderPost).join('')
-    : '<div class="stub"><p class="stub__sub">まだ投稿がありません。</p></div>';
+  const body = (
+    '<div id="profile-posts">' +
+      '<div class="stub"><p class="stub__sub">投稿を読み込み中…</p></div>' +
+    '</div>'
+  );
 
   return header + tabs + body;
 }
@@ -104,16 +104,28 @@ export function renderProfile(handle) {
 // rendered profile. The 404 case shows the notFound stub.
 export async function hydrateProfile(handle) {
   const me = currentUser();
-  if (me && me.handle === handle) return;  // own profile already populated
-  const local = getUser(handle);
-  if (local && local._fetched) return;     // cached from a recent fetch
+  const haveLocal = me && me.handle === handle || getUser(handle)?._fetched;
+  if (!haveLocal) {
+    const fetched = await fetchProfileByHandle(handle);
+    const app = document.getElementById('app');
+    if (!app) return;
+    if (!fetched) { app.innerHTML = notFound(handle); return; }
+    // fetched was cached into KEYS.users, so renderProfile() will find it.
+    app.innerHTML = renderProfile(handle);
+  }
+  await hydrateProfilePosts(handle);
+}
 
-  const fetched = await fetchProfileByHandle(handle);
-  const app = document.getElementById('app');
-  if (!app) return;
-  if (!fetched) { app.innerHTML = notFound(handle); return; }
-  // fetched was cached into KEYS.users, so renderProfile() will find it.
-  app.innerHTML = renderProfile(handle);
+async function hydrateProfilePosts(handle) {
+  const list = document.getElementById('profile-posts');
+  if (!list) return;
+  const posts = await postsByHandle(handle);
+  const count = posts.length;
+  const countEl = document.getElementById('profile-postcount');
+  if (countEl) countEl.textContent = String(count);
+  list.innerHTML = count
+    ? posts.map(renderPost).join('')
+    : '<div class="stub"><p class="stub__sub">まだ投稿がありません。</p></div>';
 }
 
 // Resolves badges asynchronously after the profile is rendered, so the
