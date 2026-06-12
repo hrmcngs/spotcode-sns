@@ -1,0 +1,14 @@
+{
+  "appId": "io.github.hrmcngs.spotcode",
+  "appName": "spotcode-sns",
+  "webDir": "src",
+  "ios": {
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "capacitor",
+    "cleartext": false
+  }
+}

@@ -1,8 +1,13 @@
-// Hybrid router: uses History API on http(s), hash routing on file:// (Electron).
-// This lets the same code work both as a static GH Pages site and as a packaged
-// Electron app where /spotcode-sns paths are meaningless.
+// Hybrid router: uses History API on http(s), hash routing on file:// (Electron)
+// and capacitor:// (iOS Capacitor wrap). This lets the same code work as a
+// static GH Pages site, a packaged Electron app, and a Capacitor-wrapped iOS
+// app where the History API base path can't be derived reliably.
 
-const HASH_MODE = (location.protocol === 'file:' || location.protocol === 'app:');
+const HASH_MODE = (
+  location.protocol === 'file:' ||
+  location.protocol === 'app:' ||
+  location.protocol === 'capacitor:'
+);
 
 const BASE = (() => {
   if (HASH_MODE) return '';

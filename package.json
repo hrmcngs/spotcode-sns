@@ -7,11 +7,19 @@
   "scripts": {
     "start:web": "npx http-server src -p 8080 -o",
     "start:electron": "ELECTRON_RUN_AS_NODE= electron .",
-    "build:electron": "electron-builder"
+    "build:electron": "electron-builder",
+    "cap:sync": "cap sync",
+    "cap:open:ios": "cap open ios",
+    "cap:add:ios": "cap add ios"
   },
   "author": "hrmcngs",
   "license": "MIT",
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2"
+  },
   "devDependencies": {
+    "@capacitor/cli": "^6.1.2",
     "electron": "^42.0.0",
     "electron-builder": "^26.0.0"
   }
