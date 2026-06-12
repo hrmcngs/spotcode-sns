@@ -734,3 +734,23 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 /* report modal */
 .report-hint { color: var(--muted); font-size: .85rem; margin-bottom: .6rem; }
 .report-done { color: var(--green); font-size: .85rem; }
+
+/* ---------- profile badges ---------- */
+.profile-badges {
+  display: flex; flex-wrap: wrap; gap: .35rem;
+  padding: .6rem 1rem 0;
+}
+.profile-badges__loading { color: var(--muted); font-size: .78rem; }
+.badge-chip {
+  display: inline-flex; align-items: center;
+  padding: .25em .7em; border-radius: 999px;
+  font-size: .75rem; font-weight: 700; letter-spacing: .02em;
+  border: 1px solid transparent;
+  cursor: default;
+}
+.badge-chip--accent { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.badge-chip--green  { background: color-mix(in srgb, var(--green)  16%, transparent); color: var(--green);  border-color: color-mix(in srgb, var(--green)  35%, transparent); }
+.badge-chip--warn   { background: color-mix(in srgb, var(--warn)   16%, transparent); color: var(--warn);   border-color: color-mix(in srgb, var(--warn)   35%, transparent); }
+.badge-chip--danger { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.badge-chip--boost  { background: color-mix(in srgb, var(--boost)  16%, transparent); color: var(--boost);  border-color: color-mix(in srgb, var(--boost)  35%, transparent); }
+.badge-chip--like   { background: color-mix(in srgb, var(--like)   16%, transparent); color: var(--like);   border-color: color-mix(in srgb, var(--like)   35%, transparent); }

@@ -4,6 +4,7 @@ import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, followerCount, followingCount } from '../interactions.js';
+import { getBadges } from '../badges.js';
 
 function notFound(handle) {
   return (
@@ -61,6 +62,11 @@ export function renderProfile(handle) {
         '<span><b>' + followersN + '</b> Followers</span>' +
         '<span><b>' + postCount + '</b> Posts</span>' +
       '</div>' +
+      (u.github?.handle
+        ? '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
+            '<span class="profile-badges__loading">バッジを取得中…</span>' +
+          '</div>'
+        : '') +
     '</header>'
   );
 
@@ -78,4 +84,23 @@ export function renderProfile(handle) {
     : '<div class="stub"><p class="stub__sub">まだ投稿がありません。</p></div>';
 
   return header + tabs + body;
+}
+
+// Resolves badges asynchronously after the profile is rendered, so the
+// page paints immediately and we don't block on GitHub API.
+export async function hydrateProfileBadges(handle) {
+  const u = getUser(handle);
+  if (!u || !u.github?.handle) return;
+  const slot = document.getElementById('profile-badges-' + u.handle);
+  if (!slot) return;
+  try {
+    const badges = await getBadges(u.github.handle);
+    if (!badges.length) { slot.remove(); return; }
+    slot.innerHTML = badges.map(b => (
+      '<span class="badge-chip badge-chip--' + b.tone + '" title="' + b.tooltip.replace(/"/g, '&quot;') + '">' +
+        b.name + '</span>'
+    )).join('');
+  } catch {
+    slot.remove();
+  }
 }
