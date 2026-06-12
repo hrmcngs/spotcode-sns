@@ -180,7 +180,7 @@ button { font: inherit; cursor: pointer; }
 }
 .composer > .avatar { margin-top: .25rem; }
 .composer .idea-form { display: flex; flex-direction: column; gap: .7rem; max-width: none; margin: 0; min-width: 0; }
-.composer-body { padding-bottom: .4rem; }
+.composer-body { padding: .2rem 0 .4rem; }
 .composer textarea {
   display: block;
   width: 100%;

@@ -10,7 +10,7 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, addPost } from './data.js';
+import { allUsers, allPosts, addPost } from './data.js';
 import { currentUser, logout, onAuthChange } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
@@ -20,11 +20,30 @@ import { renderAvatar } from './avatar.js';
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
 
-const spots = [
-  { id: 'shibuya',   lat: 35.659, lng: 139.700, ideaCount: 12 },
-  { id: 'akihabara', lat: 35.702, lng: 139.774, ideaCount: 27 },
-  { id: 'shimokita', lat: 35.661, lng: 139.668, ideaCount: 5  },
-];
+function escape(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+// Aggregate the actual posts by city (市区町村) for the right-rail
+// "Trending spots" card. A post contributes when its spot includes
+// `addressDetails.city` (filled in by the Nominatim reverse-geocode
+// in the spot picker). Posts without a location are skipped.
+function computeTrendingCities() {
+  const byCity = new Map(); // city -> { city, prefecture, count }
+  for (const p of allPosts()) {
+    const det = p?.spot?.addressDetails;
+    const city = det?.city;
+    if (!city) continue;
+    const prev = byCity.get(city);
+    if (prev) prev.count++;
+    else byCity.set(city, { city, prefecture: det.prefecture || '', count: 1 });
+  }
+  return [...byCity.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+}
 
 const counts = {};
 for (let i = 0; i < 53 * 7; i++) {
@@ -46,27 +65,41 @@ document.querySelectorAll('.side-nav__item').forEach(el => {
 function renderRail() {
   const me = currentUser();
   const others = Object.values(allUsers()).filter(u => !me || u.handle !== me.handle);
+  const trending = computeTrendingCities();
+
   const parts = [
     '<section class="card">',
       '<h3>Your activity <span class="dim">last 12 months</span></h3>',
       renderGrass(counts),
     '</section>',
-    '<section class="card">',
-      '<h3>Trending spots</h3>',
-      '<div class="trend-list">',
-        spots.map((s, i) => (
-          '<a class="trend-item" href="' + url('/spots') + '">' +
-            '<div class="trend-item__main">' +
-              '<span class="trend-item__cat">Trending · #' + (i + 1) + '</span>' +
-              '<span class="trend-item__name">' + icon('pin', { size: 14, className: 'icon--inline' }) + s.id + '</span>' +
-              '<span class="trend-item__sub">' + s.lat.toFixed(3) + ', ' + s.lng.toFixed(3) + '</span>' +
-            '</div>' +
-            '<span class="trend-item__count">' + s.ideaCount + ' ideas</span>' +
-          '</a>'
-        )).join(''),
-      '</div>',
-    '</section>',
   ];
+
+  if (trending.length) {
+    parts.push(
+      '<section class="card">' +
+        '<h3>Trending spots <span class="dim">市区町村別</span></h3>' +
+        '<div class="trend-list">' +
+          trending.map((s, i) => (
+            '<a class="trend-item" href="' + url('/spots') + '">' +
+              '<div class="trend-item__main">' +
+                '<span class="trend-item__cat">Trending · #' + (i + 1) + '</span>' +
+                '<span class="trend-item__name">' +
+                  icon('pin', { size: 14, className: 'icon--inline' }) + escape(s.city) +
+                '</span>' +
+                (s.prefecture
+                  ? '<span class="trend-item__sub">' + escape(s.prefecture) + '</span>'
+                  : '') +
+              '</div>' +
+              '<span class="trend-item__count">' + s.count + ' ' +
+                (s.count === 1 ? 'idea' : 'ideas') +
+              '</span>' +
+            '</a>'
+          )).join('') +
+        '</div>' +
+      '</section>'
+    );
+  }
+
   if (others.length) {
     parts.push(
       '<section class="card">' +
