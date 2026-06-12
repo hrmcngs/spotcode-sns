@@ -58,7 +58,7 @@ function mount() {
     if (e.target.matches('[data-report-close]')) close(null);
   });
 
-  document.getElementById('report-form').addEventListener('submit', (e) => {
+  document.getElementById('report-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
     const err  = form.querySelector('[data-error]');
@@ -68,17 +68,20 @@ function mount() {
     if (!me) { err.textContent = 'ログインしてください'; return; }
     if (!activePostId) { err.textContent = '対象投稿が不明です'; return; }
     const fd = new FormData(form);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
     try {
-      reportPost({
-        postId:   activePostId,
-        reporter: me.handle,
-        reason:   fd.get('reason'),
-        comment:  fd.get('comment'),
+      await reportPost({
+        postId:  activePostId,
+        reason:  fd.get('reason'),
+        comment: fd.get('comment'),
       });
       done.hidden = false;
-      form.querySelector('button[type="submit"]').disabled = true;
       setTimeout(() => close({ ok: true }), 900);
-    } catch (ex) { err.textContent = ex.message || String(ex); }
+    } catch (ex) {
+      err.textContent = ex.message || String(ex);
+      submitBtn.disabled = false;
+    }
   });
 
   document.addEventListener('keydown', (e) => {
@@ -103,9 +106,12 @@ export function openReport(postId) {
   form.querySelector('[data-done]').hidden = true;
 
   const me = currentUser();
-  if (me && reportedByMe(postId, me.handle)) {
-    form.querySelector('[data-done]').textContent = 'この投稿は既に報告済みです（再送で上書きされます）';
-    form.querySelector('[data-done]').hidden = false;
+  if (me) {
+    reportedByMe(postId).then((already) => {
+      if (!already) return;
+      form.querySelector('[data-done]').textContent = 'この投稿は既に報告済みです（再送で上書きされます）';
+      form.querySelector('[data-done]').hidden = false;
+    });
   }
 
   rootEl.hidden = false;

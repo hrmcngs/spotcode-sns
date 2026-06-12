@@ -2,6 +2,7 @@ import { renderIdeaForm } from '../idea-post.js';
 import { allPosts }       from '../data.js';
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
+import { hydratePostLikes } from '../interactions.js';
 
 function emptyTimeline(loggedIn) {
   return (
@@ -35,7 +36,8 @@ export function renderHome() {
 }
 
 // Async fetch of the global timeline; replaces the loading skeleton with
-// the rendered posts (or the empty state).
+// the rendered posts (or the empty state). Like counts come in a second
+// hydration pass so the posts paint immediately.
 export async function hydrateHome() {
   const list = document.getElementById('timeline-list');
   if (!list) return;
@@ -44,5 +46,8 @@ export async function hydrateHome() {
     list.innerHTML = emptyTimeline(!!currentUser());
     return;
   }
+  list.innerHTML = posts.map(renderPost).join('');
+  await hydratePostLikes(posts.map(p => p.id));
+  // Re-render to pick up the freshly cached like counts / is-liked state.
   list.innerHTML = posts.map(renderPost).join('');
 }

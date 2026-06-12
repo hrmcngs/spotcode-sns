@@ -14,7 +14,8 @@ import { allUsers, allPosts, addPost, removePost } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
-         toggleFollow, isFollowing } from './interactions.js';
+         toggleFollow, isFollowing,
+         hydrateMyFollows, clearInteractionsCache } from './interactions.js';
 import { renderAvatar } from './avatar.js';
 
 const app  = document.getElementById('app');
@@ -248,6 +249,9 @@ initThemeToggle(document.getElementById('theme-toggle'));
 // (Supabase down, no network) leave cachedUser null — the app still works
 // as a logged-out static site.
 try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
+// Once logged in, pre-load the set of handles I follow so isFollowing()
+// can answer synchronously from the render path.
+hydrateMyFollows();
 
 onRoute(dispatch);
 renderAuthArea();
@@ -255,6 +259,11 @@ renderSideMe();
 initSearch();
 
 onAuthChange(() => {
+  // The signed-in identity changed (login / logout / profile update) —
+  // drop the like/follow cache so the next renders re-fetch with the
+  // right `auth.uid()` context, then warm the new user's follows.
+  clearInteractionsCache();
+  hydrateMyFollows();
   renderAuthArea();
   renderSideMe();
   refresh();
@@ -333,14 +342,15 @@ document.addEventListener('click', (e) => {
     const post = likeBtn.closest('[data-post-id]');
     if (!post) return;
     const postId = post.getAttribute('data-post-id');
-    const now = toggleLike(postId, me.handle);
-    likeBtn.classList.toggle('is-liked', now);
-    const span = likeBtn.querySelector('span');
-    if (span) {
-      const article = likeBtn.closest('article');
-      const base = Number(article?.dataset.baseLikes || 0);
-      span.textContent = base + likeCount(postId);
-    }
+    likeBtn.disabled = true;
+    toggleLike(postId)
+      .then((now) => {
+        likeBtn.classList.toggle('is-liked', now);
+        const span = likeBtn.querySelector('span');
+        if (span) span.textContent = String(likeCount(postId));
+      })
+      .catch((err) => alert('いいねに失敗しました: ' + err.message))
+      .finally(() => { likeBtn.disabled = false; });
     return;
   }
 
@@ -352,13 +362,18 @@ document.addEventListener('click', (e) => {
     if (!me) return openAuth('login');
     const target = followBtn.getAttribute('data-target');
     if (!target || target === me.handle) return;
-    const now = toggleFollow(me.handle, target);
-    followBtn.classList.toggle('is-following', now);
-    followBtn.classList.toggle('btn--primary', !now);
-    followBtn.classList.toggle('btn--ghost', now);
-    followBtn.textContent = now ? 'Following' : 'Follow';
-    // Refresh the route so any visible follower/following counts re-read.
-    refresh();
+    followBtn.disabled = true;
+    toggleFollow(me.handle, target)
+      .then((now) => {
+        followBtn.classList.toggle('is-following', now);
+        followBtn.classList.toggle('btn--primary', !now);
+        followBtn.classList.toggle('btn--ghost', now);
+        followBtn.textContent = now ? 'Following' : 'Follow';
+        // Re-render so any visible follower/following counts re-read the cache.
+        refresh();
+      })
+      .catch((err) => alert('フォロー操作に失敗しました: ' + err.message))
+      .finally(() => { followBtn.disabled = false; });
     return;
   }
 

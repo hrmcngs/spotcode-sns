@@ -3,7 +3,8 @@ import { renderPost }              from '../post.js';
 import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
 import { icon }                    from '../icons.js';
-import { isFollowing, followerCount, followingCount } from '../interactions.js';
+import { isFollowing, followerCount, followingCount,
+         hydratePostLikes, hydrateProfileFollow } from '../interactions.js';
 import { getBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
@@ -36,8 +37,10 @@ export function renderProfile(handle) {
   const me = currentUser();
   const isMe = me && me.handle === u.handle;
   const ghLink = u.github?.url || (u.github?.handle ? 'https://github.com/' + u.github.handle : null);
-  const followingN = (u.following || 0) + followingCount(u.handle);
-  const followersN = (u.followers || 0) + followerCount(u.handle);
+  // Counts come from Supabase via hydrateProfileFollow; the cache returns
+  // 0 until then, which is fine — hydrateProfile re-renders after fill.
+  const followingN = followingCount(u.handle);
+  const followersN = followerCount(u.handle);
   const followed = me && !isMe && isFollowing(me.handle, u.handle);
 
   const header = (
@@ -99,20 +102,22 @@ export function renderProfile(handle) {
   return header + tabs + body;
 }
 
-// Look up the profile in Supabase if it's not in the local cache yet,
-// then swap the loading skeleton (or whatever's there) for the real
-// rendered profile. The 404 case shows the notFound stub.
+// Look up the profile + follow counts in Supabase if needed, render the
+// finalised profile shell, then hydrate the posts list. 404 → notFound.
 export async function hydrateProfile(handle) {
   const me = currentUser();
-  const haveLocal = me && me.handle === handle || getUser(handle)?._fetched;
+  const haveLocal = (me && me.handle === handle) || getUser(handle)?._fetched;
   if (!haveLocal) {
     const fetched = await fetchProfileByHandle(handle);
-    const app = document.getElementById('app');
-    if (!app) return;
-    if (!fetched) { app.innerHTML = notFound(handle); return; }
-    // fetched was cached into KEYS.users, so renderProfile() will find it.
-    app.innerHTML = renderProfile(handle);
+    if (!fetched) {
+      const app = document.getElementById('app');
+      if (app) app.innerHTML = notFound(handle);
+      return;
+    }
   }
+  await hydrateProfileFollow(handle);
+  const app = document.getElementById('app');
+  if (app) app.innerHTML = renderProfile(handle);
   await hydrateProfilePosts(handle);
 }
 
@@ -123,9 +128,13 @@ async function hydrateProfilePosts(handle) {
   const count = posts.length;
   const countEl = document.getElementById('profile-postcount');
   if (countEl) countEl.textContent = String(count);
-  list.innerHTML = count
-    ? posts.map(renderPost).join('')
-    : '<div class="stub"><p class="stub__sub">まだ投稿がありません。</p></div>';
+  if (!count) {
+    list.innerHTML = '<div class="stub"><p class="stub__sub">まだ投稿がありません。</p></div>';
+    return;
+  }
+  list.innerHTML = posts.map(renderPost).join('');
+  await hydratePostLikes(posts.map(p => p.id));
+  list.innerHTML = posts.map(renderPost).join('');
 }
 
 // Resolves badges asynchronously after the profile is rendered, so the

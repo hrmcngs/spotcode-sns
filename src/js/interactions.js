@@ -1,120 +1,189 @@
-// Persistent likes, follows and reports. Stored in localStorage as:
-//   spotcode:likes   → { [postId]: [handles] }
-//   spotcode:follows → { [followerHandle]: [targetHandles] }
-//   spotcode:reports → [ { id, postId, reporter, reason, comment, ts, resolved } ]
+// Likes / follows / reports backed by Supabase (Stage 5).
+//
+// Reads are served from small in-memory caches populated by `hydrate*()`
+// helpers, so the existing sync getters (`likeCount(postId)` etc) keep
+// the render path simple. Writes are async and update the cache
+// optimistically before the round trip.
 
-import { read, write } from './storage.js';
+import { getClient } from './supa.js';
 
-const LIKES   = 'spotcode:likes';
-const FOLLOWS = 'spotcode:follows';
-const REPORTS = 'spotcode:reports';
+// post id  -> { count, mine }
+const likes = new Map();
+// user handle -> { followers, following }
+const followCounts = new Map();
+// target handles that the current session user follows
+const followsMine = new Set();
+let followsMineLoaded = false;
 
-// ----- likes -----
-
-function readLikes()  { return read(LIKES, {}); }
-function writeLikes(o){ write(LIKES, o); }
-
-export function isLiked(postId, handle) {
-  if (!postId || !handle) return false;
-  return (readLikes()[postId] || []).includes(handle);
+export function clearInteractionsCache() {
+  likes.clear();
+  followCounts.clear();
+  followsMine.clear();
+  followsMineLoaded = false;
 }
+
+// ----------------------------------------------------------------------
+// LIKES
+// ----------------------------------------------------------------------
 
 export function likeCount(postId) {
-  if (!postId) return 0;
-  return (readLikes()[postId] || []).length;
+  return likes.get(postId)?.count || 0;
+}
+export function isLiked(postId /* , _handle ignored */) {
+  return !!likes.get(postId)?.mine;
 }
 
-export function toggleLike(postId, handle) {
-  if (!postId || !handle) return false;
-  const all = readLikes();
-  const set = new Set(all[postId] || []);
-  const nowLiked = !set.has(handle);
-  if (nowLiked) set.add(handle); else set.delete(handle);
-  if (set.size) all[postId] = Array.from(set);
-  else delete all[postId];
-  writeLikes(all);
-  return nowLiked;
-}
+// Batch-fetch like counts + isLiked-by-me for the visible post IDs in
+// two round trips (one for everyone's rows, one for mine).
+export async function hydratePostLikes(postIds) {
+  if (!postIds || !postIds.length) return;
+  let supa; try { supa = await getClient(); } catch { return; }
 
-// ----- follows -----
+  const { data: { user } } = await supa.auth.getUser();
+  const { data: rows } = await supa
+    .from('likes')
+    .select('post_id, user_id')
+    .in('post_id', postIds);
 
-function readFollows()   { return read(FOLLOWS, {}); }
-function writeFollows(o) { write(FOLLOWS, o); }
-
-export function isFollowing(myHandle, targetHandle) {
-  if (!myHandle || !targetHandle) return false;
-  return (readFollows()[myHandle] || []).includes(targetHandle);
-}
-
-export function followingCount(handle) {
-  if (!handle) return 0;
-  return (readFollows()[handle] || []).length;
-}
-
-export function followerCount(handle) {
-  if (!handle) return 0;
-  const follows = readFollows();
-  let n = 0;
-  for (const arr of Object.values(follows)) if (arr.includes(handle)) n++;
-  return n;
-}
-
-export function toggleFollow(myHandle, targetHandle) {
-  if (!myHandle || !targetHandle || myHandle === targetHandle) return false;
-  const all = readFollows();
-  const set = new Set(all[myHandle] || []);
-  const nowFollowing = !set.has(targetHandle);
-  if (nowFollowing) set.add(targetHandle); else set.delete(targetHandle);
-  if (set.size) all[myHandle] = Array.from(set);
-  else delete all[myHandle];
-  writeFollows(all);
-  return nowFollowing;
-}
-
-// ----- reports -----
-
-function readReports()  { return read(REPORTS, []); }
-function writeReports(a){ write(REPORTS, a); }
-
-export function reportPost({ postId, reporter, reason, comment }) {
-  if (!postId || !reporter || !reason) throw new Error('postId / reporter / reason は必須です');
-  const reports = readReports();
-  // De-dupe: a single reporter can only have one active report per post.
-  const idx = reports.findIndex(r => r.postId === postId && r.reporter === reporter && !r.resolved);
-  const entry = {
-    id: 'r' + Date.now() + Math.floor(Math.random() * 1000),
-    postId, reporter, reason,
-    comment: comment ? String(comment).slice(0, 400) : '',
-    ts: Date.now(),
-    resolved: false,
-  };
-  if (idx >= 0) reports[idx] = entry;
-  else reports.unshift(entry);
-  writeReports(reports);
-  return entry;
-}
-
-export function allReports() { return readReports(); }
-
-export function pendingReports() {
-  return readReports().filter(r => !r.resolved);
-}
-
-export function reportsForPost(postId) {
-  return readReports().filter(r => r.postId === postId);
-}
-
-export function reportedByMe(postId, handle) {
-  if (!postId || !handle) return false;
-  return readReports().some(r => r.postId === postId && r.reporter === handle && !r.resolved);
-}
-
-export function resolveReports(postId) {
-  const reports = readReports();
-  let changed = false;
-  for (const r of reports) {
-    if (r.postId === postId && !r.resolved) { r.resolved = true; r.resolvedAt = Date.now(); changed = true; }
+  const counts = new Map();
+  const mine   = new Set();
+  for (const r of rows || []) {
+    counts.set(r.post_id, (counts.get(r.post_id) || 0) + 1);
+    if (user && r.user_id === user.id) mine.add(r.post_id);
   }
-  if (changed) writeReports(reports);
-  return changed;
+  for (const id of postIds) {
+    likes.set(id, { count: counts.get(id) || 0, mine: mine.has(id) });
+  }
+}
+
+export async function toggleLike(postId /* , _handle ignored */) {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしてください');
+  const state = likes.get(postId) || { count: 0, mine: false };
+  if (state.mine) {
+    const { error } = await supa.from('likes')
+      .delete().eq('post_id', postId).eq('user_id', user.id);
+    if (error) throw new Error(error.message);
+    likes.set(postId, { count: Math.max(0, state.count - 1), mine: false });
+  } else {
+    const { error } = await supa.from('likes')
+      .insert({ post_id: postId, user_id: user.id });
+    if (error) throw new Error(error.message);
+    likes.set(postId, { count: state.count + 1, mine: true });
+  }
+  return likes.get(postId).mine;
+}
+
+// ----------------------------------------------------------------------
+// FOLLOWS
+// ----------------------------------------------------------------------
+
+export function followerCount(handle)  { return followCounts.get(handle)?.followers  || 0; }
+export function followingCount(handle) { return followCounts.get(handle)?.following || 0; }
+export function isFollowing(_myHandle, targetHandle) { return followsMine.has(targetHandle); }
+
+async function userIdFromHandle(handle) {
+  const supa = await getClient();
+  const { data } = await supa.from('profiles').select('id').eq('handle', handle).maybeSingle();
+  return data?.id || null;
+}
+
+// One round trip per session to know which handles the current user
+// follows. Used by the sync `isFollowing()` getter.
+export async function hydrateMyFollows() {
+  if (followsMineLoaded) return;
+  let supa; try { supa = await getClient(); } catch { return; }
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) { followsMineLoaded = true; return; }
+  const { data } = await supa
+    .from('follows')
+    .select('target:profiles!follows_target_id_fkey(handle)')
+    .eq('follower_id', user.id);
+  followsMine.clear();
+  for (const r of data || []) {
+    if (r.target?.handle) followsMine.add(r.target.handle);
+  }
+  followsMineLoaded = true;
+}
+
+// Fill followCounts for a single user (used by profile page).
+export async function hydrateProfileFollow(handle) {
+  let supa; try { supa = await getClient(); } catch { return; }
+  const id = await userIdFromHandle(handle);
+  if (!id) return;
+  const [followers, following] = await Promise.all([
+    supa.from('follows').select('*', { count: 'exact', head: true }).eq('target_id', id),
+    supa.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', id),
+  ]);
+  followCounts.set(handle, {
+    followers: followers.count || 0,
+    following: following.count || 0,
+  });
+}
+
+export async function toggleFollow(myHandle, targetHandle) {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしてください');
+  const targetId = await userIdFromHandle(targetHandle);
+  if (!targetId) throw new Error('対象ユーザーが見つかりません');
+  if (user.id === targetId) throw new Error('自分自身はフォローできません');
+
+  const already = followsMine.has(targetHandle);
+  if (already) {
+    const { error } = await supa.from('follows')
+      .delete().eq('follower_id', user.id).eq('target_id', targetId);
+    if (error) throw new Error(error.message);
+    followsMine.delete(targetHandle);
+  } else {
+    const { error } = await supa.from('follows')
+      .insert({ follower_id: user.id, target_id: targetId });
+    if (error) throw new Error(error.message);
+    followsMine.add(targetHandle);
+  }
+
+  // Bump cached counts optimistically.
+  const delta = already ? -1 : 1;
+  const target = followCounts.get(targetHandle);
+  if (target) followCounts.set(targetHandle,
+    { ...target, followers: Math.max(0, target.followers + delta) });
+  const mine = myHandle ? followCounts.get(myHandle) : null;
+  if (mine) followCounts.set(myHandle,
+    { ...mine, following: Math.max(0, mine.following + delta) });
+
+  return !already;
+}
+
+// ----------------------------------------------------------------------
+// REPORTS
+// ----------------------------------------------------------------------
+
+export async function reportPost({ postId, reason, comment }) {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしてください');
+  const row = {
+    post_id:     postId,
+    reporter_id: user.id,
+    reason,
+    comment:     comment ? String(comment).slice(0, 400) : null,
+  };
+  const { error } = await supa.from('reports')
+    .upsert(row, { onConflict: 'post_id,reporter_id' });
+  if (error) throw new Error(error.message);
+}
+
+export async function reportedByMe(postId) {
+  let supa; try { supa = await getClient(); } catch { return false; }
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) return false;
+  const { data } = await supa
+    .from('reports')
+    .select('id')
+    .eq('post_id', postId)
+    .eq('reporter_id', user.id)
+    .eq('resolved', false)
+    .maybeSingle();
+  return !!data;
 }
