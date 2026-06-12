@@ -4,6 +4,7 @@ import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
 import { renderProfile, hydrateProfileBadges, hydrateProfile } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
+import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderSettings, bindSettings } from './views/settings.js';
 import { pickSpot }        from './views/spot-picker.js';
 import { openAuth }        from './views/auth-modal.js';
@@ -81,7 +82,7 @@ async function renderRail() {
         '<h3>Trending spots <span class="dim">市区町村別</span></h3>' +
         '<div class="trend-list">' +
           trending.map((s, i) => (
-            '<a class="trend-item" href="' + url('/spots') + '">' +
+            '<a class="trend-item" href="' + url('/spot/' + encodeURIComponent(s.city)) + '">' +
               '<div class="trend-item__main">' +
                 '<span class="trend-item__cat">Trending · #' + (i + 1) + '</span>' +
                 '<span class="trend-item__name">' +
@@ -187,6 +188,7 @@ let pendingSpot = null;
 
 function dispatch(path) {
   const stubMatch = path.match(/^\/(explore|spots|repos|notifications)\/?$/);
+  const spotMatch = path.match(/^\/spot\/(.+?)\/?$/);
   const userMatch = path.match(/^\/([A-Za-z0-9_]+)\/?$/);
 
   if (path === '/' || path === '') {
@@ -198,6 +200,11 @@ function dispatch(path) {
     document.title = 'Settings / spotcode-sns';
     app.innerHTML = renderSettings();
     bindSettings();
+  } else if (spotMatch) {
+    const city = decodeURIComponent(spotMatch[1]);
+    document.title = city + ' / spotcode-sns';
+    app.innerHTML = renderSpot(city);
+    hydrateSpot(city);
   } else if (stubMatch) {
     document.title = stubMatch[1] + ' / spotcode-sns';
     app.innerHTML = renderStub(stubMatch[1]);

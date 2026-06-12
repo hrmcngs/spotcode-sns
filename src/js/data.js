@@ -97,6 +97,21 @@ export async function postsByHandle(handle) {
   return (data || []).map(shapePost);
 }
 
+export async function postsByCity(city) {
+  if (!city) return [];
+  const supa = await getClient();
+  // PostgREST JSONB path filter: spot->addressDetails->>city == city.
+  // The post.spot column is jsonb and addressDetails is the nested
+  // object we save from the picker.
+  const { data, error } = await supa
+    .from('posts')
+    .select(POST_COLS)
+    .eq('spot->addressDetails->>city', city)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map(shapePost);
+}
+
 export async function addPost(post) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
