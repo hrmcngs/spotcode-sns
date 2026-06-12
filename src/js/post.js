@@ -4,6 +4,8 @@ import { statusBadge }     from './status-badges.js';
 import { getUser, relTime } from './data.js';
 import { url }              from './router.js';
 import { icon }             from './icons.js';
+import { isLiked, likeCount } from './interactions.js';
+import { currentUser }      from './auth.js';
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -50,8 +52,11 @@ export function renderPost(p) {
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
   const profileUrl = url('/' + u.handle);
+  const me = currentUser();
+  const liked = me && isLiked(p.id, me.handle);
+  const likes = (a.likes || 0) + likeCount(p.id);
   return (
-    '<article class="post" data-post-id="' + escape(p.id) + '">' +
+    '<article class="post" data-post-id="' + escape(p.id) + '" data-base-likes="' + (a.likes || 0) + '">' +
       '<a class="avatar" href="' + profileUrl + '">' + escape(u.avatar) + '</a>' +
       '<div class="post__main">' +
         '<div class="post__head">' +
@@ -74,7 +79,7 @@ export function renderPost(p) {
           '<button class="act act--reply" title="reply">' + icon('reply', { size: 16 }) + '<span>' + (a.replies || 0) + '</span></button>' +
           '<button class="act act--fork"  title="fork">'  + icon('fork',  { size: 16 }) + '<span>' + (a.forks   || 0) + '</span></button>' +
           '<button class="act act--star"  title="star">'  + icon('star',  { size: 16 }) + '<span>' + (a.stars   || 0) + '</span></button>' +
-          '<button class="act act--like"  title="like">'  + icon('heart', { size: 16 }) + '<span>'  + (a.likes   || 0) + '</span></button>' +
+          '<button class="act act--like' + (liked ? ' is-liked' : '') + '" title="like">'  + icon('heart', { size: 16 }) + '<span>'  + likes + '</span></button>' +
           '<button class="act act--share" title="share">' + icon('share', { size: 16 }) + '</button>' +
         '</div>' +
       '</div>' +

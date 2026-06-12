@@ -268,6 +268,8 @@ button { font: inherit; cursor: pointer; }
 .act--fork:hover  { color: var(--boost); }
 .act--star:hover  { color: var(--warn); }
 .act--like:hover  { color: var(--like); }
+.act--like.is-liked { color: var(--like); }
+.act--like.is-liked svg { fill: var(--like); stroke: var(--like); }
 .act--share:hover { color: var(--accent); }
 
 /* ---------- file size badges & status badges ---------- */
@@ -316,6 +318,16 @@ button { font: inherit; cursor: pointer; }
   padding: .35em .9em; font-weight: 700; font-size: .85rem;
 }
 .followlist__follow:hover { opacity: .85; }
+.followlist__follow.is-following,
+.btn--follow.is-following {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border);
+}
+.followlist__follow.is-following:hover,
+.btn--follow.is-following:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger); border-color: var(--danger);
+}
 
 /* ---------- profile page ---------- */
 .profile-header {
