@@ -16,16 +16,33 @@ function emptyTimeline(loggedIn) {
   );
 }
 
+function loadingTimeline() {
+  return '<div class="stub" id="timeline-loading"><p class="stub__sub">タイムラインを読み込み中…</p></div>';
+}
+
 export function renderHome() {
-  const me = currentUser();
-  const posts = allPosts();
   return [
     '<div class="timeline__head">',
       '<a class="tab is-active" href="/">For you</a>',
       '<a class="tab" href="/">Following</a>',
       '<a class="tab" href="/">Spots</a>',
     '</div>',
-    renderIdeaForm({ user: me }),
-    posts.length ? posts.map(renderPost).join('') : emptyTimeline(!!me),
+    renderIdeaForm({ user: currentUser() }),
+    '<div id="timeline-list">',
+      loadingTimeline(),
+    '</div>',
   ].join('');
+}
+
+// Async fetch of the global timeline; replaces the loading skeleton with
+// the rendered posts (or the empty state).
+export async function hydrateHome() {
+  const list = document.getElementById('timeline-list');
+  if (!list) return;
+  const posts = await allPosts();
+  if (!posts.length) {
+    list.innerHTML = emptyTimeline(!!currentUser());
+    return;
+  }
+  list.innerHTML = posts.map(renderPost).join('');
 }

@@ -1,7 +1,7 @@
 import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
-import { renderHome }      from './views/home.js';
+import { renderHome, hydrateHome } from './views/home.js';
 import { renderProfile, hydrateProfileBadges, hydrateProfile } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSettings, bindSettings } from './views/settings.js';
@@ -28,11 +28,11 @@ function escape(s) {
 
 // Aggregate the actual posts by city (市区町村) for the right-rail
 // "Trending spots" card. A post contributes when its spot includes
-// `addressDetails.city` (filled in by the Nominatim reverse-geocode
-// in the spot picker). Posts without a location are skipped.
-function computeTrendingCities() {
+// `addressDetails.city`. Posts without a location are skipped.
+async function computeTrendingCities() {
   const byCity = new Map(); // city -> { city, prefecture, count }
-  for (const p of allPosts()) {
+  const posts = await allPosts({ limit: 200 });
+  for (const p of posts) {
     const det = p?.spot?.addressDetails;
     const city = det?.city;
     if (!city) continue;
@@ -62,10 +62,10 @@ document.querySelectorAll('.side-nav__item').forEach(el => {
   if (name) el.insertAdjacentHTML('afterbegin', '<span class="side-nav__icon">' + icon(name, { size: 22 }) + '</span>');
 });
 
-function renderRail() {
+async function renderRail() {
   const me = currentUser();
   const others = Object.values(allUsers()).filter(u => !me || u.handle !== me.handle);
-  const trending = computeTrendingCities();
+  const trending = await computeTrendingCities();
 
   const parts = [
     '<section class="card">',
@@ -192,6 +192,7 @@ function dispatch(path) {
     document.title = 'spotcode-sns';
     app.innerHTML = renderHome();
     if (pendingSpot) syncSpotChip(pendingSpot);
+    hydrateHome();
   } else if (path === '/settings') {
     document.title = 'Settings / spotcode-sns';
     app.innerHTML = renderSettings();
@@ -210,7 +211,7 @@ function dispatch(path) {
     document.title = 'Not found / spotcode-sns';
     app.innerHTML = '<div class="stub"><h2 class="stub__title">Not found</h2><a class="back-home" href="/">← Back to home</a></div>';
   }
-  rail.innerHTML = renderRail();
+  renderRail().then((html) => { rail.innerHTML = html; });
   setActiveNav(path);
 }
 
@@ -307,8 +308,10 @@ document.addEventListener('click', (e) => {
     const post = deleteBtn.closest('[data-post-id]');
     if (!post) return;
     if (!confirm('この投稿を削除しますか？元に戻せません。')) return;
-    removePost(post.getAttribute('data-post-id'));
-    refresh();
+    deleteBtn.disabled = true;
+    removePost(post.getAttribute('data-post-id'))
+      .then(() => refresh())
+      .catch((err) => { alert('削除に失敗しました: ' + err.message); deleteBtn.disabled = false; });
     return;
   }
 
@@ -423,20 +426,23 @@ document.addEventListener('submit', (e) => {
       }
     : null;
   const post = {
-    id: 'p' + Date.now(),
-    authorHandle: me.handle,
     body: text,
     githubLink: gh || undefined,
     status: 'wip',
-    actions: { replies: 0, forks: 0, stars: 0, likes: 0 },
-    createdAt: Date.now(),
   };
   if (spotValue) post.spot = spotValue;
-  addPost(post);
-  ta.value = '';
-  pendingSpot = null;
-  refresh();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  addPost(post)
+    .then(() => {
+      ta.value = '';
+      pendingSpot = null;
+      refresh();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    })
+    .catch((err) => alert('投稿に失敗しました: ' + err.message))
+    .finally(() => { if (submitBtn) submitBtn.disabled = false; });
 });
 
 // Auto-grow the composer textarea as the user types, and drop the
