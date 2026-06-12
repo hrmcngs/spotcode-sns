@@ -1,3 +1,4 @@
+import { initThemeToggle } from './theme.js';
 import { renderFileBadge } from './file-size-viz.js';
 import { statusBadge }     from './status-badges.js';
 import { renderGrass }     from './grass.js';
@@ -29,3 +30,5 @@ app.innerHTML = [
   '<h2 style="margin-top:1.6rem">Post an idea</h2>',
   renderIdeaForm('shibuya'),
 ].join('');
+
+initThemeToggle(document.getElementById('theme-toggle'));
