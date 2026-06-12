@@ -116,8 +116,14 @@ export async function addPost(post) {
 
 export async function removePost(postId) {
   const supa = await getClient();
-  const { error } = await supa.from('posts').delete().eq('id', postId);
+  // .select() forces PostgREST to return the deleted row(s). Without it,
+  // RLS silently dropping the operation looks like success to the caller.
+  const { data, error } = await supa
+    .from('posts').delete().eq('id', postId).select('id');
   if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error('削除権限がありません（RLS により拒否、または既に削除済み）');
+  }
   return true;
 }
 
