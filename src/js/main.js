@@ -297,7 +297,12 @@ document.addEventListener('submit', (e) => {
   if (!text) return;
   const gh = form.querySelector('input[name="github"]').value.trim();
   const spotValue = pendingSpot
-    ? { lat: pendingSpot.lat, lng: pendingSpot.lng, label: pendingSpot.label || '' }
+    ? {
+        lat: pendingSpot.lat,
+        lng: pendingSpot.lng,
+        label: pendingSpot.label || '',
+        ...(pendingSpot.address ? { address: pendingSpot.address } : {}),
+      }
     : (form.dataset.spot || 'somewhere');
   addPost({
     id: 'p' + Date.now(),

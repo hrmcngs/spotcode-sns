@@ -673,8 +673,23 @@ a.trend-item:hover { background: var(--surface-2); }
   padding: .8rem 1rem; border-top: 1px solid var(--border);
   gap: 1rem; flex-wrap: wrap;
 }
-.picker-coords { font-family: var(--mono); font-size: .85rem; color: var(--muted); }
-.picker-actions { display: flex; gap: .5rem; }
+.picker-info { display: flex; flex-direction: column; gap: .15rem; min-width: 0; flex: 1; }
+.picker-address {
+  font-size: .9rem; color: var(--text); line-height: 1.35;
+  word-break: break-word;
+}
+.picker-address strong { color: var(--text); font-weight: 700; }
+.picker-address span   { color: var(--muted); font-size: .82rem; }
+.picker-address.is-loading { color: var(--muted); font-style: italic; }
+.picker-address.is-bad     { color: var(--danger); }
+.picker-coords { font-family: var(--mono); font-size: .78rem; color: var(--muted); }
+.picker-actions { display: flex; gap: .5rem; flex: 0 0 auto; }
+
+.post__addr {
+  font-size: .82rem; color: var(--muted);
+  margin-top: .3rem;
+  word-break: break-word;
+}
 .picker-error {
   padding: .6rem 1rem; color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, transparent);

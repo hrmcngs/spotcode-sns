@@ -54,10 +54,16 @@ function spotChip(spot) {
   if (typeof spot === 'object') {
     const label = spot.label || (Number(spot.lat).toFixed(4) + ', ' + Number(spot.lng).toFixed(4));
     const gmaps = 'https://www.google.com/maps?q=' + spot.lat + ',' + spot.lng;
-    return '<a class="spot-chip" href="' + gmaps + '" target="_blank" rel="noopener" title="Google Maps で開く">' +
+    const title = spot.address ? 'Google Maps で開く — ' + spot.address : 'Google Maps で開く';
+    return '<a class="spot-chip" href="' + gmaps + '" target="_blank" rel="noopener" title="' + escape(title) + '">' +
       pinIcon + escape(label) + '</a>';
   }
   return '<span class="spot-chip">' + pinIcon + escape(spot) + '</span>';
+}
+
+function spotAddress(spot) {
+  if (!spot || typeof spot !== 'object' || !spot.address) return '';
+  return '<div class="post__addr">' + escape(spot.address) + '</div>';
 }
 
 export function renderPost(p) {
@@ -81,6 +87,7 @@ export function renderPost(p) {
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
         '<div class="post__body">' + inlineFormat(escape(p.body)) + '</div>' +
+        spotAddress(p.spot) +
         (p.githubLink
           ? '<div class="post__meta"><a class="post__link" href="' + escape(p.githubLink) + '" target="_blank" rel="noopener">' +
             icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(p.githubLink) + '</a></div>'
