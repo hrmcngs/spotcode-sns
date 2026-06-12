@@ -270,7 +270,8 @@ button { font: inherit; cursor: pointer; }
 .act--like:hover  { color: var(--like); }
 .act--like.is-liked { color: var(--like); }
 .act--like.is-liked svg { fill: var(--like); stroke: var(--like); }
-.act--share:hover { color: var(--accent); }
+.act--share:hover  { color: var(--accent); }
+.act--report:hover { color: var(--danger); }
 
 /* ---------- file size badges & status badges ---------- */
 .file-badge {
@@ -694,6 +695,24 @@ a.trend-item:hover { background: var(--surface-2); }
   color: var(--green);
   border-color: color-mix(in srgb, var(--green) 35%, transparent);
 }
+.spot-chip--add {
+  background: transparent;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+}
+.spot-chip--add:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.spot-chip-clear {
+  background: transparent; border: 0; color: var(--muted);
+  font: inherit; font-size: 1rem; line-height: 1;
+  width: 22px; height: 22px; border-radius: 50%;
+  cursor: pointer;
+}
+.spot-chip-clear:hover { background: var(--surface-2); color: var(--danger); }
 
 a.spot-chip { text-decoration: none; }
 a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
@@ -711,3 +730,7 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .edit-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .3rem; }
+
+/* report modal */
+.report-hint { color: var(--muted); font-size: .85rem; margin-bottom: .6rem; }
+.report-done { color: var(--green); font-size: .85rem; }

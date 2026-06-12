@@ -25,7 +25,7 @@ export function renderHome() {
       '<a class="tab" href="/">Following</a>',
       '<a class="tab" href="/">Spots</a>',
     '</div>',
-    renderIdeaForm({ spot: 'shibuya', user: me }),
+    renderIdeaForm({ user: me }),
     posts.length ? posts.map(renderPost).join('') : emptyTimeline(!!me),
   ].join('');
 }

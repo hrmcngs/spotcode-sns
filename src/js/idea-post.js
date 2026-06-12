@@ -1,7 +1,8 @@
-// Twitter-style composer. Disabled state when logged out.
+// Twitter-style composer. Disabled state when logged out. Spot is optional —
+// the chip says "場所を追加" and only flips to a real spot once the user picks one.
 import { icon } from './icons.js';
 
-export function renderIdeaForm({ spot = 'somewhere', user = null } = {}) {
+export function renderIdeaForm({ user = null } = {}) {
   if (!user) {
     return (
       '<div class="composer composer--gated">' +
@@ -20,14 +21,15 @@ export function renderIdeaForm({ spot = 'somewhere', user = null } = {}) {
   return (
     '<div class="composer">' +
       '<div class="avatar avatar--lg">' + av + '</div>' +
-      '<form class="idea-form" data-spot="' + spot + '">' +
-        '<textarea name="text" placeholder="What did you ship today?" rows="1" required></textarea>' +
+      '<form class="idea-form">' +
+        '<textarea name="text" placeholder="いまどうしてる？" rows="1" required></textarea>' +
         '<div class="compose-meta">' +
-          '<button type="button" class="spot-chip spot-chip--btn" id="compose-spot-btn" data-spot-label="' + spot + '">' +
+          '<button type="button" class="spot-chip spot-chip--btn spot-chip--add" id="compose-spot-btn">' +
             icon('pin', { size: 12, className: 'icon--inline' }) +
-            '<span data-spot-text>' + spot + '</span>' +
+            '<span data-spot-text>場所を追加</span>' +
           '</button>' +
-          '<input name="github" placeholder="github.com/owner/repo/blob/...">' +
+          '<button type="button" class="spot-chip-clear" id="compose-spot-clear" hidden title="位置を外す">×</button>' +
+          '<input name="github" placeholder="github.com/owner/repo/blob/... (任意)">' +
         '</div>' +
         '<div class="compose-actions">' +
           '<div class="compose-tools">' +

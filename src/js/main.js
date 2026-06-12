@@ -8,6 +8,7 @@ import { renderSettings, bindSettings } from './views/settings.js';
 import { pickSpot }        from './views/spot-picker.js';
 import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
+import { openReport }      from './views/report-modal.js';
 import { allUsers, addPost } from './data.js';
 import { currentUser, logout, onAuthChange } from './auth.js';
 import { icon }            from './icons.js';
@@ -180,12 +181,26 @@ function syncSpotChip(spot) {
   const btn = document.getElementById('compose-spot-btn');
   if (!btn) return;
   const textEl = btn.querySelector('[data-spot-text]');
+  if (!spot) {
+    if (textEl) textEl.textContent = '場所を追加';
+    btn.classList.remove('spot-chip--set');
+    btn.classList.add('spot-chip--add');
+    delete btn.dataset.spotLat;
+    delete btn.dataset.spotLng;
+    delete btn.dataset.spotLabel;
+    const clear = document.getElementById('compose-spot-clear');
+    if (clear) clear.hidden = true;
+    return;
+  }
   const label = spot.label || (spot.lat.toFixed(4) + ', ' + spot.lng.toFixed(4));
   if (textEl) textEl.textContent = label;
   btn.dataset.spotLat   = String(spot.lat);
   btn.dataset.spotLng   = String(spot.lng);
   btn.dataset.spotLabel = spot.label || '';
   btn.classList.add('spot-chip--set');
+  btn.classList.remove('spot-chip--add');
+  const clear = document.getElementById('compose-spot-clear');
+  if (clear) clear.hidden = false;
 }
 
 initThemeToggle(document.getElementById('theme-toggle'));
@@ -229,6 +244,18 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Report a post (flag button).
+  const reportBtn = e.target.closest('.act--report');
+  if (reportBtn) {
+    e.preventDefault();
+    const me = currentUser();
+    if (!me) return openAuth('login');
+    const post = reportBtn.closest('[data-post-id]');
+    if (!post) return;
+    openReport(post.getAttribute('data-post-id'));
+    return;
+  }
+
   // Like a post (heart button).
   const likeBtn = e.target.closest('.act--like');
   if (likeBtn) {
@@ -267,7 +294,15 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  // Open the Google Maps spot picker.
+  // Clear the picked spot (the small × next to the chip).
+  if (e.target.closest('#compose-spot-clear')) {
+    e.preventDefault();
+    pendingSpot = null;
+    syncSpotChip(null);
+    return;
+  }
+
+  // Open the spot picker (📍 tool button or the spot chip itself).
   const spotTrigger = e.target.closest('[data-spot-pick], #compose-spot-btn');
   if (spotTrigger) {
     e.preventDefault();
@@ -304,18 +339,24 @@ document.addEventListener('submit', (e) => {
   if (!text) return;
   const gh = form.querySelector('input[name="github"]').value.trim();
   const spotValue = pendingSpot
-    ? { lat: pendingSpot.lat, lng: pendingSpot.lng, label: pendingSpot.label || '' }
-    : (form.dataset.spot || 'somewhere');
-  addPost({
+    ? {
+        lat: pendingSpot.lat,
+        lng: pendingSpot.lng,
+        label: pendingSpot.label || '',
+        ...(pendingSpot.address ? { address: pendingSpot.address } : {}),
+      }
+    : null;
+  const post = {
     id: 'p' + Date.now(),
     authorHandle: me.handle,
-    spot: spotValue,
     body: text,
     githubLink: gh || undefined,
     status: 'wip',
     actions: { replies: 0, forks: 0, stars: 0, likes: 0 },
     createdAt: Date.now(),
-  });
+  };
+  if (spotValue) post.spot = spotValue;
+  addPost(post);
   ta.value = '';
   pendingSpot = null;
   refresh();
