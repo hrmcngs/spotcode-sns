@@ -76,8 +76,7 @@ export function renderPost(p) {
           '<a class="post__handle" href="' + profileUrl + '">@' + escape(u.handle) + '</a>' +
           '<span class="post__sep">·</span>' +
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
-          '<span class="post__sep">·</span>' +
-          spotChip(p.spot) +
+          (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot) : '') +
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
         '<div class="post__body">' + inlineFormat(escape(p.body)) + '</div>' +
