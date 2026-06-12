@@ -6,6 +6,7 @@ import { icon }                    from '../icons.js';
 import { isFollowing, followerCount, followingCount } from '../interactions.js';
 import { getBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
+import { fetchProfileByHandle } from '../profiles.js';
 
 function notFound(handle) {
   return (
@@ -17,9 +18,20 @@ function notFound(handle) {
   );
 }
 
+function loading(handle) {
+  return (
+    '<div class="stub" id="profile-loading">' +
+      '<h2 class="stub__title">@' + handle + '</h2>' +
+      '<p class="stub__sub">プロフィールを読み込み中…</p>' +
+    '</div>'
+  );
+}
+
 export function renderProfile(handle) {
   const u = getUser(handle);
-  if (!u) return notFound(handle);
+  // No local cache yet — show a loading skeleton; hydrateProfile() will
+  // fetch from Supabase and re-render this card.
+  if (!u) return loading(handle);
 
   const me = currentUser();
   const isMe = me && me.handle === u.handle;
@@ -85,6 +97,23 @@ export function renderProfile(handle) {
     : '<div class="stub"><p class="stub__sub">まだ投稿がありません。</p></div>';
 
   return header + tabs + body;
+}
+
+// Look up the profile in Supabase if it's not in the local cache yet,
+// then swap the loading skeleton (or whatever's there) for the real
+// rendered profile. The 404 case shows the notFound stub.
+export async function hydrateProfile(handle) {
+  const me = currentUser();
+  if (me && me.handle === handle) return;  // own profile already populated
+  const local = getUser(handle);
+  if (local && local._fetched) return;     // cached from a recent fetch
+
+  const fetched = await fetchProfileByHandle(handle);
+  const app = document.getElementById('app');
+  if (!app) return;
+  if (!fetched) { app.innerHTML = notFound(handle); return; }
+  // fetched was cached into KEYS.users, so renderProfile() will find it.
+  app.innerHTML = renderProfile(handle);
 }
 
 // Resolves badges asynchronously after the profile is rendered, so the

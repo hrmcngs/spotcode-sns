@@ -1,18 +1,21 @@
 // Topbar search → live dropdown of matching users.
 //
-// All accounts live in localStorage, so only users registered on the
-// current device are searchable. When the query looks like a handle but
-// no local match exists, we still offer "open as profile" and a direct
-// GitHub link as fallbacks.
+// Local matches (allUsers, including cached fetched profiles) render
+// instantly; a debounced query against Supabase profiles fills in
+// anyone registered on another device. The fallback "open as profile"
+// and "github.com" rows still appear when nothing matches.
 
 import { allUsers } from '../data.js';
 import { url, navigate } from '../router.js';
 import { renderAvatar } from '../avatar.js';
 import { icon } from '../icons.js';
+import { searchProfiles } from '../profiles.js';
 
 let dropdownEl  = null;
 let activeIndex = -1;
 let lastResults = [];
+let currentQuery = '';
+let debounceTimer = null;
 
 const HANDLE_RE = /^[A-Za-z0-9_-]{1,39}$/;
 
@@ -31,44 +34,67 @@ function mount(host) {
   host.appendChild(dropdownEl);
 }
 
+function scoreUser(u, lower) {
+  const handle = (u.handle || '').toLowerCase();
+  const name   = (u.name   || '').toLowerCase();
+  if (handle === lower)              return 100;
+  if (handle.startsWith(lower))      return 80;
+  if (handle.includes(lower))        return 60;
+  if (name.startsWith(lower))        return 50;
+  if (name.includes(lower))          return 30;
+  return 0;
+}
+
 function searchLocal(q) {
   const lower = q.toLowerCase();
   return Object.values(allUsers())
-    .map(u => {
-      const handle = (u.handle || '').toLowerCase();
-      const name   = (u.name   || '').toLowerCase();
-      let score = 0;
-      if (handle === lower)          score = 100;
-      else if (handle.startsWith(lower)) score = 80;
-      else if (handle.includes(lower))   score = 60;
-      else if (name.startsWith(lower))   score = 50;
-      else if (name.includes(lower))     score = 30;
-      return score ? { u, score } : null;
-    })
-    .filter(Boolean)
+    .map(u => ({ u, score: scoreUser(u, lower) }))
+    .filter(x => x.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
     .map(x => x.u);
 }
 
-function buildResults(q) {
-  const local = searchLocal(q);
-  const items = local.map(u => ({
+function withFallbacks(items, q) {
+  // If query looks like a handle and nothing matched it exactly, surface
+  // a direct nav and a GitHub link as "always-available" fallbacks.
+  if (!HANDLE_RE.test(q)) return items;
+  const exists = items.some(it =>
+    it.kind === 'local' && it.user.handle.toLowerCase() === q.toLowerCase()
+  );
+  if (exists) return items;
+  return [
+    ...items,
+    { kind: 'jump',   handle: q, path: '/' + q },
+    { kind: 'github', handle: q },
+  ];
+}
+
+function localItems(q) {
+  return searchLocal(q).map(u => ({
     kind: 'local',
     handle: u.handle,
     path: '/' + u.handle,
     user: u,
   }));
+}
 
-  // If query looks like a handle, always surface direct nav as a fallback.
-  if (HANDLE_RE.test(q)) {
-    const exists = local.some(u => u.handle.toLowerCase() === q.toLowerCase());
-    if (!exists) {
-      items.push({ kind: 'jump',   handle: q, path: '/' + q });
-      items.push({ kind: 'github', handle: q });
+function mergeLocalAndRemote(localItems, remoteUsers, q) {
+  const lower = q.toLowerCase();
+  const byHandle = new Map();
+  localItems.forEach(it => byHandle.set(it.user.handle.toLowerCase(), it));
+  remoteUsers.forEach(u => {
+    const k = u.handle.toLowerCase();
+    if (!byHandle.has(k)) {
+      byHandle.set(k, { kind: 'local', handle: u.handle, path: '/' + u.handle, user: u });
     }
-  }
-  return items;
+  });
+  // Re-rank by score against the live query for stability.
+  return [...byHandle.values()]
+    .map(it => ({ it, score: it.kind === 'local' ? scoreUser(it.user, lower) : 1 }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 7)
+    .map(x => x.it);
 }
 
 function render(items, q) {
@@ -76,9 +102,10 @@ function render(items, q) {
     dropdownEl.innerHTML =
       '<div class="search-results__empty">' +
         '「' + escapeHtml(q) + '」 に一致するユーザーが見つかりません' +
-        '<div class="search-results__hint">アカウントはこの端末にしか保存されません。別端末で登録されたユーザーは検索できません。</div>' +
+        '<div class="search-results__hint">サインアップ済みのアカウントは Supabase に保存されているので、別端末で登録されたユーザーも検索できます。</div>' +
       '</div>';
     activeIndex = -1;
+    lastResults = [];
     return;
   }
   dropdownEl.innerHTML = items.map((it, i) => {
@@ -104,7 +131,6 @@ function render(items, q) {
         '</a>'
       );
     }
-    // github
     return (
       '<a class="search-result search-result--alt" data-idx="' + i + '" href="https://github.com/' + encodeURIComponent(it.handle) + '" target="_blank" rel="noopener">' +
         '<span class="search-result__icon">' + icon('github', { size: 18, fill: true }) + '</span>' +
@@ -116,6 +142,7 @@ function render(items, q) {
     );
   }).join('');
   activeIndex = 0;
+  lastResults = items;
   paintActive();
 }
 
@@ -126,14 +153,26 @@ function paintActive() {
   });
 }
 
-function open() {
-  if (!dropdownEl) return;
-  dropdownEl.hidden = false;
-}
+function open() { if (dropdownEl) dropdownEl.hidden = false; }
 function close() {
-  if (!dropdownEl) return;
-  dropdownEl.hidden = true;
-  activeIndex = -1;
+  if (dropdownEl) { dropdownEl.hidden = true; activeIndex = -1; }
+}
+
+async function queryRemote(q) {
+  // Show local-only results immediately so typing feels instant.
+  const local = localItems(q);
+  render(withFallbacks(local, q), q);
+  open();
+
+  // Then fetch remote in the background.
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(async () => {
+    if (q !== currentQuery) return;
+    const remote = await searchProfiles(q, 10);
+    if (q !== currentQuery) return; // a newer keystroke superseded us
+    const merged = mergeLocalAndRemote(local, remote, q);
+    render(withFallbacks(merged, q), q);
+  }, 220);
 }
 
 export function initSearch() {
@@ -145,10 +184,9 @@ export function initSearch() {
 
   input.addEventListener('input', () => {
     const q = input.value.trim();
+    currentQuery = q;
     if (!q) { close(); return; }
-    lastResults = buildResults(q);
-    render(lastResults, q);
-    open();
+    queryRemote(q);
   });
 
   input.addEventListener('focus', () => {
@@ -183,17 +221,14 @@ export function initSearch() {
     }
   });
 
-  // Close on outside click.
   document.addEventListener('click', (e) => {
     if (!wrap.contains(e.target)) close();
   });
 
-  // Clicking a result navigates and the router intercept handles same-origin
-  // hrefs, so we just need to clear the search and close.
   dropdownEl.addEventListener('click', (e) => {
-    const a = e.target.closest('.search-result');
-    if (!a) return;
-    input.value = '';
-    close();
+    if (e.target.closest('.search-result')) {
+      input.value = '';
+      close();
+    }
   });
 }

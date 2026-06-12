@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome }      from './views/home.js';
-import { renderProfile, hydrateProfileBadges } from './views/profile.js';
+import { renderProfile, hydrateProfileBadges, hydrateProfile } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSettings, bindSettings } from './views/settings.js';
 import { pickSpot }        from './views/spot-picker.js';
@@ -203,7 +203,9 @@ function dispatch(path) {
     const handle = userMatch[1];
     document.title = '@' + handle + ' / spotcode-sns';
     app.innerHTML = renderProfile(handle);
-    hydrateProfileBadges(handle);
+    // Fetch from Supabase if we don't have the user locally, then hit
+    // GitHub for badges once we know the github_handle on the profile.
+    hydrateProfile(handle).then(() => hydrateProfileBadges(handle));
   } else {
     document.title = 'Not found / spotcode-sns';
     app.innerHTML = '<div class="stub"><h2 class="stub__title">Not found</h2><a class="back-home" href="/">← Back to home</a></div>';
