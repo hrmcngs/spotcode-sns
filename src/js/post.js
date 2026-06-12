@@ -93,6 +93,7 @@ export function renderPost(p) {
           '<button class="act act--star"  title="star">'  + icon('star',  { size: 16 }) + '<span>' + (a.stars   || 0) + '</span></button>' +
           '<button class="act act--like' + (liked ? ' is-liked' : '') + '" title="like">'  + icon('heart', { size: 16 }) + '<span>'  + likes + '</span></button>' +
           '<button class="act act--share" title="share">' + icon('share', { size: 16 }) + '</button>' +
+          '<button class="act act--report" title="report">' + icon('flag', { size: 16 }) + '</button>' +
         '</div>' +
       '</div>' +
     '</article>'

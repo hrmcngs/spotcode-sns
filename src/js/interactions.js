@@ -1,11 +1,13 @@
-// Persistent likes and follows. Stored in localStorage as:
+// Persistent likes, follows and reports. Stored in localStorage as:
 //   spotcode:likes   → { [postId]: [handles] }
 //   spotcode:follows → { [followerHandle]: [targetHandles] }
+//   spotcode:reports → [ { id, postId, reporter, reason, comment, ts, resolved } ]
 
 import { read, write } from './storage.js';
 
 const LIKES   = 'spotcode:likes';
 const FOLLOWS = 'spotcode:follows';
+const REPORTS = 'spotcode:reports';
 
 // ----- likes -----
 
@@ -67,4 +69,52 @@ export function toggleFollow(myHandle, targetHandle) {
   else delete all[myHandle];
   writeFollows(all);
   return nowFollowing;
+}
+
+// ----- reports -----
+
+function readReports()  { return read(REPORTS, []); }
+function writeReports(a){ write(REPORTS, a); }
+
+export function reportPost({ postId, reporter, reason, comment }) {
+  if (!postId || !reporter || !reason) throw new Error('postId / reporter / reason は必須です');
+  const reports = readReports();
+  // De-dupe: a single reporter can only have one active report per post.
+  const idx = reports.findIndex(r => r.postId === postId && r.reporter === reporter && !r.resolved);
+  const entry = {
+    id: 'r' + Date.now() + Math.floor(Math.random() * 1000),
+    postId, reporter, reason,
+    comment: comment ? String(comment).slice(0, 400) : '',
+    ts: Date.now(),
+    resolved: false,
+  };
+  if (idx >= 0) reports[idx] = entry;
+  else reports.unshift(entry);
+  writeReports(reports);
+  return entry;
+}
+
+export function allReports() { return readReports(); }
+
+export function pendingReports() {
+  return readReports().filter(r => !r.resolved);
+}
+
+export function reportsForPost(postId) {
+  return readReports().filter(r => r.postId === postId);
+}
+
+export function reportedByMe(postId, handle) {
+  if (!postId || !handle) return false;
+  return readReports().some(r => r.postId === postId && r.reporter === handle && !r.resolved);
+}
+
+export function resolveReports(postId) {
+  const reports = readReports();
+  let changed = false;
+  for (const r of reports) {
+    if (r.postId === postId && !r.resolved) { r.resolved = true; r.resolvedAt = Date.now(); changed = true; }
+  }
+  if (changed) writeReports(reports);
+  return changed;
 }
