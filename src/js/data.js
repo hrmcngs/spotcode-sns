@@ -68,33 +68,32 @@ function shapePost(row) {
 }
 
 export async function allPosts({ limit = 100 } = {}) {
-  let supa;
-  try { supa = await getClient(); } catch { return []; }
+  const supa = await getClient();
   const { data, error } = await supa
     .from('posts')
     .select(POST_COLS)
     .order('created_at', { ascending: false })
     .limit(limit);
-  if (error) { console.warn('allPosts', error); return []; }
+  if (error) throw new Error(error.message);
   return (data || []).map(shapePost);
 }
 
 export async function postsByHandle(handle) {
   if (!handle) return [];
-  let supa;
-  try { supa = await getClient(); } catch { return []; }
-  const { data: prof } = await supa
+  const supa = await getClient();
+  const { data: prof, error: profErr } = await supa
     .from('profiles')
     .select('id')
     .eq('handle', handle)
     .maybeSingle();
+  if (profErr) throw new Error(profErr.message);
   if (!prof) return [];
   const { data, error } = await supa
     .from('posts')
     .select(POST_COLS)
     .eq('author_id', prof.id)
     .order('created_at', { ascending: false });
-  if (error) { console.warn('postsByHandle', error); return []; }
+  if (error) throw new Error(error.message);
   return (data || []).map(shapePost);
 }
 
