@@ -663,6 +663,16 @@ html[data-theme='light'] .post__body code { color: #6a3df0; }
 a.trend-item { color: inherit; text-decoration: none; }
 a.trend-item:hover { background: var(--surface-2); }
 
+/* ---------- city / spot page header ---------- */
+.spot-head {
+  padding: 1.5rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: flex-start; gap: .35rem;
+}
+.spot-head__icon { color: var(--accent); }
+.spot-head__title { font-size: 1.4rem; color: var(--text); margin: 0; }
+.spot-head__sub { color: var(--muted); margin: 0; }
+
 /* ---------- stub / empty page ---------- */
 .stub {
   padding: 3.5rem 1.5rem; text-align: center; color: var(--muted);

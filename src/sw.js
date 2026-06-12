@@ -7,7 +7,7 @@
 //   - never intercept POSTs or cross-origin (Maps tiles, GitHub API, ...)
 //   - bump CACHE when shipping a new version to nuke the old shell
 
-const CACHE = 'spotcode-shell-v4';
+const CACHE = 'spotcode-shell-v5';
 const SHELL = [
   './',
   './index.html',
@@ -34,6 +34,7 @@ const SHELL = [
   './js/views/profile.js',
   './js/views/stub.js',
   './js/views/settings.js',
+  './js/views/spot.js',
   './js/views/spot-picker.js',
   './js/views/auth-modal.js',
   './js/views/edit-profile-modal.js',
