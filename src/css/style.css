@@ -12,3 +12,24 @@ body { background: var(--bg); color: var(--text); font-family: system-ui, sans-s
 .site-header { padding: 1.2rem 1.6rem; border-bottom: 1px solid var(--border); }
 .site-header h1 { font-size: 1.2rem; letter-spacing: 0.05em; }
 #app { padding: 1.6rem; }
+
+/* file size badges */
+.file-badge { font-family: ui-monospace, monospace; font-size: .8em; margin-right: .4em; }
+
+/* idea form */
+.idea-form { display: flex; flex-direction: column; gap: .6rem; max-width: 480px; margin-top: .8rem; }
+.idea-form textarea, .idea-form input {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: .55em .7em; font: inherit;
+}
+.idea-form button {
+  align-self: flex-start; background: var(--accent); color: #fff;
+  border: 0; padding: .5em 1.2em; border-radius: 7px; font-weight: 700; cursor: pointer;
+}
+.idea-form button:hover { filter: brightness(1.1); }
+
+/* map placeholder */
+.map ul { list-style: none; padding-left: 0; }
+.map li { padding: .3em 0; border-bottom: 1px dashed var(--border); }
+
+h2 { font-size: 1rem; letter-spacing: .04em; color: var(--muted); }
