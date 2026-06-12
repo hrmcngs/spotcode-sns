@@ -806,12 +806,55 @@ a.trend-item:hover { background: var(--surface-2); }
   background: var(--bg);
 }
 .picker-foot {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; justify-content: space-between; align-items: flex-end;
   padding: .8rem 1rem; border-top: 1px solid var(--border);
   gap: 1rem; flex-wrap: wrap;
 }
-.picker-coords { font-family: var(--mono); font-size: .85rem; color: var(--muted); }
+.picker-info { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: .35rem; }
+.picker-coords { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
 .picker-actions { display: flex; gap: .5rem; }
+
+.picker-address-meta { display: flex; flex-wrap: wrap; gap: .3rem; }
+.picker-chip {
+  display: inline-flex; align-items: center;
+  padding: .15em .55em; border-radius: 999px;
+  font-size: .72rem; font-weight: 600;
+  background: var(--surface-2); color: var(--muted);
+  border: 1px solid var(--border);
+}
+.picker-chip--strong { color: var(--text); background: var(--bg); }
+
+.picker-address-field {
+  display: flex; align-items: stretch; gap: .4rem;
+  background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: .3em .5em;
+}
+.picker-address-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.picker-address-field__label {
+  font-size: .72rem; font-weight: 700; color: var(--muted);
+  align-self: center; letter-spacing: .04em;
+}
+.picker-address-input {
+  flex: 1; min-width: 0;
+  background: transparent; border: 0; color: var(--text);
+  font: inherit; padding: .25em 0;
+}
+.picker-address-input:focus { outline: 0; }
+.picker-address-reset {
+  background: transparent; border: 0; color: var(--muted);
+  cursor: pointer; font: inherit; font-size: 1rem; line-height: 1;
+  padding: 0 .3em; border-radius: 6px;
+}
+.picker-address-reset:hover { color: var(--accent); background: var(--surface-2); }
+
+.picker-address-hint { font-size: .8rem; color: var(--muted); }
+.picker-address-hint.is-loading { color: var(--muted); font-style: italic; }
+.picker-address-hint.is-warn    { color: var(--warn); }
+.picker-address-hint.is-bad     { color: var(--danger); }
 .picker-error {
   padding: .6rem 1rem; color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
@@ -907,11 +950,6 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   font-size: .78rem;
   margin-left: .3em;
 }
-
-/* ---------- picker address breakdown ---------- */
-.picker-address__main { display: inline-block; color: var(--text); font-weight: 600; }
-.picker-address__hn   { color: var(--green); font-weight: 600; }
-.picker-address__warn { color: var(--warn); font-size: .82rem; }
 
 /* ---------- avatar edit section in profile modal ---------- */
 .avatar-edit {
