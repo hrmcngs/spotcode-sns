@@ -1,14 +1,29 @@
-// Data layer. Only what the user has actually saved locally — no seed
-// users or posts. Swap these functions for an API client later.
+// Data layer.
+//
+// Users are now backed by Supabase (auth.users + public.profiles). The
+// localStorage user store is no longer written to, but the readers stay
+// to render any data that was saved before the Supabase migration.
+// `getUser()` falls back to the current Supabase session user so the UI
+// can render the author of own posts even before Stage 3 wires in
+// cross-device profile lookups.
+//
+// Posts / likes / follows are still localStorage-only here; Stage 4 onward
+// move them to Supabase.
 
 import { KEYS, read, write } from './storage.js';
+import { currentUser }       from './auth.js';
 
 export function allUsers() {
-  return read(KEYS.users, {});
+  const stored = read(KEYS.users, {});
+  const me = currentUser();
+  if (me && me.handle) return { ...stored, [me.handle]: me };
+  return stored;
 }
 
 export function getUser(handle) {
-  return allUsers()[handle] || null;
+  const me = currentUser();
+  if (me && me.handle === handle) return me;
+  return read(KEYS.users, {})[handle] || null;
 }
 
 export function allPosts() {

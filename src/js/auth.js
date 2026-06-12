@@ -1,22 +1,94 @@
-// Auth: register, login, logout, current session.
-// Demo-grade — passwords are SHA-256(salt:password) in localStorage.
-// Swap this module to call a real backend later; keep the function shapes.
+// Auth backed by Supabase. Replaces the previous localStorage-only
+// implementation so accounts survive across devices and browsers.
+//
+// Surface (kept compatible with the previous version so view code doesn't
+// have to change much):
+//   currentUser()         — cached merged { id, email, handle, name, avatar, ... } | null
+//   onAuthChange(fn)      — subscribe to login / logout / profile changes
+//   initAuth()            — bootstraps cachedUser from the active session
+//   register({...})       — Supabase signUp + profile post-fill
+//   login({...})          — Supabase signInWithPassword
+//   logout()              — Supabase signOut + clear cache
+//   updateProfile(patch)  — writes to public.profiles + refreshes cache
+//   fetchGithubProfile(h) — same public GitHub API lookup as before
 
-import { KEYS, read, write, remove, hashPassword, randomSalt } from './storage.js';
+import { getClient } from './supa.js';
 
 const subscribers = new Set();
-function emit() { subscribers.forEach(fn => fn(currentUser())); }
-export function onAuthChange(fn) { subscribers.add(fn); return () => subscribers.delete(fn); }
+let cachedUser = null;
+let initialized = false;
 
-export function currentUser() {
-  const handle = read(KEYS.session, null);
-  if (!handle) return null;
-  const users = read(KEYS.users, {});
-  return users[handle] || null;
+function emit() { subscribers.forEach(fn => { try { fn(cachedUser); } catch {} }); }
+
+export function onAuthChange(fn) { subscribers.add(fn); return () => subscribers.delete(fn); }
+export function currentUser() { return cachedUser; }
+
+// Build the UI-facing user object from a Supabase auth user + profiles row.
+function projectUser(authUser, profile) {
+  if (!authUser || !profile) return null;
+  const name = profile.name || authUser.email || 'User';
+  return {
+    id:          authUser.id,
+    email:       authUser.email,
+    handle:      profile.handle,
+    name,
+    avatar:      (name[0] || '?').toUpperCase(),
+    avatarImage: profile.avatar_url || null,
+    avatarShape: profile.avatar_shape || 'round',
+    bio:         profile.bio || '',
+    location:    profile.location || '',
+    role:        profile.role || 'general',
+    github:      profile.github_handle
+                   ? { handle: profile.github_handle, url: 'https://github.com/' + profile.github_handle }
+                   : null,
+    joined:      profile.created_at ? String(profile.created_at).slice(0, 7) : '',
+  };
+}
+
+async function loadProfile(userId) {
+  const supa = await getClient();
+  const { data, error } = await supa
+    .from('profiles')
+    .select('handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, created_at')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) { console.warn('loadProfile error', error); return null; }
+  return data;
+}
+
+async function refreshFromSession() {
+  let supa;
+  try { supa = await getClient(); } catch { cachedUser = null; emit(); return; }
+  const { data } = await supa.auth.getSession();
+  const session = data?.session;
+  if (!session) { cachedUser = null; emit(); return; }
+  const profile = await loadProfile(session.user.id);
+  cachedUser = projectUser(session.user, profile);
+  emit();
+}
+
+export async function initAuth() {
+  if (initialized) return;
+  initialized = true;
+  let supa;
+  try { supa = await getClient(); }
+  catch { cachedUser = null; return; }
+
+  const { data } = await supa.auth.getSession();
+  if (data?.session) {
+    const profile = await loadProfile(data.session.user.id);
+    cachedUser = projectUser(data.session.user, profile);
+  }
+
+  supa.auth.onAuthStateChange(async (_event, session) => {
+    if (!session) { cachedUser = null; emit(); return; }
+    const profile = await loadProfile(session.user.id);
+    cachedUser = projectUser(session.user, profile);
+    emit();
+  });
 }
 
 // Validate a GitHub handle by hitting the unauthenticated public API.
-// Returns the API user object on success, null on failure.
 export async function fetchGithubProfile(handle) {
   if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(handle)) return null;
   try {
@@ -31,113 +103,92 @@ export async function fetchGithubProfile(handle) {
 function emailLooksValid(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
 function handleLooksValid(h) { return /^[A-Za-z0-9_]{2,20}$/.test(h); }
 
+async function isHandleTaken(handle) {
+  const supa = await getClient();
+  const { data } = await supa.from('profiles').select('handle').eq('handle', handle).maybeSingle();
+  return !!data;
+}
+
+function translateAuthError(msg) {
+  if (!msg) return 'エラーが発生しました';
+  const m = String(msg).toLowerCase();
+  if (m.includes('invalid login'))           return 'メールアドレスかパスワードが違います';
+  if (m.includes('email not confirmed'))     return 'メール確認が完了していません';
+  if (m.includes('user already registered')) return 'このメールは既に登録されています';
+  if (m.includes('already registered'))      return 'このメールは既に登録されています';
+  return msg;
+}
+
 export async function register({ email, password, handle, name, role, githubHandle }) {
-  if (!emailLooksValid(email))      throw new Error('メールアドレスの形式が正しくありません');
-  if (!password || password.length < 8) throw new Error('パスワードは 8 文字以上にしてください');
-  if (!handleLooksValid(handle))    throw new Error('ハンドルは半角英数_の 2〜20 文字');
-  if (!name || !name.trim())        throw new Error('表示名を入力してください');
+  if (!emailLooksValid(email))           throw new Error('メールアドレスの形式が正しくありません');
+  if (!password || password.length < 8)  throw new Error('パスワードは 8 文字以上にしてください');
+  if (!handleLooksValid(handle))         throw new Error('ハンドルは半角英数_の 2〜20 文字');
+  if (!name || !name.trim())             throw new Error('表示名を入力してください');
   if (role === 'programmer' && !githubHandle) {
     throw new Error('Programmer ロールは GitHub 連携が必須です');
   }
 
-  const users = read(KEYS.users, {});
-  if (users[handle]) throw new Error('そのハンドルは既に使われています');
-  if (Object.values(users).some(u => u.email === email)) throw new Error('そのメールは既に登録されています');
+  if (await isHandleTaken(handle)) throw new Error('そのハンドルは既に使われています');
 
-  let github = null;
   if (githubHandle) {
-    const profile = await fetchGithubProfile(githubHandle);
-    if (!profile) throw new Error('GitHub ユーザー「' + githubHandle + '」が見つかりませんでした');
-    github = {
-      handle: profile.login,
-      url: profile.html_url,
-      avatar: profile.avatar_url,
-      bio: profile.bio || '',
-    };
+    const gh = await fetchGithubProfile(githubHandle);
+    if (!gh) throw new Error('GitHub ユーザー「' + githubHandle + '」が見つかりませんでした');
   }
 
-  const salt = randomSalt();
-  const passwordHash = await hashPassword(password, salt);
-  const user = {
-    handle,
-    name: name.trim(),
-    avatar: (name.trim()[0] || handle[0] || '?').toUpperCase(),
+  const supa = await getClient();
+  const { data, error } = await supa.auth.signUp({
     email,
-    salt,
-    passwordHash,
-    role,
-    github,
-    bio: github?.bio || '',
-    location: '',
-    joined: new Date().toISOString().slice(0, 7),
-    following: 0,
-    followers: 0,
-    createdAt: Date.now(),
-  };
-  users[handle] = user;
-  write(KEYS.users, users);
-  write(KEYS.session, handle);
-  emit();
-  return user;
+    password,
+    options: { data: { handle, name: name.trim() } },
+  });
+  if (error) throw new Error(translateAuthError(error.message));
+  const user = data?.user;
+  if (!user) throw new Error('サインアップに失敗しました');
+
+  // The handle_new_user trigger created the profile shell from raw_user_meta_data.
+  // Patch the extra fields the trigger doesn't know about.
+  const patch = {};
+  if (role) patch.role = role;
+  if (githubHandle) patch.github_handle = githubHandle;
+  if (Object.keys(patch).length) {
+    const { error: upErr } = await supa.from('profiles').update(patch).eq('id', user.id);
+    if (upErr) console.warn('profile post-update failed', upErr);
+  }
+
+  await refreshFromSession();
+  return cachedUser;
 }
 
 export async function login({ email, password }) {
-  const users = read(KEYS.users, {});
-  const u = Object.values(users).find(x => x.email === email);
-  if (!u) throw new Error('このメールのアカウントはありません');
-  const h = await hashPassword(password, u.salt);
-  if (h !== u.passwordHash) throw new Error('パスワードが違います');
-  write(KEYS.session, u.handle);
-  emit();
-  return u;
+  const supa = await getClient();
+  const { error } = await supa.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(translateAuthError(error.message));
+  await refreshFromSession();
+  return cachedUser;
 }
 
-export function logout() {
-  remove(KEYS.session);
-  emit();
-}
-
-export function updateProfile(patch) {
-  const handle = read(KEYS.session, null);
-  if (!handle) throw new Error('ログインしていません');
-  const users = read(KEYS.users, {});
-  const u = users[handle];
-  if (!u) throw new Error('ユーザーが見つかりません');
-
-  const next = { ...u };
-  if (patch.name != null) {
-    const name = String(patch.name).trim();
-    if (!name) throw new Error('表示名は空にできません');
-    next.name = name;
-    if (!patch.avatar) next.avatar = (name[0] || handle[0] || '?').toUpperCase();
-  }
-  if (patch.avatar != null) {
-    const av = String(patch.avatar).trim();
-    if (av) next.avatar = av.slice(0, 2).toUpperCase();
-  }
-  if (patch.bio      != null) next.bio      = String(patch.bio).slice(0, 280);
-  if (patch.location != null) next.location = String(patch.location).slice(0, 60);
-
-  // Avatar image: pass a data: URL to set, an empty string ('' / null) to clear.
-  if (patch.avatarImage !== undefined) {
-    const v = patch.avatarImage;
-    if (!v) delete next.avatarImage;
-    else if (typeof v === 'string' && /^data:image\//.test(v)) next.avatarImage = v;
-    else throw new Error('画像データが不正です');
-  }
-  // Avatar shape: 'round' (default) or 'square'.
-  if (patch.avatarShape != null) {
-    const s = String(patch.avatarShape);
-    if (s !== 'round' && s !== 'square') throw new Error('shape は round / square のみ');
-    next.avatarShape = s;
-  }
-
-  users[handle] = next;
+export async function logout() {
   try {
-    write(KEYS.users, users);
-  } catch (err) {
-    throw new Error('保存に失敗しました（画像が大きすぎる可能性: ' + (err.message || err) + '）');
-  }
+    const supa = await getClient();
+    await supa.auth.signOut();
+  } catch {}
+  cachedUser = null;
   emit();
-  return next;
+}
+
+export async function updateProfile(patch) {
+  if (!cachedUser) throw new Error('ログインしていません');
+  const supa = await getClient();
+  const db = {};
+  if (patch.name != null)              db.name         = String(patch.name).trim();
+  if (patch.bio != null)               db.bio          = String(patch.bio).slice(0, 280);
+  if (patch.location != null)          db.location     = String(patch.location).slice(0, 60);
+  if (patch.avatarImage !== undefined) db.avatar_url   = patch.avatarImage || null;
+  if (patch.avatarShape != null)       db.avatar_shape = patch.avatarShape;
+  if (Object.keys(db).length) {
+    const { error } = await supa.from('profiles').update(db).eq('id', cachedUser.id);
+    if (error) throw new Error(error.message);
+  }
+  await refreshFromSession();
+  return cachedUser;
 }
