@@ -96,3 +96,30 @@ export function logout() {
   remove(KEYS.session);
   emit();
 }
+
+export function updateProfile(patch) {
+  const handle = read(KEYS.session, null);
+  if (!handle) throw new Error('ログインしていません');
+  const users = read(KEYS.users, {});
+  const u = users[handle];
+  if (!u) throw new Error('ユーザーが見つかりません');
+
+  const next = { ...u };
+  if (patch.name != null) {
+    const name = String(patch.name).trim();
+    if (!name) throw new Error('表示名は空にできません');
+    next.name = name;
+    if (!patch.avatar) next.avatar = (name[0] || handle[0] || '?').toUpperCase();
+  }
+  if (patch.avatar != null) {
+    const av = String(patch.avatar).trim();
+    if (av) next.avatar = av.slice(0, 2).toUpperCase();
+  }
+  if (patch.bio      != null) next.bio      = String(patch.bio).slice(0, 280);
+  if (patch.location != null) next.location = String(patch.location).slice(0, 60);
+
+  users[handle] = next;
+  write(KEYS.users, users);
+  emit();
+  return next;
+}

@@ -697,3 +697,17 @@ a.trend-item:hover { background: var(--surface-2); }
 
 a.spot-chip { text-decoration: none; }
 a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* ---------- edit profile modal ---------- */
+.auth-form__h { font-size: 1.1rem; margin-bottom: .6rem; color: var(--text); }
+.auth-form textarea {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: .55em .7em; font: inherit; resize: vertical;
+  min-height: 4rem; line-height: 1.45;
+}
+.auth-form textarea:focus {
+  outline: 0; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.edit-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .3rem; }

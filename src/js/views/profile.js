@@ -36,7 +36,7 @@ export function renderProfile(handle) {
         '<div class="profile-top__actions">' +
           (isMe
             ? '<button class="btn btn--ghost" id="logout-btn">Log out</button>' +
-              '<button class="btn btn--ghost">Edit profile</button>'
+              '<button class="btn btn--primary" id="edit-profile-btn">Edit profile</button>'
             : '<button class="btn btn--ghost">More</button>' +
               '<button class="btn ' + (followed ? 'btn--ghost is-following' : 'btn--primary') + ' btn--follow" data-target="' + u.handle + '">' +
                 (followed ? 'Following' : 'Follow') +
