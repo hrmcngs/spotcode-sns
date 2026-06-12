@@ -33,3 +33,11 @@ body { background: var(--bg); color: var(--text); font-family: system-ui, sans-s
 .map li { padding: .3em 0; border-bottom: 1px dashed var(--border); }
 
 h2 { font-size: 1rem; letter-spacing: .04em; color: var(--muted); }
+
+html[data-theme='light'] {
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --text: #1a1a22;
+  --muted: #555566;
+  --border: rgba(0,0,0,0.08);
+}
