@@ -41,6 +41,14 @@ export function addPost(post) {
   return post;
 }
 
+export function removePost(postId) {
+  const stored = read(KEYS.posts, []);
+  const next = stored.filter(p => p.id !== postId);
+  if (next.length === stored.length) return false;
+  write(KEYS.posts, next);
+  return true;
+}
+
 // Relative-time formatter ("just now", "5m", "3h", "2d").
 export function relTime(ts) {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));

@@ -10,7 +10,7 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, allPosts, addPost } from './data.js';
+import { allUsers, allPosts, addPost, removePost } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
@@ -295,6 +295,18 @@ document.addEventListener('click', (e) => {
     const post = reportBtn.closest('[data-post-id]');
     if (!post) return;
     openReport(post.getAttribute('data-post-id'));
+    return;
+  }
+
+  // Delete own post (trash button — only rendered on own posts).
+  const deleteBtn = e.target.closest('.act--delete');
+  if (deleteBtn) {
+    e.preventDefault();
+    const post = deleteBtn.closest('[data-post-id]');
+    if (!post) return;
+    if (!confirm('この投稿を削除しますか？元に戻せません。')) return;
+    removePost(post.getAttribute('data-post-id'));
+    refresh();
     return;
   }
 

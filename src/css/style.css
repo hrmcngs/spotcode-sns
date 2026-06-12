@@ -330,6 +330,7 @@ html[data-theme='light'] .composer textarea::placeholder { color: #6a737d; }
 .act--like.is-liked svg { fill: var(--like); stroke: var(--like); }
 .act--share:hover  { color: var(--accent); }
 .act--report:hover { color: var(--danger); }
+.act--delete:hover { color: var(--danger); }
 
 /* ---------- file size badges & status badges ---------- */
 .file-badge {
