@@ -8,6 +8,7 @@ import { renderSettings, bindSettings } from './views/settings.js';
 import { pickSpot }        from './views/spot-picker.js';
 import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
+import { openReport }      from './views/report-modal.js';
 import { allUsers, addPost } from './data.js';
 import { currentUser, logout, onAuthChange } from './auth.js';
 import { icon }            from './icons.js';
@@ -226,6 +227,18 @@ document.addEventListener('click', (e) => {
     e.preventDefault();
     if (!currentUser()) return openAuth('login');
     openEditProfile();
+    return;
+  }
+
+  // Report a post (flag button).
+  const reportBtn = e.target.closest('.act--report');
+  if (reportBtn) {
+    e.preventDefault();
+    const me = currentUser();
+    if (!me) return openAuth('login');
+    const post = reportBtn.closest('[data-post-id]');
+    if (!post) return;
+    openReport(post.getAttribute('data-post-id'));
     return;
   }
 

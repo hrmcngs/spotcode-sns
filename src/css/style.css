@@ -270,7 +270,8 @@ button { font: inherit; cursor: pointer; }
 .act--like:hover  { color: var(--like); }
 .act--like.is-liked { color: var(--like); }
 .act--like.is-liked svg { fill: var(--like); stroke: var(--like); }
-.act--share:hover { color: var(--accent); }
+.act--share:hover  { color: var(--accent); }
+.act--report:hover { color: var(--danger); }
 
 /* ---------- file size badges & status badges ---------- */
 .file-badge {
@@ -711,3 +712,7 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .edit-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .3rem; }
+
+/* report modal */
+.report-hint { color: var(--muted); font-size: .85rem; margin-bottom: .6rem; }
+.report-done { color: var(--green); font-size: .85rem; }
