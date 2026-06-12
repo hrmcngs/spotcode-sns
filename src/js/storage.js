@@ -3,10 +3,9 @@
 // implementation here when a backend is wired up.
 
 export const KEYS = {
-  users:     'spotcode:users',
-  posts:     'spotcode:posts',
-  session:   'spotcode:session',
-  gmapsKey:  'spotcode:gmaps_key',
+  users:   'spotcode:users',
+  posts:   'spotcode:posts',
+  session: 'spotcode:session',
 };
 
 export function read(key, fallback) {

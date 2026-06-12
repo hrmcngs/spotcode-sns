@@ -1,18 +1,18 @@
-// Modal that opens a Google Map and lets the user drop a precise pin
-// — works at building-zoom and supports geolocation. Resolves with
-// { lat, lng, label } when the user confirms, or null when cancelled.
+// Spot picker modal. Uses Leaflet + OpenStreetMap tiles + Nominatim
+// for reverse geocoding. No API key required, no account, no age gate.
 
-import { loadMaps, getApiKey } from '../gmap.js';
-import { url }                  from '../router.js';
-import { icon }                  from '../icons.js';
+import { loadMaps, reverseGeocode, pickBuildingName } from '../gmap.js';
+import { icon } from '../icons.js';
 
 let rootEl    = null;
 let mapInst   = null;
 let markerInst = null;
 let resolveFn = null;
 let pickedPos = null;
+let pickedAddress = '';
+let geocodeSeq = 0;
 
-const TOKYO = { lat: 35.681236, lng: 139.767125 }; // fallback center
+const TOKYO = { lat: 35.681236, lng: 139.767125 };
 
 function template() {
   return (
@@ -28,13 +28,16 @@ function template() {
           '<button type="button" class="btn btn--ghost btn--sm" id="picker-geo">' +
             icon('pin', { size: 14, className: 'icon--inline' }) + '現在地を使う' +
           '</button>' +
-          '<input type="text" id="picker-label" placeholder="ラベル（任意）例: スタバ 渋谷店">' +
+          '<input type="text" id="picker-label" placeholder="ラベル（任意・建物名や店名）">' +
         '</div>' +
 
         '<div id="picker-map" class="picker-map"></div>' +
 
         '<footer class="picker-foot">' +
-          '<div id="picker-coords" class="picker-coords"></div>' +
+          '<div class="picker-info">' +
+            '<div id="picker-address" class="picker-address"></div>' +
+            '<div id="picker-coords" class="picker-coords"></div>' +
+          '</div>' +
           '<div class="picker-actions">' +
             '<button type="button" class="btn btn--ghost" data-picker-close>Cancel</button>' +
             '<button type="button" class="btn btn--primary" id="picker-confirm" disabled>Confirm</button>' +
@@ -59,7 +62,12 @@ function mount() {
   document.getElementById('picker-confirm').addEventListener('click', () => {
     if (!pickedPos) return;
     const label = document.getElementById('picker-label').value.trim() || '';
-    close({ lat: pickedPos.lat, lng: pickedPos.lng, label });
+    close({
+      lat: pickedPos.lat,
+      lng: pickedPos.lng,
+      label,
+      ...(pickedAddress ? { address: pickedAddress } : {}),
+    });
   });
   document.getElementById('picker-geo').addEventListener('click', useGeolocation);
 }
@@ -71,65 +79,98 @@ function showError(msg) {
   el.hidden = !msg;
 }
 
-function setPick(lat, lng) {
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function setPick(lat, lng, { autoFillLabel = false } = {}) {
   pickedPos = { lat, lng };
-  if (markerInst) markerInst.setPosition({ lat, lng });
+  if (markerInst) markerInst.setLatLng([lat, lng]);
   document.getElementById('picker-coords').textContent =
     'lat ' + lat.toFixed(6) + ', lng ' + lng.toFixed(6);
   document.getElementById('picker-confirm').disabled = false;
+
+  pickedAddress = '';
+  const addrEl = document.getElementById('picker-address');
+  if (addrEl) {
+    addrEl.textContent = '住所を取得中…';
+    addrEl.className   = 'picker-address is-loading';
+  }
+  doReverseGeocode(lat, lng, autoFillLabel);
+}
+
+async function doReverseGeocode(lat, lng, autoFillLabel) {
+  const seq = ++geocodeSeq;
+  let data;
+  try {
+    data = await reverseGeocode(lat, lng);
+  } catch (err) {
+    if (seq !== geocodeSeq) return;
+    const addrEl = document.getElementById('picker-address');
+    if (addrEl) {
+      addrEl.textContent = '住所の取得に失敗しました';
+      addrEl.className = 'picker-address is-bad';
+    }
+    return;
+  }
+  if (seq !== geocodeSeq) return;
+
+  const address  = data.display_name || '';
+  const building = pickBuildingName(data);
+  pickedAddress = address;
+
+  const addrEl = document.getElementById('picker-address');
+  if (addrEl) {
+    addrEl.innerHTML =
+      (building ? '<strong>' + escapeHtml(building) + '</strong>' : '') +
+      (building && address ? '<br>' : '') +
+      (address ? '<span>' + escapeHtml(address) + '</span>' : '住所が見つかりません');
+    addrEl.className = 'picker-address';
+  }
+
+  if (autoFillLabel) {
+    const labelInput = document.getElementById('picker-label');
+    if (labelInput && !labelInput.value.trim()) {
+      labelInput.value = building || (address.split(/[、,]\s*/)[0] || '');
+    }
+  }
 }
 
 async function initMap() {
   showError('');
-  let maps;
+  let L;
   try {
-    maps = await loadMaps();
+    L = await loadMaps();
   } catch (err) {
-    if (err.message === 'NO_KEY') {
-      showError('Google Maps API キーが未設定です。Settings から登録してください。');
-      const goSettings = document.createElement('a');
-      goSettings.href = url('/settings');
-      goSettings.className = 'btn btn--primary btn--sm';
-      goSettings.style.marginLeft = '.5rem';
-      goSettings.textContent = 'Settings →';
-      document.getElementById('picker-error').appendChild(goSettings);
-    } else {
-      showError('Maps の読み込みに失敗しました: ' + err.message);
-    }
+    showError('地図ライブラリの読み込みに失敗しました: ' + err.message + '（ネットワーク接続を確認してください）');
     return;
   }
-
   const container = document.getElementById('picker-map');
   if (!container) return;
 
-  mapInst = new maps.Map(container, {
-    center: TOKYO,
-    zoom: 16,
-    streetViewControl: false,
-    mapTypeControl: false,
-    fullscreenControl: false,
-    clickableIcons: false,
-    gestureHandling: 'greedy',
-  });
+  mapInst = L.map(container, { zoomControl: true }).setView([TOKYO.lat, TOKYO.lng], 16);
 
-  markerInst = new maps.Marker({
-    map: mapInst,
-    position: TOKYO,
-    draggable: true,
-  });
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(mapInst);
 
-  // Initial pick: center
+  markerInst = L.marker([TOKYO.lat, TOKYO.lng], { draggable: true }).addTo(mapInst);
+
   setPick(TOKYO.lat, TOKYO.lng);
 
-  mapInst.addListener('click', (ev) => {
-    const lat = ev.latLng.lat();
-    const lng = ev.latLng.lng();
-    setPick(lat, lng);
+  mapInst.on('click', (ev) => {
+    setPick(ev.latlng.lat, ev.latlng.lng);
   });
-  markerInst.addListener('dragend', () => {
-    const p = markerInst.getPosition();
-    setPick(p.lat(), p.lng());
+  markerInst.on('dragend', () => {
+    const ll = markerInst.getLatLng();
+    setPick(ll.lat, ll.lng);
   });
+
+  // Leaflet measures container at init; redraw once visible so tiles fill it.
+  setTimeout(() => mapInst.invalidateSize(), 60);
 }
 
 function useGeolocation() {
@@ -143,11 +184,8 @@ function useGeolocation() {
       showError('');
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
-      if (mapInst) {
-        mapInst.setCenter({ lat, lng });
-        mapInst.setZoom(18);
-      }
-      setPick(lat, lng);
+      if (mapInst) mapInst.setView([lat, lng], 18);
+      setPick(lat, lng, { autoFillLabel: true });
     },
     (err) => {
       showError('現在地を取得できませんでした: ' + err.message);
@@ -161,22 +199,22 @@ function close(result) {
   rootEl.hidden = true;
   if (resolveFn) { resolveFn(result); resolveFn = null; }
   pickedPos = null;
+  pickedAddress = '';
 }
 
-// Open the picker. Resolves with { lat, lng, label } or null on cancel.
+// Open the picker. Resolves with { lat, lng, label, address } or null on cancel.
 export function pickSpot() {
   mount();
   showError('');
   pickedPos = null;
+  pickedAddress = '';
+  geocodeSeq++;
   document.getElementById('picker-confirm').disabled = true;
-  document.getElementById('picker-coords').textContent = '';
-  document.getElementById('picker-label').value = '';
+  document.getElementById('picker-coords').textContent  = '';
+  document.getElementById('picker-address').textContent = '';
+  document.getElementById('picker-address').className   = 'picker-address';
+  document.getElementById('picker-label').value         = '';
   rootEl.hidden = false;
-  // Defer the map init so the modal has dimensions when Google Maps measures.
   setTimeout(initMap, 30);
   return new Promise((res) => { resolveFn = res; });
-}
-
-export function hasApiKey() {
-  return !!getApiKey();
 }
