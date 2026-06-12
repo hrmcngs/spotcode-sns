@@ -157,8 +157,7 @@ button { font: inherit; cursor: pointer; }
 .timeline__head {
   position: sticky; top: 64px; z-index: 10;
   display: flex;
-  backdrop-filter: blur(8px);
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 .tab {
