@@ -35,11 +35,9 @@ document.querySelectorAll('.side-nav__item').forEach(el => {
 });
 
 function renderRail() {
-  const others = Object.values(allUsers()).filter(u => {
-    const me = currentUser();
-    return !me || u.handle !== me.handle;
-  });
-  return [
+  const me = currentUser();
+  const others = Object.values(allUsers()).filter(u => !me || u.handle !== me.handle);
+  const parts = [
     '<section class="card">',
       '<h3>Your activity <span class="dim">last 12 months</span></h3>',
       renderGrass(counts),
@@ -59,22 +57,27 @@ function renderRail() {
         )).join(''),
       '</div>',
     '</section>',
-    '<section class="card">',
-      '<h3>Who to follow</h3>',
-      '<div class="followlist">',
-        others.slice(0, 5).map(u => (
-          '<div class="followlist__row">' +
-            '<a class="avatar" href="' + url('/' + u.handle) + '">' + u.avatar + '</a>' +
-            '<div>' +
-              '<a class="followlist__name" href="' + url('/' + u.handle) + '">' + u.name + '</a>' +
-              '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
-            '</div>' +
-            '<button class="followlist__follow">Follow</button>' +
-          '</div>'
-        )).join(''),
-      '</div>',
-    '</section>',
-  ].join('');
+  ];
+  if (others.length) {
+    parts.push(
+      '<section class="card">' +
+        '<h3>Who to follow</h3>' +
+        '<div class="followlist">' +
+          others.slice(0, 5).map(u => (
+            '<div class="followlist__row">' +
+              '<a class="avatar" href="' + url('/' + u.handle) + '">' + u.avatar + '</a>' +
+              '<div>' +
+                '<a class="followlist__name" href="' + url('/' + u.handle) + '">' + u.name + '</a>' +
+                '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
+              '</div>' +
+              '<button class="followlist__follow" data-target="' + u.handle + '">Follow</button>' +
+            '</div>'
+          )).join('') +
+        '</div>' +
+      '</section>'
+    );
+  }
+  return parts.join('');
 }
 
 function setActiveNav(path) {
@@ -94,8 +97,7 @@ function renderAuthArea() {
       '<a class="avatar avatar--me" href="' + url('/' + me.handle) + '" title="' + me.name + '">' + me.avatar + '</a>';
   } else {
     slot.innerHTML =
-      '<button class="btn btn--ghost btn--sm" data-auth="login">Log in</button>' +
-      '<button class="btn btn--primary btn--sm" data-auth="register">Sign up</button>';
+      '<button class="btn btn--primary btn--sm" data-auth="login">Log in</button>';
   }
 }
 

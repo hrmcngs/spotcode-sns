@@ -34,7 +34,7 @@ export function renderProfile(handle) {
             ? '<button class="btn btn--ghost" id="logout-btn">Log out</button>' +
               '<button class="btn btn--ghost">Edit profile</button>'
             : '<button class="btn btn--ghost">More</button>' +
-              '<button class="btn btn--primary">Follow</button>') +
+              '<button class="btn btn--primary btn--follow" data-target="' + u.handle + '">Follow</button>') +
         '</div>' +
       '</div>' +
       '<div class="profile-id">' +
