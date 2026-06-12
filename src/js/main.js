@@ -11,7 +11,7 @@ import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
 import { allUsers, allPosts, addPost } from './data.js';
-import { currentUser, logout, onAuthChange } from './auth.js';
+import { currentUser, logout, onAuthChange, initAuth } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing } from './interactions.js';
@@ -239,6 +239,13 @@ function syncSpotChip(spot) {
 }
 
 initThemeToggle(document.getElementById('theme-toggle'));
+
+// Restore the Supabase session (if any) before the first render so the
+// app doesn't flash a logged-out state to a returning user. Failures here
+// (Supabase down, no network) leave cachedUser null — the app still works
+// as a logged-out static site.
+try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
+
 onRoute(dispatch);
 renderAuthArea();
 renderSideMe();
@@ -269,8 +276,7 @@ document.addEventListener('click', (e) => {
   }
   if (e.target.closest('#logout-btn')) {
     e.preventDefault();
-    logout();
-    navigate('/');
+    logout().finally(() => navigate('/'));
     return;
   }
   if (e.target.closest('#edit-profile-btn')) {

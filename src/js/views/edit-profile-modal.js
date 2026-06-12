@@ -46,11 +46,8 @@ function template(u) {
         '</div>' +
 
         '<form class="auth-form" id="edit-profile-form">' +
-          '<label>Display name' +
+          '<label>Display name <span class="hint">(画像未設定時のイニシャルは表示名の先頭文字)</span>' +
             '<input name="name" maxlength="40" value="' + attr(u.name) + '" required>' +
-          '</label>' +
-          '<label>Initials <span class="hint">(画像未設定時に表示・1〜2 文字)</span>' +
-            '<input name="avatar" maxlength="2" value="' + attr(u.avatar) + '" placeholder="H">' +
           '</label>' +
           '<label>Bio <span class="hint">(280 文字まで)</span>' +
             '<textarea name="bio" maxlength="280" rows="3">' + attr(u.bio || '') + '</textarea>' +
@@ -142,22 +139,26 @@ export function openEditProfile() {
   // save
   const form = document.getElementById('edit-profile-form');
   const err  = form.querySelector('[data-error]');
-  form.addEventListener('submit', (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     err.textContent = '';
-    const fd = new FormData(form);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving…'; }
     try {
+      const fd = new FormData(form);
       const patch = {
         name:     fd.get('name'),
-        avatar:   fd.get('avatar'),
         bio:      fd.get('bio'),
         location: fd.get('location'),
         avatarShape: stagedAvatarShape,
       };
       if (stagedAvatarImage !== undefined) patch.avatarImage = stagedAvatarImage;
-      updateProfile(patch);
+      await updateProfile(patch);
       close();
-    } catch (ex) { err.textContent = ex.message || String(ex); }
+    } catch (ex) {
+      err.textContent = ex.message || String(ex);
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }
+    }
   });
 
   document.addEventListener('keydown', function escClose(e) {
