@@ -48,6 +48,18 @@ function timeText(p) {
   return p.time || '';
 }
 
+function spotChip(spot) {
+  if (!spot) return '';
+  const pinIcon = icon('pin', { size: 12, className: 'icon--inline' });
+  if (typeof spot === 'object') {
+    const label = spot.label || (Number(spot.lat).toFixed(4) + ', ' + Number(spot.lng).toFixed(4));
+    const gmaps = 'https://www.google.com/maps?q=' + spot.lat + ',' + spot.lng;
+    return '<a class="spot-chip" href="' + gmaps + '" target="_blank" rel="noopener" title="Google Maps で開く">' +
+      pinIcon + escape(label) + '</a>';
+  }
+  return '<span class="spot-chip">' + pinIcon + escape(spot) + '</span>';
+}
+
 export function renderPost(p) {
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
@@ -65,7 +77,7 @@ export function renderPost(p) {
           '<span class="post__sep">·</span>' +
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
           '<span class="post__sep">·</span>' +
-          '<span class="spot-chip">' + icon('pin', { size: 12, className: 'icon--inline' }) + escape(p.spot) + '</span>' +
+          spotChip(p.spot) +
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
         '<div class="post__body">' + inlineFormat(escape(p.body)) + '</div>' +

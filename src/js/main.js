@@ -4,6 +4,8 @@ import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome }      from './views/home.js';
 import { renderProfile }   from './views/profile.js';
 import { renderStub }      from './views/stub.js';
+import { renderSettings, bindSettings } from './views/settings.js';
+import { pickSpot }        from './views/spot-picker.js';
 import { openAuth }        from './views/auth-modal.js';
 import { allUsers, addPost } from './data.js';
 import { currentUser, logout, onAuthChange } from './auth.js';
@@ -29,6 +31,7 @@ for (let i = 0; i < 53 * 7; i++) {
 // ----- static icon slots that aren't view-rendered -----
 document.getElementById('ic-search').innerHTML = icon('search', { size: 16 });
 document.getElementById('ic-bell').innerHTML   = icon('bell',   { size: 20 });
+document.getElementById('ic-gear').innerHTML   = icon('gear',   { size: 20 });
 document.getElementById('theme-toggle').innerHTML = icon('moon', { size: 16 });
 document.querySelector('#open-compose .compose-cta__ico').innerHTML = icon('plus', { size: 18 });
 document.querySelectorAll('.side-nav__item').forEach(el => {
@@ -141,6 +144,10 @@ function renderSideMe() {
   }
 }
 
+// Spot picked in the composer for the current home view, kept in memory
+// so the timeline can re-render without losing the chosen pin.
+let pendingSpot = null;
+
 function dispatch(path) {
   const stubMatch = path.match(/^\/(explore|spots|repos|notifications)\/?$/);
   const userMatch = path.match(/^\/([A-Za-z0-9_]+)\/?$/);
@@ -148,6 +155,11 @@ function dispatch(path) {
   if (path === '/' || path === '') {
     document.title = 'spotcode-sns';
     app.innerHTML = renderHome();
+    if (pendingSpot) syncSpotChip(pendingSpot);
+  } else if (path === '/settings') {
+    document.title = 'Settings / spotcode-sns';
+    app.innerHTML = renderSettings();
+    bindSettings();
   } else if (stubMatch) {
     document.title = stubMatch[1] + ' / spotcode-sns';
     app.innerHTML = renderStub(stubMatch[1]);
@@ -161,6 +173,18 @@ function dispatch(path) {
   }
   rail.innerHTML = renderRail();
   setActiveNav(path);
+}
+
+function syncSpotChip(spot) {
+  const btn = document.getElementById('compose-spot-btn');
+  if (!btn) return;
+  const textEl = btn.querySelector('[data-spot-text]');
+  const label = spot.label || (spot.lat.toFixed(4) + ', ' + spot.lng.toFixed(4));
+  if (textEl) textEl.textContent = label;
+  btn.dataset.spotLat   = String(spot.lat);
+  btn.dataset.spotLng   = String(spot.lng);
+  btn.dataset.spotLabel = spot.label || '';
+  btn.classList.add('spot-chip--set');
 }
 
 initThemeToggle(document.getElementById('theme-toggle'));
@@ -236,6 +260,18 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Open the Google Maps spot picker.
+  const spotTrigger = e.target.closest('[data-spot-pick], #compose-spot-btn');
+  if (spotTrigger) {
+    e.preventDefault();
+    pickSpot().then((result) => {
+      if (!result) return;
+      pendingSpot = result;
+      syncSpotChip(result);
+    });
+    return;
+  }
+
   // Push button fallback: in case form submit gets eaten elsewhere,
   // explicitly trigger the form when the submit button is clicked.
   const pushBtn = e.target.closest('.composer button[type="submit"]');
@@ -260,10 +296,13 @@ document.addEventListener('submit', (e) => {
   const text = ta.value.trim();
   if (!text) return;
   const gh = form.querySelector('input[name="github"]').value.trim();
+  const spotValue = pendingSpot
+    ? { lat: pendingSpot.lat, lng: pendingSpot.lng, label: pendingSpot.label || '' }
+    : (form.dataset.spot || 'somewhere');
   addPost({
     id: 'p' + Date.now(),
     authorHandle: me.handle,
-    spot: form.dataset.spot || 'somewhere',
+    spot: spotValue,
     body: text,
     githubLink: gh || undefined,
     status: 'wip',
@@ -271,6 +310,7 @@ document.addEventListener('submit', (e) => {
     createdAt: Date.now(),
   });
   ta.value = '';
+  pendingSpot = null;
   refresh();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
