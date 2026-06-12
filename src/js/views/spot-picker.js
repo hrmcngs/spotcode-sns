@@ -1,7 +1,7 @@
 // Spot picker modal. Uses Leaflet + OpenStreetMap tiles + Nominatim
 // for reverse geocoding. No API key required, no account, no age gate.
 
-import { loadMaps, reverseGeocode, pickBuildingName, formatJapanAddress } from '../gmap.js';
+import { loadMaps, reverseGeocode, reverseGeocodeGSI, pickBuildingName, formatJapanAddress } from '../gmap.js';
 import { icon } from '../icons.js';
 
 let rootEl    = null;
@@ -36,7 +36,14 @@ function template() {
 
         '<footer class="picker-foot">' +
           '<div class="picker-info">' +
-            '<div id="picker-address" class="picker-address"></div>' +
+            '<div id="picker-address-meta" class="picker-address-meta"></div>' +
+            '<label class="picker-address-field">' +
+              '<span class="picker-address-field__label">住所</span>' +
+              '<input type="text" id="picker-address-input" class="picker-address-input" ' +
+                'placeholder="地図をクリックして取得…" autocomplete="off" spellcheck="false">' +
+              '<button type="button" id="picker-address-reset" class="picker-address-reset" hidden title="自動取得に戻す">↺</button>' +
+            '</label>' +
+            '<div id="picker-address-hint" class="picker-address-hint"></div>' +
             '<div id="picker-coords" class="picker-coords"></div>' +
           '</div>' +
           '<div class="picker-actions">' +
@@ -63,15 +70,35 @@ function mount() {
   document.getElementById('picker-confirm').addEventListener('click', () => {
     if (!pickedPos) return;
     const label = document.getElementById('picker-label').value.trim() || '';
+    // The address actually submitted is whatever is currently in the input —
+    // user-edited (e.g. "...神宮前6-17-2") wins over the auto-detected text.
+    const finalAddress = (document.getElementById('picker-address-input').value || '').trim();
     close({
       lat: pickedPos.lat,
       lng: pickedPos.lng,
       label,
-      ...(pickedAddress ? { address: pickedAddress } : {}),
+      ...(finalAddress ? { address: finalAddress } : {}),
       ...(pickedAddressDetails ? { addressDetails: pickedAddressDetails } : {}),
     });
   });
   document.getElementById('picker-geo').addEventListener('click', useGeolocation);
+
+  // Restore auto-detected text when the user clicks the ↺ button.
+  document.getElementById('picker-address-reset').addEventListener('click', () => {
+    const input = document.getElementById('picker-address-input');
+    if (!input) return;
+    const auto = input.dataset.auto || '';
+    input.value = auto;
+    document.getElementById('picker-address-reset').hidden = true;
+  });
+
+  // Show the ↺ button as soon as the user edits the field.
+  document.getElementById('picker-address-input').addEventListener('input', () => {
+    const input = document.getElementById('picker-address-input');
+    const reset = document.getElementById('picker-address-reset');
+    const auto = input.dataset.auto || '';
+    reset.hidden = (input.value === auto);
+  });
 }
 
 function showError(msg) {
@@ -96,53 +123,76 @@ function setPick(lat, lng, { autoFillLabel = false } = {}) {
 
   pickedAddress = '';
   pickedAddressDetails = null;
-  const addrEl = document.getElementById('picker-address');
-  if (addrEl) {
-    addrEl.textContent = '住所を取得中…';
-    addrEl.className   = 'picker-address is-loading';
+  const meta = document.getElementById('picker-address-meta');
+  const hint = document.getElementById('picker-address-hint');
+  if (meta) meta.innerHTML = '';
+  if (hint) {
+    hint.textContent = '住所を取得中…';
+    hint.className   = 'picker-address-hint is-loading';
   }
   doReverseGeocode(lat, lng, autoFillLabel);
 }
 
 async function doReverseGeocode(lat, lng, autoFillLabel) {
   const seq = ++geocodeSeq;
-  let data;
-  try {
-    data = await reverseGeocode(lat, lng);
-  } catch (err) {
-    if (seq !== geocodeSeq) return;
-    const addrEl = document.getElementById('picker-address');
-    if (addrEl) {
-      addrEl.textContent = '住所の取得に失敗しました';
-      addrEl.className = 'picker-address is-bad';
+  // Call OSM/Nominatim + GSI in parallel. GSI fills in the 大字・町丁目
+  // when Nominatim only knew the ward. Either may legitimately fail
+  // (network, outside Japan, etc.) — handle separately.
+  const [nomRes, gsiRes] = await Promise.allSettled([
+    reverseGeocode(lat, lng),
+    reverseGeocodeGSI(lat, lng),
+  ]);
+  if (seq !== geocodeSeq) return;
+
+  const hint  = document.getElementById('picker-address-hint');
+  const meta  = document.getElementById('picker-address-meta');
+  const input = document.getElementById('picker-address-input');
+  const reset = document.getElementById('picker-address-reset');
+
+  if (nomRes.status !== 'fulfilled' && gsiRes.status !== 'fulfilled') {
+    if (hint) {
+      hint.textContent = '住所の取得に失敗しました（ネットワーク？）';
+      hint.className = 'picker-address-hint is-bad';
     }
     return;
   }
-  if (seq !== geocodeSeq) return;
 
+  const data = nomRes.status === 'fulfilled' ? nomRes.value : {};
+  const gsi  = gsiRes.status === 'fulfilled' ? gsiRes.value : null;
   const building = pickBuildingName(data);
-  const det      = formatJapanAddress(data);
-  // Prefer the structured Japan-format string (with 〒postcode and 番地)
-  // because Nominatim's display_name sometimes drops the house_number
-  // or reorders fields in English style.
+  const det      = formatJapanAddress(data, gsi);
   const address  = det.full || data.display_name || '';
   pickedAddress = address;
   pickedAddressDetails = det;
 
-  const addrEl = document.getElementById('picker-address');
-  if (addrEl) {
-    const lines = [];
-    if (building) lines.push('<strong>' + escapeHtml(building) + '</strong>');
-    if (address)  lines.push('<span class="picker-address__main">' + escapeHtml(address) + '</span>');
-    else          lines.push('住所が見つかりません');
-
-    if (det.houseNumber) {
-      lines.push('<span class="picker-address__hn">番地: ' + escapeHtml(det.houseNumber) + '</span>');
-    } else if (address) {
-      lines.push('<span class="picker-address__warn">⚠ 番地情報なし — ラベル欄に「○○ビル 3F」など補足してください</span>');
+  if (meta) {
+    const chips = [];
+    if (det.postcode) chips.push('<span class="picker-chip">〒' + escapeHtml(det.postcode) + '</span>');
+    if (building)     chips.push('<span class="picker-chip picker-chip--strong">' + escapeHtml(building) + '</span>');
+    meta.innerHTML = chips.join('');
+  }
+  if (input) {
+    // Only overwrite the field if the user hasn't typed into it (i.e. its
+    // current value is empty or matches the previous auto-fill). Otherwise
+    // they've already started writing "6-17-2…" and we'd be clobbering them.
+    const prevAuto = input.dataset.auto || '';
+    if (!input.value || input.value === prevAuto) {
+      input.value = address;
     }
-    addrEl.innerHTML = lines.join('<br>');
-    addrEl.className = 'picker-address';
+    input.dataset.auto = address;
+    if (reset) reset.hidden = (input.value === address);
+  }
+  if (hint) {
+    if (det.houseNumber) {
+      hint.textContent = '番地: ' + det.houseNumber + '（自動取得）';
+      hint.className = 'picker-address-hint';
+    } else if (address) {
+      hint.textContent = '⚠ 番地は自動取得できませんでした — 上の住所欄に「6-17-2」など追記してください';
+      hint.className = 'picker-address-hint is-warn';
+    } else {
+      hint.textContent = '住所が見つかりません — 上の住所欄に直接入力してください';
+      hint.className = 'picker-address-hint is-warn';
+    }
   }
 
   if (autoFillLabel) {
@@ -249,10 +299,15 @@ export function pickSpot() {
   pickedAddressDetails = null;
   geocodeSeq++;
   document.getElementById('picker-confirm').disabled = true;
-  document.getElementById('picker-coords').textContent  = '';
-  document.getElementById('picker-address').textContent = '';
-  document.getElementById('picker-address').className   = 'picker-address';
-  document.getElementById('picker-label').value         = '';
+  document.getElementById('picker-coords').textContent       = '';
+  document.getElementById('picker-address-meta').innerHTML   = '';
+  document.getElementById('picker-address-hint').textContent = '';
+  document.getElementById('picker-address-hint').className   = 'picker-address-hint';
+  const input = document.getElementById('picker-address-input');
+  input.value = '';
+  input.dataset.auto = '';
+  document.getElementById('picker-address-reset').hidden = true;
+  document.getElementById('picker-label').value          = '';
   rootEl.hidden = false;
   setTimeout(initMap, 30);
   return new Promise((res) => { resolveFn = res; });

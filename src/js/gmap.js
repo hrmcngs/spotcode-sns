@@ -62,6 +62,28 @@ export async function reverseGeocode(lat, lng) {
   return r.json();
 }
 
+// Reverse geocoding via 国土地理院 (GSI). Free, no key, no rate-limit
+// hassle, and consistently returns the Japanese 大字・町丁目 name
+// (e.g. "神宮前六丁目") even when Nominatim only knows the broader ward.
+// Returns null if outside Japan or no result.
+export async function reverseGeocodeGSI(lat, lng) {
+  const u = new URL('https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress');
+  u.searchParams.set('lat', String(lat));
+  u.searchParams.set('lon', String(lng));
+  let r;
+  try { r = await fetch(u.toString(), { headers: { 'Accept': 'application/json' } }); }
+  catch { return null; }
+  if (!r.ok) return null;
+  let j;
+  try { j = await r.json(); } catch { return null; }
+  const res = j && j.results;
+  if (!res || !res.lv01Nm) return null;
+  return {
+    muniCd: res.muniCd || '',
+    chomeName: String(res.lv01Nm),  // e.g. "神宮前六丁目"
+  };
+}
+
 // Pick a building / venue name from a Nominatim response.
 export function pickBuildingName(data) {
   if (!data) return '';
@@ -75,31 +97,48 @@ export function pickBuildingName(data) {
   );
 }
 
-// Format a Japan-style postal address from a Nominatim response, including
-// the house number when it is known. Falls back to display_name when the
-// address components are too sparse to reconstruct.
+// Format a Japan-style postal address from a Nominatim response, optionally
+// enriched with a GSI reverse-geocode result. GSI consistently knows the
+// 大字・町丁目 part (e.g. "神宮前六丁目") that Nominatim often omits.
 //
-// Returns { full, postcode, prefecture, city, ward, road, houseNumber, missingHouseNumber }.
-export function formatJapanAddress(data) {
+// Returns { full, postcode, prefecture, city, ward, chome, road,
+//           houseNumber, missingHouseNumber }.
+export function formatJapanAddress(data, gsi) {
   const a = (data && data.address) || {};
   const prefecture = a.province || a.state || '';
   const city       = a.city || a.town || a.village || a.municipality || '';
   // Ward / 大字 / neighbourhood — Nominatim distributes Japanese addresses
   // across several fields depending on the area.
-  const ward = [a.city_district, a.suburb, a.neighbourhood, a.quarter, a.hamlet]
+  const wardRaw = [a.city_district, a.suburb, a.neighbourhood, a.quarter, a.hamlet]
     .filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join('');
   const road        = a.road || '';
   const houseNumber = a.house_number || '';
   const postcode    = a.postcode || '';
 
-  const body = [prefecture, city, ward, road, houseNumber].filter(Boolean).join('');
+  // Prefer GSI's chōme name if it extends what we already have. e.g. when
+  // Nominatim only gave "渋谷区" but GSI returned "神宮前六丁目", we want
+  // both — ward stays "渋谷区", chome becomes "神宮前六丁目".
+  let ward  = wardRaw;
+  let chome = '';
+  const gsiChome = gsi && gsi.chomeName;
+  if (gsiChome) {
+    if (!ward || !gsiChome.startsWith(ward)) {
+      chome = gsiChome;
+    } else {
+      // GSI is already prefixed with the ward Nominatim gave us; trim it
+      // so we don't render "神宮前神宮前六丁目".
+      chome = gsiChome.slice(ward.length);
+    }
+  }
+
+  const body = [prefecture, city, ward, chome, road, houseNumber].filter(Boolean).join('');
   const full = postcode
     ? '〒' + postcode + ' ' + body
     : body;
 
   return {
     full: full.trim() || (data?.display_name || ''),
-    postcode, prefecture, city, ward, road, houseNumber,
+    postcode, prefecture, city, ward, chome, road, houseNumber,
     missingHouseNumber: !houseNumber,
   };
 }
