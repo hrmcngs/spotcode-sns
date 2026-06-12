@@ -1,0 +1,5 @@
+[
+  { "id": "shibuya",    "lat": 35.659, "lng": 139.700, "name": "渋谷スクランブル" },
+  { "id": "akihabara",  "lat": 35.702, "lng": 139.774, "name": "秋葉原 電気街" },
+  { "id": "kyoto-tower","lat": 34.987, "lng": 135.759, "name": "京都タワー" }
+]
