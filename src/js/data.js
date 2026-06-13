@@ -101,6 +101,32 @@ export async function postsByHandle(handle) {
   return (data || []).map(shapePost);
 }
 
+// Posts liked by a given handle (for the profile "Likes" tab).
+export async function likedPostsByHandle(handle) {
+  if (!handle) return [];
+  const supa = await getClient();
+  const { data: prof, error: profErr } = await supa
+    .from('profiles')
+    .select('id')
+    .eq('handle', handle)
+    .maybeSingle();
+  if (profErr) throw new Error(profErr.message);
+  if (!prof) return [];
+  // Embed the full post (with its author) under each like row. The FK
+  // name hint is required for the same reason POST_COLS already pins
+  // posts→profiles.
+  const { data, error } = await supa
+    .from('likes')
+    .select('created_at, post:posts!likes_post_id_fkey(' + POST_COLS + ')')
+    .eq('user_id', prof.id)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || [])
+    .map(r => r.post)
+    .filter(Boolean)
+    .map(shapePost);
+}
+
 export async function postsByCity(city) {
   if (!city) return [];
   const supa = await getClient();

@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
-import { renderProfile, hydrateProfileBadges, hydrateProfile } from './views/profile.js';
+import { renderProfile, hydrateProfileBadges, hydrateProfile, setProfileTab } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderFollowList, hydrateFollowList } from './views/follow-list.js';
@@ -121,8 +121,8 @@ async function renderRail() {
             return (
               '<div class="followlist__row">' +
                 renderAvatar(u, { tag: 'a', href: url('/' + u.handle) }) +
-                '<div>' +
-                  '<a class="followlist__name" href="' + url('/' + u.handle) + '">' + u.name + '</a>' +
+                '<div class="followlist__text">' +
+                  '<a class="followlist__name" href="' + url('/' + u.handle) + '" title="' + escape(u.name) + '">' + escape(u.name) + '</a>' +
                   '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
                 '</div>' +
                 '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
@@ -321,6 +321,18 @@ document.addEventListener('click', (e) => {
   if (auth) {
     e.preventDefault();
     openAuth(auth.dataset.auth === 'register' ? 'register' : 'login');
+    return;
+  }
+
+  // Profile-page tabs (Posts / Spots / Likes). They keep the URL on
+  // /<handle> and only swap the body — no navigation, no scroll jump.
+  const profileTab = e.target.closest('[data-profile-tab]');
+  if (profileTab) {
+    e.preventDefault();
+    setProfileTab(
+      profileTab.getAttribute('data-profile-handle'),
+      profileTab.getAttribute('data-profile-tab'),
+    );
     return;
   }
   if (e.target.closest('#logout-btn')) {
