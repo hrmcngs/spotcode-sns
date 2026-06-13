@@ -732,6 +732,40 @@ a.trend-item:hover { background: var(--surface-2); }
 .spot-head__title { font-size: 1.4rem; color: var(--text); margin: 0; }
 .spot-head__sub { color: var(--muted); margin: 0; }
 
+/* ---------- map view ---------- */
+.map-head {
+  display: flex; align-items: center; gap: .8rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.map-head__icon { color: var(--accent); }
+.map-head__title { font-size: 1.1rem; color: var(--text); margin: 0; }
+.map-head__sub   { color: var(--muted); font-size: .82rem; margin: .15rem 0 0; }
+.map-canvas {
+  width: 100%;
+  height: 70vh;
+  background: var(--bg);
+}
+.leaflet-popup-content-wrapper.map-popup,
+.map-popup .leaflet-popup-content-wrapper {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border);
+}
+.map-popup .leaflet-popup-tip { background: var(--surface); }
+.map-popup__head { margin-bottom: .35rem; }
+.map-popup__author {
+  color: var(--muted); font-size: .78rem; margin-top: .15rem;
+}
+.map-popup__body {
+  font-size: .92rem; line-height: 1.45; color: var(--text);
+  white-space: pre-wrap; word-break: break-word;
+}
+.map-popup__locked {
+  font-size: .82rem; color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  padding: .35em .55em; border-radius: 6px;
+}
+
 /* ---------- geo gate banner ---------- */
 .geo-banner {
   padding: .55rem 1rem;

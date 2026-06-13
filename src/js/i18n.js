@@ -124,6 +124,16 @@ const DICT = {
     'geo.denied':              '📍 位置情報がオフです。場所付きの投稿は、現地から近づくと見えるようになります。',
     'geo.showing_nearby':      '📍 半径 {r} m 以内のスポット投稿のみ表示中',
     'geo.too_far':             '📍 ここから {r} m 以内にいる人だけ閲覧できます。',
+
+    // ---------------- map view ----------------
+    'map.title':               '📍 マップ',
+    'map.loading':             'マップを読み込み中…',
+    'map.error':               'マップの読み込みに失敗しました',
+    'map.subtitle_with_loc':   '{n} 件のピン · 半径 {r} m 以内のピンを開くと中身が見えます',
+    'map.subtitle_denied':     '{n} 件のピン · 位置情報がオフのため中身は非表示（場所と建物名だけ見えます）',
+    'map.subtitle_no_loc':     '{n} 件のピン · 位置情報を許可すると近くの中身が読めます',
+    'map.unknown_building':    '（建物名なし）',
+    'map.locked':              '📍 ここから半径 {r} m 以内に来ると中身が読めます',
   },
 
   en: {
@@ -230,6 +240,15 @@ const DICT = {
     'geo.denied':              "📍 Location is off. Spot-tagged posts become visible once you're near them.",
     'geo.showing_nearby':      '📍 Showing spot posts within {r} m of you',
     'geo.too_far':             '📍 Only people within {r} m of here can read this.',
+
+    'map.title':               '📍 Map',
+    'map.loading':             'Loading map…',
+    'map.error':               'Failed to load the map',
+    'map.subtitle_with_loc':   '{n} pins · open a pin within {r} m to read the idea',
+    'map.subtitle_denied':     '{n} pins · location is off, so only the spot and building name are visible',
+    'map.subtitle_no_loc':     '{n} pins · allow location access to read nearby ideas',
+    'map.unknown_building':    '(unnamed building)',
+    'map.locked':              '📍 Come within {r} m to read this idea',
   },
 };
 
