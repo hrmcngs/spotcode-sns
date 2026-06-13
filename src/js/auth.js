@@ -56,9 +56,16 @@ function projectUser(authUser, profile) {
 
 async function loadProfile(userId) {
   const supa = await getClient();
+  // Use `*` so that newly-added optional columns (Stage 9 website /
+  // twitter / instagram, future Stage Ns) don't break login if the
+  // user hasn't run the corresponding migration yet — a missing column
+  // in an explicit select list returns an error → null profile → the
+  // user appears logged out even though the auth session is fine.
+  // `projectUser` already defaults every field with `|| ''` / `|| null`
+  // so a missing column just renders as empty in the UI.
   const { data, error } = await supa
     .from('profiles')
-    .select('handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, github_verify_token, is_private, website, twitter, instagram, created_at')
+    .select('*')
     .eq('id', userId)
     .maybeSingle();
   if (error) { console.warn('loadProfile error', error); return null; }
