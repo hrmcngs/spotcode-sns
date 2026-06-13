@@ -4,6 +4,7 @@
 import { loadMaps, reverseGeocode, reverseGeocodeGSI, pickBuildingName, formatJapanAddress } from '../gmap.js';
 import { icon } from '../icons.js';
 import { t } from '../i18n.js';
+import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
 
 let rootEl    = null;
 let mapInst   = null;
@@ -282,8 +283,9 @@ function useGeolocation() {
 }
 
 function close(result) {
-  if (!rootEl) return;
+  if (!rootEl || rootEl.hidden) return;
   rootEl.hidden = true;
+  unlockBodyScroll();
   if (resolveFn) { resolveFn(result); resolveFn = null; }
   pickedPos = null;
   pickedAddress = '';
@@ -310,6 +312,7 @@ export function pickSpot() {
   document.getElementById('picker-address-reset').hidden = true;
   document.getElementById('picker-label').value          = '';
   rootEl.hidden = false;
+  lockBodyScroll();
   setTimeout(initMap, 30);
   return new Promise((res) => { resolveFn = res; });
 }
