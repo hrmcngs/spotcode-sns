@@ -732,6 +732,21 @@ a.trend-item:hover { background: var(--surface-2); }
 .spot-head__title { font-size: 1.4rem; color: var(--text); margin: 0; }
 .spot-head__sub { color: var(--muted); margin: 0; }
 
+/* ---------- geo gate banner ---------- */
+.geo-banner {
+  padding: .55rem 1rem;
+  font-size: .82rem; line-height: 1.45;
+  border-bottom: 1px solid var(--border);
+}
+.geo-banner--on {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+}
+.geo-banner--off {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+}
+
 /* ---------- stub / empty page ---------- */
 .stub {
   padding: 3.5rem 1.5rem; text-align: center; color: var(--muted);

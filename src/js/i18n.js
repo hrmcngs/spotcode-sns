@@ -118,6 +118,12 @@ const DICT = {
     'stub.sub.spots':          'スポットごとに、過去にそこで生まれたアイデアを束ねる。',
     'stub.sub.repos':          'GitHub と紐づくリポジトリ単位で動きを見る。',
     'stub.sub.notifications':  'リプライ・スター・フォークを通知。',
+
+    // ---------------- geo gate ----------------
+    'geo.waiting':             '📍 位置情報を取得しています…（許可を求められたら「許可」を押してください）',
+    'geo.denied':              '📍 位置情報がオフです。場所付きの投稿は、現地から近づくと見えるようになります。',
+    'geo.showing_nearby':      '📍 半径 {r} m 以内のスポット投稿のみ表示中',
+    'geo.too_far':             '📍 ここから {r} m 以内にいる人だけ閲覧できます。',
   },
 
   en: {
@@ -219,6 +225,11 @@ const DICT = {
     'stub.sub.spots':          'Browse ideas grouped by the place they were born.',
     'stub.sub.repos':          'Activity per GitHub repository.',
     'stub.sub.notifications':  'Replies, stars, and forks land here.',
+
+    'geo.waiting':             '📍 Getting your location… (allow access when asked)',
+    'geo.denied':              "📍 Location is off. Spot-tagged posts become visible once you're near them.",
+    'geo.showing_nearby':      '📍 Showing spot posts within {r} m of you',
+    'geo.too_far':             '📍 Only people within {r} m of here can read this.',
   },
 };
 
@@ -244,10 +255,16 @@ export function setLang(lang) {
 }
 
 // Look up a key. Falls back to the JA dictionary, then to the literal
-// key so missing translations are visible during development.
-export function t(key) {
+// key so missing translations are visible during development. An
+// optional second arg interpolates `{name}` placeholders in the
+// matched string.
+export function t(key, params) {
   const table = DICT[active] || DICT[DEFAULT_LANG];
-  return (table && table[key]) || (DICT.ja && DICT.ja[key]) || key;
+  const raw = (table && table[key]) || (DICT.ja && DICT.ja[key]) || key;
+  if (!params) return raw;
+  return raw.replace(/\{(\w+)\}/g, (_, name) =>
+    params[name] != null ? String(params[name]) : '{' + name + '}'
+  );
 }
 
 // Apply the current language to <html lang> on boot.
