@@ -49,12 +49,34 @@ function timeText(p) {
   return p.time || '';
 }
 
+// Build a Google Maps URL that, when opened, shows the building name
+// in the search box instead of raw N/E coordinates. Priority order:
+//   1. label   ("東京都立桜町高等学校") — text search, Maps resolves to the place
+//   2. address ("世田谷区用賀…")        — same, but less specific
+//   3. lat/lng                          — last-resort coordinate pin
+// In (1)/(2) we still append the coords via the `/@<lat>,<lng>,17z`
+// suffix so Maps centres on the exact spot the user picked, even when
+// the name lookup matches multiple branches (e.g. a chain store).
+function gmapsUrl(spot) {
+  const lat = Number(spot.lat), lng = Number(spot.lng);
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+  const text = (spot.label || spot.address || '').trim();
+  if (text) {
+    const q = encodeURIComponent(text);
+    return hasCoords
+      ? 'https://www.google.com/maps/search/' + q + '/@' + lat + ',' + lng + ',17z'
+      : 'https://www.google.com/maps/search/?api=1&query=' + q;
+  }
+  if (hasCoords) return 'https://www.google.com/maps?q=' + lat + ',' + lng;
+  return 'https://www.google.com/maps';
+}
+
 function spotChip(spot) {
   if (!spot) return '';
   const pinIcon = icon('pin', { size: 12, className: 'icon--inline' });
   if (typeof spot === 'object') {
     const label = spot.label || (Number(spot.lat).toFixed(4) + ', ' + Number(spot.lng).toFixed(4));
-    const gmaps = 'https://www.google.com/maps?q=' + spot.lat + ',' + spot.lng;
+    const gmaps = gmapsUrl(spot);
     const title = spot.address ? 'Google Maps で開く — ' + spot.address : 'Google Maps で開く';
     return '<a class="spot-chip" href="' + gmaps + '" target="_blank" rel="noopener" title="' + escape(title) + '">' +
       pinIcon + escape(label) + '</a>';
