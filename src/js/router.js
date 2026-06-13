@@ -83,9 +83,18 @@ document.addEventListener('click', (e) => {
   // Let auth-trigger anchors bubble to the app-level handler.
   if (a.hasAttribute('data-auth')) return;
 
-  // Strip hash prefix or BASE prefix to get logical path
+  // In file:// builds we use hash-routing — links are rewritten to
+  // `#/foo` and the router treats the part after `#` as the path.
+  // But a hash *fragment* like `#likers` (page-internal anchor used by
+  // /post/<id>/analytics tile links) must NOT be treated as a path:
+  // doing so navigated to /likers and rendered the user-not-found stub.
+  // Distinguish: `#/...` is a route, anything else after `#` is a
+  // fragment we leave for the browser to scroll to natively.
   let path = raw;
-  if (path.startsWith('#')) path = path.slice(1);
+  if (path.startsWith('#')) {
+    if (path.startsWith('#/')) path = path.slice(1);
+    else return; // pure fragment anchor — let the browser handle it
+  }
   if (BASE && BASE !== '/' && path.startsWith(BASE)) path = '/' + path.slice(BASE.length);
   if (!path.startsWith('/')) path = '/' + path;
 
