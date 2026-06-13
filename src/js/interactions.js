@@ -300,8 +300,28 @@ export async function denyFollowRequest(followerHandle) {
 
 // (reposts + bookmarks maps declared at the top of the file alongside
 // the other interaction caches; only the missing-table flags live here.)
+//
+// Same trick as data.js: cache the "table missing" flags in
+// localStorage so subsequent page loads skip the table-not-found
+// round trip and treat the action as no-op directly. Saves one HTTP
+// 404 per visible post batch on every visit before Stage 11 is run.
+const INT_CACHE_KEY = 'spotcode:int-cache:v1';
 let repostsTableMissing   = false;
 let bookmarksTableMissing = false;
+(function loadIntCache() {
+  try {
+    const v = JSON.parse(localStorage.getItem(INT_CACHE_KEY) || '{}');
+    if (v.repostsTableMissing   === true) repostsTableMissing   = true;
+    if (v.bookmarksTableMissing === true) bookmarksTableMissing = true;
+  } catch {}
+})();
+function persistIntCache() {
+  try {
+    localStorage.setItem(INT_CACHE_KEY, JSON.stringify({
+      repostsTableMissing, bookmarksTableMissing,
+    }));
+  } catch {}
+}
 
 function isTableMissing(error, name) {
   const msg = String(error?.message || '').toLowerCase();
@@ -326,7 +346,7 @@ export async function hydrateRepostsMine(postIds) {
   const { data, error } = await supa.from('reposts')
     .select('post_id').eq('user_id', user.id).in('post_id', postIds);
   if (error) {
-    if (isTableMissing(error, 'reposts')) { repostsTableMissing = true; return; }
+    if (isTableMissing(error, 'reposts')) { repostsTableMissing = true; persistIntCache(); return; }
     console.warn('hydrateRepostsMine', error);
     return;
   }
@@ -341,7 +361,7 @@ export async function hydrateBookmarksMine(postIds) {
   const { data, error } = await supa.from('bookmarks')
     .select('post_id').eq('user_id', user.id).in('post_id', postIds);
   if (error) {
-    if (isTableMissing(error, 'bookmarks')) { bookmarksTableMissing = true; return; }
+    if (isTableMissing(error, 'bookmarks')) { bookmarksTableMissing = true; persistIntCache(); return; }
     console.warn('hydrateBookmarksMine', error);
     return;
   }
