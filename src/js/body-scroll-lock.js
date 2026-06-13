@@ -26,13 +26,26 @@ export function unlockBodyScroll() {
   if (depth === 0) return;
   depth -= 1;
   if (depth > 0) return;
+  resetBodyStyles();
+}
+
+// Wipe the body styles regardless of the refcount. Call after a route
+// change to recover from a leaked lock — e.g. a modal closed via an
+// uncaught error path that skipped its unlock.
+export function forceUnlockBodyScroll() {
+  depth = 0;
+  resetBodyStyles();
+}
+
+function resetBodyStyles() {
   const b = document.body;
+  if (!b.classList.contains('modal-open') && !b.style.position) return;
   b.style.position = '';
   b.style.top      = '';
   b.style.left     = '';
   b.style.right    = '';
   b.style.width    = '';
   b.classList.remove('modal-open');
-  window.scrollTo(0, savedScrollY);
+  if (savedScrollY) window.scrollTo(0, savedScrollY);
   savedScrollY = 0;
 }

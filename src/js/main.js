@@ -25,7 +25,7 @@ import { initDevMode, isDevMode } from './dev-mode.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
-import { lockBodyScroll, unlockBodyScroll } from './body-scroll-lock.js';
+import { lockBodyScroll, unlockBodyScroll, forceUnlockBodyScroll } from './body-scroll-lock.js';
 import { fetchContributions, cachedContributions } from './github-activity.js';
 
 const app  = document.getElementById('app');
@@ -216,6 +216,10 @@ function renderSideMe() {
 let pendingSpot = null;
 
 function dispatch(path) {
+  // If a modal closed without unlocking (uncaught error path, navigation
+  // mid-animation, …) the body would still be position:fixed and the
+  // next page would render shifted. Force-clear once on every nav.
+  forceUnlockBodyScroll();
   const stubMatch   = path.match(/^\/(explore|repos|notifications)\/?$/);
   const mapMatch    = path === '/spots' || path === '/spots/';
   const spotMatch   = path.match(/^\/spot\/(.+?)\/?$/);
