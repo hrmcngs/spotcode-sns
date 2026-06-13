@@ -77,6 +77,19 @@ button { font: inherit; cursor: pointer; }
 }
 .icon-btn:hover, .theme-toggle:hover { background: var(--surface-2); }
 
+/* Developer-mode chip — visible only when html[data-dev="1"] (set by
+   dev-mode.js when the toggle is on for an allowlisted handle). */
+.dev-chip {
+  display: none;
+  font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  padding: .25em .6em; border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+}
+.dev-chip:hover { background: color-mix(in srgb, var(--warn) 28%, transparent); }
+html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
+
 /* ---------- app 3-column grid (Twitter) ---------- */
 .app-grid {
   display: grid;
@@ -179,10 +192,10 @@ button { font: inherit; cursor: pointer; }
 .composer {
   display: grid; grid-template-columns: 42px 1fr; gap: .8rem;
   align-items: start;
-  /* Generous top padding so the textarea's focus ring sits well clear of
-     the sticky For you tab bar above (≈56px topbar + ≈56px tab bar ≈ 112px),
-     even when the user has just refreshed and scrollIntoView hasn't run. */
-  padding: 3rem 1rem 1rem; border-bottom: 1px solid var(--border);
+  /* Extra-generous top padding — the textarea now sits well below the
+     sticky For you tab bar even before scrollIntoView runs. Two bumps in
+     a row weren't enough on the live site, so settle on 4.5rem. */
+  padding: 4.5rem 1rem 1rem; border-bottom: 1px solid var(--border);
 }
 .composer > .avatar { margin-top: .25rem; }
 .composer .idea-form { display: flex; flex-direction: column; gap: .7rem; max-width: none; margin: 0; min-width: 0; }
@@ -206,7 +219,7 @@ button { font: inherit; cursor: pointer; }
   /* When focusin triggers scrollIntoView, leave clearance for the sticky
      topbar (≈56px) + tab bar (≈56px) + a comfortable visual buffer so the
      textarea's top edge never sits flush against the For you underline. */
-  scroll-margin-top: 200px;
+  scroll-margin-top: 240px;
 }
 .composer textarea:focus {
   border-color: var(--accent);
