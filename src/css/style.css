@@ -29,13 +29,19 @@ html[data-theme='light'] {
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
+html {
+  /* Belt-and-suspenders against any child that tries to push the page
+     wider than the viewport — iOS Safari sometimes honours overflow on
+     html but not on body, so set it on both. */
+  overflow-x: hidden;
+  max-width: 100vw;
+}
 body {
   background: var(--bg); color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
   line-height: 1.5;
-  /* Prevent horizontal scrolling on small viewports — keeps iOS WKWebView
-     from zooming the whole page to fit overflowing content. */
   overflow-x: hidden;
+  max-width: 100vw;
 }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; cursor: pointer; }
@@ -1131,7 +1137,12 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   margin-bottom: .4rem;
 }
 .profile-activity__hint { font-weight: 400; color: var(--muted); }
-.profile-activity__graph { overflow-x: auto; }
+.profile-activity__graph { overflow-x: auto; max-width: 100%; }
+/* The grass SVG has a fixed 688×91 pixel size which exceeds an iPhone
+   viewport. Shrink it to whatever the column allows, preserving the
+   aspect ratio via height: auto + the SVG's intrinsic viewBox. */
+.profile-activity__graph svg,
+.card svg { max-width: 100%; height: auto; display: block; }
 .badge-chip {
   display: inline-flex; align-items: center;
   padding: .25em .7em; border-radius: 999px;
