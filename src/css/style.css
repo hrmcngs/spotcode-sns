@@ -1073,6 +1073,17 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   padding: .6rem 1rem 0;
 }
 .profile-badges__loading { color: var(--muted); font-size: .78rem; }
+
+/* GitHub contributions heatmap inline on the profile header. */
+.profile-activity {
+  padding: .8rem 1rem 0;
+}
+.profile-activity__head {
+  font-size: .82rem; color: var(--muted); font-weight: 600;
+  margin-bottom: .4rem;
+}
+.profile-activity__hint { font-weight: 400; color: var(--muted); }
+.profile-activity__graph { overflow-x: auto; }
 .badge-chip {
   display: inline-flex; align-items: center;
   padding: .25em .7em; border-radius: 999px;

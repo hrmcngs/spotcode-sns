@@ -9,10 +9,23 @@ import { getBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
+import { renderGrass } from '../grass.js';
+import { fetchContributions, cachedContributions } from '../github-activity.js';
 
 // Monotonic version so async hydrations can detect a newer renderProfile
 // has superseded them and bail out before clobbering the DOM.
 let renderVersion = 0;
+
+// 53 weeks × 7 days of zeros — gives renderGrass() something to paint
+// while we wait for the real GitHub data to come back.
+function emptyGrid() {
+  const out = {};
+  for (let i = 0; i < 53 * 7; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    out[d.toISOString().slice(0, 10)] = 0;
+  }
+  return out;
+}
 
 // In-memory current tab per profile view. Not in the URL — clicking a tab
 // stays on /<handle> but swaps the body via hydrateProfileBody().
@@ -91,6 +104,18 @@ export function renderProfile(handle) {
       (u.github?.handle
         ? '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
             '<span class="profile-badges__loading">バッジを取得中…</span>' +
+          '</div>'
+        : '') +
+      (u.github?.handle
+        ? '<div class="profile-activity" id="profile-activity-' + u.handle + '" data-gh="' + u.github.handle + '">' +
+            '<div class="profile-activity__head">' +
+              icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
+              ' GitHub activity ' +
+              '<span class="profile-activity__hint">last 12 months</span>' +
+            '</div>' +
+            // Filled by hydrateProfileActivity (or just stays as the
+            // placeholder if the fetch fails / GitHub handle is bogus).
+            '<div class="profile-activity__graph">' + renderGrass(emptyGrid()) + '</div>' +
           '</div>'
         : '') +
     '</header>'
@@ -221,4 +246,23 @@ export async function hydrateProfileBadges(handle) {
   } catch {
     slot.remove();
   }
+}
+
+// Same idea for the GitHub contributions heatmap: render the empty grid
+// inline (renderProfile already does that), then fill it in once the
+// API answers. Cached for an hour so revisits are instant.
+export async function hydrateProfileActivity(handle) {
+  const u = getUser(handle);
+  const gh = u?.github?.handle;
+  if (!gh) return;
+  const cached = cachedContributions(gh);
+  if (!cached) {
+    const counts = await fetchContributions(gh);
+    if (!counts) return;
+  }
+  // Re-render the graph with whatever the cache holds now.
+  const slot = document.querySelector('#profile-activity-' + u.handle + ' .profile-activity__graph');
+  if (!slot) return;
+  const counts = cachedContributions(gh);
+  if (counts) slot.innerHTML = renderGrass(counts);
 }
