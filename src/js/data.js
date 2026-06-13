@@ -240,6 +240,8 @@ export function cachedPosts(scope) {
 // Fires a single 1-row select with the full column set; the error
 // message disables every missing optional in one round-trip pass.
 // Subsequent queries skip the per-request retry loop entirely.
+// Also probes the Stage 11 optional tables (reposts / bookmarks) via
+// interactions.js so visible-post batches never see a 404 either.
 let probeDone = false;
 let probePromise = null;
 export function probeSchema() {
@@ -248,13 +250,19 @@ export function probeSchema() {
   probePromise = (async () => {
     try {
       const supa = await getClient();
-      // Run repeatedly until either the query succeeds or no more flags
-      // can flip — same retry pattern as withResilientCols but bounded.
+      // Posts column probe — retry-loop drops one missing column per
+      // round trip until the select succeeds or no more flags can flip.
       for (let i = 0; i <= OPTIONAL.length; i++) {
         const { error } = await supa.from('posts').select(postCols()).limit(1);
         if (!error) break;
         if (!isMissingOptionalColumn(error)) break;
       }
+    } catch {}
+    // Parallel probe of optional tables. Dynamic import avoids a
+    // circular dep between data.js ↔ interactions.js at module load.
+    try {
+      const { probeOptionalTables } = await import('./interactions.js');
+      await probeOptionalTables();
     } catch {}
     probeDone = true;
     probePromise = null;
