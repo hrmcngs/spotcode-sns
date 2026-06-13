@@ -25,6 +25,7 @@ import { initDevMode, isDevMode } from './dev-mode.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
+import { lockBodyScroll, unlockBodyScroll } from './body-scroll-lock.js';
 import { fetchContributions, cachedContributions } from './github-activity.js';
 
 const app  = document.getElementById('app');
@@ -315,6 +316,32 @@ hydrateMyFollows();
 initDevMode();
 initI18n();
 initIosZoomGuard();
+
+// Mobile hamburger drawer — opens / closes the off-canvas sidenav.
+// No-op on desktop where the drawer never shows.
+(function initDrawer() {
+  const toggle   = document.getElementById('drawer-toggle');
+  const backdrop = document.getElementById('drawer-backdrop');
+  if (!toggle || !backdrop) return;
+  let open = false;
+  function setOpen(next) {
+    if (next === open) return;
+    open = next;
+    document.body.classList.toggle('drawer-open', open);
+    backdrop.hidden = !open;
+    if (open) lockBodyScroll(); else unlockBodyScroll();
+  }
+  toggle.addEventListener('click', () => setOpen(!open));
+  backdrop.addEventListener('click', () => setOpen(false));
+  // Any sidenav tap closes the drawer so the user lands on the new page
+  // without the drawer sitting open over it.
+  document.querySelectorAll('.side-nav__item, .compose-cta, .me-card').forEach(el => {
+    el.addEventListener('click', () => setTimeout(() => setOpen(false), 30));
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && open) setOpen(false);
+  });
+})();
 // Patch the static topbar placeholder so it picks up the active language.
 const searchInput = document.querySelector('.topbar__search input');
 if (searchInput) searchInput.placeholder = t('nav.search.placeholder');
