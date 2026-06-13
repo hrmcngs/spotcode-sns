@@ -111,18 +111,30 @@ button { font: inherit; cursor: pointer; }
 .dev-chip:hover { background: color-mix(in srgb, var(--warn) 28%, transparent); }
 html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
 
-/* ---------- app 3-column grid (Twitter) ---------- */
+/* ---------- app 3-column grid (Twitter) ----------
+   All widths in %, not px, so the grid scales smoothly with the
+   viewport instead of locking the side rails at fixed sizes and
+   squishing the middle. The minmax() floor on the centre column
+   prevents flex children (posts, code blocks) from blowing it out. */
 .app-grid {
   display: grid;
-  grid-template-columns: 260px minmax(0, 620px) 320px;
+  grid-template-columns: 21% minmax(0, 1fr) 25%;
   gap: 1.25rem;
   max-width: 1280px;
   margin: 0 auto;
   padding: 1rem;
 }
-@media (max-width: 1024px) {
-  .app-grid { grid-template-columns: 72px minmax(0, 1fr); }
+/* Tablet-ish: right rail gets cramped under ~1100px (the "Your
+   activity" / "Trending spots" cards start wrapping their headings
+   vertically), so drop it before that happens. Left rail keeps its
+   full labels until 1024px. */
+@media (max-width: 1100px) {
+  .app-grid { grid-template-columns: 22% minmax(0, 1fr); }
   .right-rail { display: none; }
+}
+@media (max-width: 1024px) {
+  /* Tablet: collapse the left rail to icon-only. */
+  .app-grid { grid-template-columns: 72px minmax(0, 1fr); }
   .side-nav__item span:last-child, .side-foot, .compose-cta { display: none; }
   .side-nav__item { justify-content: center; }
 }
