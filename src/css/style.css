@@ -176,9 +176,9 @@ button { font: inherit; cursor: pointer; }
 .composer {
   display: grid; grid-template-columns: 42px 1fr; gap: .8rem;
   align-items: start;
-  /* Extra top padding so the textarea's blue focus ring doesn't visually
-     touch the For you tab's blue underline above it. */
-  padding: 1.5rem 1rem 1rem; border-bottom: 1px solid var(--border);
+  /* Generous top padding so the textarea's focus ring sits clear of the
+     sticky For you tab bar above (≈56px topbar + ≈56px tab bar ≈ 112px). */
+  padding: 2.25rem 1rem 1rem; border-bottom: 1px solid var(--border);
 }
 .composer > .avatar { margin-top: .25rem; }
 .composer .idea-form { display: flex; flex-direction: column; gap: .7rem; max-width: none; margin: 0; min-width: 0; }
@@ -199,9 +199,10 @@ button { font: inherit; cursor: pointer; }
   resize: none;
   overflow: hidden;
   transition: border-color .12s, box-shadow .12s;
-  /* Leave room for the sticky topbar (≈56px) + sticky tab bar (≈56px)
-     when the browser scrolls this element into view on focus. */
-  scroll-margin-top: 130px;
+  /* When focusin triggers scrollIntoView, leave clearance for the sticky
+     topbar (≈56px) + tab bar (≈56px) + a comfortable visual buffer so the
+     textarea's top edge never sits flush against the For you underline. */
+  scroll-margin-top: 170px;
 }
 .composer textarea:focus {
   border-color: var(--accent);
