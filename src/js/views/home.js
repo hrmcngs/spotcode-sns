@@ -1,9 +1,10 @@
 import { renderIdeaForm } from '../idea-post.js';
-import { allPosts, hydrateQuotedPosts } from '../data.js';
+import { allPosts, hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
 import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
 import { t }              from '../i18n.js';
+import { renderTimelineSkeleton } from '../skeleton.js';
 
 // Monotonic counter incremented on every renderHome() so async hydrations
 // can detect when they've been superseded by a newer navigation / refresh
@@ -24,7 +25,15 @@ function emptyTimeline(loggedIn) {
 }
 
 function loadingTimeline() {
-  return '<div class="stub" id="timeline-loading"><p class="stub__sub">' + t('home.loading') + '</p></div>';
+  // If we have a cached timeline from a previous visit, paint that
+  // immediately so the page never looks empty. The skeleton only shows
+  // for genuinely-first-time visitors. Either way, hydrateHome will
+  // refresh the list with live data once Supabase comes back.
+  const cached = cachedPosts('home');
+  if (cached && cached.length) {
+    return '<div id="timeline-list-cached">' + cached.map(renderPost).join('') + '</div>';
+  }
+  return renderTimelineSkeleton(4);
 }
 
 function errorTimeline(msg) {

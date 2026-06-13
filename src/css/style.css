@@ -1027,6 +1027,45 @@ a.trend-item:hover { background: var(--surface-2); }
   color: var(--warn);
 }
 
+/* ---------- skeleton loading state ----------
+   Reused by every timeline view (home / spot / profile) so the user
+   sees post-shaped grey blocks during the cold Supabase fetch
+   instead of a black void. Shimmer animation uses a single linear
+   gradient slid across the surface — cheap on mobile GPUs. */
+.skeleton-list { display: flex; flex-direction: column; }
+.sk-post {
+  display: grid; grid-template-columns: 42px 1fr; gap: .8rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.sk-avatar { width: 42px; height: 42px; border-radius: 50%; }
+.sk-main   { display: flex; flex-direction: column; gap: .5rem; }
+.sk-head   { display: flex; gap: .5rem; }
+.sk-name   { width: 6em; height: 1em; border-radius: 4px; }
+.sk-handle { width: 4em; height: 1em; border-radius: 4px; }
+.sk-body   { display: flex; flex-direction: column; gap: .4rem; }
+.sk-line   { width: 100%; height: .85em; border-radius: 4px; }
+.sk-line--short { width: 60%; }
+.sk-actions { display: flex; gap: 1.5rem; margin-top: .35rem; }
+.sk-act    { width: 2em; height: 1em; border-radius: 4px; }
+.sk-avatar, .sk-name, .sk-handle, .sk-line, .sk-act {
+  background: linear-gradient(
+    90deg,
+    var(--surface) 0%,
+    var(--surface-2) 50%,
+    var(--surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: skShimmer 1.2s ease-in-out infinite;
+}
+@keyframes skShimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-avatar, .sk-name, .sk-handle, .sk-line, .sk-act { animation: none; }
+}
+
 /* ---------- post detail + comments ---------- */
 .post-detail .back-home { display: inline-block; padding: .8rem 1rem .2rem; }
 .post-detail__bar {

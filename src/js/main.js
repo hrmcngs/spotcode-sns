@@ -16,7 +16,7 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, allPosts, addPost, removePost } from './data.js';
+import { allUsers, allPosts, addPost, removePost, probeSchema } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
@@ -517,6 +517,10 @@ hydrateMyFollows();
 // chrome (e.g. the dev-mode topbar indicator) without flashing.
 initDevMode();
 initI18n();
+// One-shot schema probe so the first real query already knows which
+// optional columns are missing, instead of discovering them one
+// retry at a time per visible page.
+probeSchema();
 initIosZoomGuard();
 
 // Mobile hamburger drawer — opens / closes the off-canvas sidenav.
