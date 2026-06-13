@@ -6,6 +6,7 @@
 
 import { getClient } from './supa.js';
 import { KEYS, read, write } from './storage.js';
+import { expandQuery } from './jp-romaji.js';
 
 // Project a profiles row into the UI-friendly user shape that the rest of
 // the app uses (same fields as auth.js#projectUser, minus id/email).
@@ -62,13 +63,21 @@ export async function searchProfiles(q, limit = 10) {
   if (!q) return [];
   let supa;
   try { supa = await getClient(); } catch { return []; }
-  // Escape LIKE metacharacters before splicing into the .or() filter.
-  const safe = String(q).replace(/[%_\\]/g, c => '\\' + c);
-  const pattern = '%' + safe + '%';
+  // Expand the query to its JP equivalents when it's a romaji slug
+  // (e.g. "shibuya" → also try "渋谷区"). The user's display name might
+  // contain the JP word even when their handle is ASCII-only.
+  const forms = expandQuery(q);
+  const orParts = [];
+  for (const f of forms) {
+    const safe = String(f).replace(/[%_\\,()]/g, c => '\\' + c);
+    const pattern = '%' + safe + '%';
+    orParts.push('handle.ilike.' + pattern);
+    orParts.push('name.ilike.'   + pattern);
+  }
   const { data, error } = await supa
     .from('profiles')
     .select(COLUMNS)
-    .or('handle.ilike.' + pattern + ',name.ilike.' + pattern)
+    .or(orParts.join(','))
     .limit(limit);
   if (error) { console.warn('searchProfiles', error); return []; }
   const profiles = (data || []).map(shapeProfile).filter(Boolean);

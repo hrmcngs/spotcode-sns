@@ -10,6 +10,7 @@ import { url, navigate } from '../router.js';
 import { renderAvatar } from '../avatar.js';
 import { icon } from '../icons.js';
 import { searchProfiles } from '../profiles.js';
+import { romajiToJp }     from '../jp-romaji.js';
 
 let dropdownEl  = null;
 let activeIndex = -1;
@@ -79,6 +80,20 @@ function localItems(q) {
   }));
 }
 
+// When the query is a romaji slug we know (e.g. "shibuya", "setagaya"),
+// surface a "Posts in <JP>" suggestion at the top of the dropdown so a
+// non-JP keyboard user can still discover the spot view.
+function spotItems(q) {
+  const jp = romajiToJp(q);
+  if (!jp) return [];
+  return [{
+    kind: 'spot',
+    label: jp,
+    romaji: q.toLowerCase(),
+    path: '/spot/' + encodeURIComponent(jp),
+  }];
+}
+
 function mergeLocalAndRemote(localItems, remoteUsers, q) {
   const lower = q.toLowerCase();
   const byHandle = new Map();
@@ -116,6 +131,17 @@ function render(items, q) {
           '<div class="search-result__main">' +
             '<div class="search-result__name">' + escapeHtml(it.user.name) + '</div>' +
             '<div class="search-result__handle">@' + escapeHtml(it.user.handle) + '</div>' +
+          '</div>' +
+        '</a>'
+      );
+    }
+    if (it.kind === 'spot') {
+      return (
+        '<a class="search-result search-result--alt" data-idx="' + i + '" href="' + url(it.path) + '">' +
+          '<span class="search-result__icon">' + icon('pin', { size: 18 }) + '</span>' +
+          '<div class="search-result__main">' +
+            '<div class="search-result__name">' + escapeHtml(it.label) + ' のアイデアを見る</div>' +
+            '<div class="search-result__handle">' + escapeHtml(it.romaji) + ' → ' + escapeHtml(it.label) + '</div>' +
           '</div>' +
         '</a>'
       );
@@ -159,9 +185,10 @@ function close() {
 }
 
 async function queryRemote(q) {
-  // Show local-only results immediately so typing feels instant.
+  // Show local + spot suggestions immediately so typing feels instant.
   const local = localItems(q);
-  render(withFallbacks(local, q), q);
+  const spots = spotItems(q);
+  render(withFallbacks([...spots, ...local], q), q);
   open();
 
   // Then fetch remote in the background.
@@ -171,7 +198,7 @@ async function queryRemote(q) {
     const remote = await searchProfiles(q, 10);
     if (q !== currentQuery) return; // a newer keystroke superseded us
     const merged = mergeLocalAndRemote(local, remote, q);
-    render(withFallbacks(merged, q), q);
+    render(withFallbacks([...spots, ...merged], q), q);
   }, 220);
 }
 

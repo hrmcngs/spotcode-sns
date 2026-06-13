@@ -20,6 +20,7 @@ import { toggleLike, isLiked, likeCount,
          hydrateMyFollows, clearInteractionsCache } from './interactions.js';
 import { renderAvatar } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
+import { romajiToJp }             from './jp-romaji.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -211,7 +212,11 @@ function dispatch(path) {
     app.innerHTML = renderSettings();
     bindSettings();
   } else if (spotMatch) {
-    const city = decodeURIComponent(spotMatch[1]);
+    // Accept either the JP city name (/spot/世田谷区) or a romaji slug
+    // (/spot/setagaya). The view always queries Supabase with the JP
+    // form, since that's what addressDetails.city actually stores.
+    const raw = decodeURIComponent(spotMatch[1]);
+    const city = romajiToJp(raw) || raw;
     document.title = city + ' / spotcode-sns';
     app.innerHTML = renderSpot(city);
     hydrateSpot(city);
