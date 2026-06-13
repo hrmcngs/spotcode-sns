@@ -27,9 +27,13 @@ export function getUser(handle) {
 
 // ----- posts (Supabase) -----
 
+// Pin the embed to the posts→profiles FK by its constraint name. Without
+// the `!posts_author_id_fkey` hint PostgREST throws "more than one
+// relationship was found" as soon as any other table also references
+// profiles (likes, follows, reports, …) and its schema cache reloads.
 const POST_COLS =
   'id, body, github_link, spot, status, created_at, ' +
-  'author:profiles(handle, name, avatar_url, avatar_shape)';
+  'author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)';
 
 function shapeAuthor(a) {
   if (!a) return null;
