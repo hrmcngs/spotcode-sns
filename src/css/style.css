@@ -399,8 +399,18 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 
 .followlist { display: flex; flex-direction: column; gap: .6rem; }
 .followlist__row { display: flex; align-items: center; gap: .6rem; }
-.followlist__name { font-weight: 700; }
-.followlist__handle { color: var(--muted); font-size: .8rem; }
+/* Name + @handle live in their own column so they each stay on one line
+   and truncate to "…" before the Follow button gets squashed. */
+.followlist__name {
+  font-weight: 700;
+  display: block; max-width: 20ch;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.followlist__handle {
+  color: var(--muted); font-size: .8rem;
+  display: block; max-width: 20ch;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .followlist__follow {
   margin-left: auto;
   background: var(--text); color: var(--bg);

@@ -1,4 +1,4 @@
-import { getUser, postsByHandle } from '../data.js';
+import { getUser, postsByHandle, likedPostsByHandle } from '../data.js';
 import { renderPost }              from '../post.js';
 import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
@@ -12,6 +12,12 @@ import { fetchProfileByHandle } from '../profiles.js';
 // Monotonic version so async hydrations can detect a newer renderProfile
 // has superseded them and bail out before clobbering the DOM.
 let renderVersion = 0;
+
+// In-memory current tab per profile view. Not in the URL — clicking a tab
+// stays on /<handle> but swaps the body via hydrateProfileBody().
+let activeTab = 'posts';
+const TABS = ['posts', 'spots', 'likes'];
+const TAB_LABELS = { posts: 'Posts', spots: 'Spots', likes: 'Likes' };
 
 function notFound(handle) {
   return (
@@ -91,10 +97,12 @@ export function renderProfile(handle) {
 
   const tabs = (
     '<div class="timeline__head">' +
-      '<a class="tab is-active" href="' + url('/' + handle) + '">Posts</a>' +
-      '<a class="tab" href="' + url('/' + handle) + '">Replies</a>' +
-      '<a class="tab" href="' + url('/' + handle) + '">Spots</a>' +
-      '<a class="tab" href="' + url('/' + handle) + '">Likes</a>' +
+      TABS.map(t => (
+        '<button type="button" class="tab' + (t === activeTab ? ' is-active' : '') + '" ' +
+          'data-profile-tab="' + t + '" data-profile-handle="' + handle + '">' +
+          TAB_LABELS[t] +
+        '</button>'
+      )).join('') +
     '</div>'
   );
 
@@ -133,29 +141,56 @@ export async function hydrateProfile(handle) {
   }
   await hydrateProfileFollow(handle);
   if (myVersion !== renderVersion) return;
+  // Reset the tab to Posts whenever a fresh profile is opened so the new
+  // page never inherits the active tab of the previous one.
+  activeTab = 'posts';
   const app = document.getElementById('app');
   if (app) app.innerHTML = renderProfile(handle);
   // renderProfile bumped renderVersion — capture the new value for the
-  // posts hydration below.
-  await hydrateProfilePosts(handle, renderVersion);
+  // body hydration below.
+  await hydrateProfileBody(handle, renderVersion);
 }
 
-async function hydrateProfilePosts(handle, myVersion) {
+// Called from main.js when the user clicks one of the profile tabs.
+// Updates the active tab, swaps the is-active class, and refetches the
+// body for the new tab.
+export async function setProfileTab(handle, tab) {
+  if (!TABS.includes(tab) || tab === activeTab) return;
+  activeTab = tab;
+  document.querySelectorAll('[data-profile-tab]').forEach(el => {
+    el.classList.toggle('is-active', el.getAttribute('data-profile-tab') === tab);
+  });
+  const list = document.getElementById('profile-posts');
+  if (list) list.innerHTML = '<div class="stub"><p class="stub__sub">読み込み中…</p></div>';
+  await hydrateProfileBody(handle, renderVersion);
+}
+
+async function hydrateProfileBody(handle, myVersion) {
   const list = document.getElementById('profile-posts');
   if (!list) return;
+  const tab = activeTab;
   let posts;
-  try { posts = await postsByHandle(handle); }
-  catch (err) {
+  try {
+    if (tab === 'likes')      posts = await likedPostsByHandle(handle);
+    else if (tab === 'spots') posts = (await postsByHandle(handle)).filter(p => p.spot);
+    else                      posts = await postsByHandle(handle);
+  } catch (err) {
     if (myVersion !== renderVersion) return;
-    console.error('hydrateProfilePosts', err);
-    list.innerHTML = '<div class="stub"><p class="stub__sub">投稿の取得に失敗しました: ' + (err.message || '') + '</p></div>';
+    console.error('hydrateProfileBody', err);
+    list.innerHTML = '<div class="stub"><p class="stub__sub">取得に失敗しました: ' + (err.message || '') + '</p></div>';
     return;
   }
   if (myVersion !== renderVersion) return;
-  const countEl = document.getElementById('profile-postcount');
-  if (countEl) countEl.textContent = String(posts.length);
+  // Only the Posts tab drives the header "Posts" count.
+  if (tab === 'posts') {
+    const countEl = document.getElementById('profile-postcount');
+    if (countEl) countEl.textContent = String(posts.length);
+  }
   if (!posts.length) {
-    list.innerHTML = '<div class="stub"><p class="stub__sub">まだ投稿がありません。</p></div>';
+    const empty = tab === 'likes' ? 'まだいいねした投稿はありません。'
+                : tab === 'spots' ? 'まだ場所付きの投稿はありません。'
+                :                   'まだ投稿がありません。';
+    list.innerHTML = '<div class="stub"><p class="stub__sub">' + empty + '</p></div>';
     return;
   }
   list.innerHTML = posts.map(renderPost).join('');
