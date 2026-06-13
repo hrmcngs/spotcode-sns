@@ -207,6 +207,43 @@ function sanitizeHandle(raw) {
   return s || null;
 }
 
+// Per-column missing flags for the Stage 9 optional fields. Same
+// pattern as data.js: cache the negative state in localStorage so
+// the second save doesn't have to rediscover the missing column.
+// Without this, Save errored with "Could not find the 'instagram'
+// column of 'profiles' in the schema cache" before the user had run
+// the Stage 9 migration — and the read path's `select('*')` masked
+// the problem on reads but writes still failed.
+const PROFILE_COLS_CACHE_KEY = 'spotcode:profile-cols:v1';
+const PROFILE_COL_FLAGS = { website: true, twitter: true, instagram: true };
+(function loadProfileColCache() {
+  try {
+    const v = JSON.parse(localStorage.getItem(PROFILE_COLS_CACHE_KEY) || '{}');
+    for (const k of Object.keys(PROFILE_COL_FLAGS)) {
+      if (v[k] === false) PROFILE_COL_FLAGS[k] = false;
+    }
+  } catch {}
+})();
+function persistProfileColCache() {
+  try { localStorage.setItem(PROFILE_COLS_CACHE_KEY, JSON.stringify(PROFILE_COL_FLAGS)); } catch {}
+}
+// Parse a PostgREST "Could not find the 'X' column …" / "column X does
+// not exist" error and disable that column for future saves. Returns
+// the column name that was just disabled (so the caller can strip it
+// from the in-flight patch + retry), or null when no flag flipped.
+function tripProfileCol(error) {
+  const msg = String(error?.message || '');
+  const m = msg.match(/'([a-z_]+)' column/i) || msg.match(/column "?([a-z_]+)"? .*does not exist/i);
+  const col = m && m[1];
+  if (col && PROFILE_COL_FLAGS.hasOwnProperty(col) && PROFILE_COL_FLAGS[col]) {
+    console.warn('profiles.' + col + ' missing — run Stage 9 SQL. Dropping from updates.');
+    PROFILE_COL_FLAGS[col] = false;
+    persistProfileColCache();
+    return col;
+  }
+  return null;
+}
+
 export async function updateProfile(patch) {
   if (!cachedUser) throw new Error('ログインしていません');
   const supa = await getClient();
@@ -217,12 +254,22 @@ export async function updateProfile(patch) {
   if (patch.avatarImage !== undefined) db.avatar_url   = patch.avatarImage || null;
   if (patch.avatarShape != null)       db.avatar_shape = patch.avatarShape;
   if (patch.isPrivate   !== undefined) db.is_private   = !!patch.isPrivate;
-  if (patch.website   != null)         db.website      = String(patch.website).trim().slice(0, 200)   || null;
-  if (patch.twitter   != null)         db.twitter      = sanitizeHandle(patch.twitter);
-  if (patch.instagram != null)         db.instagram    = sanitizeHandle(patch.instagram);
+  if (patch.website   != null && PROFILE_COL_FLAGS.website)   db.website   = String(patch.website).trim().slice(0, 200) || null;
+  if (patch.twitter   != null && PROFILE_COL_FLAGS.twitter)   db.twitter   = sanitizeHandle(patch.twitter);
+  if (patch.instagram != null && PROFILE_COL_FLAGS.instagram) db.instagram = sanitizeHandle(patch.instagram);
   if (Object.keys(db).length) {
-    const { error } = await supa.from('profiles').update(db).eq('id', cachedUser.id);
-    if (error) throw new Error(error.message);
+    // Retry loop: PostgREST returns one missing column per request, so
+    // when Stage 9 is unmigrated AND the user filled all 3 optional
+    // fields we need up to 3 retries (drop instagram, then twitter,
+    // then website) before the UPDATE goes through.
+    for (let i = 0; i < 4; i++) {
+      const { error } = await supa.from('profiles').update(db).eq('id', cachedUser.id);
+      if (!error) break;
+      const dropped = tripProfileCol(error);
+      if (!dropped) throw new Error(error.message);
+      delete db[dropped];
+      if (Object.keys(db).length === 0) break;
+    }
   }
   await refreshFromSession();
   return cachedUser;
