@@ -31,9 +31,32 @@ export function getUser(handle) {
 // the `!posts_author_id_fkey` hint PostgREST throws "more than one
 // relationship was found" as soon as any other table also references
 // profiles (likes, follows, reports, …) and its schema cache reloads.
-const POST_COLS =
-  'id, body, github_link, spot, status, created_at, comments_count, ' +
-  'author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)';
+//
+// `comments_count` is appended by `postCols()` only when we know it
+// exists in the deployed schema. If a query fails with "column …
+// does not exist" we cache the negative and re-query without it, so
+// users who haven't run the Stage 10 migration yet still see posts.
+let hasCommentsCount = true;
+function postCols() {
+  const base =
+    'id, body, github_link, spot, status, created_at, ' +
+    'author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)';
+  return hasCommentsCount ? base.replace('created_at,', 'created_at, comments_count,') : base;
+}
+
+// Was the error caused by a missing optional column we know how to
+// degrade gracefully on? If so, flip the flag and signal a retry.
+function isMissingOptionalColumn(error) {
+  const msg = String(error?.message || '').toLowerCase();
+  if (msg.includes('comments_count') && msg.includes('does not exist')) {
+    if (hasCommentsCount) {
+      console.warn('posts.comments_count missing — run Stage 10 SQL. Falling back.');
+      hasCommentsCount = false;
+    }
+    return true;
+  }
+  return false;
+}
 
 function shapeAuthor(a) {
   if (!a) return null;
@@ -76,24 +99,36 @@ function shapePost(row) {
   };
 }
 
+// Run `build(cols)` once and retry once if the only error was a known
+// optional column. Centralised so every read path inherits the same
+// fall-forward behaviour without copy-pasted try / catch chains.
+async function withResilientCols(build) {
+  const first = await build(postCols());
+  if (first.error && isMissingOptionalColumn(first.error)) {
+    return build(postCols());
+  }
+  return first;
+}
+
 // Fetch a single post by id (for /post/<id>). Returns null on 404 or RLS
 // miss so the view can render its own not-found state.
 export async function getPost(id) {
   if (!id) return null;
   const supa = await getClient();
-  const { data, error } = await supa
-    .from('posts').select(POST_COLS).eq('id', id).maybeSingle();
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').select(cols).eq('id', id).maybeSingle()
+  );
   if (error) { console.warn('getPost', error); return null; }
   return data ? shapePost(data) : null;
 }
 
 export async function allPosts({ limit = 100 } = {}) {
   const supa = await getClient();
-  const { data, error } = await supa
-    .from('posts')
-    .select(POST_COLS)
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').select(cols)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+  );
   if (error) throw new Error(error.message);
   return (data || []).map(shapePost);
 }
@@ -108,11 +143,11 @@ export async function postsByHandle(handle) {
     .maybeSingle();
   if (profErr) throw new Error(profErr.message);
   if (!prof) return [];
-  const { data, error } = await supa
-    .from('posts')
-    .select(POST_COLS)
-    .eq('author_id', prof.id)
-    .order('created_at', { ascending: false });
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').select(cols)
+      .eq('author_id', prof.id)
+      .order('created_at', { ascending: false })
+  );
   if (error) throw new Error(error.message);
   return (data || []).map(shapePost);
 }
@@ -129,13 +164,14 @@ export async function likedPostsByHandle(handle) {
   if (profErr) throw new Error(profErr.message);
   if (!prof) return [];
   // Embed the full post (with its author) under each like row. The FK
-  // name hint is required for the same reason POST_COLS already pins
+  // name hint is required for the same reason postCols() already pins
   // posts→profiles.
-  const { data, error } = await supa
-    .from('likes')
-    .select('created_at, post:posts!likes_post_id_fkey(' + POST_COLS + ')')
-    .eq('user_id', prof.id)
-    .order('created_at', { ascending: false });
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('likes')
+      .select('created_at, post:posts!likes_post_id_fkey(' + cols + ')')
+      .eq('user_id', prof.id)
+      .order('created_at', { ascending: false })
+  );
   if (error) throw new Error(error.message);
   return (data || [])
     .map(r => r.post)
@@ -149,11 +185,11 @@ export async function postsByCity(city) {
   // PostgREST JSONB path filter: spot->addressDetails->>city == city.
   // The post.spot column is jsonb and addressDetails is the nested
   // object we save from the picker.
-  const { data, error } = await supa
-    .from('posts')
-    .select(POST_COLS)
-    .eq('spot->addressDetails->>city', city)
-    .order('created_at', { ascending: false });
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').select(cols)
+      .eq('spot->addressDetails->>city', city)
+      .order('created_at', { ascending: false })
+  );
   if (error) throw new Error(error.message);
   return (data || []).map(shapePost);
 }
@@ -169,7 +205,9 @@ export async function addPost(post) {
     spot:        post.spot || null,
     status:      post.status || 'wip',
   };
-  const { data, error } = await supa.from('posts').insert(row).select(POST_COLS).single();
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').insert(row).select(cols).single()
+  );
   if (error) throw new Error(error.message);
   return shapePost(data);
 }
