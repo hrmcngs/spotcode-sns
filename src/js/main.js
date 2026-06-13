@@ -18,6 +18,7 @@ import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
          hydrateMyFollows, clearInteractionsCache } from './interactions.js';
 import { renderAvatar } from './avatar.js';
+import { initDevMode, isDevMode } from './dev-mode.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -66,7 +67,14 @@ document.querySelectorAll('.side-nav__item').forEach(el => {
 
 async function renderRail() {
   const me = currentUser();
-  const others = Object.values(allUsers()).filter(u => !me || u.handle !== me.handle);
+  // Make sure followsMine is filled before deciding who to suggest, so the
+  // "Who to follow" list never re-suggests someone you already follow.
+  try { await hydrateMyFollows(); } catch {}
+  const others = Object.values(allUsers()).filter(u => {
+    if (!me) return true; // guest: don't hide anyone
+    if (u.handle === me.handle) return false;
+    return !isFollowing(me.handle, u.handle);
+  });
   const trending = await computeTrendingCities();
 
   const parts = [
@@ -259,6 +267,9 @@ try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
 // Once logged in, pre-load the set of handles I follow so isFollowing()
 // can answer synchronously from the render path.
 hydrateMyFollows();
+// Apply the dev-mode html[data-dev] flag so dev-only CSS can scope its
+// chrome (e.g. the dev-mode topbar indicator) without flashing.
+initDevMode();
 
 onRoute(dispatch);
 renderAuthArea();

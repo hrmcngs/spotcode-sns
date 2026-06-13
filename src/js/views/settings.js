@@ -1,5 +1,6 @@
 import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping } from '../supa.js';
+import { canBeDev, isDevMode, setDevMode } from '../dev-mode.js';
 
 function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
@@ -94,6 +95,20 @@ export function renderSettings() {
         '<p class="settings-status" id="map-status">未確認</p>' +
       '</section>' +
 
+      (canBeDev()
+        ? '<section class="settings-card">' +
+            '<h2>Developer mode <span class="settings-tag">' + (isDevMode() ? 'ON' : 'OFF') + '</span></h2>' +
+            '<p class="settings__hint">' +
+              '一般ユーザー向けの表示と切り替えます。ON のときだけ通報キューや内部 ID などの開発者向け UI が表示されます。' +
+            '</p>' +
+            '<div class="settings-form__actions">' +
+              '<button type="button" class="btn btn--' + (isDevMode() ? 'ghost' : 'primary') + '" id="dev-mode-toggle">' +
+                (isDevMode() ? 'OFF にする' : 'ON にする') +
+              '</button>' +
+            '</div>' +
+          '</section>'
+        : '') +
+
       '<section class="settings-card">' +
         '<h2>About</h2>' +
         '<p class="settings__hint">' +
@@ -156,6 +171,13 @@ export function bindSettings() {
     setConfig({ url: '', anonKey: '' });
     show('上書きを削除しました。リロードします…', 'ok');
     setTimeout(() => location.reload(), 400);
+  });
+
+  // Developer-mode toggle (only present when the current user is on the
+  // allowlist — the button doesn't render otherwise).
+  document.getElementById('dev-mode-toggle')?.addEventListener('click', () => {
+    setDevMode(!isDevMode());
+    location.reload();
   });
 
   document.getElementById('supa-test')?.addEventListener('click', async () => {
