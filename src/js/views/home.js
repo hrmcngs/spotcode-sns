@@ -4,8 +4,6 @@ import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
 import { hydratePostLikes } from '../interactions.js';
 import { t }              from '../i18n.js';
-import { getMyLocation, filterPostsByLocation, permissionDenied,
-         cachedLocation, getRadius } from '../geo-gate.js';
 
 // Monotonic counter incremented on every renderHome() so async hydrations
 // can detect when they've been superseded by a newer navigation / refresh
@@ -46,7 +44,7 @@ export function renderHome() {
     '<div class="timeline__head">',
       '<a class="tab is-active" href="/">' + t('home.tab.foryou') + '</a>',
       '<a class="tab" href="/">' + t('home.tab.following') + '</a>',
-      '<a class="tab" href="/">' + t('home.tab.spots') + '</a>',
+      '<a class="tab" href="/spots">' + t('home.tab.spots') + '</a>',
     '</div>',
     renderIdeaForm({ user: currentUser() }),
     '<div id="timeline-list">',
@@ -59,56 +57,38 @@ export function renderHome() {
 // the rendered posts (or the empty state). Like counts come in a second
 // hydration pass so the posts paint immediately. Guards every DOM write
 // against `renderVersion` so stale fetches don't clobber a fresh render.
-function geoBanner() {
-  if (cachedLocation()) {
-    return '<div class="geo-banner geo-banner--on">' +
-      t('geo.showing_nearby', { r: getRadius() }) +
-    '</div>';
-  }
-  if (permissionDenied()) {
-    return '<div class="geo-banner geo-banner--off">' +
-      t('geo.denied') +
-    '</div>';
-  }
-  return '<div class="geo-banner geo-banner--off">' +
-    t('geo.waiting') +
-  '</div>';
-}
-
+//
+// No geo-gate here — the timeline shows every post (spot-tagged or not,
+// nearby or not). The Map view (/spots) is where the location-gated
+// experience lives instead.
 export async function hydrateHome() {
   const myVersion = renderVersion;
   const list = document.getElementById('timeline-list');
   if (!list) return;
 
-  // Fire the geolocation request in parallel with allPosts so the gate
-  // is ready by the time we filter — without serialising the two.
-  const [posts] = await Promise.all([
-    allPosts().catch((err) => err),
-    getMyLocation(),
-  ]);
+  let posts;
+  try {
+    posts = await allPosts();
+  } catch (err) {
+    if (myVersion !== renderVersion) return;
+    console.error('hydrateHome: allPosts failed', err);
+    list.innerHTML = errorTimeline(err.message || '通信エラー');
+    return;
+  }
   if (myVersion !== renderVersion) return;
-  if (posts instanceof Error) {
-    console.error('hydrateHome: allPosts failed', posts);
-    list.innerHTML = errorTimeline(posts.message || '通信エラー');
+
+  if (!posts.length) {
+    list.innerHTML = emptyTimeline(!!currentUser());
     return;
   }
-
-  const me = currentUser();
-  const gated = filterPostsByLocation(posts, me?.handle);
-  const banner = geoBanner();
-
-  if (!gated.length) {
-    list.innerHTML = banner + emptyTimeline(!!me);
-    return;
-  }
-  list.innerHTML = banner + gated.map(renderPost).join('');
+  list.innerHTML = posts.map(renderPost).join('');
 
   try {
-    await hydratePostLikes(gated.map(p => p.id));
+    await hydratePostLikes(posts.map(p => p.id));
   } catch (err) {
     console.warn('hydratePostLikes failed', err);
     return;
   }
   if (myVersion !== renderVersion) return;
-  list.innerHTML = banner + gated.map(renderPost).join('');
+  list.innerHTML = posts.map(renderPost).join('');
 }

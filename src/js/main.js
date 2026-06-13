@@ -5,6 +5,7 @@ import { renderHome, hydrateHome } from './views/home.js';
 import { renderProfile, hydrateProfileBadges, hydrateProfile, setProfileTab } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
+import { renderMap, hydrateMap }  from './views/map.js';
 import { renderFollowList, hydrateFollowList } from './views/follow-list.js';
 import { renderSettings, bindSettings } from './views/settings.js';
 import { pickSpot }        from './views/spot-picker.js';
@@ -198,7 +199,8 @@ function renderSideMe() {
 let pendingSpot = null;
 
 function dispatch(path) {
-  const stubMatch   = path.match(/^\/(explore|spots|repos|notifications)\/?$/);
+  const stubMatch   = path.match(/^\/(explore|repos|notifications)\/?$/);
+  const mapMatch    = path === '/spots' || path === '/spots/';
   const spotMatch   = path.match(/^\/spot\/(.+?)\/?$/);
   const followMatch = path.match(/^\/([A-Za-z0-9_]+)\/(following|followers)\/?$/);
   const userMatch   = path.match(/^\/([A-Za-z0-9_]+)\/?$/);
@@ -227,6 +229,10 @@ function dispatch(path) {
     document.title = '@' + handle + ' ' + kind + ' / spotcode-sns';
     app.innerHTML = renderFollowList(handle, kind);
     hydrateFollowList(handle, kind);
+  } else if (mapMatch) {
+    document.title = 'Map / spotcode-sns';
+    app.innerHTML = renderMap();
+    hydrateMap();
   } else if (stubMatch) {
     document.title = stubMatch[1] + ' / spotcode-sns';
     app.innerHTML = renderStub(stubMatch[1]);
