@@ -746,6 +746,16 @@ a.trend-item:hover { background: var(--surface-2); }
 /* ---------- settings page ---------- */
 .settings { padding: 1.5rem; }
 .settings__title { font-size: 1.5rem; margin-bottom: 1rem; }
+.settings__section {
+  font-size: 1.1rem; margin: 1.8rem 0 .25rem;
+  color: var(--warn);
+  border-top: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  padding-top: 1rem;
+}
+.settings__section-hint {
+  color: var(--muted); font-size: .82rem;
+  margin-bottom: .9rem;
+}
 .settings-card {
   background: var(--surface);
   border: 1px solid var(--border);
