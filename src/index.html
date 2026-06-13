@@ -4,14 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>spotcode-sns</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="manifest" href="manifest.json">
+  <script>
+    // Inject icon / manifest / stylesheet <link>s with an absolute base
+    // URL so they resolve correctly on deep links like
+    // /spotcode-sns/<handle>. Without this the browser walks the URL bar
+    // path and asks for /spotcode-sns/<handle>/favicon.svg → 404.
+    //   - GH Pages       → /spotcode-sns/
+    //   - root deploy    → /
+    //   - file://, capacitor:// (Electron / iOS wrap) → ./
+    (function () {
+      var p = location.protocol, b;
+      if (p === 'file:' || p === 'capacitor:' || p === 'app:') b = './';
+      else if (location.pathname.indexOf('/spotcode-sns/') === 0) b = '/spotcode-sns/';
+      else b = '/';
+      document.write(
+        '<link rel="icon" type="image/svg+xml" href="' + b + 'favicon.svg">' +
+        '<link rel="manifest" href="' + b + 'manifest.json">' +
+        '<link rel="apple-touch-icon" href="' + b + 'favicon.svg">' +
+        '<link rel="stylesheet" href="' + b + 'css/style.css">'
+      );
+    })();
+  </script>
   <meta name="theme-color" content="#0d1117">
+  <!-- mobile-web-app-capable is the standard replacement for the
+       apple-specific tag. Keep both so older iOS still gets standalone. -->
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="spotcode">
-  <link rel="apple-touch-icon" href="favicon.svg">
-  <link rel="stylesheet" href="css/style.css">
   <script>
     // Restore the real path that 404.html stashed into the query string,
     // so deep links like /spotcode-sns/hrmcngs work on GH Pages.
