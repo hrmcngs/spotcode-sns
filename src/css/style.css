@@ -179,6 +179,12 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
 .tab {
   flex: 1; text-align: center; padding: 1rem .5rem;
   color: var(--muted); font-weight: 600; position: relative;
+  /* Reset the browser's default <button> chrome so profile tabs that are
+     now <button>s blend with the surface like the original <a> tabs did. */
+  background: transparent;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
 }
 .tab:hover { background: var(--surface-2); color: var(--text); }
 .tab.is-active { color: var(--text); }
