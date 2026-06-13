@@ -7,6 +7,8 @@ import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
 import { renderRequests, hydrateRequests } from './views/requests.js';
+import { renderPostDetail, hydratePostDetail, handleCommentDelete } from './views/post-detail.js';
+import { renderPostAnalytics, hydratePostAnalytics } from './views/post-analytics.js';
 import { renderFollowList, hydrateFollowList } from './views/follow-list.js';
 import { renderSettings, bindSettings } from './views/settings.js';
 import { pickSpot }        from './views/spot-picker.js';
@@ -221,11 +223,13 @@ function dispatch(path) {
   // mid-animation, …) the body would still be position:fixed and the
   // next page would render shifted. Force-clear once on every nav.
   forceUnlockBodyScroll();
-  const stubMatch   = path.match(/^\/(explore|repos|notifications)\/?$/);
-  const mapMatch    = path === '/spots' || path === '/spots/';
-  const spotMatch   = path.match(/^\/spot\/(.+?)\/?$/);
-  const followMatch = path.match(/^\/([A-Za-z0-9_]+)\/(following|followers)\/?$/);
-  const userMatch   = path.match(/^\/([A-Za-z0-9_]+)\/?$/);
+  const stubMatch      = path.match(/^\/(explore|repos|notifications)\/?$/);
+  const mapMatch       = path === '/spots' || path === '/spots/';
+  const spotMatch      = path.match(/^\/spot\/(.+?)\/?$/);
+  const analyticsMatch = path.match(/^\/post\/([0-9a-fA-F-]{36})\/analytics\/?$/);
+  const postMatch      = path.match(/^\/post\/([0-9a-fA-F-]{36})\/?$/);
+  const followMatch    = path.match(/^\/([A-Za-z0-9_]+)\/(following|followers)\/?$/);
+  const userMatch      = path.match(/^\/([A-Za-z0-9_]+)\/?$/);
 
   if (path === '/' || path === '') {
     document.title = 'spotcode-sns';
@@ -256,6 +260,16 @@ function dispatch(path) {
     document.title = 'Map / spotcode-sns';
     app.innerHTML = renderMap();
     hydrateMap();
+  } else if (analyticsMatch) {
+    const pid = analyticsMatch[1];
+    document.title = 'Analytics / spotcode-sns';
+    app.innerHTML = renderPostAnalytics(pid);
+    hydratePostAnalytics(pid);
+  } else if (postMatch) {
+    const pid = postMatch[1];
+    document.title = 'Post / spotcode-sns';
+    app.innerHTML = renderPostDetail(pid);
+    hydratePostDetail(pid);
   } else if (path === '/requests' || path === '/requests/') {
     document.title = 'Requests / spotcode-sns';
     app.innerHTML = renderRequests();
@@ -525,6 +539,14 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('#logout-btn')) {
     e.preventDefault();
     logout().finally(() => navigate('/'));
+    return;
+  }
+
+  // Per-comment delete button on the post detail page.
+  const cdel = e.target.closest('[data-comment-delete]');
+  if (cdel) {
+    e.preventDefault();
+    handleCommentDelete(cdel.getAttribute('data-comment-delete'));
     return;
   }
   if (e.target.closest('#edit-profile-btn')) {

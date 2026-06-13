@@ -32,7 +32,7 @@ export function getUser(handle) {
 // relationship was found" as soon as any other table also references
 // profiles (likes, follows, reports, …) and its schema cache reloads.
 const POST_COLS =
-  'id, body, github_link, spot, status, created_at, ' +
+  'id, body, github_link, spot, status, created_at, comments_count, ' +
   'author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)';
 
 function shapeAuthor(a) {
@@ -72,8 +72,19 @@ function shapePost(row) {
     spot:         row.spot || null,
     status:       row.status || 'wip',
     createdAt:    row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-    actions:      { replies: 0, forks: 0, stars: 0, likes: 0 },
+    actions:      { replies: row.comments_count || 0, forks: 0, stars: 0, likes: 0 },
   };
+}
+
+// Fetch a single post by id (for /post/<id>). Returns null on 404 or RLS
+// miss so the view can render its own not-found state.
+export async function getPost(id) {
+  if (!id) return null;
+  const supa = await getClient();
+  const { data, error } = await supa
+    .from('posts').select(POST_COLS).eq('id', id).maybeSingle();
+  if (error) { console.warn('getPost', error); return null; }
+  return data ? shapePost(data) : null;
 }
 
 export async function allPosts({ limit = 100 } = {}) {

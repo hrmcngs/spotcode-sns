@@ -235,3 +235,68 @@ create policy "follower or target can delete a follow"
 alter table public.profiles add column if not exists website   text;
 alter table public.profiles add column if not exists twitter   text;
 alter table public.profiles add column if not exists instagram text;
+
+
+-- ===================================================================
+-- Stage 10 — Comments + denormalised counts
+-- ===================================================================
+-- Comments are public per-post (anyone who can read the parent post
+-- can read its comments). The denormalised `comments_count` column on
+-- posts is kept in sync by trigger so the timeline can show the count
+-- without an extra round trip per post.
+
+create table if not exists public.comments (
+  id          uuid primary key default gen_random_uuid(),
+  post_id     uuid not null references public.posts(id) on delete cascade,
+  author_id   uuid not null references public.profiles(id) on delete cascade,
+  body        text not null check (char_length(body) > 0 and char_length(body) <= 500),
+  created_at  timestamptz default now()
+);
+create index if not exists comments_post_id_idx on public.comments(post_id, created_at);
+
+alter table public.comments enable row level security;
+
+drop policy if exists "comments visible like parent" on public.comments;
+create policy "comments visible like parent"
+  on public.comments for select using (
+    -- EXISTS hits posts under RLS — if the post isn't visible to the
+    -- current user (private author, no follow), the comment isn't either.
+    exists (select 1 from public.posts p where p.id = post_id)
+  );
+drop policy if exists "users insert their own comments" on public.comments;
+create policy "users insert their own comments"
+  on public.comments for insert with check (auth.uid() = author_id);
+drop policy if exists "users delete their own comments" on public.comments;
+create policy "users delete their own comments"
+  on public.comments for delete using (auth.uid() = author_id);
+
+-- Denormalised count column + trigger. Default 0 so existing rows are
+-- valid as soon as the column appears; the trailing UPDATE backfills
+-- the real counts in one pass.
+alter table public.posts
+  add column if not exists comments_count integer not null default 0;
+
+create or replace function public.bump_post_comments_count() returns trigger
+language plpgsql security definer as $$
+begin
+  if (tg_op = 'INSERT') then
+    update public.posts set comments_count = comments_count + 1
+      where id = new.post_id;
+  elsif (tg_op = 'DELETE') then
+    update public.posts set comments_count = greatest(0, comments_count - 1)
+      where id = old.post_id;
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists comments_count_trg on public.comments;
+create trigger comments_count_trg
+  after insert or delete on public.comments
+  for each row execute procedure public.bump_post_comments_count();
+
+-- Backfill so any pre-existing comments (or rows imported manually) are
+-- counted correctly the first time this migration runs.
+update public.posts p
+   set comments_count = coalesce(
+     (select count(*) from public.comments c where c.post_id = p.id), 0
+   );

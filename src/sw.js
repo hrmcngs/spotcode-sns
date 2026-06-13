@@ -48,6 +48,8 @@ const SHELL = [
   './js/views/requests.js',
   './js/views/follow-list.js',
   './js/views/spot-picker.js',
+  './js/views/post-detail.js',
+  './js/views/post-analytics.js',
   './js/views/auth-modal.js',
   './js/views/edit-profile-modal.js',
   './js/views/report-modal.js',
