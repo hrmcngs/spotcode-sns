@@ -37,12 +37,20 @@ export function getUser(handle) {
 // "column … does not exist" we cache the negative + retry without
 // it, so users who haven't run a migration yet still see posts.
 //
-// State persists in localStorage so the second page load doesn't
-// have to rediscover the missing columns one round trip at a time.
-// On a brand-new browser the first visit pays the discovery cost
-// (one PostgREST error per missing column) but subsequent visits go
-// straight to the trimmed column list and succeed in one shot.
+// State persists in localStorage so the second page load doesn't have
+// to rediscover the missing columns one round trip at a time.
+//
+// IMPORTANT: a TTL guards the cache. Without it, once any user hit a
+// "column does not exist" error before the admin ran the migration,
+// the false flag stuck FOREVER in that user's localStorage — even
+// after the SQL was applied — and that user kept silently dropping
+// the column from every request. The fix had to be "clear localStorage
+// in DevTools", which obviously most users won't know to do.
+//
+// 1 hour is short enough that a migration propagates to all sessions
+// within an hour, long enough to avoid retry-storming on a stable DB.
 const SCHEMA_CACHE_KEY = 'spotcode:schema-cache:v1';
+const SCHEMA_CACHE_TTL_MS = 60 * 60 * 1000;
 
 let hasCommentsCount  = true;
 let hasRepostsCount   = true;
@@ -53,6 +61,9 @@ let hasQuoteOf        = true;
 (function loadSchemaCache() {
   try {
     const v = JSON.parse(localStorage.getItem(SCHEMA_CACHE_KEY) || '{}');
+    // Cache without a timestamp = legacy entry from before this TTL
+    // was introduced; treat as expired so it self-heals on next load.
+    if (!v.at || Date.now() - v.at > SCHEMA_CACHE_TTL_MS) return;
     if (v.hasCommentsCount  === false) hasCommentsCount  = false;
     if (v.hasRepostsCount   === false) hasRepostsCount   = false;
     if (v.hasBookmarksCount === false) hasBookmarksCount = false;
@@ -63,6 +74,7 @@ let hasQuoteOf        = true;
 function persistSchemaCache() {
   try {
     localStorage.setItem(SCHEMA_CACHE_KEY, JSON.stringify({
+      at: Date.now(),
       hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf,
     }));
   } catch {}

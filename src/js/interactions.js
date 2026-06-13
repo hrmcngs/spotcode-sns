@@ -303,14 +303,17 @@ export async function denyFollowRequest(followerHandle) {
 //
 // Same trick as data.js: cache the "table missing" flags in
 // localStorage so subsequent page loads skip the table-not-found
-// round trip and treat the action as no-op directly. Saves one HTTP
-// 404 per visible post batch on every visit before Stage 11 is run.
+// round trip. TTL guards against stale state — once the admin runs
+// Stage 11 SQL, every user's session re-probes within an hour
+// instead of being stuck on the false flag forever.
 const INT_CACHE_KEY = 'spotcode:int-cache:v1';
+const INT_CACHE_TTL_MS = 60 * 60 * 1000;
 let repostsTableMissing   = false;
 let bookmarksTableMissing = false;
 (function loadIntCache() {
   try {
     const v = JSON.parse(localStorage.getItem(INT_CACHE_KEY) || '{}');
+    if (!v.at || Date.now() - v.at > INT_CACHE_TTL_MS) return;
     if (v.repostsTableMissing   === true) repostsTableMissing   = true;
     if (v.bookmarksTableMissing === true) bookmarksTableMissing = true;
   } catch {}
@@ -318,6 +321,7 @@ let bookmarksTableMissing = false;
 function persistIntCache() {
   try {
     localStorage.setItem(INT_CACHE_KEY, JSON.stringify({
+      at: Date.now(),
       repostsTableMissing, bookmarksTableMissing,
     }));
   } catch {}
