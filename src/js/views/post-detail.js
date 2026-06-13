@@ -80,7 +80,11 @@ export function renderPostDetail(id) {
 
 export async function hydratePostDetail(id) {
   const myVersion = renderVersion;
-  const root = document.getElementById('post-detail-' + cssEscape(id));
+  // getElementById takes a literal id, NOT a CSS selector — never pass
+  // it through CSS.escape, because cssEscape mangles the leading digit
+  // of a UUID like 8f0a... into "\38 f0a..." which getElementById can't
+  // match. (Querying with cssEscape is fine for querySelector.)
+  const root = document.getElementById('post-detail-' + id);
   if (!root) return;
 
   let post;
