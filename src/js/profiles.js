@@ -30,6 +30,9 @@ function shapeProfile(row) {
                      }
                    : null,
     isPrivate:   !!row.is_private,
+    website:     row.website   || '',
+    twitter:     row.twitter   || '',
+    instagram:   row.instagram || '',
     joined:      row.created_at ? String(row.created_at).slice(0, 7) : '',
     _fetched:    Date.now(),
   };
@@ -42,7 +45,7 @@ function cacheLocally(profile) {
   write(KEYS.users, users);
 }
 
-const COLUMNS = 'handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, is_private, created_at';
+const COLUMNS = 'handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, is_private, website, twitter, instagram, created_at';
 
 export async function fetchProfileByHandle(handle) {
   if (!handle) return null;

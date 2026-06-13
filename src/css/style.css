@@ -618,6 +618,23 @@ html[data-theme='light'] .profile-cover {
   display: flex; flex-wrap: wrap; gap: 1rem;
   padding: .6rem 1rem 0; color: var(--muted); font-size: .9rem;
 }
+/* Website / Twitter / Instagram row. Wraps on narrow screens so a user
+   with all three doesn't overflow the profile card on mobile. */
+.profile-links {
+  display: flex; flex-wrap: wrap; gap: .85rem;
+  padding: .35rem 1rem 0; font-size: .9rem;
+}
+.profile-link {
+  display: inline-flex; align-items: center; gap: .35em;
+  color: var(--accent);
+  text-decoration: none;
+  max-width: 100%;
+}
+.profile-link span {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 18ch;
+}
+.profile-link:hover { text-decoration: underline; }
 .profile-stats {
   display: flex; gap: 1.2rem; padding: .6rem 1rem 0;
   font-size: .9rem; color: var(--muted);

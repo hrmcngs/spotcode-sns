@@ -47,6 +47,9 @@ function projectUser(authUser, profile) {
                      }
                    : null,
     isPrivate:   !!profile.is_private,
+    website:     profile.website   || '',
+    twitter:     profile.twitter   || '',
+    instagram:   profile.instagram || '',
     joined:      profile.created_at ? String(profile.created_at).slice(0, 7) : '',
   };
 }
@@ -55,7 +58,7 @@ async function loadProfile(userId) {
   const supa = await getClient();
   const { data, error } = await supa
     .from('profiles')
-    .select('handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, github_verify_token, is_private, created_at')
+    .select('handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, github_verify_token, is_private, website, twitter, instagram, created_at')
     .eq('id', userId)
     .maybeSingle();
   if (error) { console.warn('loadProfile error', error); return null; }
@@ -182,6 +185,21 @@ export async function logout() {
   emit();
 }
 
+// Normalise a Twitter / Instagram handle: strip @, any URL prefix,
+// any trailing slash / query, lowercase whitespace trim. Empty → null
+// so the column reads as "not set" instead of "empty string".
+function sanitizeHandle(raw) {
+  let s = String(raw || '').trim();
+  if (!s) return null;
+  // Strip a pasted URL form (https://twitter.com/foo, https://x.com/foo,
+  // https://instagram.com/foo) down to the handle.
+  s = s.replace(/^https?:\/\/(www\.)?(twitter|x|instagram)\.com\//i, '');
+  s = s.replace(/^@/, '');
+  s = s.replace(/[\/?#].*$/, '');
+  s = s.slice(0, 30);
+  return s || null;
+}
+
 export async function updateProfile(patch) {
   if (!cachedUser) throw new Error('ログインしていません');
   const supa = await getClient();
@@ -192,6 +210,9 @@ export async function updateProfile(patch) {
   if (patch.avatarImage !== undefined) db.avatar_url   = patch.avatarImage || null;
   if (patch.avatarShape != null)       db.avatar_shape = patch.avatarShape;
   if (patch.isPrivate   !== undefined) db.is_private   = !!patch.isPrivate;
+  if (patch.website   != null)         db.website      = String(patch.website).trim().slice(0, 200)   || null;
+  if (patch.twitter   != null)         db.twitter      = sanitizeHandle(patch.twitter);
+  if (patch.instagram != null)         db.instagram    = sanitizeHandle(patch.instagram);
   if (Object.keys(db).length) {
     const { error } = await supa.from('profiles').update(db).eq('id', cachedUser.id);
     if (error) throw new Error(error.message);
