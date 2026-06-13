@@ -16,6 +16,55 @@ import { fetchContributions, cachedContributions } from '../github-activity.js';
 // has superseded them and bail out before clobbering the DOM.
 let renderVersion = 0;
 
+function escAttr(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+// Normalise a website URL for display: hide the protocol so the row
+// stays scannable. The link itself still points at the real URL.
+function prettyUrl(u) {
+  try {
+    const url = new URL(u);
+    return (url.host + url.pathname + url.search).replace(/\/$/, '');
+  } catch { return u; }
+}
+
+// Render the row of social links shown under the profile-meta line.
+// Empty when the user has set none, so existing profiles render the
+// same as before this PR.
+function renderProfileLinks(u) {
+  const links = [];
+  if (u.website) {
+    const href = /^https?:\/\//i.test(u.website) ? u.website : 'https://' + u.website;
+    links.push(
+      '<a class="profile-link" href="' + escAttr(href) + '" target="_blank" rel="noopener nofollow">' +
+        icon('globe', { size: 14, className: 'icon--inline' }) +
+        '<span>' + escAttr(prettyUrl(href)) + '</span>' +
+      '</a>'
+    );
+  }
+  if (u.twitter) {
+    links.push(
+      '<a class="profile-link" href="https://x.com/' + escAttr(u.twitter) + '" target="_blank" rel="noopener nofollow">' +
+        icon('twitter', { size: 14, className: 'icon--inline' }) +
+        '<span>@' + escAttr(u.twitter) + '</span>' +
+      '</a>'
+    );
+  }
+  if (u.instagram) {
+    links.push(
+      '<a class="profile-link" href="https://instagram.com/' + escAttr(u.instagram) + '" target="_blank" rel="noopener nofollow">' +
+        icon('instagram', { size: 14, className: 'icon--inline' }) +
+        '<span>@' + escAttr(u.instagram) + '</span>' +
+      '</a>'
+    );
+  }
+  if (!links.length) return '';
+  return '<div class="profile-links">' + links.join('') + '</div>';
+}
+
 // 53 weeks × 7 days of zeros — gives renderGrass() something to paint
 // while we wait for the real GitHub data to come back.
 function emptyGrid() {
@@ -108,6 +157,7 @@ export function renderProfile(handle) {
                     (u.github?.verified ? ' <span class="gh-verified" title="本人確認済み">✓</span>' : '') +
                   '</a>' : '') +
       '</div>' +
+      renderProfileLinks(u) +
       '<div class="profile-stats">' +
         '<a href="' + url('/' + u.handle + '/following') + '"><b>' + followingN + '</b> ' + t('profile.stat.following') + '</a>' +
         '<a href="' + url('/' + u.handle + '/followers') + '"><b>' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +

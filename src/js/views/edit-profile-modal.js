@@ -95,6 +95,15 @@ function template(u) {
           '<label>Location' +
             '<input name="location" maxlength="60" value="' + attr(u.location || '') + '" placeholder="shibuya">' +
           '</label>' +
+          '<label>Website' +
+            '<input name="website" type="url" maxlength="200" value="' + attr(u.website || '') + '" placeholder="https://example.com" inputmode="url">' +
+          '</label>' +
+          '<label>Twitter / X <span class="hint">(@ なしのハンドルでも URL でも OK)</span>' +
+            '<input name="twitter" maxlength="30" value="' + attr(u.twitter || '') + '" placeholder="hrmcngs">' +
+          '</label>' +
+          '<label>Instagram <span class="hint">(@ なしのハンドルでも URL でも OK)</span>' +
+            '<input name="instagram" maxlength="30" value="' + attr(u.instagram || '') + '" placeholder="hrmcngs">' +
+          '</label>' +
 
           (u.github?.handle ? githubVerifyBlock(u) : '') +
 
@@ -231,9 +240,12 @@ export function openEditProfile() {
     try {
       const fd = new FormData(form);
       const patch = {
-        name:     fd.get('name'),
-        bio:      fd.get('bio'),
-        location: fd.get('location'),
+        name:      fd.get('name'),
+        bio:       fd.get('bio'),
+        location:  fd.get('location'),
+        website:   fd.get('website'),
+        twitter:   fd.get('twitter'),
+        instagram: fd.get('instagram'),
         avatarShape: stagedAvatarShape,
       };
       if (stagedAvatarImage !== undefined) patch.avatarImage = stagedAvatarImage;

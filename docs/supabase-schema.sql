@@ -224,3 +224,14 @@ create policy "follower or target can delete a follow"
   on public.follows for delete using (
     follower_id = auth.uid() or target_id = auth.uid()
   );
+
+
+-- ===================================================================
+-- Stage 9 — Profile social links
+-- ===================================================================
+-- Three optional URLs / handles the user can show on their profile.
+-- Validation is intentionally loose at the DB layer (just length); the
+-- UI normalises and renders them.
+alter table public.profiles add column if not exists website   text;
+alter table public.profiles add column if not exists twitter   text;
+alter table public.profiles add column if not exists instagram text;
