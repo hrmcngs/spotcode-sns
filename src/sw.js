@@ -27,6 +27,7 @@ const SHELL = [
   './js/interactions.js',
   './js/theme.js',
   './js/dev-mode.js',
+  './js/jp-romaji.js',
   './js/grass.js',
   './js/file-size-viz.js',
   './js/status-badges.js',
