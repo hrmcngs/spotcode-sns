@@ -279,6 +279,79 @@ export async function denyFollowRequest(followerHandle) {
 }
 
 // ----------------------------------------------------------------------
+// COMMENTS
+// ----------------------------------------------------------------------
+
+// Comment list for /post/<id>. Returns oldest-first so the thread reads
+// in chronological order (Twitter style). Embeds the author profile so
+// callers don't need a second round trip per row.
+export async function getComments(postId) {
+  if (!postId) return [];
+  const supa = await getClient();
+  const { data, error } = await supa
+    .from('comments')
+    .select('id, body, created_at, author:profiles!comments_author_id_fkey(handle, name, avatar_url, avatar_shape)')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []).map(c => ({
+    id:        c.id,
+    body:      c.body,
+    createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
+    author:    shapeProfile(c.author || { name: '?' }),
+  }));
+}
+
+export async function addComment(postId, body) {
+  const text = String(body || '').trim();
+  if (!text) throw new Error('コメントを入力してください');
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしてください');
+  const { data, error } = await supa.from('comments')
+    .insert({ post_id: postId, author_id: user.id, body: text.slice(0, 500) })
+    .select('id, body, created_at, author:profiles!comments_author_id_fkey(handle, name, avatar_url, avatar_shape)')
+    .single();
+  if (error) throw new Error(error.message);
+  return {
+    id:        data.id,
+    body:      data.body,
+    createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
+    author:    shapeProfile(data.author || { name: '?' }),
+  };
+}
+
+export async function removeComment(commentId) {
+  const supa = await getClient();
+  const { data, error } = await supa
+    .from('comments').delete().eq('id', commentId).select('id');
+  if (error) throw new Error(error.message);
+  if (!data || !data.length) throw new Error('削除権限がありません');
+  return true;
+}
+
+// ----------------------------------------------------------------------
+// POST ANALYTICS (visible to the post author only — enforced in UI)
+// ----------------------------------------------------------------------
+
+// Returns the list of users who liked a post, newest-first. Anyone can
+// call this (likes table is publicly readable), but the dashboard view
+// only links to it from the post author's own UI.
+export async function likersOf(postId) {
+  if (!postId) return [];
+  const supa = await getClient();
+  const { data, error } = await supa
+    .from('likes')
+    .select('created_at, user:profiles!likes_user_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || [])
+    .map(r => ({ user: shapeProfile(r.user || { name: '?' }), createdAt: r.created_at }))
+    .filter(r => r.user.handle);
+}
+
+// ----------------------------------------------------------------------
 // REPORTS
 // ----------------------------------------------------------------------
 

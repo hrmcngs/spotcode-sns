@@ -105,7 +105,7 @@ export function renderPost(p) {
         files(p.files) +
         commit(p.commit) +
         '<div class="post__actions">' +
-          '<button class="act act--reply" title="reply">' + icon('reply', { size: 16 }) + '<span>' + (a.replies || 0) + '</span></button>' +
+          '<a class="act act--reply" title="コメント" href="' + url('/post/' + p.id) + '">' + icon('reply', { size: 16 }) + '<span>' + (a.replies || 0) + '</span></a>' +
           '<button class="act act--fork"  title="fork">'  + icon('fork',  { size: 16 }) + '<span>' + (a.forks   || 0) + '</span></button>' +
           '<button class="act act--star"  title="star">'  + icon('star',  { size: 16 }) + '<span>' + (a.stars   || 0) + '</span></button>' +
           '<button class="act act--like' + (liked ? ' is-liked' : '') + '" title="like">'  + icon('heart', { size: 16 }) + '<span>'  + likes + '</span></button>' +
