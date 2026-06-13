@@ -370,6 +370,26 @@ const autosaveComposerDraft = debounce(() => {
   saveDraft(draftHandle(), state);
 }, 400);
 
+// Synchronous flush — no debounce, no async. Called from pagehide /
+// visibilitychange where the browser may freeze or unload the tab
+// within microseconds and a pending 400ms setTimeout would never fire.
+// Without this, typing a draft and immediately switching to another
+// site / tab / app loses the last <400ms of typing.
+function flushComposerDraft() {
+  autosaveComposerDraft.flush?.();
+  const state = readComposerState();
+  if (state) saveDraft(draftHandle(), state);
+}
+// `pagehide` is the reliable mobile-Safari signal that the tab is
+// about to go away (back/forward cache, app switch, tab close).
+// `visibilitychange → hidden` covers the in-app case (user pulls down
+// notification centre, opens a link in a new tab, …) where pagehide
+// doesn't fire.
+window.addEventListener('pagehide', flushComposerDraft);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushComposerDraft();
+});
+
 // Called from dispatch() right after rendering home. Fills the textarea,
 // pops open the link row if a draft URL exists, re-attaches the saved
 // spot via syncSpotChip, and shows the "Draft restored" banner.

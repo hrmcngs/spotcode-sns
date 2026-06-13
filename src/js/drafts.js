@@ -53,11 +53,28 @@ export function hasDraft(handle) {
 }
 
 // Tiny debounce so the input handler can call saveDraft on every
-// keystroke without thrashing localStorage.
+// keystroke without thrashing localStorage. The returned function has
+// a `.flush()` method that forces the trailing call to fire right now —
+// used by the pagehide / visibilitychange handlers so a draft is
+// persisted before the browser unloads or backgrounds the tab.
 export function debounce(fn, ms) {
   let t = 0;
-  return function (...args) {
+  let pending = null;
+  const wrapped = function (...args) {
+    pending = { ctx: this, args };
     clearTimeout(t);
-    t = setTimeout(() => fn.apply(this, args), ms);
+    t = setTimeout(() => {
+      const p = pending;
+      pending = null;
+      fn.apply(p.ctx, p.args);
+    }, ms);
   };
+  wrapped.flush = function () {
+    if (!pending) return;
+    clearTimeout(t);
+    const p = pending;
+    pending = null;
+    fn.apply(p.ctx, p.args);
+  };
+  return wrapped;
 }
