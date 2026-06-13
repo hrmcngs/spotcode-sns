@@ -93,8 +93,11 @@ export function renderProfile(handle) {
       '<div class="profile-meta">' +
         (u.location ? '<span>' + icon('pin',      { size: 14, className: 'icon--inline' }) + u.location + '</span>' : '') +
         (u.joined   ? '<span>' + icon('calendar', { size: 14, className: 'icon--inline' }) + t('profile.joined') + u.joined + '</span>' : '') +
-        (ghLink ? '<a class="profile-gh" href="' + ghLink + '" target="_blank" rel="noopener">' +
-                    icon('github', { size: 14, fill: true, className: 'icon--inline' }) + (u.github.handle || '') + '</a>' : '') +
+        (ghLink ? '<a class="profile-gh" href="' + ghLink + '" target="_blank" rel="noopener" title="' +
+                    (u.github?.verified ? '本人確認済み' : '未確認') + '">' +
+                    icon('github', { size: 14, fill: true, className: 'icon--inline' }) + (u.github.handle || '') +
+                    (u.github?.verified ? ' <span class="gh-verified" title="本人確認済み">✓</span>' : '') +
+                  '</a>' : '') +
       '</div>' +
       '<div class="profile-stats">' +
         '<a href="' + url('/' + u.handle + '/following') + '"><b>' + followingN + '</b> ' + t('profile.stat.following') + '</a>' +

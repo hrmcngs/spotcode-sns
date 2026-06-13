@@ -160,3 +160,13 @@ create policy "anyone can file a report"
 --   on storage.objects for update using (
 --     bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]
 --   );
+
+
+-- ===================================================================
+-- Stage 7 — GitHub bio-token verification
+-- ===================================================================
+-- Adds two columns so the app can record which profiles have proved
+-- they own the GitHub handle they're claiming. The token is wiped
+-- once verification succeeds; only `github_verified` stays.
+alter table public.profiles add column if not exists github_verified boolean default false;
+alter table public.profiles add column if not exists github_verify_token text;
