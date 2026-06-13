@@ -21,6 +21,7 @@ import { toggleLike, isLiked, likeCount,
 import { renderAvatar } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
 import { romajiToJp }             from './jp-romaji.js';
+import { initI18n, t }            from './i18n.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -81,7 +82,7 @@ async function renderRail() {
 
   const parts = [
     '<section class="card">',
-      '<h3>Your activity <span class="dim">last 12 months</span></h3>',
+      '<h3>' + t('rail.activity') + '</h3>',
       renderGrass(counts),
     '</section>',
   ];
@@ -89,7 +90,7 @@ async function renderRail() {
   if (trending.length) {
     parts.push(
       '<section class="card">' +
-        '<h3>Trending spots <span class="dim">市区町村別</span></h3>' +
+        '<h3>' + t('rail.trending') + '</h3>' +
         '<div class="trend-list">' +
           trending.map((s, i) => (
             '<a class="trend-item" href="' + url('/spot/' + encodeURIComponent(s.city)) + '">' +
@@ -103,7 +104,7 @@ async function renderRail() {
                   : '') +
               '</div>' +
               '<span class="trend-item__count">' + s.count + ' ' +
-                (s.count === 1 ? 'idea' : 'ideas') +
+                (s.count === 1 ? t('common.idea') : t('common.ideas')) +
               '</span>' +
             '</a>'
           )).join('') +
@@ -115,7 +116,7 @@ async function renderRail() {
   if (others.length) {
     parts.push(
       '<section class="card">' +
-        '<h3>Who to follow</h3>' +
+        '<h3>' + t('rail.who_to_follow') + '</h3>' +
         '<div class="followlist">' +
           others.slice(0, 5).map(u => {
             const f = me && isFollowing(me.handle, u.handle);
@@ -127,7 +128,7 @@ async function renderRail() {
                   '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
                 '</div>' +
                 '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
-                  (f ? 'Following' : 'Follow') +
+                  (f ? t('profile.btn.following') : t('profile.btn.follow')) +
                 '</button>' +
               '</div>'
             );
@@ -155,7 +156,7 @@ function renderAuthArea() {
     slot.innerHTML = renderAvatar(me, { tag: 'a', href: url('/' + me.handle), size: 'me', title: me.name });
   } else {
     slot.innerHTML =
-      '<button class="btn btn--primary btn--sm" data-auth="login">Log in</button>';
+      '<button class="btn btn--primary btn--sm" data-auth="login">' + t('nav.login') + '</button>';
   }
 }
 
@@ -174,7 +175,7 @@ function renderSideMe() {
       '</a>';
   } else {
     slot.innerHTML =
-      '<button class="btn btn--ghost btn--block" data-auth="login">Log in</button>';
+      '<button class="btn btn--ghost btn--block" data-auth="login">' + t('nav.login') + '</button>';
   }
   // Profile side-nav item: link to own profile when logged in,
   // otherwise turn it into a login trigger.
@@ -283,6 +284,10 @@ hydrateMyFollows();
 // Apply the dev-mode html[data-dev] flag so dev-only CSS can scope its
 // chrome (e.g. the dev-mode topbar indicator) without flashing.
 initDevMode();
+initI18n();
+// Patch the static topbar placeholder so it picks up the active language.
+const searchInput = document.querySelector('.topbar__search input');
+if (searchInput) searchInput.placeholder = t('nav.search.placeholder');
 
 onRoute(dispatch);
 renderAuthArea();

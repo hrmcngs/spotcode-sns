@@ -5,6 +5,7 @@ import { postsByCity }       from '../data.js';
 import { renderPost }        from '../post.js';
 import { hydratePostLikes }  from '../interactions.js';
 import { icon }              from '../icons.js';
+import { t }                 from '../i18n.js';
 
 let renderVersion = 0;
 
@@ -21,13 +22,13 @@ export function renderSpot(city) {
     '<div class="spot-head">' +
       '<div class="spot-head__icon">' + icon('pin', { size: 28 }) + '</div>' +
       '<h2 class="spot-head__title">' + safe + '</h2>' +
-      '<p class="spot-head__sub">この市区町村で生まれたアイデア</p>' +
+      '<p class="spot-head__sub">' + t('spot.subtitle') + '</p>' +
     '</div>' +
     '<div class="timeline__head">' +
-      '<a class="tab is-active" href="#">Posts</a>' +
+      '<a class="tab is-active" href="#">' + t('profile.tab.posts') + '</a>' +
     '</div>' +
     '<div id="spot-posts">' +
-      '<div class="stub"><p class="stub__sub">投稿を読み込み中…</p></div>' +
+      '<div class="stub"><p class="stub__sub">' + t('spot.loading') + '</p></div>' +
     '</div>'
   );
 }
@@ -46,7 +47,7 @@ export async function hydrateSpot(city) {
   }
   if (myVersion !== renderVersion) return;
   if (!posts.length) {
-    list.innerHTML = '<div class="stub"><p class="stub__sub">まだここからの投稿はありません。</p><a class="back-home" href="/">← Back to home</a></div>';
+    list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('spot.empty') + '</p><a class="back-home" href="/">' + t('profile.back') + '</a></div>';
     return;
   }
   list.innerHTML = posts.map(renderPost).join('');

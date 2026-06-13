@@ -3,6 +3,7 @@ import { allPosts }       from '../data.js';
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
 import { hydratePostLikes } from '../interactions.js';
+import { t }              from '../i18n.js';
 
 // Monotonic counter incremented on every renderHome() so async hydrations
 // can detect when they've been superseded by a newer navigation / refresh
@@ -14,27 +15,25 @@ let renderVersion = 0;
 function emptyTimeline(loggedIn) {
   return (
     '<div class="stub">' +
-      '<h2 class="stub__title">タイムラインはまだ空です</h2>' +
+      '<h2 class="stub__title">' + t('home.empty.title') + '</h2>' +
       '<p class="stub__sub">' +
-        (loggedIn
-          ? '上のコンポーザーから最初のアイデアを投稿してみましょう。'
-          : 'サインインして最初の一歩を投稿してみましょう。') +
+        (loggedIn ? t('home.empty.signed_in') : t('home.empty.guest')) +
       '</p>' +
     '</div>'
   );
 }
 
 function loadingTimeline() {
-  return '<div class="stub" id="timeline-loading"><p class="stub__sub">タイムラインを読み込み中…</p></div>';
+  return '<div class="stub" id="timeline-loading"><p class="stub__sub">' + t('home.loading') + '</p></div>';
 }
 
 function errorTimeline(msg) {
   const safe = String(msg).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
   return (
     '<div class="stub">' +
-      '<h2 class="stub__title">読み込みに失敗しました</h2>' +
+      '<h2 class="stub__title">' + t('home.error.title') + '</h2>' +
       '<p class="stub__sub">' + safe + '</p>' +
-      '<button type="button" class="btn btn--ghost" onclick="location.reload()">リロード</button>' +
+      '<button type="button" class="btn btn--ghost" onclick="location.reload()">' + t('home.error.reload') + '</button>' +
     '</div>'
   );
 }
@@ -43,9 +42,9 @@ export function renderHome() {
   renderVersion++;
   return [
     '<div class="timeline__head">',
-      '<a class="tab is-active" href="/">For you</a>',
-      '<a class="tab" href="/">Following</a>',
-      '<a class="tab" href="/">Spots</a>',
+      '<a class="tab is-active" href="/">' + t('home.tab.foryou') + '</a>',
+      '<a class="tab" href="/">' + t('home.tab.following') + '</a>',
+      '<a class="tab" href="/">' + t('home.tab.spots') + '</a>',
     '</div>',
     renderIdeaForm({ user: currentUser() }),
     '<div id="timeline-list">',
