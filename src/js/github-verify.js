@@ -30,43 +30,59 @@ export async function startVerification() {
   return token;
 }
 
-async function fetchGithubBio(handle) {
-  // Bust the GitHub CDN cache — bio changes propagate via a ~60 second
-  // edge TTL, so the user who pasted their token and immediately hit
-  // Verify would otherwise still see an empty bio. A unique query
-  // parameter changes the cache key.
-  const buster = '_' + Date.now() + Math.random().toString(36).slice(2, 8);
-  const r = await fetch(
-    'https://api.github.com/users/' + encodeURIComponent(handle) + '?cb=' + buster,
-    { cache: 'no-store', headers: { 'Accept': 'application/vnd.github+json' } }
-  );
-  if (!r.ok) throw new Error('GitHub API ' + r.status);
-  const j = await r.json();
-  return j.bio || '';
+// Build the unique repo name the user must create on GitHub to prove
+// ownership. Kept short and obviously meaningless so leaving it on the
+// account doesn't read like a real project.
+export function repoNameFor(token) { return token; /* spotcode-verify-<hex> */ }
+
+// Convenience: deep-link the user to GitHub's "new repo" page with the
+// name + description prefilled — one click → already-filled-in form.
+export function newRepoUrl(token) {
+  const params = new URLSearchParams({
+    name: repoNameFor(token),
+    description: 'spotcode-sns 本人確認用（確認後に削除して OK）',
+    visibility: 'public',
+  });
+  return 'https://github.com/new?' + params.toString();
 }
 
-// Read the GitHub user's public bio and check it contains the saved
-// token. If yes, flip github_verified to true. Returns the new state.
+// Hit the public GitHub API to see whether <handle>/<repoName> exists.
+// 200 → true, 404 → false, anything else → error.
+async function repoExists(handle, repoName) {
+  const buster = '_' + Date.now() + Math.random().toString(36).slice(2, 8);
+  const url = 'https://api.github.com/repos/'
+    + encodeURIComponent(handle) + '/' + encodeURIComponent(repoName) + '?cb=' + buster;
+  const r = await fetch(url, {
+    cache: 'no-store',
+    headers: { 'Accept': 'application/vnd.github+json' },
+  });
+  if (r.status === 200) return true;
+  if (r.status === 404) return false;
+  throw new Error('GitHub API ' + r.status);
+}
+
+// Check that the user created the repo we asked them to. If yes, flip
+// github_verified to true. Returns the new state.
 export async function confirmVerification(handle, token) {
   if (!handle || !token) throw new Error('invalid');
-  // Try up to 3 times with a short wait between attempts — even with
-  // the cache-buster query, the edge node we hit may still serve a
-  // stale entry for a few seconds after the bio was just saved.
-  let bio = '';
+  const repoName = repoNameFor(token);
+  // Three quick tries — newly-created repos may take a moment to appear
+  // in the REST API.
+  let exists = false;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    try { bio = await fetchGithubBio(handle); }
+    try { exists = await repoExists(handle, repoName); }
     catch (err) {
-      if (attempt === 3) throw new Error('GitHub プロフィール取得失敗: ' + err.message);
+      if (attempt === 3) throw new Error('GitHub API 取得失敗: ' + err.message);
       await new Promise(r => setTimeout(r, 1500));
       continue;
     }
-    if (bio.includes(token)) break;
+    if (exists) break;
     if (attempt < 3) await new Promise(r => setTimeout(r, 1500));
   }
-  if (!bio.includes(token)) {
+  if (!exists) {
     throw new Error(
-      'GitHub bio に「' + token +
-      '」が見つかりませんでした。Bio を保存した直後はキャッシュで反映が遅れることがあります。30 秒ほど待ってもう一度押してください。'
+      '@' + handle + '/' + repoName + ' が見つかりませんでした。' +
+      '上のリンクから空の public リポジトリを作って、もう一度押してください。'
     );
   }
 
