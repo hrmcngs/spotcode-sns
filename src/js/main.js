@@ -27,6 +27,7 @@ import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
 import { lockBodyScroll, unlockBodyScroll, forceUnlockBodyScroll } from './body-scroll-lock.js';
 import { fetchContributions, cachedContributions } from './github-activity.js';
+import { saveDraft, loadDraft, clearDraft, debounce } from './drafts.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -229,6 +230,7 @@ function dispatch(path) {
   if (path === '/' || path === '') {
     document.title = 'spotcode-sns';
     app.innerHTML = renderHome();
+    restoreComposerDraft();
     if (pendingSpot) syncSpotChip(pendingSpot);
     hydrateHome();
   } else if (path === '/settings') {
@@ -292,6 +294,7 @@ function syncSpotChip(spot) {
     delete btn.dataset.spotLabel;
     const clear = document.getElementById('compose-spot-clear');
     if (clear) clear.hidden = true;
+    autosaveComposerDraft();
     return;
   }
   const label = spot.label || (spot.lat.toFixed(4) + ', ' + spot.lng.toFixed(4));
@@ -303,6 +306,119 @@ function syncSpotChip(spot) {
   btn.classList.remove('spot-chip--add');
   const clear = document.getElementById('compose-spot-clear');
   if (clear) clear.hidden = false;
+  autosaveComposerDraft();
+}
+
+// ----- composer drafts -----
+// Scope drafts per signed-in handle (logged-out users share `_guest`).
+function draftHandle() {
+  const me = currentUser();
+  return me ? me.handle : '_guest';
+}
+
+function readComposerState() {
+  const form = document.querySelector('.idea-form');
+  if (!form) return null;
+  const ta   = form.querySelector('textarea[name="text"]');
+  const gh   = form.querySelector('input[name="github"]');
+  return {
+    body:       ta ? ta.value : '',
+    githubLink: gh ? gh.value : '',
+    spot:       pendingSpot,
+  };
+}
+
+// Wipe the composer UI back to its blank state (textarea + GitHub link +
+// spot chip). Used after a successful submit and after "Discard draft".
+function clearComposerUI() {
+  const form = document.querySelector('.idea-form');
+  if (!form) return;
+  const ta = form.querySelector('textarea[name="text"]');
+  if (ta) {
+    ta.value = '';
+    ta.style.height = 'auto';
+  }
+  const gh = form.querySelector('input[name="github"]');
+  if (gh) gh.value = '';
+  const row = document.getElementById('compose-link-row');
+  if (row) row.hidden = true;
+  const linkToggle = document.getElementById('compose-link-toggle');
+  if (linkToggle) linkToggle.setAttribute('aria-expanded', 'false');
+  pendingSpot = null;
+  syncSpotChip(null);
+  hideDraftBanner();
+}
+
+function showDraftBanner(message) {
+  const b = document.getElementById('compose-draft-banner');
+  if (!b) return;
+  const text = b.querySelector('[data-draft-text]');
+  if (text && message) text.textContent = message;
+  b.hidden = false;
+}
+
+function hideDraftBanner() {
+  const b = document.getElementById('compose-draft-banner');
+  if (b) b.hidden = true;
+}
+
+// Pull whatever is in the textarea / link / spot chip and persist it.
+// Debounced so input events don't hammer localStorage.
+const autosaveComposerDraft = debounce(() => {
+  const state = readComposerState();
+  if (!state) return;
+  saveDraft(draftHandle(), state);
+}, 400);
+
+// Synchronous flush — no debounce, no async. Called from pagehide /
+// visibilitychange where the browser may freeze or unload the tab
+// within microseconds and a pending 400ms setTimeout would never fire.
+// Without this, typing a draft and immediately switching to another
+// site / tab / app loses the last <400ms of typing.
+function flushComposerDraft() {
+  autosaveComposerDraft.flush?.();
+  const state = readComposerState();
+  if (state) saveDraft(draftHandle(), state);
+}
+// `pagehide` is the reliable mobile-Safari signal that the tab is
+// about to go away (back/forward cache, app switch, tab close).
+// `visibilitychange → hidden` covers the in-app case (user pulls down
+// notification centre, opens a link in a new tab, …) where pagehide
+// doesn't fire.
+window.addEventListener('pagehide', flushComposerDraft);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushComposerDraft();
+});
+
+// Called from dispatch() right after rendering home. Fills the textarea,
+// pops open the link row if a draft URL exists, re-attaches the saved
+// spot via syncSpotChip, and shows the "Draft restored" banner.
+function restoreComposerDraft() {
+  const handle = draftHandle();
+  const d = loadDraft(handle);
+  if (!d) return;
+  const form = document.querySelector('.idea-form');
+  if (!form) return;
+  const ta = form.querySelector('textarea[name="text"]');
+  if (ta && d.body) {
+    ta.value = d.body;
+    // Trigger the auto-grow so the textarea isn't 2-rows tall on a long draft.
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 320) + 'px';
+  }
+  if (d.githubLink) {
+    const gh = form.querySelector('input[name="github"]');
+    if (gh) gh.value = d.githubLink;
+    const row = document.getElementById('compose-link-row');
+    if (row) row.hidden = false;
+    const linkToggle = document.getElementById('compose-link-toggle');
+    if (linkToggle) linkToggle.setAttribute('aria-expanded', 'true');
+  }
+  if (d.spot && d.spot.lat != null && d.spot.lng != null) {
+    pendingSpot = d.spot;
+    syncSpotChip(d.spot);
+  }
+  showDraftBanner();
 }
 
 initThemeToggle(document.getElementById('theme-toggle'));
@@ -530,6 +646,25 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Save draft button — persist whatever is in the composer to
+  // localStorage, then flash the "Draft saved" banner. Works offline.
+  if (e.target.closest('[data-compose-draft]')) {
+    e.preventDefault();
+    const state = readComposerState();
+    if (!state) return;
+    saveDraft(draftHandle(), state);
+    showDraftBanner(t('home.composer.draft_saved'));
+    return;
+  }
+
+  // Discard the draft — clears localStorage + wipes the composer UI.
+  if (e.target.closest('[data-compose-draft-discard]')) {
+    e.preventDefault();
+    clearDraft(draftHandle());
+    clearComposerUI();
+    return;
+  }
+
   // Push button fallback: in case form submit gets eaten elsewhere,
   // explicitly trigger the form when the submit button is clicked.
   const pushBtn = e.target.closest('.composer button[type="submit"]');
@@ -580,8 +715,8 @@ document.addEventListener('submit', (e) => {
   if (submitBtn) submitBtn.disabled = true;
   addPost(post)
     .then(() => {
-      ta.value = '';
-      pendingSpot = null;
+      clearDraft(draftHandle());
+      clearComposerUI();
       refresh();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     })
@@ -592,12 +727,21 @@ document.addEventListener('submit', (e) => {
 // Auto-grow the composer textarea as the user types, and drop the
 // "this field can't be empty" error state once they start typing again.
 document.addEventListener('input', (e) => {
-  const ta = e.target;
-  if (!(ta instanceof HTMLTextAreaElement)) return;
-  if (!ta.closest('.composer')) return;
-  ta.classList.remove('is-error');
-  ta.style.height = 'auto';
-  ta.style.height = Math.min(ta.scrollHeight, 320) + 'px';
+  const el = e.target;
+  // Textarea: auto-grow + clear error + autosave draft.
+  if (el instanceof HTMLTextAreaElement && el.closest('.composer')) {
+    el.classList.remove('is-error');
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 320) + 'px';
+    hideDraftBanner();
+    autosaveComposerDraft();
+    return;
+  }
+  // GitHub URL field: just autosave so the draft picks up the link too.
+  if (el instanceof HTMLInputElement && el.closest('.composer') && el.name === 'github') {
+    hideDraftBanner();
+    autosaveComposerDraft();
+  }
 });
 
 // ----- keyboard shortcuts -----

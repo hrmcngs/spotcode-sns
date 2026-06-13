@@ -53,7 +53,14 @@ export function renderIdeaForm({ user = null } = {}) {
             '<button type="button" class="compose-tool" data-spot-pick title="' + t('picker.title') + '">' + icon('pin', { size: 18 }) + '</button>' +
             '<button type="button" class="compose-tool" title="poll">'  + icon('chart', { size: 18 }) + '</button>' +
           '</div>' +
-          '<button type="submit" title="⌘/Ctrl + Enter">' + t('home.composer.submit') + '</button>' +
+          '<div class="compose-submit">' +
+            '<button type="button" class="btn btn--ghost compose-draft" data-compose-draft title="' + t('home.composer.draft_hint') + '">' + t('home.composer.draft') + '</button>' +
+            '<button type="submit" title="⌘/Ctrl + Enter">' + t('home.composer.submit') + '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="compose-draft-banner" id="compose-draft-banner" hidden>' +
+          '<span class="compose-draft-banner__text" data-draft-text>' + t('home.composer.draft_restored') + '</span>' +
+          '<button type="button" class="compose-draft-banner__discard" data-compose-draft-discard>' + t('home.composer.draft_discard') + '</button>' +
         '</div>' +
       '</form>' +
     '</div>'
