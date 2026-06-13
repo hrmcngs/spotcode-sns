@@ -8,6 +8,7 @@ export const KEYS = {
   session:  'spotcode:session',
   supaUrl:  'spotcode:supa_url',
   supaAnon: 'spotcode:supa_anon',
+  lang:     'spotcode:lang',
 };
 
 export function read(key, fallback) {

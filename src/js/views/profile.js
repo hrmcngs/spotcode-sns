@@ -8,6 +8,7 @@ import { isFollowing, followerCount, followingCount,
 import { getBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
+import { t } from '../i18n.js';
 
 // Monotonic version so async hydrations can detect a newer renderProfile
 // has superseded them and bail out before clobbering the DOM.
@@ -17,14 +18,14 @@ let renderVersion = 0;
 // stays on /<handle> but swaps the body via hydrateProfileBody().
 let activeTab = 'posts';
 const TABS = ['posts', 'spots', 'likes'];
-const TAB_LABELS = { posts: 'Posts', spots: 'Spots', likes: 'Likes' };
+function tabLabel(key) { return t('profile.tab.' + key); }
 
 function notFound(handle) {
   return (
     '<div class="stub">' +
-      '<h2 class="stub__title">@' + handle + ' is empty here</h2>' +
-      '<p class="stub__sub">このアカウントは存在しないか、まだ何も投稿していません。</p>' +
-      '<a class="back-home" href="/">← Back to home</a>' +
+      '<h2 class="stub__title">@' + handle + ' ' + t('profile.not_found.title') + '</h2>' +
+      '<p class="stub__sub">' + t('profile.not_found.sub') + '</p>' +
+      '<a class="back-home" href="/">' + t('profile.back') + '</a>' +
     '</div>'
   );
 }
@@ -33,7 +34,7 @@ function loading(handle) {
   return (
     '<div class="stub" id="profile-loading">' +
       '<h2 class="stub__title">@' + handle + '</h2>' +
-      '<p class="stub__sub">プロフィールを読み込み中…</p>' +
+      '<p class="stub__sub">' + t('profile.loading') + '</p>' +
     '</div>'
   );
 }
@@ -61,11 +62,11 @@ export function renderProfile(handle) {
         renderAvatar(u, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
           (isMe
-            ? '<button class="btn btn--ghost" id="logout-btn">Log out</button>' +
-              '<button class="btn btn--primary" id="edit-profile-btn">Edit profile</button>'
-            : '<button class="btn btn--ghost">More</button>' +
+            ? '<button class="btn btn--ghost" id="logout-btn">' + t('nav.logout') + '</button>' +
+              '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
+            : '<button class="btn btn--ghost">' + t('profile.btn.more') + '</button>' +
               '<button class="btn ' + (followed ? 'btn--ghost is-following' : 'btn--primary') + ' btn--follow" data-target="' + u.handle + '">' +
-                (followed ? 'Following' : 'Follow') +
+                (followed ? t('profile.btn.following') : t('profile.btn.follow')) +
               '</button>') +
         '</div>' +
       '</div>' +
@@ -78,14 +79,14 @@ export function renderProfile(handle) {
       (u.bio ? '<p class="profile-bio">' + u.bio + '</p>' : '') +
       '<div class="profile-meta">' +
         (u.location ? '<span>' + icon('pin',      { size: 14, className: 'icon--inline' }) + u.location + '</span>' : '') +
-        (u.joined   ? '<span>' + icon('calendar', { size: 14, className: 'icon--inline' }) + 'Joined ' + u.joined + '</span>' : '') +
+        (u.joined   ? '<span>' + icon('calendar', { size: 14, className: 'icon--inline' }) + t('profile.joined') + u.joined + '</span>' : '') +
         (ghLink ? '<a class="profile-gh" href="' + ghLink + '" target="_blank" rel="noopener">' +
                     icon('github', { size: 14, fill: true, className: 'icon--inline' }) + (u.github.handle || '') + '</a>' : '') +
       '</div>' +
       '<div class="profile-stats">' +
-        '<a href="' + url('/' + u.handle + '/following') + '"><b>' + followingN + '</b> Following</a>' +
-        '<a href="' + url('/' + u.handle + '/followers') + '"><b>' + followersN + '</b> Followers</a>' +
-        '<span><b id="profile-postcount">…</b> Posts</span>' +
+        '<a href="' + url('/' + u.handle + '/following') + '"><b>' + followingN + '</b> ' + t('profile.stat.following') + '</a>' +
+        '<a href="' + url('/' + u.handle + '/followers') + '"><b>' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +
+        '<span><b id="profile-postcount">…</b> ' + t('profile.stat.posts') + '</span>' +
       '</div>' +
       (u.github?.handle
         ? '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
@@ -97,10 +98,10 @@ export function renderProfile(handle) {
 
   const tabs = (
     '<div class="timeline__head">' +
-      TABS.map(t => (
-        '<button type="button" class="tab' + (t === activeTab ? ' is-active' : '') + '" ' +
-          'data-profile-tab="' + t + '" data-profile-handle="' + handle + '">' +
-          TAB_LABELS[t] +
+      TABS.map(key => (
+        '<button type="button" class="tab' + (key === activeTab ? ' is-active' : '') + '" ' +
+          'data-profile-tab="' + key + '" data-profile-handle="' + handle + '">' +
+          tabLabel(key) +
         '</button>'
       )).join('') +
     '</div>'
@@ -108,7 +109,7 @@ export function renderProfile(handle) {
 
   const body = (
     '<div id="profile-posts">' +
-      '<div class="stub"><p class="stub__sub">投稿を読み込み中…</p></div>' +
+      '<div class="stub"><p class="stub__sub">' + t('spot.loading') + '</p></div>' +
     '</div>'
   );
 
@@ -164,7 +165,7 @@ export async function setProfileTab(handle, tab) {
     el.classList.toggle('is-active', el.getAttribute('data-profile-tab') === tab);
   });
   const list = document.getElementById('profile-posts');
-  if (list) list.innerHTML = '<div class="stub"><p class="stub__sub">読み込み中…</p></div>';
+  if (list) list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('follow.loading') + '</p></div>';
   await hydrateProfileBody(handle, renderVersion);
 }
 
@@ -190,9 +191,9 @@ async function hydrateProfileBody(handle, myVersion) {
     if (countEl) countEl.textContent = String(posts.length);
   }
   if (!posts.length) {
-    const empty = tab === 'likes' ? 'まだいいねした投稿はありません。'
-                : tab === 'spots' ? 'まだ場所付きの投稿はありません。'
-                :                   'まだ投稿がありません。';
+    const empty = tab === 'likes' ? t('profile.empty.likes')
+                : tab === 'spots' ? t('profile.empty.spots')
+                :                   t('profile.empty.posts');
     list.innerHTML = '<div class="stub"><p class="stub__sub">' + empty + '</p></div>';
     return;
   }

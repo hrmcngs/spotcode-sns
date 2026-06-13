@@ -6,6 +6,7 @@ import { followersOf, followingOf, isFollowing } from '../interactions.js';
 import { currentUser } from '../auth.js';
 import { renderAvatar } from '../avatar.js';
 import { url } from '../router.js';
+import { t } from '../i18n.js';
 
 let renderVersion = 0;
 
@@ -17,8 +18,8 @@ function escape(s) {
 
 export function renderFollowList(handle, kind) {
   renderVersion++;
-  const titleLeft  = kind === 'followers' ? 'Followers' : 'Following';
-  const titleRight = kind === 'followers' ? 'Following' : 'Followers';
+  const titleLeft  = kind === 'followers' ? t('profile.stat.followers') : t('profile.stat.following');
+  const titleRight = kind === 'followers' ? t('profile.stat.following') : t('profile.stat.followers');
   const leftHref   = url('/' + handle + '/' + kind);
   const rightHref  = url('/' + handle + '/' + (kind === 'followers' ? 'following' : 'followers'));
   return (
@@ -30,7 +31,7 @@ export function renderFollowList(handle, kind) {
       '<a class="tab" href="' + rightHref + '">' + titleRight + '</a>' +
     '</div>' +
     '<div id="follow-list">' +
-      '<div class="stub"><p class="stub__sub">読み込み中…</p></div>' +
+      '<div class="stub"><p class="stub__sub">' + t('follow.loading') + '</p></div>' +
     '</div>'
   );
 }
@@ -50,7 +51,7 @@ export async function hydrateFollowList(handle, kind) {
   if (myVersion !== renderVersion) return;
   if (!users.length) {
     list.innerHTML = '<div class="stub"><p class="stub__sub">' +
-      (kind === 'followers' ? 'まだフォロワーはいません。' : 'まだ誰もフォローしていません。') +
+      (kind === 'followers' ? t('follow.empty.followers') : t('follow.empty.following')) +
       '</p></div>';
     return;
   }
@@ -69,7 +70,7 @@ export async function hydrateFollowList(handle, kind) {
           '</div>' +
           (showBtn
             ? '<button class="followlist__follow' + (followed ? ' is-following' : '') + '" data-target="' + escape(u.handle) + '">' +
-                (followed ? 'Following' : 'Follow') +
+                (followed ? t('profile.btn.following') : t('profile.btn.follow')) +
               '</button>'
             : '') +
         '</div>'

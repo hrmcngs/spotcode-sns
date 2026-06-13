@@ -3,6 +3,7 @@
 
 import { loadMaps, reverseGeocode, reverseGeocodeGSI, pickBuildingName, formatJapanAddress } from '../gmap.js';
 import { icon } from '../icons.js';
+import { t } from '../i18n.js';
 
 let rootEl    = null;
 let mapInst   = null;
@@ -21,15 +22,15 @@ function template() {
       '<div class="modal__backdrop" data-picker-close></div>' +
       '<div class="modal__card modal__card--map" role="dialog" aria-labelledby="picker-title">' +
         '<header class="picker-head">' +
-          '<h2 id="picker-title">場所を選ぶ</h2>' +
+          '<h2 id="picker-title">' + t('picker.title') + '</h2>' +
           '<button class="modal__close" data-picker-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
         '</header>' +
 
         '<div class="picker-toolbar">' +
           '<button type="button" class="btn btn--ghost btn--sm" id="picker-geo">' +
-            icon('pin', { size: 14, className: 'icon--inline' }) + '現在地を使う' +
+            icon('pin', { size: 14, className: 'icon--inline' }) + t('picker.use_geo') +
           '</button>' +
-          '<input type="text" id="picker-label" placeholder="ラベル（任意・建物名や店名）">' +
+          '<input type="text" id="picker-label" placeholder="' + t('picker.label_placeholder') + '">' +
         '</div>' +
 
         '<div id="picker-map" class="picker-map"></div>' +
@@ -38,17 +39,17 @@ function template() {
           '<div class="picker-info">' +
             '<div id="picker-address-meta" class="picker-address-meta"></div>' +
             '<label class="picker-address-field">' +
-              '<span class="picker-address-field__label">住所</span>' +
+              '<span class="picker-address-field__label">' + t('picker.address') + '</span>' +
               '<input type="text" id="picker-address-input" class="picker-address-input" ' +
-                'placeholder="地図をクリックして取得…" autocomplete="off" spellcheck="false">' +
+                'placeholder="' + t('picker.address_placeholder') + '" autocomplete="off" spellcheck="false">' +
               '<button type="button" id="picker-address-reset" class="picker-address-reset" hidden title="自動取得に戻す">↺</button>' +
             '</label>' +
             '<div id="picker-address-hint" class="picker-address-hint"></div>' +
             '<div id="picker-coords" class="picker-coords"></div>' +
           '</div>' +
           '<div class="picker-actions">' +
-            '<button type="button" class="btn btn--ghost" data-picker-close>Cancel</button>' +
-            '<button type="button" class="btn btn--primary" id="picker-confirm" disabled>Confirm</button>' +
+            '<button type="button" class="btn btn--ghost" data-picker-close>' + t('picker.cancel') + '</button>' +
+            '<button type="button" class="btn btn--primary" id="picker-confirm" disabled>' + t('picker.confirm') + '</button>' +
           '</div>' +
         '</footer>' +
 

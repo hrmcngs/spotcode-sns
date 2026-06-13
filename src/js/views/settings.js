@@ -1,6 +1,7 @@
 import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode } from '../dev-mode.js';
+import { getLang, setLang, t } from '../i18n.js';
 
 function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
@@ -122,9 +123,20 @@ export function renderSettings() {
   const override = getOverride();
   const usingOverride = isUsingOverride();
 
+  const lang = getLang();
   return (
     '<div class="settings">' +
-      '<h1 class="settings__title">Settings</h1>' +
+      '<h1 class="settings__title">' + t('settings.title') + '</h1>' +
+
+      '<section class="settings-card">' +
+        '<h2>' + t('settings.lang.title') + '</h2>' +
+        '<p class="settings__hint">' + t('settings.lang.hint') + '</p>' +
+        '<div class="settings-form__actions">' +
+          '<button type="button" class="btn btn--' + (lang === 'ja' ? 'primary' : 'ghost') + '" data-lang="ja">' + t('settings.lang.ja') + '</button>' +
+          '<button type="button" class="btn btn--' + (lang === 'en' ? 'primary' : 'ghost') + '" data-lang="en">' + t('settings.lang.en') + '</button>' +
+        '</div>' +
+      '</section>' +
+
       userCards() +
       (canBeDev() ? devCards({ cfg, override, usingOverride }) : '') +
     '</div>'
@@ -182,6 +194,13 @@ export function bindSettings() {
     setConfig({ url: '', anonKey: '' });
     show('上書きを削除しました。リロードします…', 'ok');
     setTimeout(() => location.reload(), 400);
+  });
+
+  // Language switch — setLang() persists + triggers a hard reload so
+  // every cached HTML fragment / modal template re-renders in the new
+  // language without us having to track listeners.
+  document.querySelectorAll('[data-lang]').forEach(btn => {
+    btn.addEventListener('click', () => setLang(btn.getAttribute('data-lang')));
   });
 
   // Developer-mode toggle (only present when the current user is on the
