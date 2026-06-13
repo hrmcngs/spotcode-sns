@@ -50,7 +50,8 @@ export function renderPostAnalytics(id) {
 
 export async function hydratePostAnalytics(id) {
   const myVersion = renderVersion;
-  const root = document.getElementById('post-analytics-' + cssEscape(id));
+  // getElementById takes a literal id — see note in post-detail.js.
+  const root = document.getElementById('post-analytics-' + id);
   if (!root) return;
 
   let post;
