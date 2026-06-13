@@ -44,6 +44,7 @@ const SHELL = [
   './js/views/settings.js',
   './js/views/spot.js',
   './js/views/map.js',
+  './js/views/requests.js',
   './js/views/follow-list.js',
   './js/views/spot-picker.js',
   './js/views/auth-modal.js',

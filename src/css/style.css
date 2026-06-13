@@ -1103,6 +1103,18 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   font-weight: 700;
 }
 
+/* ---------- privacy lock + follow request UI ---------- */
+.profile-lock {
+  display: inline-block;
+  margin-left: .15em;
+  color: var(--warn);
+  font-size: .85em;
+}
+.request-actions {
+  display: flex; gap: .35rem;
+  margin-left: auto; align-self: center;
+}
+
 /* ---------- profile badges ---------- */
 .profile-badges {
   display: flex; flex-wrap: wrap; gap: .35rem;

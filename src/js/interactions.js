@@ -11,14 +11,17 @@ import { getClient } from './supa.js';
 const likes = new Map();
 // user handle -> { followers, following }
 const followCounts = new Map();
-// target handles that the current session user follows
+// target handles that the current session user follows (status='accepted')
 const followsMine = new Set();
+// target handles where the current session user has a pending request
+const requestsMine = new Set();
 let followsMineLoaded = false;
 
 export function clearInteractionsCache() {
   likes.clear();
   followCounts.clear();
   followsMine.clear();
+  requestsMine.clear();
   followsMineLoaded = false;
 }
 
@@ -82,6 +85,7 @@ export async function toggleLike(postId /* , _handle ignored */) {
 export function followerCount(handle)  { return followCounts.get(handle)?.followers  || 0; }
 export function followingCount(handle) { return followCounts.get(handle)?.following || 0; }
 export function isFollowing(_myHandle, targetHandle) { return followsMine.has(targetHandle); }
+export function isRequested(_myHandle, targetHandle) { return requestsMine.has(targetHandle); }
 
 async function userIdFromHandle(handle) {
   const supa = await getClient();
@@ -89,8 +93,15 @@ async function userIdFromHandle(handle) {
   return data?.id || null;
 }
 
+async function userMetaByHandle(handle) {
+  const supa = await getClient();
+  const { data } = await supa.from('profiles').select('id, is_private').eq('handle', handle).maybeSingle();
+  return data || null;
+}
+
 // One round trip per session to know which handles the current user
-// follows. Used by the sync `isFollowing()` getter.
+// follows (accepted) vs has a pending request for. Used by the sync
+// `isFollowing()` / `isRequested()` getters.
 export async function hydrateMyFollows() {
   if (followsMineLoaded) return;
   let supa; try { supa = await getClient(); } catch { return; }
@@ -98,11 +109,15 @@ export async function hydrateMyFollows() {
   if (!user) { followsMineLoaded = true; return; }
   const { data } = await supa
     .from('follows')
-    .select('target:profiles!follows_target_id_fkey(handle)')
+    .select('status, target:profiles!follows_target_id_fkey(handle)')
     .eq('follower_id', user.id);
   followsMine.clear();
+  requestsMine.clear();
   for (const r of data || []) {
-    if (r.target?.handle) followsMine.add(r.target.handle);
+    const h = r.target?.handle;
+    if (!h) continue;
+    if (r.status === 'pending') requestsMine.add(h);
+    else                        followsMine.add(h);
   }
   followsMineLoaded = true;
 }
@@ -113,8 +128,10 @@ export async function hydrateProfileFollow(handle) {
   const id = await userIdFromHandle(handle);
   if (!id) return;
   const [followers, following] = await Promise.all([
-    supa.from('follows').select('*', { count: 'exact', head: true }).eq('target_id', id),
-    supa.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', id),
+    supa.from('follows').select('*', { count: 'exact', head: true })
+      .eq('target_id', id).eq('status', 'accepted'),
+    supa.from('follows').select('*', { count: 'exact', head: true })
+      .eq('follower_id', id).eq('status', 'accepted'),
   ]);
   followCounts.set(handle, {
     followers: followers.count || 0,
@@ -132,6 +149,7 @@ export async function followersOf(handle) {
     .from('follows')
     .select('user:profiles!follows_follower_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
     .eq('target_id', id)
+    .eq('status', 'accepted')
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []).map(r => r.user).filter(Boolean).map(shapeProfile);
@@ -146,6 +164,7 @@ export async function followingOf(handle) {
     .from('follows')
     .select('user:profiles!follows_target_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
     .eq('follower_id', id)
+    .eq('status', 'accepted')
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []).map(r => r.user).filter(Boolean).map(shapeProfile);
@@ -163,37 +182,100 @@ function shapeProfile(p) {
   };
 }
 
+// Returns { state }, where state is one of:
+//   'following' — accepted follow now exists
+//   'requested' — pending follow now exists (private target)
+//   'none'      — the follow / request was removed
 export async function toggleFollow(myHandle, targetHandle) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
   if (!user) throw new Error('ログインしてください');
-  const targetId = await userIdFromHandle(targetHandle);
-  if (!targetId) throw new Error('対象ユーザーが見つかりません');
-  if (user.id === targetId) throw new Error('自分自身はフォローできません');
+  const meta = await userMetaByHandle(targetHandle);
+  if (!meta) throw new Error('対象ユーザーが見つかりません');
+  if (user.id === meta.id) throw new Error('自分自身はフォローできません');
 
-  const already = followsMine.has(targetHandle);
-  if (already) {
+  const wasAccepted = followsMine.has(targetHandle);
+  const wasPending  = requestsMine.has(targetHandle);
+
+  // Tap on Following / Requested → remove the row entirely.
+  if (wasAccepted || wasPending) {
     const { error } = await supa.from('follows')
-      .delete().eq('follower_id', user.id).eq('target_id', targetId);
+      .delete().eq('follower_id', user.id).eq('target_id', meta.id);
     if (error) throw new Error(error.message);
     followsMine.delete(targetHandle);
-  } else {
-    const { error } = await supa.from('follows')
-      .insert({ follower_id: user.id, target_id: targetId });
-    if (error) throw new Error(error.message);
-    followsMine.add(targetHandle);
+    requestsMine.delete(targetHandle);
+    if (wasAccepted) {
+      // Bump cached counts — pending requests don't show in follower count.
+      const target = followCounts.get(targetHandle);
+      if (target) followCounts.set(targetHandle,
+        { ...target, followers: Math.max(0, target.followers - 1) });
+      const mine = myHandle ? followCounts.get(myHandle) : null;
+      if (mine) followCounts.set(myHandle,
+        { ...mine, following: Math.max(0, mine.following - 1) });
+    }
+    return { state: 'none' };
   }
 
-  // Bump cached counts optimistically.
-  const delta = already ? -1 : 1;
-  const target = followCounts.get(targetHandle);
-  if (target) followCounts.set(targetHandle,
-    { ...target, followers: Math.max(0, target.followers + delta) });
-  const mine = myHandle ? followCounts.get(myHandle) : null;
-  if (mine) followCounts.set(myHandle,
-    { ...mine, following: Math.max(0, mine.following + delta) });
+  // Insert a new row. Private target → status pending. Public → accepted.
+  const status = meta.is_private ? 'pending' : 'accepted';
+  const { error } = await supa.from('follows')
+    .insert({ follower_id: user.id, target_id: meta.id, status });
+  if (error) throw new Error(error.message);
+  if (status === 'accepted') {
+    followsMine.add(targetHandle);
+    const target = followCounts.get(targetHandle);
+    if (target) followCounts.set(targetHandle,
+      { ...target, followers: target.followers + 1 });
+    const mine = myHandle ? followCounts.get(myHandle) : null;
+    if (mine) followCounts.set(myHandle,
+      { ...mine, following: mine.following + 1 });
+    return { state: 'following' };
+  }
+  requestsMine.add(targetHandle);
+  return { state: 'requested' };
+}
 
-  return !already;
+// Pending follow requests addressed to ME (the current session user).
+// Returned newest-first so the requests page can list them in order.
+export async function pendingFollowRequests() {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supa
+    .from('follows')
+    .select('created_at, follower:profiles!follows_follower_id_fkey(handle, name, avatar_url, avatar_shape, bio, is_private)')
+    .eq('target_id', user.id)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || [])
+    .map(r => ({ user: shapeProfile(r.follower), createdAt: r.created_at }))
+    .filter(r => r.user.handle);
+}
+
+// Flip a pending follow into accepted (RLS allows the target to update).
+export async function acceptFollowRequest(followerHandle) {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしてください');
+  const followerId = await userIdFromHandle(followerHandle);
+  if (!followerId) throw new Error('そのユーザーが見つかりません');
+  const { error } = await supa.from('follows')
+    .update({ status: 'accepted' })
+    .eq('follower_id', followerId).eq('target_id', user.id);
+  if (error) throw new Error(error.message);
+}
+
+// Reject the request — just delete the pending row.
+export async function denyFollowRequest(followerHandle) {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしてください');
+  const followerId = await userIdFromHandle(followerHandle);
+  if (!followerId) throw new Error('そのユーザーが見つかりません');
+  const { error } = await supa.from('follows')
+    .delete().eq('follower_id', followerId).eq('target_id', user.id);
+  if (error) throw new Error(error.message);
 }
 
 // ----------------------------------------------------------------------

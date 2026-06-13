@@ -170,3 +170,57 @@ create policy "anyone can file a report"
 -- once verification succeeds; only `github_verified` stays.
 alter table public.profiles add column if not exists github_verified boolean default false;
 alter table public.profiles add column if not exists github_verify_token text;
+
+
+-- ===================================================================
+-- Stage 8 — Twitter-style private accounts + approve-follow flow
+-- ===================================================================
+-- Adds a privacy flag and a pending/accepted status on follows so a
+-- private account's posts are RLS-hidden from anyone who isn't an
+-- approved follower.
+
+alter table public.profiles
+  add column if not exists is_private boolean default false;
+
+alter table public.follows
+  add column if not exists status text default 'accepted'
+  check (status in ('pending', 'accepted'));
+
+-- Posts: replace the "public to all" SELECT with the privacy-aware one.
+drop policy if exists "posts are public" on public.posts;
+drop policy if exists "posts visible to allowed viewers" on public.posts;
+create policy "posts visible to allowed viewers"
+  on public.posts for select using (
+    -- Public author → anyone can read.
+    not exists (
+      select 1 from public.profiles where id = author_id and is_private = true
+    )
+    -- Or the viewer is the author.
+    or author_id = auth.uid()
+    -- Or the viewer has an accepted follow for the author.
+    or exists (
+      select 1 from public.follows
+      where target_id = author_id
+        and follower_id = auth.uid()
+        and status = 'accepted'
+    )
+  );
+
+-- Follows: stay publicly readable so follower counts / follow lists work.
+-- But also grant targets the ability to update (accept) or delete pending
+-- rows that name them, and let either side delete an accepted row.
+drop policy if exists "follows are public" on public.follows;
+create policy "follows are public"
+  on public.follows for select using (true);
+
+drop policy if exists "targets can update their pending follows" on public.follows;
+create policy "targets can update their pending follows"
+  on public.follows for update using (target_id = auth.uid())
+                       with check (target_id = auth.uid());
+
+drop policy if exists "users delete their own follows" on public.follows;
+drop policy if exists "follower or target can delete a follow" on public.follows;
+create policy "follower or target can delete a follow"
+  on public.follows for delete using (
+    follower_id = auth.uid() or target_id = auth.uid()
+  );

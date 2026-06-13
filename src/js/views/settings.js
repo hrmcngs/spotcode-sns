@@ -2,6 +2,7 @@ import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
+import { currentUser, updateProfile } from '../auth.js';
 
 function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
@@ -16,8 +17,32 @@ function maskHost(url) {
   } catch { return url; }
 }
 
+function privacyCard() {
+  const me = currentUser();
+  if (!me) return '';
+  const priv = !!me.isPrivate;
+  return (
+    '<section class="settings-card">' +
+      '<h2>アカウントの公開範囲 <span class="settings-tag">' +
+        (priv ? '🔒 非公開' : '🌐 公開') + '</span></h2>' +
+      '<p class="settings__hint">' +
+        (priv
+          ? '<strong>非公開</strong>です。投稿はフォロー承認した人だけが読めます。新しいフォローは「リクエスト」扱いになり、あなたの承認を待ちます。'
+          : '<strong>公開</strong>です。投稿は誰でも読めて、フォローは自動で承認されます。鍵をかけると非公開アカウントに切り替わります。') +
+      '</p>' +
+      '<div class="settings-form__actions">' +
+        '<button type="button" class="btn btn--' + (priv ? 'ghost' : 'primary') + '" id="privacy-toggle">' +
+          (priv ? '🌐 公開に戻す' : '🔒 非公開にする') +
+        '</button>' +
+      '</div>' +
+      '<p class="settings-status" id="privacy-status"></p>' +
+    '</section>'
+  );
+}
+
 function userCards() {
   return (
+    privacyCard() +
     '<section class="settings-card">' +
       '<h2>Map</h2>' +
       '<p class="settings__hint">' +
@@ -201,6 +226,33 @@ export function bindSettings() {
   // language without us having to track listeners.
   document.querySelectorAll('[data-lang]').forEach(btn => {
     btn.addEventListener('click', () => setLang(btn.getAttribute('data-lang')));
+  });
+
+  // Privacy toggle — flip is_private on the profile and reload so every
+  // cached view picks up the new state (Follow/Request button text,
+  // post visibility, etc).
+  const privBtn    = document.getElementById('privacy-toggle');
+  const privStatus = document.getElementById('privacy-status');
+  privBtn?.addEventListener('click', async () => {
+    if (!privBtn) return;
+    const me = currentUser();
+    if (!me) return;
+    privBtn.disabled = true;
+    if (privStatus) privStatus.textContent = '更新中…';
+    try {
+      await updateProfile({ isPrivate: !me.isPrivate });
+      if (privStatus) {
+        privStatus.textContent = '反映しました。リロードします…';
+        privStatus.className = 'settings-status is-ok';
+      }
+      setTimeout(() => location.reload(), 400);
+    } catch (ex) {
+      if (privStatus) {
+        privStatus.textContent = '失敗: ' + (ex.message || ex);
+        privStatus.className = 'settings-status is-bad';
+      }
+      privBtn.disabled = false;
+    }
   });
 
   // Developer-mode toggle (only present when the current user is on the
