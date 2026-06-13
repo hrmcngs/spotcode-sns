@@ -34,14 +34,39 @@ export function getUser(handle) {
 //
 // Stage 10 / 11 columns are appended by `postCols()` only when we
 // know they exist in the deployed schema. If a query fails with
-// "column … does not exist" we cache the negative and re-query
-// without it, so users who haven't run a migration yet still see
-// posts. Each flag is flipped independently.
+// "column … does not exist" we cache the negative + retry without
+// it, so users who haven't run a migration yet still see posts.
+//
+// State persists in localStorage so the second page load doesn't
+// have to rediscover the missing columns one round trip at a time.
+// On a brand-new browser the first visit pays the discovery cost
+// (one PostgREST error per missing column) but subsequent visits go
+// straight to the trimmed column list and succeed in one shot.
+const SCHEMA_CACHE_KEY = 'spotcode:schema-cache:v1';
+
 let hasCommentsCount  = true;
 let hasRepostsCount   = true;
 let hasBookmarksCount = true;
 let hasQuotesCount    = true;
 let hasQuoteOf        = true;
+
+(function loadSchemaCache() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SCHEMA_CACHE_KEY) || '{}');
+    if (v.hasCommentsCount  === false) hasCommentsCount  = false;
+    if (v.hasRepostsCount   === false) hasRepostsCount   = false;
+    if (v.hasBookmarksCount === false) hasBookmarksCount = false;
+    if (v.hasQuotesCount    === false) hasQuotesCount    = false;
+    if (v.hasQuoteOf        === false) hasQuoteOf        = false;
+  } catch {}
+})();
+function persistSchemaCache() {
+  try {
+    localStorage.setItem(SCHEMA_CACHE_KEY, JSON.stringify({
+      hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf,
+    }));
+  } catch {}
+}
 
 function postCols() {
   const extras = [];
@@ -72,6 +97,7 @@ function isMissingOptionalColumn(error) {
   if (!msg.includes('does not exist')) return false;
   let flipped = false;
   for (const o of OPTIONAL) if (msg.includes(o.needle) && o.off()) flipped = true;
+  if (flipped) persistSchemaCache();
   return flipped;
 }
 
@@ -153,15 +179,19 @@ export async function addQuote(post, quotedPostId) {
   return shapePost(res.data);
 }
 
-// Run `build(cols)` once and retry once if the only error was a known
-// optional column. Centralised so every read path inherits the same
-// fall-forward behaviour without copy-pasted try / catch chains.
+// Run `build(cols)` and keep retrying as long as the only error each
+// time is a known-optional column. Postgres only reports the FIRST
+// missing column per request, so a single retry isn't enough when
+// several Stages are unmigrated — we have to loop, dropping one
+// column per round trip, until the query either succeeds or hits a
+// non-recoverable error. Capped at OPTIONAL.length + 1 so a buggy
+// matcher can't spin forever.
 async function withResilientCols(build) {
-  const first = await build(postCols());
-  if (first.error && isMissingOptionalColumn(first.error)) {
-    return build(postCols());
+  let res = await build(postCols());
+  for (let i = 0; i < OPTIONAL.length && res.error && isMissingOptionalColumn(res.error); i++) {
+    res = await build(postCols());
   }
-  return first;
+  return res;
 }
 
 // Fetch a single post by id (for /post/<id>). Returns null on 404 or RLS
