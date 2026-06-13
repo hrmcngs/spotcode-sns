@@ -1,6 +1,7 @@
 // Login / Sign-up modal. Mounts itself on first open() and stays in the DOM.
 import { register, login, fetchGithubProfile } from '../auth.js';
 import { icon } from '../icons.js';
+import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
 
 let rootEl = null;
 
@@ -171,9 +172,12 @@ export function openAuth(tab = 'login') {
   mount();
   showTab(tab);
   rootEl.hidden = false;
+  lockBodyScroll();
   setTimeout(() => rootEl.querySelector('[data-pane="' + tab + '"] input')?.focus(), 30);
 }
 
 export function close() {
-  if (rootEl) rootEl.hidden = true;
+  if (!rootEl || rootEl.hidden) return;
+  rootEl.hidden = true;
+  unlockBodyScroll();
 }

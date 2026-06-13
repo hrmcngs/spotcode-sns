@@ -5,6 +5,7 @@
 import { currentUser, updateProfile } from '../auth.js';
 import { icon }                       from '../icons.js';
 import { fileToAvatarDataUrl, renderAvatar } from '../avatar.js';
+import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
 
 let rootEl = null;
 let stagedAvatarImage = undefined; // undefined = unchanged, '' = clear, 'data:...' = new
@@ -68,8 +69,9 @@ function template(u) {
 }
 
 function close() {
-  if (!rootEl) return;
+  if (!rootEl || rootEl.hidden) return;
   rootEl.hidden = true;
+  unlockBodyScroll();
 }
 
 function setPreview(userLike) {
@@ -169,5 +171,6 @@ export function openEditProfile() {
   });
 
   rootEl.hidden = false;
+  lockBodyScroll();
   setTimeout(() => form.querySelector('input[name="name"]')?.focus(), 30);
 }

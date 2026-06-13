@@ -123,8 +123,16 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
 @media (max-width: 640px) {
   .app-grid { grid-template-columns: 1fr; padding: .5rem; }
   .left-rail { display: none; }
-  .topbar { grid-template-columns: auto 1fr auto; }
+  .topbar { grid-template-columns: auto 1fr auto; gap: .5rem; padding: .5rem .6rem; }
   .brand-slash, .brand-repo { display: none; }
+  /* On a 393px viewport the brand + search + 4 icons row overflows the
+     topbar. Drop the always-present bell + theme toggle (still reachable
+     via /notifications and Settings), shrink the remaining icons, and
+     tighten the action gap. */
+  .topbar__actions { gap: .25rem; }
+  .topbar__actions #theme-toggle,
+  .topbar__actions #ic-bell { display: none; }
+  .topbar__actions .icon-btn { width: 30px; height: 30px; border-radius: 6px; }
 }
 
 /* ---------- left rail (Twitter side-nav) ---------- */
@@ -580,8 +588,11 @@ html[data-theme='light'] .profile-cover {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 1.5rem 1.5rem 1.2rem;
+  /* Extra bottom padding so the last form field on a tall Sign-up form
+     doesn't sit flush against the rounded corner when scrolled. */
+  padding: 1.5rem 1.5rem 1.8rem;
   box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  -webkit-overflow-scrolling: touch;
 }
 .modal__close {
   position: absolute; top: .35rem; right: .35rem;
@@ -589,14 +600,11 @@ html[data-theme='light'] .profile-cover {
   background: transparent; border: 0; color: var(--muted);
   font-size: 1.3rem; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
-  /* The SVG icon inside is what gets tapped most of the time — make
-     sure clicks on it still register with the [data-close] dataset
-     by routing pointer events to the button itself. */
 }
 .modal__close > * { pointer-events: none; }
 .modal__close:hover { background: var(--surface-2); color: var(--text); }
 @media (max-width: 480px) {
-  .modal__card { padding: 1rem 1rem .9rem; }
+  .modal__card { padding: 1rem 1rem 1.4rem; }
 }
 
 .auth-tabs {

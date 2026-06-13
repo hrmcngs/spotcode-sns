@@ -4,6 +4,7 @@
 import { currentUser }            from '../auth.js';
 import { reportPost, reportedByMe } from '../interactions.js';
 import { icon }                   from '../icons.js';
+import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
 
 let rootEl    = null;
 let activePostId = null;
@@ -90,8 +91,9 @@ function mount() {
 }
 
 function close(result) {
-  if (!rootEl) return;
+  if (!rootEl || rootEl.hidden) return;
   rootEl.hidden = true;
+  unlockBodyScroll();
   activePostId = null;
   if (resolveFn) { resolveFn(result); resolveFn = null; }
 }
@@ -115,5 +117,6 @@ export function openReport(postId) {
   }
 
   rootEl.hidden = false;
+  lockBodyScroll();
   return new Promise((res) => { resolveFn = res; });
 }
