@@ -50,13 +50,18 @@ function shapeAuthor(a) {
 function shapePost(row) {
   const author = shapeAuthor(row.author);
   // Side-effect: cache the joined author so renderPost's sync getUser()
-  // can find them on subsequent renders.
+  // can find them on subsequent renders. ALWAYS merge — the previous
+  // "skip if already cached" branch made another user's uploaded
+  // avatar invisible to anyone whose cache was populated before the
+  // upload, because the cache would never refresh.
   if (author?.handle) {
     const users = read(KEYS.users, {});
-    if (!users[author.handle] || !users[author.handle]._fetched) {
-      users[author.handle] = { ...author, _fetched: Date.now() };
-      write(KEYS.users, users);
-    }
+    users[author.handle] = {
+      ...(users[author.handle] || {}),
+      ...author,
+      _fetched: Date.now(),
+    };
+    write(KEYS.users, users);
   }
   return {
     id:           row.id,

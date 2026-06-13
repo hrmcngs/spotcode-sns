@@ -122,8 +122,11 @@ export function renderProfile(handle) {
 export async function hydrateProfile(handle) {
   const myVersion = renderVersion;
   const me = currentUser();
-  const haveLocal = (me && me.handle === handle) || getUser(handle)?._fetched;
-  if (!haveLocal) {
+  const isMe = me && me.handle === handle;
+  // Always go to Supabase for other users' profiles so their avatar /
+  // bio / shape changes propagate without waiting for a session reset.
+  // For your own profile, currentUser() is already the freshest source.
+  if (!isMe) {
     let fetched;
     try { fetched = await fetchProfileByHandle(handle); }
     catch (err) {

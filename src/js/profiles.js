@@ -40,10 +40,11 @@ const COLUMNS = 'handle, name, avatar_url, avatar_shape, bio, location, role, gi
 
 export async function fetchProfileByHandle(handle) {
   if (!handle) return null;
-  // Serve from cache when we've already fetched it this session.
-  const cached = read(KEYS.users, {})[handle];
-  if (cached?._fetched) return cached;
-
+  // Intentionally NOT short-circuiting on the localStorage cache here —
+  // the profile page is the place where stale data hurts (e.g. another
+  // user's freshly-uploaded avatar should appear without a hard reload),
+  // and the round trip is cheap. The localStorage cache stays useful for
+  // the sync renderPost path which can't await anyway.
   let supa;
   try { supa = await getClient(); } catch { return null; }
   const { data, error } = await supa
