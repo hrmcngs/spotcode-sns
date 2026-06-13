@@ -6,7 +6,7 @@ import { currentUser, updateProfile } from '../auth.js';
 import { icon }                       from '../icons.js';
 import { fileToAvatarDataUrl, renderAvatar } from '../avatar.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
-import { startVerification, confirmVerification } from '../github-verify.js';
+import { startVerification, confirmVerification, newRepoUrl, repoNameFor } from '../github-verify.js';
 
 let rootEl = null;
 let stagedAvatarImage = undefined; // undefined = unchanged, '' = clear, 'data:...' = new
@@ -28,6 +28,7 @@ function githubVerifyBlock(u) {
     );
   }
   const existing = u.github?.verifyToken || '';
+  const repoLink = existing ? newRepoUrl(existing) : '';
   return (
     '<div class="verify-row" id="verify-row">' +
       '<div class="verify-row__title">' +
@@ -35,8 +36,8 @@ function githubVerifyBlock(u) {
         'GitHub の本人確認' +
       '</div>' +
       '<p class="verify-row__hint">' +
-        '下のコードを <a href="https://github.com/settings/profile" target="_blank" rel="noopener">GitHub の Bio 欄</a> に貼って「確認」を押すと、 @' +
-        attr(u.github.handle) + ' があなた本人だと検証されます。' +
+        'コードを発行して、その名前のリポジトリを <a href="https://github.com/' + attr(u.github.handle) + '" target="_blank" rel="noopener">@' +
+        attr(u.github.handle) + '</a> に作ってください。空でも構いません。確認後にリポジトリは削除して OK です（Bio は触りません）。' +
       '</p>' +
       '<div class="verify-row__token">' +
         '<code id="verify-token">' + attr(existing) + '</code>' +
@@ -45,6 +46,8 @@ function githubVerifyBlock(u) {
         '</button>' +
       '</div>' +
       '<div class="edit-actions">' +
+        '<a class="btn btn--ghost btn--sm" id="verify-newrepo" target="_blank" rel="noopener" href="' +
+          attr(repoLink) + '"' + (existing ? '' : ' hidden') + '>GitHub でリポジトリを作る</a>' +
         '<button type="button" class="btn btn--primary btn--sm" id="verify-confirm" ' +
           (existing ? '' : 'disabled') + '>確認</button>' +
         '<span class="verify-row__status" id="verify-status"></span>' +
@@ -176,11 +179,12 @@ export function openEditProfile() {
     });
   });
 
-  // GitHub bio-token verification flow
+  // GitHub repo-name verification flow
   const vGen     = document.getElementById('verify-gen');
   const vConfirm = document.getElementById('verify-confirm');
   const vToken   = document.getElementById('verify-token');
   const vStatus  = document.getElementById('verify-status');
+  const vNewRepo = document.getElementById('verify-newrepo');
   function showVerify(msg, kind) {
     if (!vStatus) return;
     vStatus.textContent = msg || '';
@@ -193,8 +197,12 @@ export function openEditProfile() {
       const t = await startVerification();
       if (vToken) vToken.textContent = t;
       if (vConfirm) vConfirm.disabled = false;
+      if (vNewRepo) {
+        vNewRepo.href = newRepoUrl(t);
+        vNewRepo.hidden = false;
+      }
       vGen.textContent = '新しいコード';
-      showVerify('発行しました。GitHub Bio に貼ったら「確認」を押してください。', 'ok');
+      showVerify('発行しました。「GitHub でリポジトリを作る」を押して、その名前のまま Create したら「確認」を押してください。', 'ok');
     } catch (ex) { showVerify(ex.message, 'bad'); }
     finally { vGen.disabled = false; }
   });
@@ -204,7 +212,7 @@ export function openEditProfile() {
     const token  = vToken?.textContent?.trim();
     if (!handle || !token) { showVerify('コードを先に発行してください', 'bad'); return; }
     vConfirm.disabled = true;
-    showVerify('GitHub Bio を確認しています…');
+    showVerify('@' + handle + '/' + repoNameFor(token) + ' を探しています…');
     try {
       await confirmVerification(handle, token);
       showVerify('✓ 本人確認できました。閉じてリロードしてください。', 'ok');
