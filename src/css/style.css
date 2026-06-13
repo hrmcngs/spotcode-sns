@@ -159,6 +159,9 @@ button { font: inherit; cursor: pointer; }
   display: flex;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  /* Tiny breathing-room gap below the For you / Following / Spots row
+     so the next element never sits visually flush against the underline. */
+  margin-bottom: 2px;
 }
 .tab {
   flex: 1; text-align: center; padding: 1rem .5rem;
@@ -176,9 +179,10 @@ button { font: inherit; cursor: pointer; }
 .composer {
   display: grid; grid-template-columns: 42px 1fr; gap: .8rem;
   align-items: start;
-  /* Generous top padding so the textarea's focus ring sits clear of the
-     sticky For you tab bar above (≈56px topbar + ≈56px tab bar ≈ 112px). */
-  padding: 2.25rem 1rem 1rem; border-bottom: 1px solid var(--border);
+  /* Generous top padding so the textarea's focus ring sits well clear of
+     the sticky For you tab bar above (≈56px topbar + ≈56px tab bar ≈ 112px),
+     even when the user has just refreshed and scrollIntoView hasn't run. */
+  padding: 3rem 1rem 1rem; border-bottom: 1px solid var(--border);
 }
 .composer > .avatar { margin-top: .25rem; }
 .composer .idea-form { display: flex; flex-direction: column; gap: .7rem; max-width: none; margin: 0; min-width: 0; }
@@ -202,7 +206,7 @@ button { font: inherit; cursor: pointer; }
   /* When focusin triggers scrollIntoView, leave clearance for the sticky
      topbar (≈56px) + tab bar (≈56px) + a comfortable visual buffer so the
      textarea's top edge never sits flush against the For you underline. */
-  scroll-margin-top: 170px;
+  scroll-margin-top: 200px;
 }
 .composer textarea:focus {
   border-color: var(--accent);
