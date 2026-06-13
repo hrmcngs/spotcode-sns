@@ -44,9 +44,12 @@ button { font: inherit; cursor: pointer; }
    below 16px when it gains focus, and then doesn't always zoom back out.
    Floor every form control to 16px on mobile so focus never triggers the
    zoom. (Desktop keeps the original visual size because the surrounding
-   font-size: inherit chains read their parents.) */
+   font-size: inherit chains read their parents.)
+   `!important` is needed because component-level rules like
+   `.auth-form input { font: inherit }` (specificity 0,1,1) win against
+   the bare type selector (specificity 0,0,1) by default. */
 @media (max-width: 640px) {
-  input, textarea, select { font-size: 16px; }
+  input, textarea, select { font-size: 16px !important; }
 }
 
 /* ---------- topbar (GitHub) ---------- */
