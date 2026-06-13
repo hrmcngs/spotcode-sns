@@ -77,8 +77,8 @@ export function renderProfile(handle) {
                     icon('github', { size: 14, fill: true, className: 'icon--inline' }) + (u.github.handle || '') + '</a>' : '') +
       '</div>' +
       '<div class="profile-stats">' +
-        '<span><b>' + followingN + '</b> Following</span>' +
-        '<span><b>' + followersN + '</b> Followers</span>' +
+        '<a href="' + url('/' + u.handle + '/following') + '"><b>' + followingN + '</b> Following</a>' +
+        '<a href="' + url('/' + u.handle + '/followers') + '"><b>' + followersN + '</b> Followers</a>' +
         '<span><b id="profile-postcount">…</b> Posts</span>' +
       '</div>' +
       (u.github?.handle

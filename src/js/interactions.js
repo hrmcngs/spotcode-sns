@@ -122,6 +122,47 @@ export async function hydrateProfileFollow(handle) {
   });
 }
 
+// Fetch the list of profiles that follow `handle` (i.e. handle's followers).
+// Returns an array of shaped user objects ready for renderAvatar() etc.
+export async function followersOf(handle) {
+  const supa = await getClient();
+  const id = await userIdFromHandle(handle);
+  if (!id) return [];
+  const { data, error } = await supa
+    .from('follows')
+    .select('user:profiles!follows_follower_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+    .eq('target_id', id)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map(r => r.user).filter(Boolean).map(shapeProfile);
+}
+
+// Fetch the list of profiles that `handle` follows (i.e. handle's following).
+export async function followingOf(handle) {
+  const supa = await getClient();
+  const id = await userIdFromHandle(handle);
+  if (!id) return [];
+  const { data, error } = await supa
+    .from('follows')
+    .select('user:profiles!follows_target_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+    .eq('follower_id', id)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map(r => r.user).filter(Boolean).map(shapeProfile);
+}
+
+function shapeProfile(p) {
+  const name = p.name || 'User';
+  return {
+    handle:      p.handle,
+    name,
+    avatar:      (name[0] || '?').toUpperCase(),
+    avatarImage: p.avatar_url || null,
+    avatarShape: p.avatar_shape || 'round',
+    bio:         p.bio || '',
+  };
+}
+
 export async function toggleFollow(myHandle, targetHandle) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
