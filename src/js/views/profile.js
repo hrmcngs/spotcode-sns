@@ -6,7 +6,8 @@ import { icon }                    from '../icons.js';
 import { isFollowing, isRequested, followerCount, followingCount,
          hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine,
          hydrateProfileFollow } from '../interactions.js';
-import { hydrateQuotedPosts } from '../data.js';
+import { hydrateQuotedPosts, cachedPosts } from '../data.js';
+import { renderTimelineSkeleton } from '../skeleton.js';
 import { getBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
@@ -196,11 +197,11 @@ export function renderProfile(handle) {
     '</div>'
   );
 
-  const body = (
-    '<div id="profile-posts">' +
-      '<div class="stub"><p class="stub__sub">' + t('spot.loading') + '</p></div>' +
-    '</div>'
-  );
+  const cached = activeTab === 'posts' ? cachedPosts('handle:' + handle) : null;
+  const initial = (cached && cached.length)
+    ? cached.map(renderPost).join('')
+    : renderTimelineSkeleton(3);
+  const body = '<div id="profile-posts">' + initial + '</div>';
 
   return header + tabs + body;
 }

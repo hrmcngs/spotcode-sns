@@ -1,11 +1,12 @@
 // City-scoped timeline. Reached from the right-rail "Trending spots"
 // card; shows every post whose spot.addressDetails.city matches.
 
-import { postsByCity, hydrateQuotedPosts } from '../data.js';
+import { postsByCity, hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderPost }        from '../post.js';
 import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
 import { icon }              from '../icons.js';
 import { t }                 from '../i18n.js';
+import { renderTimelineSkeleton } from '../skeleton.js';
 
 let renderVersion = 0;
 
@@ -18,6 +19,10 @@ function escape(s) {
 export function renderSpot(city) {
   renderVersion++;
   const safe = escape(city);
+  const cached = cachedPosts('city:' + city);
+  const initial = (cached && cached.length)
+    ? cached.map(renderPost).join('')
+    : renderTimelineSkeleton(3);
   return (
     '<div class="spot-head">' +
       '<div class="spot-head__icon">' + icon('pin', { size: 28 }) + '</div>' +
@@ -27,9 +32,7 @@ export function renderSpot(city) {
     '<div class="timeline__head">' +
       '<a class="tab is-active" href="#">' + t('profile.tab.posts') + '</a>' +
     '</div>' +
-    '<div id="spot-posts">' +
-      '<div class="stub"><p class="stub__sub">' + t('spot.loading') + '</p></div>' +
-    '</div>'
+    '<div id="spot-posts">' + initial + '</div>'
   );
 }
 

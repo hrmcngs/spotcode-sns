@@ -194,6 +194,74 @@ async function withResilientCols(build) {
   return res;
 }
 
+// ----- timeline cache (instant-paint pattern) -----
+//
+// On the first visit the timeline blocks on a Supabase round trip
+// (often 200-800ms on a cold cellular connection) and the page sits
+// on the loading stub. On the second visit we want to paint the LAST
+// known timeline immediately from localStorage so the user sees
+// something the moment the JS executes, then silently swap in the
+// fresh fetch when it lands.
+//
+// Cached blob is small (~5 KB / 20 posts) and gets clobbered every
+// time `allPosts` succeeds. Versioned key so a future post shape
+// change doesn't try to render an incompatible snapshot.
+
+const POSTS_CACHE_KEY = 'spotcode:posts-cache:v1';
+const POSTS_CACHE_MAX = 30;          // don't bloat localStorage
+const POSTS_CACHE_TTL_MS = 6 * 3600 * 1000; // 6 hours
+
+function savePostsCache(scope, posts) {
+  try {
+    const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
+    all[scope] = {
+      at: Date.now(),
+      posts: posts.slice(0, POSTS_CACHE_MAX),
+    };
+    localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+// Returns the cached posts array (already in the same shape as
+// shapePost output — they were saved post-shape), or null if no entry
+// for this scope or the entry is older than TTL.
+export function cachedPosts(scope) {
+  try {
+    const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
+    const e = all[scope];
+    if (!e || !e.posts) return null;
+    if (Date.now() - (e.at || 0) > POSTS_CACHE_TTL_MS) return null;
+    return e.posts;
+  } catch { return null; }
+}
+
+// Boot-time schema probe. Runs once on first read after the page
+// loads (or never, if the localStorage flags are already cached).
+// Fires a single 1-row select with the full column set; the error
+// message disables every missing optional in one round-trip pass.
+// Subsequent queries skip the per-request retry loop entirely.
+let probeDone = false;
+let probePromise = null;
+export function probeSchema() {
+  if (probeDone) return Promise.resolve();
+  if (probePromise) return probePromise;
+  probePromise = (async () => {
+    try {
+      const supa = await getClient();
+      // Run repeatedly until either the query succeeds or no more flags
+      // can flip — same retry pattern as withResilientCols but bounded.
+      for (let i = 0; i <= OPTIONAL.length; i++) {
+        const { error } = await supa.from('posts').select(postCols()).limit(1);
+        if (!error) break;
+        if (!isMissingOptionalColumn(error)) break;
+      }
+    } catch {}
+    probeDone = true;
+    probePromise = null;
+  })();
+  return probePromise;
+}
+
 // Fetch a single post by id (for /post/<id>). Returns null on 404 or RLS
 // miss so the view can render its own not-found state.
 export async function getPost(id) {
@@ -214,7 +282,9 @@ export async function allPosts({ limit = 100 } = {}) {
       .limit(limit)
   );
   if (error) throw new Error(error.message);
-  return (data || []).map(shapePost);
+  const shaped = (data || []).map(shapePost);
+  savePostsCache('home', shaped);
+  return shaped;
 }
 
 export async function postsByHandle(handle) {
@@ -233,7 +303,9 @@ export async function postsByHandle(handle) {
       .order('created_at', { ascending: false })
   );
   if (error) throw new Error(error.message);
-  return (data || []).map(shapePost);
+  const shaped = (data || []).map(shapePost);
+  savePostsCache('handle:' + handle, shaped);
+  return shaped;
 }
 
 // Posts liked by a given handle (for the profile "Likes" tab).
@@ -275,7 +347,9 @@ export async function postsByCity(city) {
       .order('created_at', { ascending: false })
   );
   if (error) throw new Error(error.message);
-  return (data || []).map(shapePost);
+  const shaped = (data || []).map(shapePost);
+  savePostsCache('city:' + city, shaped);
+  return shaped;
 }
 
 // Fetch + attach the quoted post for any visible post with quoteOfPostId
