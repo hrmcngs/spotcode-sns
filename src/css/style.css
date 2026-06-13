@@ -119,6 +119,12 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
 .app-grid {
   display: grid;
   grid-template-columns: 21% minmax(0, 1fr) 25%;
+  /* Without explicit start alignment, CSS Grid defaults cells to
+     `stretch` — on iOS Safari that interacts badly with sticky topbar
+     + viewport-fit=cover and the timeline cell ends up stretched to
+     the dynamic viewport height, pushing all the rendered content
+     (tabs, composer, posts) to the bottom of a huge empty column. */
+  align-items: start;
   gap: 1.25rem;
   max-width: 1280px;
   margin: 0 auto;
