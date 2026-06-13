@@ -374,6 +374,44 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 }
 .composer button[type="submit"]:hover { background: var(--accent-hover); }
 
+/* Save-draft button sits to the left of Push; same pill silhouette as
+   Push but ghost-styled so the primary action stays visually dominant. */
+.compose-submit { display: flex; align-items: center; gap: .5rem; }
+.compose-draft {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border);
+  padding: .5em 1em; border-radius: 999px;
+  font-weight: 600; font-size: .85rem;
+  cursor: pointer;
+}
+.compose-draft:hover {
+  background: var(--surface-2);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+/* "Draft restored" / "Draft saved" banner. Shows under the action row
+   so the user can confirm work was persisted, and offers a one-tap
+   discard for when they don't want the old draft. */
+.compose-draft-banner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem;
+  margin-top: .5rem;
+  padding: .4rem .75rem;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 8px;
+  font-size: .8rem; color: var(--muted);
+}
+.compose-draft-banner__text { color: var(--text); }
+.compose-draft-banner__discard {
+  background: transparent; border: 0;
+  color: var(--muted); cursor: pointer;
+  font-size: .8rem; font-weight: 600;
+  padding: .2em .4em; border-radius: 6px;
+}
+.compose-draft-banner__discard:hover { color: var(--danger, #f85149); background: var(--surface-2); }
+
 /* Optional link row: collapsed by default so the textarea stays the only
    obvious place to type. */
 .compose-link-toggle {
