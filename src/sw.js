@@ -28,6 +28,7 @@ const SHELL = [
   './js/theme.js',
   './js/dev-mode.js',
   './js/jp-romaji.js',
+  './js/ios-zoom.js',
   './js/i18n.js',
   './js/geo-gate.js',
   './js/grass.js',
