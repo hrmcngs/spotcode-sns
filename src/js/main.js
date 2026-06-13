@@ -23,6 +23,7 @@ import { renderAvatar } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
+import { initIosZoomGuard }       from './ios-zoom.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -291,6 +292,7 @@ hydrateMyFollows();
 // chrome (e.g. the dev-mode topbar indicator) without flashing.
 initDevMode();
 initI18n();
+initIosZoomGuard();
 // Patch the static topbar placeholder so it picks up the active language.
 const searchInput = document.querySelector('.topbar__search input');
 if (searchInput) searchInput.placeholder = t('nav.search.placeholder');
