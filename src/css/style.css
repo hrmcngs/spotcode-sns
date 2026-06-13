@@ -569,12 +569,20 @@ html[data-theme='light'] .profile-cover {
   box-shadow: 0 20px 60px rgba(0,0,0,.45);
 }
 .modal__close {
-  position: absolute; top: .5rem; right: .6rem;
-  width: 32px; height: 32px; border-radius: 50%;
+  position: absolute; top: .35rem; right: .35rem;
+  width: 40px; height: 40px; border-radius: 50%;
   background: transparent; border: 0; color: var(--muted);
   font-size: 1.3rem; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  /* The SVG icon inside is what gets tapped most of the time — make
+     sure clicks on it still register with the [data-close] dataset
+     by routing pointer events to the button itself. */
 }
+.modal__close > * { pointer-events: none; }
 .modal__close:hover { background: var(--surface-2); color: var(--text); }
+@media (max-width: 480px) {
+  .modal__card { padding: 1rem 1rem .9rem; }
+}
 
 .auth-tabs {
   display: flex; gap: .3rem; margin-bottom: 1rem;
@@ -614,7 +622,11 @@ html[data-theme='light'] .profile-cover {
   content: ""; flex: 1; height: 1px; background: var(--border);
 }
 
-.auth-form { display: flex; flex-direction: column; gap: .7rem; }
+.auth-form { display: flex; flex-direction: column; gap: .7rem; min-width: 0; }
+/* `display: flex` above overrides the [hidden] attribute that the JS uses
+   to show only one pane at a time. Restore the standard hidden semantics
+   so the Log in / Sign up panes don't stack into one giant scrolling form. */
+.auth-form[hidden] { display: none; }
 .auth-form h2 { font-size: 1.1rem; margin-bottom: .2rem; color: var(--text); }
 .auth-form label {
   display: flex; flex-direction: column; gap: .25rem;

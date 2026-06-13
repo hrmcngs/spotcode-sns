@@ -16,8 +16,7 @@ function template() {
         '</div>' +
 
         '<div class="auth-social">' +
-          '<button class="btn btn--social btn--gh" data-social="github">' + icon('github', { size: 18, fill: true }) + 'Continue with GitHub</button>' +
-          '<button class="btn btn--social btn--ig" data-social="instagram" title="バックエンド未実装">' + icon('instagram', { size: 18 }) + 'Continue with Instagram</button>' +
+          '<button type="button" class="btn btn--social btn--gh" data-social="github">' + icon('github', { size: 18, fill: true }) + 'Continue with GitHub</button>' +
         '</div>' +
         '<div class="auth-divider"><span>or</span></div>' +
 
@@ -77,23 +76,19 @@ function setError(form, msg) {
 
 function bindEvents() {
   rootEl.addEventListener('click', (e) => {
-    if (e.target.matches('[data-close]')) close();
+    // closest() — not matches() — because the tap target is usually the
+    // SVG icon inside the close button, not the button itself.
+    if (e.target.closest('[data-close]')) { close(); return; }
     const tab = e.target.closest('.auth-tab');
-    if (tab) showTab(tab.dataset.tab);
+    if (tab) { showTab(tab.dataset.tab); return; }
 
     const social = e.target.closest('[data-social]');
-    if (social) {
-      if (social.dataset.social === 'instagram') {
-        alert('Instagram 連携は OAuth サーバーが必要なため、現在は未対応です。\n（client_secret を静的サイトに置けないため）');
-        return;
-      }
-      if (social.dataset.social === 'github') {
-        // Jump to register tab and prefill — no real OAuth without backend.
-        showTab('register');
-        const reg = rootEl.querySelector('[data-pane="register"]');
-        reg.querySelector('input[name="githubHandle"]').focus();
-        setError(reg, 'GitHub ユーザー名を入力すると公開プロフィールから情報を取り込みます。');
-      }
+    if (social && social.dataset.social === 'github') {
+      // Jump to register tab and prefill — no real OAuth without backend.
+      showTab('register');
+      const reg = rootEl.querySelector('[data-pane="register"]');
+      reg.querySelector('input[name="githubHandle"]').focus();
+      setError(reg, 'GitHub ユーザー名を入力すると公開プロフィールから情報を取り込みます。');
     }
   });
 
