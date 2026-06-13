@@ -7,7 +7,7 @@
 //   - never intercept POSTs or cross-origin (Maps tiles, GitHub API, ...)
 //   - bump CACHE when shipping a new version to nuke the old shell
 
-const CACHE = 'spotcode-shell-v20';
+const CACHE = 'spotcode-shell-v21';
 const SHELL = [
   './',
   './index.html',
@@ -30,6 +30,7 @@ const SHELL = [
   './js/jp-romaji.js',
   './js/ios-zoom.js',
   './js/body-scroll-lock.js',
+  './js/github-activity.js',
   './js/i18n.js',
   './js/geo-gate.js',
   './js/grass.js',

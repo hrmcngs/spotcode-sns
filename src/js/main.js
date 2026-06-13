@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
-import { renderProfile, hydrateProfileBadges, hydrateProfile, setProfileTab } from './views/profile.js';
+import { renderProfile, hydrateProfileBadges, hydrateProfileActivity, hydrateProfile, setProfileTab } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
@@ -24,6 +24,7 @@ import { initDevMode, isDevMode } from './dev-mode.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
+import { fetchContributions, cachedContributions } from './github-activity.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -53,10 +54,13 @@ async function computeTrendingCities() {
     .slice(0, 5);
 }
 
-const counts = {};
+// Empty-day grid for the activity heatmap when we don't have real data
+// yet (logged-out, or fetching the GitHub contributions API). Renders as
+// a grey placeholder until cached data shows up on a re-render.
+const emptyCounts = {};
 for (let i = 0; i < 53 * 7; i++) {
   const d = new Date(); d.setDate(d.getDate() - i);
-  counts[d.toISOString().slice(0, 10)] = Math.floor(Math.random() * 10);
+  emptyCounts[d.toISOString().slice(0, 10)] = 0;
 }
 
 // ----- static icon slots that aren't view-rendered -----
@@ -82,10 +86,20 @@ async function renderRail() {
   });
   const trending = await computeTrendingCities();
 
+  // Pull the viewer's real GitHub contributions for the activity heatmap.
+  // If they're not logged in, or haven't linked a github_handle, fall back
+  // to the empty grid so the card still renders. Cached after first fetch.
+  const gh = me?.github?.handle;
+  const myCounts = gh ? (cachedContributions(gh) || emptyCounts) : emptyCounts;
+  if (gh && !cachedContributions(gh)) {
+    // Fetch in the background and re-render once it lands.
+    fetchContributions(gh).then((c) => { if (c) refresh(); });
+  }
+
   const parts = [
     '<section class="card">',
       '<h3>' + t('rail.activity') + '</h3>',
-      renderGrass(counts),
+      renderGrass(myCounts),
     '</section>',
   ];
 
@@ -243,7 +257,10 @@ function dispatch(path) {
     app.innerHTML = renderProfile(handle);
     // Fetch from Supabase if we don't have the user locally, then hit
     // GitHub for badges once we know the github_handle on the profile.
-    hydrateProfile(handle).then(() => hydrateProfileBadges(handle));
+    hydrateProfile(handle).then(() => {
+      hydrateProfileBadges(handle);
+      hydrateProfileActivity(handle);
+    });
   } else {
     document.title = 'Not found / spotcode-sns';
     app.innerHTML = '<div class="stub"><h2 class="stub__title">Not found</h2><a class="back-home" href="/">← Back to home</a></div>';
