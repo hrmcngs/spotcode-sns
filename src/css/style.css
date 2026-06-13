@@ -136,6 +136,12 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
    override the @media value and the button would stay hidden even on
    mobile (or, with a stale cache, drift visible on desktop). */
 .hamburger { display: none; }
+/* Left-rail default: same trap as above. The mobile @media flips
+   position to `fixed` (off-canvas drawer); if this base `sticky` rule
+   sat after the @media, source-order would win at equal specificity →
+   on mobile the rail stays sticky, occupies a grid row above the
+   timeline, and creates a huge empty gap below the topbar. */
+.left-rail { position: sticky; top: 64px; align-self: start; }
 /* Tablet-ish: right rail gets cramped under ~1100px (the "Your
    activity" / "Trending spots" cards start wrapping their headings
    vertically), so drop it before that happens. Left rail keeps its
@@ -204,8 +210,10 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   .left-rail .side-nav__item { justify-content: flex-start; }
 }
 
-/* ---------- left rail (Twitter side-nav) ---------- */
-.left-rail { position: sticky; top: 64px; align-self: start; }
+/* ---------- left rail (Twitter side-nav) ----------
+   Base `.left-rail { position: sticky }` lives near the .app-grid
+   block, BEFORE the @media (max-width: 640px) drawer override —
+   see comment up there. */
 .side-nav { display: flex; flex-direction: column; gap: .15rem; }
 .side-nav__item {
   display: flex; align-items: center; gap: .9rem;
