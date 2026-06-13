@@ -20,7 +20,7 @@ import { toggleLike, isLiked, likeCount,
          hydrateMyFollows, clearInteractionsCache } from './interactions.js';
 import { renderAvatar } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
-import { romajiToJp }             from './jp-romaji.js';
+import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
 
 const app  = document.getElementById('app');
@@ -93,7 +93,7 @@ async function renderRail() {
         '<h3>' + t('rail.trending') + '</h3>' +
         '<div class="trend-list">' +
           trending.map((s, i) => (
-            '<a class="trend-item" href="' + url('/spot/' + encodeURIComponent(s.city)) + '">' +
+            '<a class="trend-item" href="' + url('/spot/' + encodeURIComponent(jpToRomaji(s.city) || s.city)) + '">' +
               '<div class="trend-item__main">' +
                 '<span class="trend-item__cat">Trending · #' + (i + 1) + '</span>' +
                 '<span class="trend-item__name">' +

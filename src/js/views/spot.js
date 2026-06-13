@@ -6,6 +6,9 @@ import { renderPost }        from '../post.js';
 import { hydratePostLikes }  from '../interactions.js';
 import { icon }              from '../icons.js';
 import { t }                 from '../i18n.js';
+import { currentUser }       from '../auth.js';
+import { getMyLocation, filterPostsByLocation, permissionDenied,
+         cachedLocation, getRadius } from '../geo-gate.js';
 
 let renderVersion = 0;
 
@@ -33,26 +36,49 @@ export function renderSpot(city) {
   );
 }
 
+function geoBanner() {
+  if (cachedLocation()) {
+    return '<div class="geo-banner geo-banner--on">' +
+      t('geo.showing_nearby', { r: getRadius() }) +
+    '</div>';
+  }
+  if (permissionDenied()) {
+    return '<div class="geo-banner geo-banner--off">' + t('geo.denied') + '</div>';
+  }
+  return '<div class="geo-banner geo-banner--off">' + t('geo.waiting') + '</div>';
+}
+
 export async function hydrateSpot(city) {
   const myVersion = renderVersion;
   const list = document.getElementById('spot-posts');
   if (!list) return;
-  let posts;
-  try { posts = await postsByCity(city); }
-  catch (err) {
-    if (myVersion !== renderVersion) return;
-    console.error('hydrateSpot', err);
-    list.innerHTML = '<div class="stub"><p class="stub__sub">投稿の取得に失敗しました: ' + escape(err.message || '') + '</p></div>';
-    return;
-  }
+  // Geolocation in parallel with the fetch so the gate is primed when
+  // we hit filterPostsByLocation below.
+  const [posts] = await Promise.all([
+    postsByCity(city).catch((err) => err),
+    getMyLocation(),
+  ]);
   if (myVersion !== renderVersion) return;
-  if (!posts.length) {
-    list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('spot.empty') + '</p><a class="back-home" href="/">' + t('profile.back') + '</a></div>';
+  if (posts instanceof Error) {
+    console.error('hydrateSpot', posts);
+    list.innerHTML = '<div class="stub"><p class="stub__sub">' + escape(posts.message || '') + '</p></div>';
     return;
   }
-  list.innerHTML = posts.map(renderPost).join('');
-  try { await hydratePostLikes(posts.map(p => p.id)); }
+
+  const me = currentUser();
+  const gated = filterPostsByLocation(posts, me?.handle);
+  const banner = geoBanner();
+
+  if (!gated.length) {
+    const sub = posts.length
+      ? t('geo.too_far', { r: getRadius() })   // posts exist but you're not nearby
+      : t('spot.empty');                       // genuinely no posts here
+    list.innerHTML = banner + '<div class="stub"><p class="stub__sub">' + sub + '</p><a class="back-home" href="/">' + t('profile.back') + '</a></div>';
+    return;
+  }
+  list.innerHTML = banner + gated.map(renderPost).join('');
+  try { await hydratePostLikes(gated.map(p => p.id)); }
   catch (err) { console.warn('hydratePostLikes (spot)', err); return; }
   if (myVersion !== renderVersion) return;
-  list.innerHTML = posts.map(renderPost).join('');
+  list.innerHTML = banner + gated.map(renderPost).join('');
 }
