@@ -323,6 +323,41 @@ function persistIntCache() {
   } catch {}
 }
 
+// One-shot probe used by data.js's probeSchema() at app boot. Hits
+// `reposts` and `bookmarks` with HEAD-style 1-row selects so the
+// table-missing flags get set before any visible-post batch tries
+// to hydrate. Without this the first page load makes one 404 per
+// optional table per visit; after this it makes zero.
+export async function probeOptionalTables() {
+  if (repostsTableMissing && bookmarksTableMissing) return;
+  let supa; try { supa = await getClient(); } catch { return; }
+  const probes = [];
+  if (!repostsTableMissing) {
+    probes.push(
+      supa.from('reposts').select('post_id', { count: 'exact', head: true }).limit(1)
+        .then(({ error }) => {
+          if (error && isTableMissing(error, 'reposts')) {
+            repostsTableMissing = true;
+          }
+        })
+        .catch(() => {})
+    );
+  }
+  if (!bookmarksTableMissing) {
+    probes.push(
+      supa.from('bookmarks').select('post_id', { count: 'exact', head: true }).limit(1)
+        .then(({ error }) => {
+          if (error && isTableMissing(error, 'bookmarks')) {
+            bookmarksTableMissing = true;
+          }
+        })
+        .catch(() => {})
+    );
+  }
+  await Promise.all(probes);
+  if (repostsTableMissing || bookmarksTableMissing) persistIntCache();
+}
+
 function isTableMissing(error, name) {
   const msg = String(error?.message || '').toLowerCase();
   return msg.includes(name) && (
