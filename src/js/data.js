@@ -32,30 +32,47 @@ export function getUser(handle) {
 // relationship was found" as soon as any other table also references
 // profiles (likes, follows, reports, …) and its schema cache reloads.
 //
-// `comments_count` is appended by `postCols()` only when we know it
-// exists in the deployed schema. If a query fails with "column …
-// does not exist" we cache the negative and re-query without it, so
-// users who haven't run the Stage 10 migration yet still see posts.
-let hasCommentsCount = true;
+// Stage 10 / 11 columns are appended by `postCols()` only when we
+// know they exist in the deployed schema. If a query fails with
+// "column … does not exist" we cache the negative and re-query
+// without it, so users who haven't run a migration yet still see
+// posts. Each flag is flipped independently.
+let hasCommentsCount  = true;
+let hasRepostsCount   = true;
+let hasBookmarksCount = true;
+let hasQuotesCount    = true;
+let hasQuoteOf        = true;
+
 function postCols() {
-  const base =
-    'id, body, github_link, spot, status, created_at, ' +
-    'author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)';
-  return hasCommentsCount ? base.replace('created_at,', 'created_at, comments_count,') : base;
+  const extras = [];
+  if (hasCommentsCount)  extras.push('comments_count');
+  if (hasRepostsCount)   extras.push('reposts_count');
+  if (hasBookmarksCount) extras.push('bookmarks_count');
+  if (hasQuotesCount)    extras.push('quotes_count');
+  if (hasQuoteOf)        extras.push('quote_of_post_id');
+  const head =
+    'id, body, github_link, spot, status, created_at' +
+    (extras.length ? ', ' + extras.join(', ') : '');
+  return head + ', author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)';
 }
 
-// Was the error caused by a missing optional column we know how to
-// degrade gracefully on? If so, flip the flag and signal a retry.
+// Optional-column / table degradation map. Each entry: a substring
+// that must appear in the error message + a side-effect that turns
+// the corresponding postCols() entry off. Returns true on a hit so
+// the caller knows to retry the query with the trimmed column list.
+const OPTIONAL = [
+  { needle: 'comments_count',   off: () => { if (hasCommentsCount)  { console.warn('posts.comments_count missing — run Stage 10 SQL.');  hasCommentsCount  = false; return true; } return false; } },
+  { needle: 'reposts_count',    off: () => { if (hasRepostsCount)   { console.warn('posts.reposts_count missing — run Stage 11 SQL.');   hasRepostsCount   = false; return true; } return false; } },
+  { needle: 'bookmarks_count',  off: () => { if (hasBookmarksCount) { console.warn('posts.bookmarks_count missing — run Stage 11 SQL.'); hasBookmarksCount = false; return true; } return false; } },
+  { needle: 'quotes_count',     off: () => { if (hasQuotesCount)    { console.warn('posts.quotes_count missing — run Stage 11 SQL.');    hasQuotesCount    = false; return true; } return false; } },
+  { needle: 'quote_of_post_id', off: () => { if (hasQuoteOf)        { console.warn('posts.quote_of_post_id missing — run Stage 11 SQL.'); hasQuoteOf      = false; return true; } return false; } },
+];
 function isMissingOptionalColumn(error) {
   const msg = String(error?.message || '').toLowerCase();
-  if (msg.includes('comments_count') && msg.includes('does not exist')) {
-    if (hasCommentsCount) {
-      console.warn('posts.comments_count missing — run Stage 10 SQL. Falling back.');
-      hasCommentsCount = false;
-    }
-    return true;
-  }
-  return false;
+  if (!msg.includes('does not exist')) return false;
+  let flipped = false;
+  for (const o of OPTIONAL) if (msg.includes(o.needle) && o.off()) flipped = true;
+  return flipped;
 }
 
 function shapeAuthor(a) {
@@ -87,16 +104,53 @@ function shapePost(row) {
     write(KEYS.users, users);
   }
   return {
-    id:           row.id,
-    authorHandle: author?.handle || '?',
+    id:            row.id,
+    authorHandle:  author?.handle || '?',
     author,
-    body:         row.body,
-    githubLink:   row.github_link || undefined,
-    spot:         row.spot || null,
-    status:       row.status || 'wip',
-    createdAt:    row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-    actions:      { replies: row.comments_count || 0, forks: 0, stars: 0, likes: 0 },
+    body:          row.body,
+    githubLink:    row.github_link || undefined,
+    spot:          row.spot || null,
+    status:        row.status || 'wip',
+    createdAt:     row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    quoteOfPostId: row.quote_of_post_id || null,
+    actions: {
+      replies:   row.comments_count   || 0,
+      forks:     row.reposts_count    || 0,  // fork icon repurposed as リポスト
+      stars:     row.bookmarks_count  || 0,  // star icon repurposed as 保存
+      likes:     0,                          // hydrated from likes table
+      quotes:    row.quotes_count     || 0,
+    },
   };
+}
+
+// Insert a quote post. Behaves like addPost but stamps quote_of_post_id
+// so the timeline can render the embedded quoted card. Silently degrades
+// when Stage 11 isn't applied yet (drops the column from the insert).
+export async function addQuote(post, quotedPostId) {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしていません');
+  const row = {
+    author_id:   user.id,
+    body:        post.body,
+    github_link: post.githubLink || null,
+    spot:        post.spot || null,
+    status:      post.status || 'wip',
+  };
+  if (hasQuoteOf && quotedPostId) row.quote_of_post_id = quotedPostId;
+  let res = await withResilientCols((cols) =>
+    supa.from('posts').insert(row).select(cols).single()
+  );
+  if (res.error && /quote_of_post_id/i.test(res.error.message)) {
+    // Schema doesn't have the column yet — fall back to a plain post.
+    hasQuoteOf = false;
+    delete row.quote_of_post_id;
+    res = await withResilientCols((cols) =>
+      supa.from('posts').insert(row).select(cols).single()
+    );
+  }
+  if (res.error) throw new Error(res.error.message);
+  return shapePost(res.data);
 }
 
 // Run `build(cols)` once and retry once if the only error was a known
@@ -192,6 +246,27 @@ export async function postsByCity(city) {
   );
   if (error) throw new Error(error.message);
   return (data || []).map(shapePost);
+}
+
+// Fetch + attach the quoted post for any visible post with quoteOfPostId
+// set. Mutates each post in place by adding `p.quoteOf` (or leaving it
+// null when the quoted post is gone / RLS-blocked / Stage 11 missing).
+// Bulk-queried in one round trip per page; safe to call on empty/all-
+// non-quote arrays.
+export async function hydrateQuotedPosts(posts) {
+  if (!posts || !posts.length) return;
+  const ids = [...new Set(posts.map(p => p.quoteOfPostId).filter(Boolean))];
+  if (!ids.length) return;
+  let supa; try { supa = await getClient(); } catch { return; }
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').select(cols).in('id', ids)
+  );
+  if (error) { console.warn('hydrateQuotedPosts', error); return; }
+  const byId = new Map();
+  for (const row of (data || [])) byId.set(row.id, shapePost(row));
+  for (const p of posts) {
+    if (p.quoteOfPostId) p.quoteOf = byId.get(p.quoteOfPostId) || null;
+  }
 }
 
 export async function addPost(post) {

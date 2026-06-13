@@ -1,9 +1,9 @@
 // City-scoped timeline. Reached from the right-rail "Trending spots"
 // card; shows every post whose spot.addressDetails.city matches.
 
-import { postsByCity }       from '../data.js';
+import { postsByCity, hydrateQuotedPosts } from '../data.js';
 import { renderPost }        from '../post.js';
-import { hydratePostLikes }  from '../interactions.js';
+import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
 import { icon }              from '../icons.js';
 import { t }                 from '../i18n.js';
 
@@ -54,8 +54,15 @@ export async function hydrateSpot(city) {
     return;
   }
   list.innerHTML = posts.map(renderPost).join('');
-  try { await hydratePostLikes(posts.map(p => p.id)); }
-  catch (err) { console.warn('hydratePostLikes (spot)', err); return; }
+  const ids = posts.map(p => p.id);
+  try {
+    await Promise.all([
+      hydratePostLikes(ids),
+      hydrateRepostsMine(ids),
+      hydrateBookmarksMine(ids),
+      hydrateQuotedPosts(posts),
+    ]);
+  } catch (err) { console.warn('hydrate batch (spot)', err); return; }
   if (myVersion !== renderVersion) return;
   list.innerHTML = posts.map(renderPost).join('');
 }

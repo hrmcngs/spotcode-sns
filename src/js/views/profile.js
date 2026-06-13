@@ -4,7 +4,9 @@ import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, isRequested, followerCount, followingCount,
-         hydratePostLikes, hydrateProfileFollow } from '../interactions.js';
+         hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine,
+         hydrateProfileFollow } from '../interactions.js';
+import { hydrateQuotedPosts } from '../data.js';
 import { getBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
@@ -309,8 +311,15 @@ async function hydrateProfileBody(handle, myVersion) {
     return;
   }
   list.innerHTML = posts.map(renderPost).join('');
-  try { await hydratePostLikes(posts.map(p => p.id)); }
-  catch (err) { console.warn('hydratePostLikes (profile)', err); return; }
+  const ids = posts.map(p => p.id);
+  try {
+    await Promise.all([
+      hydratePostLikes(ids),
+      hydrateRepostsMine(ids),
+      hydrateBookmarksMine(ids),
+      hydrateQuotedPosts(posts),
+    ]);
+  } catch (err) { console.warn('hydrate batch (profile)', err); return; }
   if (myVersion !== renderVersion) return;
   list.innerHTML = posts.map(renderPost).join('');
 }

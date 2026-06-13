@@ -1,8 +1,8 @@
 import { renderIdeaForm } from '../idea-post.js';
-import { allPosts }       from '../data.js';
+import { allPosts, hydrateQuotedPosts } from '../data.js';
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
-import { hydratePostLikes } from '../interactions.js';
+import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
 import { t }              from '../i18n.js';
 
 // Monotonic counter incremented on every renderHome() so async hydrations
@@ -83,10 +83,16 @@ export async function hydrateHome() {
   }
   list.innerHTML = posts.map(renderPost).join('');
 
+  const ids = posts.map(p => p.id);
   try {
-    await hydratePostLikes(posts.map(p => p.id));
+    await Promise.all([
+      hydratePostLikes(ids),
+      hydrateRepostsMine(ids),
+      hydrateBookmarksMine(ids),
+      hydrateQuotedPosts(posts),
+    ]);
   } catch (err) {
-    console.warn('hydratePostLikes failed', err);
+    console.warn('hydrate batch failed', err);
     return;
   }
   if (myVersion !== renderVersion) return;
