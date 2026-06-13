@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>spotcode-sns</title>
   <script>
-    // Inject icon / manifest / stylesheet <link>s with an absolute base
+    // Inject icon / manifest / stylesheet / main.js with an absolute base
     // URL so they resolve correctly on deep links like
     // /spotcode-sns/<handle>. Without this the browser walks the URL bar
-    // path and asks for /spotcode-sns/<handle>/favicon.svg → 404.
+    // path and asks for /spotcode-sns/<handle>/favicon.svg → 404, then the
+    // SW fallback serves index.html as the response → ES module parse
+    // error → no JS at all → blank page + dead navigation.
     //   - GH Pages       → /spotcode-sns/
     //   - root deploy    → /
     //   - file://, capacitor:// (Electron / iOS wrap) → ./
@@ -17,11 +19,13 @@
       if (p === 'file:' || p === 'capacitor:' || p === 'app:') b = './';
       else if (location.pathname.indexOf('/spotcode-sns/') === 0) b = '/spotcode-sns/';
       else b = '/';
+      window.__BASE__ = b;
       document.write(
         '<link rel="icon" type="image/svg+xml" href="' + b + 'favicon.svg">' +
         '<link rel="manifest" href="' + b + 'manifest.json">' +
         '<link rel="apple-touch-icon" href="' + b + 'favicon.svg">' +
-        '<link rel="stylesheet" href="' + b + 'css/style.css">'
+        '<link rel="stylesheet" href="' + b + 'css/style.css">' +
+        '<script src="' + b + 'js/main.js" type="module" defer><\/script>'
       );
     })();
   </script>
@@ -91,6 +95,27 @@
     <aside class="right-rail" id="rail"></aside>
   </div>
 
-  <script src="js/main.js" type="module"></script>
+  <script>
+    // Resolve static <a href="/..."> attributes in the chrome (topbar,
+    // sidenav, brand link) against the deploy base. Without this the
+    // sidenav Home link is href="/" which on GH Pages navigates to
+    // https://hrmcngs.github.io/ → 404 if the module-based router never
+    // got to run rewriteLinks() (e.g. a missing dep crashed main.js).
+    // This script is intentionally inline + no-module so it runs even
+    // when the ESM bootstrap is broken.
+    (function () {
+      var b = window.__BASE__ || '/';
+      function fix(el) {
+        var href = el.getAttribute('href');
+        if (!href || href.charAt(0) !== '/') return;
+        if (href.indexOf(b) === 0) return;       // already absolute
+        if (/^\/\//.test(href)) return;          // protocol-relative
+        el.setAttribute('href', b + href.replace(/^\//, ''));
+      }
+      document.querySelectorAll(
+        '.side-nav__item, .icon-btn, .dev-chip, .topbar__brand, .compose-cta'
+      ).forEach(fix);
+    })();
+  </script>
 </body>
 </html>

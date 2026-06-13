@@ -7,7 +7,7 @@
 //   - never intercept POSTs or cross-origin (Maps tiles, GitHub API, ...)
 //   - bump CACHE when shipping a new version to nuke the old shell
 
-const CACHE = 'spotcode-shell-v15';
+const CACHE = 'spotcode-shell-v16';
 const SHELL = [
   './',
   './index.html',
@@ -69,18 +69,30 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
+  // Spot / profile / handle paths are SPA routes — index.html serves them.
+  // Returning a stale cached entry for /spot/<city> would otherwise pin
+  // an old HTML snapshot that references files that no longer exist.
+  const isAppRoute = req.mode === 'navigate' && req.destination === 'document';
+
   event.respondWith(
     caches.match(req).then((cached) => {
-      if (cached) return cached;
+      if (cached && !isAppRoute) return cached;
       return fetch(req).then((res) => {
         // Opportunistically cache successful same-origin responses so
         // newly-touched paths become offline-available too.
-        if (res && res.status === 200 && res.type === 'basic') {
+        if (res && res.status === 200 && res.type === 'basic' && !isAppRoute) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         }
         return res;
-      }).catch(() => caches.match('./index.html'));
+      }).catch(() => {
+        // Only fall back to the cached index.html for actual document
+        // navigations. Returning HTML when the browser asked for a JS
+        // module or CSS file silently breaks the whole page (parser
+        // chokes on the HTML, module never loads, no JS runs).
+        if (isAppRoute) return caches.match('./index.html');
+        return new Response('', { status: 504, statusText: 'offline' });
+      });
     })
   );
 });
