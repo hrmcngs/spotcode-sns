@@ -124,6 +124,12 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   margin: 0 auto;
   padding: 1rem;
 }
+/* Hamburger default: hidden. The mobile @media below flips it to
+   inline-flex. Declaring the default BEFORE the @media is essential —
+   if it lived after, the cascade (same specificity, later wins) would
+   override the @media value and the button would stay hidden even on
+   mobile (or, with a stale cache, drift visible on desktop). */
+.hamburger { display: none; }
 /* Tablet-ish: right rail gets cramped under ~1100px (the "Your
    activity" / "Trending spots" cards start wrapping their headings
    vertically), so drop it before that happens. Left rail keeps its
@@ -191,8 +197,6 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   .left-rail .compose-cta { display: revert; }
   .left-rail .side-nav__item { justify-content: flex-start; }
 }
-/* Hamburger hidden whenever the left-rail is shown natively (≥641px). */
-.hamburger { display: none; }
 
 /* ---------- left rail (Twitter side-nav) ---------- */
 .left-rail { position: sticky; top: 64px; align-self: start; }
