@@ -3,13 +3,14 @@
 // /post/<id>. The author also sees an "Analytics" link to
 // /post/<id>/analytics.
 
-import { getPost }                      from '../data.js';
+import { getPost, hydrateQuotedPosts }  from '../data.js';
 import { renderPost }                   from '../post.js';
 import { renderAvatar }                 from '../avatar.js';
 import { currentUser }                  from '../auth.js';
 import { url }                          from '../router.js';
 import { icon }                         from '../icons.js';
-import { getComments, addComment, removeComment } from '../interactions.js';
+import { getComments, addComment, removeComment,
+         hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
 import { relTime }                      from '../data.js';
 
 let renderVersion = 0;
@@ -102,6 +103,18 @@ export async function hydratePostDetail(id) {
         icon('chart', { size: 14, className: 'icon--inline' }) + 'アクティビティを見る' +
       '</a>'
     : '';
+
+  // Warm caches for the single post so the action buttons reflect
+  // mine-state correctly + quote card embeds.
+  try {
+    await Promise.all([
+      hydratePostLikes([post.id]),
+      hydrateRepostsMine([post.id]),
+      hydrateBookmarksMine([post.id]),
+      hydrateQuotedPosts([post]),
+    ]);
+  } catch {}
+  if (myVersion !== renderVersion) return;
 
   let comments = [];
   try { comments = await getComments(id); } catch (err) { console.warn('getComments', err); }

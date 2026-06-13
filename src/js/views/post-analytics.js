@@ -6,7 +6,8 @@
 // add reposts / quotes / bookmarks / shares + their actor lists.
 
 import { getPost, relTime }     from '../data.js';
-import { likersOf, getComments } from '../interactions.js';
+import { likersOf, getComments,
+         repostersOf, bookmarkersOf, quotersOf } from '../interactions.js';
 import { renderAvatar }         from '../avatar.js';
 import { currentUser }          from '../auth.js';
 import { url }                  from '../router.js';
@@ -74,9 +75,12 @@ export async function hydratePostAnalytics(id) {
     return;
   }
 
-  const [likers, comments] = await Promise.all([
+  const [likers, comments, reposters, bookmarkers, quoters] = await Promise.all([
     likersOf(post.id).catch(err => { console.warn('likersOf', err); return []; }),
     getComments(post.id).catch(err => { console.warn('getComments', err); return []; }),
+    repostersOf(post.id).catch(err => { console.warn('repostersOf', err); return []; }),
+    bookmarkersOf(post.id).catch(err => { console.warn('bookmarkersOf', err); return []; }),
+    quotersOf(post.id).catch(err => { console.warn('quotersOf', err); return []; }),
   ]);
   if (myVersion !== renderVersion) return;
 
@@ -90,34 +94,43 @@ export async function hydratePostAnalytics(id) {
         (post.body.length > 120 ? '…' : '') + '</p>' +
     '</header>' +
     '<section class="analytics-summary">' +
-      summaryTile(icon('heart', { size: 18 }), 'いいね',     likers.length) +
-      summaryTile(icon('reply', { size: 18 }), 'コメント',   comments.length) +
-      summaryTile(icon('fork',  { size: 18 }), 'リポスト',   '—', 'まだ実装中') +
-      summaryTile(icon('chart', { size: 18 }), '引用',       '—', 'まだ実装中') +
-      summaryTile(icon('star',  { size: 18 }), '保存',       '—', 'まだ実装中') +
-      summaryTile(icon('share', { size: 18 }), '共有',       '—', 'まだ実装中') +
+      summaryTile(icon('heart', { size: 18 }), 'いいね',     likers.length,      '#likers') +
+      summaryTile(icon('reply', { size: 18 }), 'コメント',   comments.length,    '#commenters') +
+      summaryTile(icon('fork',  { size: 18 }), 'リポスト',   reposters.length,   '#reposters') +
+      summaryTile(icon('chart', { size: 18 }), '引用',       quoters.length,     '#quoters') +
+      summaryTile(icon('star',  { size: 18 }), '保存',       bookmarkers.length, '#bookmarkers') +
+      summaryTile(icon('share', { size: 18 }), '共有',       '—', null, '集計は未対応 (クライアント側のみ)') +
     '</section>' +
-    '<section class="analytics-section">' +
-      '<h3>' + icon('heart', { size: 14, className: 'icon--inline' }) + 'いいねした人 (' + likers.length + ')</h3>' +
-      (likers.length
-        ? '<div class="analytics-list">' + likers.map(r => userRow(r.user, r.createdAt ? relTime(new Date(r.createdAt).getTime()) : '')).join('') + '</div>'
-        : emptyList('いいね')) +
-    '</section>' +
-    '<section class="analytics-section">' +
-      '<h3>' + icon('reply', { size: 14, className: 'icon--inline' }) + 'コメントした人 (' + comments.length + ')</h3>' +
-      (comments.length
-        ? '<div class="analytics-list">' + comments.map(c => userRow(c.author, relTime(c.createdAt))).join('') + '</div>'
-        : emptyList('コメント')) +
-    '</section>';
+    sectionHtml('likers',      icon('heart', { size: 14, className: 'icon--inline' }), 'いいねした人',     likers.map(r => userRow(r.user, r.createdAt ? relTime(new Date(r.createdAt).getTime()) : ''))) +
+    sectionHtml('commenters',  icon('reply', { size: 14, className: 'icon--inline' }), 'コメントした人',   comments.map(c => userRow(c.author, relTime(c.createdAt)))) +
+    sectionHtml('reposters',   icon('fork',  { size: 14, className: 'icon--inline' }), 'リポストした人',   reposters.map(r => userRow(r.user, r.createdAt ? relTime(new Date(r.createdAt).getTime()) : ''))) +
+    sectionHtml('quoters',     icon('chart', { size: 14, className: 'icon--inline' }), '引用した人',       quoters.map(q => userRow(q.user, q.createdAt ? relTime(new Date(q.createdAt).getTime()) : ''))) +
+    sectionHtml('bookmarkers', icon('star',  { size: 14, className: 'icon--inline' }), '保存した人',       bookmarkers.map(b => userRow(b.user, b.createdAt ? relTime(new Date(b.createdAt).getTime()) : '')));
 }
 
-function summaryTile(iconHtml, label, value, hint) {
+function sectionHtml(anchor, iconHtml, label, rows) {
   return (
-    '<div class="analytics-tile' + (hint ? ' analytics-tile--soon' : '') + '" title="' + escape(hint || '') + '">' +
+    '<section class="analytics-section" id="' + anchor + '">' +
+      '<h3>' + iconHtml + label + ' (' + rows.length + ')</h3>' +
+      (rows.length
+        ? '<div class="analytics-list">' + rows.join('') + '</div>'
+        : emptyList(label)) +
+    '</section>'
+  );
+}
+
+// Tile: optional anchor scrolls to the matching list below; optional
+// hint shows a tooltip (used for the share tile which has no list).
+function summaryTile(iconHtml, label, value, anchor, hint) {
+  const open  = anchor ? '<a class="analytics-tile" href="' + anchor + '"' : '<div class="analytics-tile' + (hint ? ' analytics-tile--soon' : '') + '"' +
+                  (hint ? ' title="' + escape(hint) + '"' : '');
+  const close = anchor ? '</a>' : '</div>';
+  return (
+    open + '>' +
       '<div class="analytics-tile__ico">' + iconHtml + '</div>' +
       '<div class="analytics-tile__value">' + escape(value) + '</div>' +
       '<div class="analytics-tile__label">' + escape(label) + '</div>' +
-    '</div>'
+    close
   );
 }
 

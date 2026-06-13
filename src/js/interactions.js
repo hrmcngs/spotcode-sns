@@ -9,6 +9,9 @@ import { getClient } from './supa.js';
 
 // post id  -> { count, mine }
 const likes = new Map();
+// post id -> { mine } — Stage 11
+const reposts   = new Map();
+const bookmarks = new Map();
 // user handle -> { followers, following }
 const followCounts = new Map();
 // target handles that the current session user follows (status='accepted')
@@ -23,6 +26,8 @@ export function clearInteractionsCache() {
   followsMine.clear();
   requestsMine.clear();
   followsMineLoaded = false;
+  reposts.clear();
+  bookmarks.clear();
 }
 
 // ----------------------------------------------------------------------
@@ -276,6 +281,177 @@ export async function denyFollowRequest(followerHandle) {
   const { error } = await supa.from('follows')
     .delete().eq('follower_id', followerId).eq('target_id', user.id);
   if (error) throw new Error(error.message);
+}
+
+// ----------------------------------------------------------------------
+// REPOSTS / BOOKMARKS (Stage 11)
+// ----------------------------------------------------------------------
+//
+// Both tables share the same (post_id, user_id) schema as `likes`. We
+// keep per-post counts on posts.* (denormalised) — the timeline reads
+// them out of the post row, no extra round trip. Per-viewer "mine"
+// state is fetched once on demand (per visible post id batch) and
+// cached in the Maps below.
+//
+// Schema-resilience: if the user hasn't run Stage 11 SQL the read paths
+// just return {} / 0 / false instead of throwing, so the action
+// buttons render their default (unliked) state without breaking the
+// page. Write paths surface a friendly "Stage 11 SQL を実行…" message.
+
+// (reposts + bookmarks maps declared at the top of the file alongside
+// the other interaction caches; only the missing-table flags live here.)
+let repostsTableMissing   = false;
+let bookmarksTableMissing = false;
+
+function isTableMissing(error, name) {
+  const msg = String(error?.message || '').toLowerCase();
+  return msg.includes(name) && (
+    msg.includes('does not exist') ||
+    msg.includes('not found') ||
+    msg.includes('relation') ||
+    msg.includes('schema cache')
+  );
+}
+
+export function isReposted(postId)   { return !!reposts.get(postId)?.mine; }
+export function isBookmarked(postId) { return !!bookmarks.get(postId)?.mine; }
+
+// Fill the `mine` flag for a batch of visible post ids. One round trip
+// each. Silent on missing-table so nothing breaks before Stage 11.
+export async function hydrateRepostsMine(postIds) {
+  if (!postIds || !postIds.length || repostsTableMissing) return;
+  let supa; try { supa = await getClient(); } catch { return; }
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) { for (const id of postIds) reposts.set(id, { mine: false }); return; }
+  const { data, error } = await supa.from('reposts')
+    .select('post_id').eq('user_id', user.id).in('post_id', postIds);
+  if (error) {
+    if (isTableMissing(error, 'reposts')) { repostsTableMissing = true; return; }
+    console.warn('hydrateRepostsMine', error);
+    return;
+  }
+  const mine = new Set((data || []).map(r => r.post_id));
+  for (const id of postIds) reposts.set(id, { mine: mine.has(id) });
+}
+export async function hydrateBookmarksMine(postIds) {
+  if (!postIds || !postIds.length || bookmarksTableMissing) return;
+  let supa; try { supa = await getClient(); } catch { return; }
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) { for (const id of postIds) bookmarks.set(id, { mine: false }); return; }
+  const { data, error } = await supa.from('bookmarks')
+    .select('post_id').eq('user_id', user.id).in('post_id', postIds);
+  if (error) {
+    if (isTableMissing(error, 'bookmarks')) { bookmarksTableMissing = true; return; }
+    console.warn('hydrateBookmarksMine', error);
+    return;
+  }
+  const mine = new Set((data || []).map(r => r.post_id));
+  for (const id of postIds) bookmarks.set(id, { mine: mine.has(id) });
+}
+
+export async function toggleRepost(postId) {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしてください');
+  const state = reposts.get(postId) || { mine: false };
+  if (state.mine) {
+    const { error } = await supa.from('reposts')
+      .delete().eq('post_id', postId).eq('user_id', user.id);
+    if (error) {
+      if (isTableMissing(error, 'reposts')) throw new Error('リポスト機能はまだセットアップされていません (Stage 11 SQL を実行してください)');
+      throw new Error(error.message);
+    }
+    reposts.set(postId, { mine: false });
+    return false;
+  }
+  const { error } = await supa.from('reposts').insert({ post_id: postId, user_id: user.id });
+  if (error) {
+    if (isTableMissing(error, 'reposts')) throw new Error('リポスト機能はまだセットアップされていません (Stage 11 SQL を実行してください)');
+    throw new Error(error.message);
+  }
+  reposts.set(postId, { mine: true });
+  return true;
+}
+
+export async function toggleBookmark(postId) {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしてください');
+  const state = bookmarks.get(postId) || { mine: false };
+  if (state.mine) {
+    const { error } = await supa.from('bookmarks')
+      .delete().eq('post_id', postId).eq('user_id', user.id);
+    if (error) {
+      if (isTableMissing(error, 'bookmarks')) throw new Error('保存機能はまだセットアップされていません (Stage 11 SQL を実行してください)');
+      throw new Error(error.message);
+    }
+    bookmarks.set(postId, { mine: false });
+    return false;
+  }
+  const { error } = await supa.from('bookmarks').insert({ post_id: postId, user_id: user.id });
+  if (error) {
+    if (isTableMissing(error, 'bookmarks')) throw new Error('保存機能はまだセットアップされていません (Stage 11 SQL を実行してください)');
+    throw new Error(error.message);
+  }
+  bookmarks.set(postId, { mine: true });
+  return true;
+}
+
+// Author-only analytics list helpers. RLS on bookmarks already enforces
+// "owner or post author only" so a non-author call will silently return
+// fewer rows (only the viewer's own bookmark, if any). Reposts are
+// publicly readable; the UI gates the dashboard route to the post author.
+export async function repostersOf(postId) {
+  if (!postId) return [];
+  const supa = await getClient();
+  const { data, error } = await supa.from('reposts')
+    .select('created_at, user:profiles!reposts_user_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    if (isTableMissing(error, 'reposts')) return [];
+    console.warn('repostersOf', error); return [];
+  }
+  return (data || [])
+    .map(r => ({ user: shapeProfile(r.user || { name: '?' }), createdAt: r.created_at }))
+    .filter(r => r.user.handle);
+}
+export async function bookmarkersOf(postId) {
+  if (!postId) return [];
+  const supa = await getClient();
+  const { data, error } = await supa.from('bookmarks')
+    .select('created_at, user:profiles!bookmarks_user_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    if (isTableMissing(error, 'bookmarks')) return [];
+    console.warn('bookmarkersOf', error); return [];
+  }
+  return (data || [])
+    .map(r => ({ user: shapeProfile(r.user || { name: '?' }), createdAt: r.created_at }))
+    .filter(r => r.user.handle);
+}
+
+// Quoters: posts whose quote_of_post_id == this post id. Returns the
+// quoting posts themselves (so the dashboard can render them inline).
+export async function quotersOf(postId) {
+  if (!postId) return [];
+  const supa = await getClient();
+  const { data, error } = await supa.from('posts')
+    .select('id, body, created_at, author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+    .eq('quote_of_post_id', postId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    const msg = String(error.message || '').toLowerCase();
+    if (msg.includes('quote_of_post_id') && msg.includes('does not exist')) return [];
+    console.warn('quotersOf', error); return [];
+  }
+  return (data || []).map(p => ({
+    user:      shapeProfile(p.author || { name: '?' }),
+    body:      p.body,
+    postId:    p.id,
+    createdAt: p.created_at,
+  })).filter(r => r.user.handle);
 }
 
 // ----------------------------------------------------------------------

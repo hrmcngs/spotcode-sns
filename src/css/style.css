@@ -505,6 +505,85 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 .act--share:hover  { color: var(--accent); }
 .act--report:hover { color: var(--danger); }
 .act--delete:hover { color: var(--danger); }
+.act--analytics:hover { color: var(--accent); }
+/* Toggle-on state for repost (fork icon) and bookmark (star icon) —
+   matches the like button's "filled accent colour" treatment. */
+.act--fork.is-on { color: var(--boost); }
+.act--fork.is-on svg { stroke: var(--boost); }
+.act--star.is-on { color: var(--warn); }
+.act--star.is-on svg { fill: var(--warn); stroke: var(--warn); }
+
+/* Popover menu shown when the user taps the repost button. Fixed-
+   positioned by JS just under the button. */
+.repost-menu {
+  display: flex; flex-direction: column;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  z-index: 250;
+  overflow: hidden;
+}
+.repost-menu__item {
+  background: transparent; border: 0; color: var(--text);
+  text-align: left; padding: .65rem .9rem; cursor: pointer;
+  font: inherit;
+}
+.repost-menu__item:hover { background: var(--surface-2); color: var(--accent); }
+
+/* Tiny toast after a successful copy-link share fallback. */
+.share-toast {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: .4rem .7rem; border-radius: 8px;
+  font-size: .8rem;
+  box-shadow: 0 6px 18px rgba(0,0,0,.4);
+  z-index: 300;
+  animation: shareToastFade 1.6s ease forwards;
+}
+@keyframes shareToastFade {
+  0%   { opacity: 0; transform: translateY(4px); }
+  15%  { opacity: 1; transform: translateY(0); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+
+/* Embedded quoted post card (shown inside the parent post body when
+   the parent has quoteOfPostId set, plus inside the quote-modal as a
+   preview of what's being quoted). */
+.quote-card {
+  display: block;
+  margin: .5rem 0;
+  padding: .6rem .8rem;
+  border: 1px solid var(--border); border-radius: 12px;
+  color: inherit; text-decoration: none;
+  background: color-mix(in srgb, var(--surface-2) 35%, transparent);
+}
+.quote-card:hover { background: var(--surface-2); }
+.quote-card--preview { cursor: default; }
+.quote-card--preview:hover { background: color-mix(in srgb, var(--surface-2) 35%, transparent); }
+.quote-card__head {
+  display: flex; align-items: baseline; gap: .4rem;
+  font-size: .85rem; color: var(--muted); flex-wrap: wrap;
+}
+.quote-card__name { color: var(--text); font-weight: 700; }
+.quote-card__body { margin-top: .3rem; color: var(--text); white-space: pre-wrap; }
+
+/* Quote composer form layout — avatar + textarea on top, quoted card
+   preview below. */
+.quote-form__row {
+  display: grid; grid-template-columns: 48px 1fr; gap: .7rem;
+  margin-bottom: .6rem;
+}
+.quote-form textarea {
+  width: 100%;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: .6em .7em; font: inherit;
+  resize: vertical; min-height: 4em;
+}
+.quote-form textarea:focus { outline: 0; border-color: var(--accent); }
 
 /* ---------- file size badges & status badges ---------- */
 .file-badge {

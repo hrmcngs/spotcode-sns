@@ -21,6 +21,7 @@ import { currentUser, logout, onAuthChange, initAuth } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
+         toggleRepost, toggleBookmark,
          hydrateMyFollows, clearInteractionsCache } from './interactions.js';
 import { renderAvatar } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
@@ -323,6 +324,73 @@ function syncSpotChip(spot) {
   autosaveComposerDraft();
 }
 
+// ----- repost menu / share / quote (Stage 11) -----
+
+function closeRepostMenu() {
+  document.querySelectorAll('.repost-menu').forEach(m => m.remove());
+}
+
+function openRepostMenu(forkBtn) {
+  const postId = forkBtn.getAttribute('data-post-id') ||
+                 forkBtn.closest('[data-post-id]')?.getAttribute('data-post-id');
+  if (!postId) return;
+  const reposted = forkBtn.classList.contains('is-on');
+  const menu = document.createElement('div');
+  menu.className = 'repost-menu';
+  menu.innerHTML =
+    '<button type="button" class="repost-menu__item" data-repost-action="repost" data-post-id="' + postId + '">' +
+      (reposted ? 'リポストを取り消す' : 'リポスト') +
+    '</button>' +
+    '<button type="button" class="repost-menu__item" data-repost-action="quote" data-post-id="' + postId + '">' +
+      '引用' +
+    '</button>';
+  // Anchor the menu below the fork button — uses viewport coordinates
+  // so it stays in place during scroll within a single open session.
+  const r = forkBtn.getBoundingClientRect();
+  menu.style.position = 'fixed';
+  menu.style.top  = (r.bottom + 4) + 'px';
+  menu.style.left = Math.max(8, Math.min(window.innerWidth - 180, r.left)) + 'px';
+  document.body.appendChild(menu);
+}
+
+// Web Share API where available (mobile Safari, Chrome Android), with
+// clipboard fallback so desktop browsers without share UI still get a
+// usable action. Falls back further to alert() if both fail.
+async function sharePost(postId, btn) {
+  const link = location.origin + (window.__BASE__ || '/') + 'post/' + postId;
+  const data = { title: 'spotcode-sns', url: link };
+  try {
+    if (navigator.share) { await navigator.share(data); return; }
+  } catch { /* user cancelled — silent */ return; }
+  try {
+    await navigator.clipboard.writeText(link);
+    flashShareToast(btn, 'リンクをコピーしました');
+    return;
+  } catch {
+    alert('リンク: ' + link);
+  }
+}
+
+function flashShareToast(anchor, msg) {
+  const t = document.createElement('div');
+  t.className = 'share-toast';
+  t.textContent = msg;
+  const r = anchor.getBoundingClientRect();
+  t.style.position = 'fixed';
+  t.style.top  = (r.top - 36) + 'px';
+  t.style.left = r.left + 'px';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 1600);
+}
+
+// Quote composer modal. Opens a textarea with the quoted post embedded
+// below. On submit, posts via addQuote(post, quotedPostId).
+import('./views/quote-modal.js').catch(() => {});
+async function openQuoteComposer(postId) {
+  const mod = await import('./views/quote-modal.js');
+  mod.openQuoteModal(postId);
+}
+
 // ----- composer drafts -----
 // Scope drafts per signed-in handle (logged-out users share `_guest`).
 function draftHandle() {
@@ -609,6 +677,77 @@ document.addEventListener('click', (e) => {
       })
       .catch((err) => alert('いいねに失敗しました: ' + err.message))
       .finally(() => { likeBtn.disabled = false; });
+    return;
+  }
+
+  // Repost / Quote menu (fork button repurposed). Two-step: tap shows
+  // the menu, tap an item runs the action. Reuses the closeRepostMenu
+  // helper so an outside-click closes any open menu.
+  const forkBtn = e.target.closest('.act--fork');
+  if (forkBtn) {
+    e.preventDefault();
+    const me = currentUser();
+    if (!me) return openAuth('login');
+    closeRepostMenu();
+    openRepostMenu(forkBtn);
+    return;
+  }
+  const repostItem = e.target.closest('[data-repost-action]');
+  if (repostItem) {
+    e.preventDefault();
+    const action = repostItem.getAttribute('data-repost-action');
+    const postId = repostItem.getAttribute('data-post-id');
+    closeRepostMenu();
+    if (action === 'repost') {
+      toggleRepost(postId)
+        .then((now) => {
+          // Re-render the timeline so all visible occurrences flip state.
+          refresh();
+          if (!now) return;
+        })
+        .catch((err) => alert(err.message));
+    } else if (action === 'quote') {
+      openQuoteComposer(postId);
+    }
+    return;
+  }
+  // Outside click on an open repost menu closes it.
+  if (document.querySelector('.repost-menu') && !e.target.closest('.repost-menu')) {
+    closeRepostMenu();
+  }
+
+  // Bookmark / save (star button repurposed).
+  const starBtn = e.target.closest('.act--star');
+  if (starBtn) {
+    e.preventDefault();
+    const me = currentUser();
+    if (!me) return openAuth('login');
+    const postId = starBtn.getAttribute('data-post-id') ||
+                   starBtn.closest('[data-post-id]')?.getAttribute('data-post-id');
+    if (!postId) return;
+    starBtn.disabled = true;
+    toggleBookmark(postId)
+      .then((now) => {
+        starBtn.classList.toggle('is-on', now);
+        const span = starBtn.querySelector('span');
+        if (span) {
+          const cur = parseInt(span.textContent, 10) || 0;
+          span.textContent = String(Math.max(0, cur + (now ? 1 : -1)));
+        }
+      })
+      .catch((err) => alert(err.message))
+      .finally(() => { starBtn.disabled = false; });
+    return;
+  }
+
+  // Share (Web Share API w/ clipboard fallback).
+  const shareBtn = e.target.closest('.act--share');
+  if (shareBtn) {
+    e.preventDefault();
+    const postId = shareBtn.getAttribute('data-post-id') ||
+                   shareBtn.closest('[data-post-id]')?.getAttribute('data-post-id');
+    if (!postId) return;
+    sharePost(postId, shareBtn);
     return;
   }
 

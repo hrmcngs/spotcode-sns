@@ -4,7 +4,7 @@ import { statusBadge }     from './status-badges.js';
 import { getUser, relTime } from './data.js';
 import { url }              from './router.js';
 import { icon }             from './icons.js';
-import { isLiked, likeCount } from './interactions.js';
+import { isLiked, likeCount, isReposted, isBookmarked } from './interactions.js';
 import { currentUser }      from './auth.js';
 import { renderAvatar }     from './avatar.js';
 
@@ -98,12 +98,43 @@ function spotAddress(spot) {
   '</div>';
 }
 
+// Render an embedded quoted-post card. Used when `p.quoteOf` is set
+// (the parent post fetched the quoted post in a 2nd round trip).
+// Compact, non-interactive — clicking the card navigates to the quoted
+// post's own detail page so users can interact there.
+function quoteCard(q) {
+  if (!q) return '';
+  const u = q.author || { name: q.authorHandle || '?', handle: q.authorHandle || '?', avatar: '?' };
+  return (
+    '<a class="quote-card" href="' + url('/post/' + q.id) + '">' +
+      '<div class="quote-card__head">' +
+        '<span class="quote-card__name">' + escape(u.name) + '</span>' +
+        '<span class="quote-card__handle">@' + escape(u.handle) + '</span>' +
+        '<span class="quote-card__time">· ' + escape(relTime(q.createdAt || Date.now())) + '</span>' +
+      '</div>' +
+      '<div class="quote-card__body">' + escape((q.body || '').slice(0, 240)) +
+        ((q.body || '').length > 240 ? '…' : '') +
+      '</div>' +
+    '</a>'
+  );
+}
+
+// "Activity / 誰がしたか" shortcut for the post author. Sends them to
+// /post/<id>/analytics so they can see who liked / commented / reposted
+// / bookmarked / quoted their post.
+function analyticsLink(postId) {
+  return '<a class="act act--analytics" title="アクティビティを見る" href="' + url('/post/' + postId + '/analytics') + '">' +
+    icon('chart', { size: 16 }) + '</a>';
+}
+
 export function renderPost(p) {
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
   const profileUrl = url('/' + u.handle);
   const me = currentUser();
-  const liked = me && isLiked(p.id);
+  const liked      = me && isLiked(p.id);
+  const reposted   = me && isReposted(p.id);
+  const bookmarked = me && isBookmarked(p.id);
   const likes = likeCount(p.id);
   const isOwn = me && p.authorHandle === me.handle;
   return (
@@ -126,12 +157,17 @@ export function renderPost(p) {
           : '') +
         files(p.files) +
         commit(p.commit) +
+        quoteCard(p.quoteOf) +
         '<div class="post__actions">' +
           '<a class="act act--reply" title="コメント" href="' + url('/post/' + p.id) + '">' + icon('reply', { size: 16 }) + '<span>' + (a.replies || 0) + '</span></a>' +
-          '<button class="act act--fork"  title="fork">'  + icon('fork',  { size: 16 }) + '<span>' + (a.forks   || 0) + '</span></button>' +
-          '<button class="act act--star"  title="star">'  + icon('star',  { size: 16 }) + '<span>' + (a.stars   || 0) + '</span></button>' +
-          '<button class="act act--like' + (liked ? ' is-liked' : '') + '" title="like">'  + icon('heart', { size: 16 }) + '<span>'  + likes + '</span></button>' +
-          '<button class="act act--share" title="share">' + icon('share', { size: 16 }) + '</button>' +
+          '<button class="act act--fork' + (reposted ? ' is-on' : '') + '" title="リポスト / 引用" data-post-id="' + escape(p.id) + '">' +
+            icon('fork',  { size: 16 }) + '<span>' + (a.forks || 0) + '</span></button>' +
+          '<button class="act act--star' + (bookmarked ? ' is-on' : '') + '" title="保存" data-post-id="' + escape(p.id) + '">' +
+            icon('star',  { size: 16 }) + '<span>' + (a.stars || 0) + '</span></button>' +
+          '<button class="act act--like' + (liked ? ' is-liked' : '') + '" title="いいね" data-post-id="' + escape(p.id) + '">' +
+            icon('heart', { size: 16 }) + '<span>'  + likes + '</span></button>' +
+          '<button class="act act--share" title="共有" data-post-id="' + escape(p.id) + '">' + icon('share', { size: 16 }) + '</button>' +
+          (isOwn ? analyticsLink(p.id) : '') +
           (isOwn
             ? '<button class="act act--delete" title="この投稿を削除">' + icon('trash', { size: 16 }) + '</button>'
             : '<button class="act act--report" title="report">' + icon('flag', { size: 16 }) + '</button>') +

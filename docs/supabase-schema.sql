@@ -300,3 +300,128 @@ update public.posts p
    set comments_count = coalesce(
      (select count(*) from public.comments c where c.post_id = p.id), 0
    );
+
+
+-- ===================================================================
+-- Stage 11 — Reposts / Bookmarks / Quotes / per-post denormalised counts
+-- ===================================================================
+-- Backs the 4 placeholder tiles in /post/<id>/analytics + the
+-- formerly-decorative fork / star / share buttons on the post card.
+--
+-- Privacy model (matches the user spec):
+--   reposts:    rows publicly readable (count = public, who = public)
+--   bookmarks:  rows readable only by the bookmarker OR the post author
+--   quotes:     implemented as posts with `quote_of_post_id` set,
+--               inherits standard post visibility (already private-
+--               account-aware via Stage 8 policy).
+
+create table if not exists public.reposts (
+  post_id    uuid not null references public.posts(id) on delete cascade,
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (post_id, user_id)
+);
+alter table public.reposts enable row level security;
+drop policy if exists "reposts are public"            on public.reposts;
+drop policy if exists "users insert their own reposts" on public.reposts;
+drop policy if exists "users delete their own reposts" on public.reposts;
+create policy "reposts are public"
+  on public.reposts for select using (true);
+create policy "users insert their own reposts"
+  on public.reposts for insert with check (auth.uid() = user_id);
+create policy "users delete their own reposts"
+  on public.reposts for delete using (auth.uid() = user_id);
+
+create table if not exists public.bookmarks (
+  post_id    uuid not null references public.posts(id) on delete cascade,
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (post_id, user_id)
+);
+alter table public.bookmarks enable row level security;
+drop policy if exists "bookmarks visible to owner or post author" on public.bookmarks;
+drop policy if exists "users insert their own bookmarks"          on public.bookmarks;
+drop policy if exists "users delete their own bookmarks"          on public.bookmarks;
+create policy "bookmarks visible to owner or post author"
+  on public.bookmarks for select using (
+    auth.uid() = user_id
+    or exists (
+      select 1 from public.posts p where p.id = post_id and p.author_id = auth.uid()
+    )
+  );
+create policy "users insert their own bookmarks"
+  on public.bookmarks for insert with check (auth.uid() = user_id);
+create policy "users delete their own bookmarks"
+  on public.bookmarks for delete using (auth.uid() = user_id);
+
+-- Quote = a post that points back at another post. Self-FK on posts.
+-- on delete set null so deleting the quoted post leaves the quoting
+-- post intact (the embed just renders as "投稿は削除されました").
+alter table public.posts
+  add column if not exists quote_of_post_id uuid references public.posts(id) on delete set null;
+
+-- Denormalised counts on posts. Same pattern as Stage 10's comments_count.
+alter table public.posts add column if not exists reposts_count   integer not null default 0;
+alter table public.posts add column if not exists bookmarks_count integer not null default 0;
+alter table public.posts add column if not exists quotes_count    integer not null default 0;
+
+create or replace function public.bump_post_reposts_count() returns trigger
+language plpgsql security definer as $$
+begin
+  if (tg_op = 'INSERT') then
+    update public.posts set reposts_count = reposts_count + 1 where id = new.post_id;
+  elsif (tg_op = 'DELETE') then
+    update public.posts set reposts_count = greatest(0, reposts_count - 1) where id = old.post_id;
+  end if;
+  return null;
+end $$;
+drop trigger if exists reposts_count_trg on public.reposts;
+create trigger reposts_count_trg
+  after insert or delete on public.reposts
+  for each row execute procedure public.bump_post_reposts_count();
+
+create or replace function public.bump_post_bookmarks_count() returns trigger
+language plpgsql security definer as $$
+begin
+  if (tg_op = 'INSERT') then
+    update public.posts set bookmarks_count = bookmarks_count + 1 where id = new.post_id;
+  elsif (tg_op = 'DELETE') then
+    update public.posts set bookmarks_count = greatest(0, bookmarks_count - 1) where id = old.post_id;
+  end if;
+  return null;
+end $$;
+drop trigger if exists bookmarks_count_trg on public.bookmarks;
+create trigger bookmarks_count_trg
+  after insert or delete on public.bookmarks
+  for each row execute procedure public.bump_post_bookmarks_count();
+
+-- Quotes counted via the posts.quote_of_post_id self-FK.
+create or replace function public.bump_post_quotes_count() returns trigger
+language plpgsql security definer as $$
+begin
+  if (tg_op = 'INSERT' and new.quote_of_post_id is not null) then
+    update public.posts set quotes_count = quotes_count + 1 where id = new.quote_of_post_id;
+  elsif (tg_op = 'DELETE' and old.quote_of_post_id is not null) then
+    update public.posts set quotes_count = greatest(0, quotes_count - 1) where id = old.quote_of_post_id;
+  elsif (tg_op = 'UPDATE') then
+    if (old.quote_of_post_id is distinct from new.quote_of_post_id) then
+      if (old.quote_of_post_id is not null) then
+        update public.posts set quotes_count = greatest(0, quotes_count - 1) where id = old.quote_of_post_id;
+      end if;
+      if (new.quote_of_post_id is not null) then
+        update public.posts set quotes_count = quotes_count + 1 where id = new.quote_of_post_id;
+      end if;
+    end if;
+  end if;
+  return null;
+end $$;
+drop trigger if exists quotes_count_trg on public.posts;
+create trigger quotes_count_trg
+  after insert or update or delete on public.posts
+  for each row execute procedure public.bump_post_quotes_count();
+
+-- Backfill so any rows that pre-existed the trigger are counted right.
+update public.posts p
+   set reposts_count   = coalesce((select count(*) from public.reposts   r where r.post_id = p.id), 0),
+       bookmarks_count = coalesce((select count(*) from public.bookmarks b where b.post_id = p.id), 0),
+       quotes_count    = coalesce((select count(*) from public.posts     q where q.quote_of_post_id = p.id), 0);
