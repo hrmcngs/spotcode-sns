@@ -282,6 +282,18 @@ export async function denyFollowRequest(followerHandle) {
 // COMMENTS
 // ----------------------------------------------------------------------
 
+// Was the error caused by the comments table not existing yet (Stage 10
+// SQL hasn't been run)? If so we treat it as "no comments" everywhere.
+function isCommentsTableMissing(error) {
+  const msg = String(error?.message || '').toLowerCase();
+  return msg.includes('comments') && (
+    msg.includes('does not exist') ||
+    msg.includes('not found') ||
+    msg.includes('relation') ||
+    msg.includes('schema cache')
+  );
+}
+
 // Comment list for /post/<id>. Returns oldest-first so the thread reads
 // in chronological order (Twitter style). Embeds the author profile so
 // callers don't need a second round trip per row.
@@ -293,7 +305,13 @@ export async function getComments(postId) {
     .select('id, body, created_at, author:profiles!comments_author_id_fkey(handle, name, avatar_url, avatar_shape)')
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isCommentsTableMissing(error)) {
+      console.warn('comments table missing — run Stage 10 SQL.');
+      return [];
+    }
+    throw new Error(error.message);
+  }
   return (data || []).map(c => ({
     id:        c.id,
     body:      c.body,
@@ -312,7 +330,12 @@ export async function addComment(postId, body) {
     .insert({ post_id: postId, author_id: user.id, body: text.slice(0, 500) })
     .select('id, body, created_at, author:profiles!comments_author_id_fkey(handle, name, avatar_url, avatar_shape)')
     .single();
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isCommentsTableMissing(error)) {
+      throw new Error('コメント機能はまだセットアップされていません (Stage 10 SQL を実行してください)');
+    }
+    throw new Error(error.message);
+  }
   return {
     id:        data.id,
     body:      data.body,
