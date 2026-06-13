@@ -3,7 +3,7 @@ import { renderPost }              from '../post.js';
 import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
 import { icon }                    from '../icons.js';
-import { isFollowing, followerCount, followingCount,
+import { isFollowing, isRequested, followerCount, followingCount,
          hydratePostLikes, hydrateProfileFollow } from '../interactions.js';
 import { getBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
@@ -66,7 +66,14 @@ export function renderProfile(handle) {
   // 0 until then, which is fine — hydrateProfile re-renders after fill.
   const followingN = followingCount(u.handle);
   const followersN = followerCount(u.handle);
-  const followed = me && !isMe && isFollowing(me.handle, u.handle);
+  const followed   = me && !isMe && isFollowing(me.handle, u.handle);
+  const requested  = me && !isMe && isRequested(me.handle, u.handle);
+  // Follow-button text/style depends on (target privacy) × (current state).
+  const followBtnLabel = followed   ? 'Following'
+                       : requested  ? 'Requested'
+                       : u.isPrivate ? 'Request'
+                       :              'Follow';
+  const followBtnCls   = (followed || requested) ? 'btn--ghost is-following' : 'btn--primary';
 
   const header = (
     '<header class="profile-header">' +
@@ -78,8 +85,8 @@ export function renderProfile(handle) {
             ? '<button class="btn btn--ghost" id="logout-btn">' + t('nav.logout') + '</button>' +
               '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
             : '<button class="btn btn--ghost">' + t('profile.btn.more') + '</button>' +
-              '<button class="btn ' + (followed ? 'btn--ghost is-following' : 'btn--primary') + ' btn--follow" data-target="' + u.handle + '">' +
-                (followed ? t('profile.btn.following') : t('profile.btn.follow')) +
+              '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
+                followBtnLabel +
               '</button>') +
         '</div>' +
       '</div>' +
@@ -87,7 +94,9 @@ export function renderProfile(handle) {
         '<div class="profile-name">' + u.name +
           (u.role === 'programmer' ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
         '</div>' +
-        '<div class="profile-handle">@' + u.handle + '</div>' +
+        '<div class="profile-handle">@' + u.handle +
+          (u.isPrivate ? ' <span class="profile-lock" title="非公開アカウント">🔒</span>' : '') +
+        '</div>' +
       '</div>' +
       (u.bio ? '<p class="profile-bio">' + u.bio + '</p>' : '') +
       '<div class="profile-meta">' +
@@ -200,6 +209,30 @@ export async function setProfileTab(handle, tab) {
 async function hydrateProfileBody(handle, myVersion) {
   const list = document.getElementById('profile-posts');
   if (!list) return;
+
+  // Private accounts: if the viewer isn't the owner and isn't an
+  // accepted follower, the Posts RLS already drops their rows so we'd
+  // just paint the generic empty state. Give a clearer message instead.
+  const u = getUser(handle);
+  const me = currentUser();
+  const blockedByPrivacy = u && u.isPrivate
+    && (!me || (me.handle !== handle && !isFollowing(me.handle, handle)));
+  if (blockedByPrivacy) {
+    const requested = me && isRequested(me.handle, handle);
+    list.innerHTML =
+      '<div class="stub">' +
+        '<h2 class="stub__title">🔒 このアカウントは非公開です</h2>' +
+        '<p class="stub__sub">' +
+          (requested
+            ? '<strong>承認待ち</strong>です。@' + handle + ' が承認すると投稿が見られるようになります。'
+            : 'フォローして承認されると投稿が見られるようになります。') +
+        '</p>' +
+      '</div>';
+    const countEl = document.getElementById('profile-postcount');
+    if (countEl) countEl.textContent = '?';
+    return;
+  }
+
   const tab = activeTab;
   let posts;
   try {

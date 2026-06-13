@@ -46,6 +46,7 @@ function projectUser(authUser, profile) {
                        verifyToken: profile.github_verify_token || null,
                      }
                    : null,
+    isPrivate:   !!profile.is_private,
     joined:      profile.created_at ? String(profile.created_at).slice(0, 7) : '',
   };
 }
@@ -54,7 +55,7 @@ async function loadProfile(userId) {
   const supa = await getClient();
   const { data, error } = await supa
     .from('profiles')
-    .select('handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, github_verify_token, created_at')
+    .select('handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, github_verify_token, is_private, created_at')
     .eq('id', userId)
     .maybeSingle();
   if (error) { console.warn('loadProfile error', error); return null; }
@@ -190,6 +191,7 @@ export async function updateProfile(patch) {
   if (patch.location != null)          db.location     = String(patch.location).slice(0, 60);
   if (patch.avatarImage !== undefined) db.avatar_url   = patch.avatarImage || null;
   if (patch.avatarShape != null)       db.avatar_shape = patch.avatarShape;
+  if (patch.isPrivate   !== undefined) db.is_private   = !!patch.isPrivate;
   if (Object.keys(db).length) {
     const { error } = await supa.from('profiles').update(db).eq('id', cachedUser.id);
     if (error) throw new Error(error.message);

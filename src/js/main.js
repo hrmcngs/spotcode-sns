@@ -6,6 +6,7 @@ import { renderProfile, hydrateProfileBadges, hydrateProfileActivity, hydratePro
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
+import { renderRequests, hydrateRequests } from './views/requests.js';
 import { renderFollowList, hydrateFollowList } from './views/follow-list.js';
 import { renderSettings, bindSettings } from './views/settings.js';
 import { pickSpot }        from './views/spot-picker.js';
@@ -248,6 +249,10 @@ function dispatch(path) {
     document.title = 'Map / spotcode-sns';
     app.innerHTML = renderMap();
     hydrateMap();
+  } else if (path === '/requests' || path === '/requests/') {
+    document.title = 'Requests / spotcode-sns';
+    app.innerHTML = renderRequests();
+    hydrateRequests();
   } else if (stubMatch) {
     document.title = stubMatch[1] + ' / spotcode-sns';
     app.innerHTML = renderStub(stubMatch[1]);
