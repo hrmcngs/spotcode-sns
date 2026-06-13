@@ -45,7 +45,12 @@ function cacheLocally(profile) {
   write(KEYS.users, users);
 }
 
-const COLUMNS = 'handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, is_private, website, twitter, instagram, created_at';
+// `*` (not an explicit list) so that adding a column to public.profiles
+// in a later migration doesn't break this query when run against an
+// older DB — a missing column in an explicit select returns an error
+// and the profile silently fails to load. Same defensiveness as
+// loadProfile in auth.js.
+const COLUMNS = '*';
 
 export async function fetchProfileByHandle(handle) {
   if (!handle) return null;
