@@ -6,6 +6,7 @@ import { currentUser, updateProfile } from '../auth.js';
 import { icon }                       from '../icons.js';
 import { fileToAvatarDataUrl, renderAvatar } from '../avatar.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
+import { startVerification, confirmVerification } from '../github-verify.js';
 
 let rootEl = null;
 let stagedAvatarImage = undefined; // undefined = unchanged, '' = clear, 'data:...' = new
@@ -15,6 +16,41 @@ function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
+}
+
+function githubVerifyBlock(u) {
+  if (u.github?.verified) {
+    return (
+      '<div class="verify-row verify-row--ok">' +
+        icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
+        '@' + attr(u.github.handle) + ' は本人確認済み ✓' +
+      '</div>'
+    );
+  }
+  const existing = u.github?.verifyToken || '';
+  return (
+    '<div class="verify-row" id="verify-row">' +
+      '<div class="verify-row__title">' +
+        icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
+        'GitHub の本人確認' +
+      '</div>' +
+      '<p class="verify-row__hint">' +
+        '下のコードを <a href="https://github.com/settings/profile" target="_blank" rel="noopener">GitHub の Bio 欄</a> に貼って「確認」を押すと、 @' +
+        attr(u.github.handle) + ' があなた本人だと検証されます。' +
+      '</p>' +
+      '<div class="verify-row__token">' +
+        '<code id="verify-token">' + attr(existing) + '</code>' +
+        '<button type="button" class="btn btn--ghost btn--sm" id="verify-gen">' +
+          (existing ? '新しいコード' : 'コードを発行') +
+        '</button>' +
+      '</div>' +
+      '<div class="edit-actions">' +
+        '<button type="button" class="btn btn--primary btn--sm" id="verify-confirm" ' +
+          (existing ? '' : 'disabled') + '>確認</button>' +
+        '<span class="verify-row__status" id="verify-status"></span>' +
+      '</div>' +
+    '</div>'
+  );
 }
 
 function template(u) {
@@ -56,6 +92,8 @@ function template(u) {
           '<label>Location' +
             '<input name="location" maxlength="60" value="' + attr(u.location || '') + '" placeholder="shibuya">' +
           '</label>' +
+
+          (u.github?.handle ? githubVerifyBlock(u) : '') +
 
           '<div class="edit-actions">' +
             '<button type="button" class="btn btn--ghost" data-edit-close>Cancel</button>' +
@@ -136,6 +174,42 @@ export function openEditProfile() {
       };
       setPreview(previewUser);
     });
+  });
+
+  // GitHub bio-token verification flow
+  const vGen     = document.getElementById('verify-gen');
+  const vConfirm = document.getElementById('verify-confirm');
+  const vToken   = document.getElementById('verify-token');
+  const vStatus  = document.getElementById('verify-status');
+  function showVerify(msg, kind) {
+    if (!vStatus) return;
+    vStatus.textContent = msg || '';
+    vStatus.className = 'verify-row__status' + (kind ? ' is-' + kind : '');
+  }
+  vGen?.addEventListener('click', async () => {
+    vGen.disabled = true;
+    showVerify('発行中…');
+    try {
+      const t = await startVerification();
+      if (vToken) vToken.textContent = t;
+      if (vConfirm) vConfirm.disabled = false;
+      vGen.textContent = '新しいコード';
+      showVerify('発行しました。GitHub Bio に貼ったら「確認」を押してください。', 'ok');
+    } catch (ex) { showVerify(ex.message, 'bad'); }
+    finally { vGen.disabled = false; }
+  });
+  vConfirm?.addEventListener('click', async () => {
+    const u = currentUser();
+    const handle = u?.github?.handle;
+    const token  = vToken?.textContent?.trim();
+    if (!handle || !token) { showVerify('コードを先に発行してください', 'bad'); return; }
+    vConfirm.disabled = true;
+    showVerify('GitHub Bio を確認しています…');
+    try {
+      await confirmVerification(handle, token);
+      showVerify('✓ 本人確認できました。閉じてリロードしてください。', 'ok');
+    } catch (ex) { showVerify(ex.message, 'bad'); }
+    finally { vConfirm.disabled = false; }
   });
 
   // save

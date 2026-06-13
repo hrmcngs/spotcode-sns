@@ -23,7 +23,11 @@ function shapeProfile(row) {
     location:    row.location || '',
     role:        row.role || 'general',
     github:      row.github_handle
-                   ? { handle: row.github_handle, url: 'https://github.com/' + row.github_handle }
+                   ? {
+                       handle: row.github_handle,
+                       url: 'https://github.com/' + row.github_handle,
+                       verified: !!row.github_verified,
+                     }
                    : null,
     joined:      row.created_at ? String(row.created_at).slice(0, 7) : '',
     _fetched:    Date.now(),
@@ -37,7 +41,7 @@ function cacheLocally(profile) {
   write(KEYS.users, users);
 }
 
-const COLUMNS = 'handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, created_at';
+const COLUMNS = 'handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, created_at';
 
 export async function fetchProfileByHandle(handle) {
   if (!handle) return null;

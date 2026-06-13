@@ -1067,6 +1067,42 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 .report-hint { color: var(--muted); font-size: .85rem; margin-bottom: .6rem; }
 .report-done { color: var(--green); font-size: .85rem; }
 
+/* ---------- GitHub verification (edit-profile modal) ---------- */
+.verify-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: .7rem .85rem;
+  background: var(--bg);
+}
+.verify-row--ok {
+  color: var(--green);
+  font-size: .9rem; font-weight: 600;
+}
+.verify-row__title { font-weight: 700; color: var(--text); margin-bottom: .35rem; }
+.verify-row__hint  { color: var(--muted); font-size: .82rem; margin-bottom: .55rem; }
+.verify-row__hint a { color: var(--accent); }
+.verify-row__hint a:hover { text-decoration: underline; }
+.verify-row__token {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  margin-bottom: .55rem;
+}
+.verify-row__token code {
+  font-family: var(--mono); font-size: .85rem;
+  background: var(--surface-2); color: var(--text);
+  padding: .25em .6em; border-radius: 6px;
+  word-break: break-all;
+}
+.verify-row__status { font-size: .82rem; align-self: center; color: var(--muted); }
+.verify-row__status.is-ok  { color: var(--green); }
+.verify-row__status.is-bad { color: var(--danger); }
+
+.gh-verified {
+  display: inline-block;
+  margin-left: .15em;
+  color: var(--green);
+  font-weight: 700;
+}
+
 /* ---------- profile badges ---------- */
 .profile-badges {
   display: flex; flex-wrap: wrap; gap: .35rem;

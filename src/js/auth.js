@@ -39,7 +39,12 @@ function projectUser(authUser, profile) {
     location:    profile.location || '',
     role:        profile.role || 'general',
     github:      profile.github_handle
-                   ? { handle: profile.github_handle, url: 'https://github.com/' + profile.github_handle }
+                   ? {
+                       handle: profile.github_handle,
+                       url: 'https://github.com/' + profile.github_handle,
+                       verified: !!profile.github_verified,
+                       verifyToken: profile.github_verify_token || null,
+                     }
                    : null,
     joined:      profile.created_at ? String(profile.created_at).slice(0, 7) : '',
   };
@@ -49,7 +54,7 @@ async function loadProfile(userId) {
   const supa = await getClient();
   const { data, error } = await supa
     .from('profiles')
-    .select('handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, created_at')
+    .select('handle, name, avatar_url, avatar_shape, bio, location, role, github_handle, github_verified, github_verify_token, created_at')
     .eq('id', userId)
     .maybeSingle();
   if (error) { console.warn('loadProfile error', error); return null; }
