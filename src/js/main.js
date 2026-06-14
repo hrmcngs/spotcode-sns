@@ -228,7 +228,7 @@ function dispatch(path) {
   // mid-animation, …) the body would still be position:fixed and the
   // next page would render shifted. Force-clear once on every nav.
   forceUnlockBodyScroll();
-  const stubMatch      = path.match(/^\/(explore|repos)\/?$/);
+  const stubMatch      = path.match(/^\/(repos)\/?$/);
   const mapMatch       = path === '/spots' || path === '/spots/';
   const spotMatch      = path.match(/^\/spot\/(.+?)\/?$/);
   const analyticsMatch = path.match(/^\/post\/([0-9a-fA-F-]{36})\/analytics\/?$/);

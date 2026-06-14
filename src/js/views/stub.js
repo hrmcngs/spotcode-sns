@@ -4,7 +4,6 @@ import { icon } from '../icons.js';
 import { t }    from '../i18n.js';
 
 const PRESETS = {
-  explore:       { title: 'Explore',       ico: 'compass' },
   spots:         { title: 'Spots',         ico: 'pin' },
   repos:         { title: 'Repos',         ico: 'repo' },
   notifications: { title: 'Notifications', ico: 'bell' },
