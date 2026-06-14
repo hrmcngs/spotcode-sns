@@ -482,6 +482,21 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 .post__handle, .post__sep, .post__time { color: var(--muted); font-size: .92rem; }
 .post__time:hover { color: var(--accent); text-decoration: underline; }
 .post__body { margin-top: .15rem; white-space: pre-wrap; word-wrap: break-word; }
+/* Geo-gate locked variant: viewer is outside the post's spot radius
+   (and isn't the author / dev). Show the head + spot chip + address
+   but replace the body with a "come within Xm" banner. The card gets
+   a subtle accent border-left so it visually reads as gated. */
+.post--locked { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.post--locked .post__head a:hover { text-decoration: underline; }
+.post__locked {
+  margin-top: .5rem;
+  padding: .55rem .75rem;
+  display: inline-flex; align-items: center; gap: .4rem;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border-radius: 10px;
+  font-size: .85rem;
+}
 .post__meta {
   margin-top: .6rem;
   display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
