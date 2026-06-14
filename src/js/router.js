@@ -23,15 +23,21 @@ export function url(path) {
 }
 
 export function currentPath() {
+  let p;
   if (HASH_MODE) {
     const h = location.hash.replace(/^#/, '');
-    if (!h) return '/';
-    return h.startsWith('/') ? h : '/' + h;
+    p = h ? (h.startsWith('/') ? h : '/' + h) : '/';
+  } else {
+    p = location.pathname;
+    if (p.startsWith(BASE)) p = p.slice(BASE.length);
+    if (!p.startsWith('/')) p = '/' + p;
+    p = p.replace(/index\.html$/, '') || '/';
   }
-  let p = location.pathname;
-  if (p.startsWith(BASE)) p = p.slice(BASE.length);
-  if (!p.startsWith('/')) p = '/' + p;
-  return p.replace(/index\.html$/, '') || '/';
+  // Strip any trailing slash so dispatch() only has to match one form
+  // per route. Without this, /settings/ fell through the `===` check
+  // and got swallowed by userMatch (which accepts a trailing slash),
+  // rendering "@settings は登録されていません". Keep "/" as-is.
+  return p.length > 1 ? p.replace(/\/+$/, '') : p;
 }
 
 const handlers = [];

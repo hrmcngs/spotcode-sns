@@ -803,8 +803,20 @@ html[data-theme='light'] .profile-cover {
 }
 .post__link:hover { text-decoration: underline; }
 
-/* ---------- auth modal ---------- */
-.modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; }
+/* ---------- auth modal ----------
+   `viewport-fit=cover` makes 100vh include the notch / home indicator
+   area on iOS, so a vertically centered modal can end up with its top
+   edge under the dynamic island. Pad the flex container by the safe-
+   area insets and shrink max-height to match — the modal then centres
+   in the visible region and never gets clipped at the top. */
+.modal {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding-top:    env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left:   env(safe-area-inset-left, 0px);
+  padding-right:  env(safe-area-inset-right, 0px);
+}
 .modal[hidden] { display: none; }
 .modal__backdrop {
   position: absolute; inset: 0;
@@ -814,7 +826,8 @@ html[data-theme='light'] .profile-cover {
 .modal__card {
   position: relative; z-index: 1;
   width: min(440px, calc(100% - 2rem));
-  max-height: calc(100vh - 2rem); overflow: auto;
+  max-height: calc(100vh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
