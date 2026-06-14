@@ -307,6 +307,32 @@ export async function allPosts({ limit = 100 } = {}) {
   return shaped;
 }
 
+// Posts authored by anyone the current user accepted-follows, newest
+// first. Returns [] when not logged in or when the user follows no
+// one (the view shows a "follow someone" empty state in that case).
+export async function followingPosts({ limit = 100 } = {}) {
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) return [];
+  const { data: follows, error: fErr } = await supa
+    .from('follows').select('target_id')
+    .eq('follower_id', user.id)
+    .eq('status', 'accepted');
+  if (fErr) throw new Error(fErr.message);
+  const targetIds = (follows || []).map(r => r.target_id);
+  if (!targetIds.length) return [];
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').select(cols)
+      .in('author_id', targetIds)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+  );
+  if (error) throw new Error(error.message);
+  const shaped = (data || []).map(shapePost);
+  savePostsCache('following', shaped);
+  return shaped;
+}
+
 export async function postsByHandle(handle) {
   if (!handle) return [];
   const supa = await getClient();

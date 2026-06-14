@@ -238,10 +238,18 @@ function dispatch(path) {
 
   if (path === '/' || path === '') {
     document.title = 'spotcode-sns';
-    app.innerHTML = renderHome();
+    app.innerHTML = renderHome('foryou');
     restoreComposerDraft();
     if (pendingSpot) syncSpotChip(pendingSpot);
-    hydrateHome();
+    hydrateHome('foryou');
+  } else if (path === '/following') {
+    // Same Home view, Following tab active — must come BEFORE userMatch
+    // which would otherwise swallow "following" as a handle.
+    document.title = 'Following / spotcode-sns';
+    app.innerHTML = renderHome('following');
+    restoreComposerDraft();
+    if (pendingSpot) syncSpotChip(pendingSpot);
+    hydrateHome('following');
   } else if (path === '/settings') {
     document.title = 'Settings / spotcode-sns';
     app.innerHTML = renderSettings();
