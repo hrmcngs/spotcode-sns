@@ -1117,6 +1117,14 @@ a.trend-item:hover { background: var(--surface-2); }
    Twitter-style 2-column row: avatar (with action-type badge overlay)
    on the left, body text on the right. Action-specific tint comes
    from the .notif--<type> modifier on .notif. */
+.notif-head {
+  position: sticky; top: 64px; z-index: 10;
+  background: var(--surface);
+  padding: .8rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.notif-head h2 { margin: 0; font-size: 1.1rem; color: var(--text); }
+
 .notif {
   display: flex;
   align-items: flex-start;
