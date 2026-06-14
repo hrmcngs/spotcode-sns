@@ -52,6 +52,47 @@ export function getMyLocation() {
   return pending;
 }
 
+// ----- IP-based approximate location (Electron / denial fallback) -----
+//
+// `navigator.geolocation` is unreliable in some hosts:
+//   - Electron under file:// has no permission UI, so it just rejects.
+//   - Capacitor without a permission entitlement does the same.
+//   - Any browser where the user previously denied returns null fast.
+//
+// In those cases we still want the map to OPEN near the viewer, not on
+// a hard-coded Tokyo default. IP-based geolocation gets us city-level
+// accuracy (~ a few km), which is fine for centering the map but NOT
+// for the 100m unlock gate — so we keep it in a separate cache and
+// never let it pose as an exact fix.
+let approxIP = null;
+let approxIPPending = null;
+
+// Resolve to { lat, lng, source: 'ip', city, country } or null.
+// Free, no key, generous rate limits. Cached for the session.
+export function getApproxLocationViaIP() {
+  if (approxIP) return Promise.resolve(approxIP);
+  if (approxIPPending) return approxIPPending;
+  approxIPPending = (async () => {
+    try {
+      const r = await fetch('https://ipwho.is/');
+      const j = await r.json();
+      if (j && j.success && Number.isFinite(j.latitude) && Number.isFinite(j.longitude)) {
+        approxIP = {
+          lat: j.latitude,
+          lng: j.longitude,
+          source: 'ip',
+          city: j.city || '',
+          country: j.country || '',
+        };
+        return approxIP;
+      }
+    } catch {}
+    return null;
+  })().finally(() => { approxIPPending = null; });
+  return approxIPPending;
+}
+export function cachedApproxLocation() { return approxIP; }
+
 // Haversine distance in meters between two lat/lng pairs.
 function distanceM(lat1, lng1, lat2, lng2) {
   const R = 6371000;

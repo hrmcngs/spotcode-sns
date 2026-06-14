@@ -10,7 +10,7 @@ import { allPosts } from '../data.js';
 import { t }        from '../i18n.js';
 import { icon }     from '../icons.js';
 import { getMyLocation, isNearSpotSync, getRadius, permissionDenied,
-         cachedLocation } from '../geo-gate.js';
+         cachedLocation, getApproxLocationViaIP } from '../geo-gate.js';
 import { currentUser } from '../auth.js';
 import { timelineTabs } from './timeline-tabs.js';
 
@@ -97,14 +97,24 @@ export async function hydrateMap() {
     console.warn('hydrateMap: allPosts failed, rendering empty map', err);
     return [];
   });
+  // EXACT location via browser geolocation — used both for centering
+  // AND for the unlock-ring + "you are here" pin. In Electron under
+  // file:// (and any other context without a geolocation permission
+  // UI) this resolves to null.
   const here = await getMyLocation().catch(() => null);
+  // APPROXIMATE location via IP geolocation — used ONLY for centering
+  // when we couldn't get an exact fix. Accuracy is city-level so it
+  // can't drive the 100m unlock gate, but it's enough to open the
+  // map near the viewer instead of defaulting to Tokyo.
+  const approxIp = here ? null : await getApproxLocationViaIP().catch(() => null);
   if (myVersion !== renderVersion) return;
 
   const spotted = (posts || []).filter(p => p?.spot?.lat != null && p?.spot?.lng != null);
 
-  // Center on user's location if we have it, else on the first spot,
-  // else default to Tokyo.
-  const center = here ? [here.lat, here.lng]
+  // Center: prefer the exact GPS fix, then IP approx, then the first
+  // spotted post, then a Tokyo default.
+  const center = here       ? [here.lat, here.lng]
+                : approxIp  ? [approxIp.lat, approxIp.lng]
                 : spotted[0] ? [spotted[0].spot.lat, spotted[0].spot.lng]
                 : [TOKYO.lat, TOKYO.lng];
 
@@ -158,6 +168,11 @@ export async function hydrateMap() {
   if (status) {
     if (cachedLocation()) {
       status.textContent = t('map.subtitle_with_loc', { n: spotted.length, r: getRadius() });
+    } else if (approxIp) {
+      // IP-only fix — show the city name so the user knows the
+      // centering is approximate and that the unlock gate is inactive.
+      const where = approxIp.city || approxIp.country || '推定位置';
+      status.textContent = spotted.length + ' 件のピン · 地図はおおよそ ' + where + ' 中心 (IP 推定)';
     } else if (permissionDenied()) {
       status.textContent = t('map.subtitle_denied', { n: spotted.length });
     } else {
