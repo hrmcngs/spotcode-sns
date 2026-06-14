@@ -57,7 +57,8 @@
           ]
         }
       ],
-      "category": "public.app-category.social-networking"
+      "category": "public.app-category.social-networking",
+      "identity": null
     },
     "win": {
       "target": [
