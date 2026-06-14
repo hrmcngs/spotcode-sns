@@ -8,11 +8,7 @@
 //   - CACHE is stamped to the deploy commit by .github/workflows/pages.yml;
 //     never edit the placeholder in PRs — it would just cause merge conflicts.
 
-<<<<<<< HEAD
 const CACHE = 'spotcode-shell-__BUILD_SHA__';
-=======
-const CACHE = 'spotcode-shell-__BUILD_SHA__';
->>>>>>> 3f598cf (chore(sw): stamp deploy SHA into CACHE so PRs stop conflicting on it)
 const SHELL = [
   './',
   './index.html',
