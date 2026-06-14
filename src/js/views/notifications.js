@@ -95,10 +95,14 @@ function renderRow(n) {
 
 export function renderNotifications() {
   renderVersion++;
+  // Real page header, not a fake one-item tab bar. The previous markup
+  // reused .timeline__head + .tab and rendered a lone centered "通知"
+  // with a blue underline, which (a) looked broken next to home's 3-tab
+  // bar and (b) reserved a tall sticky strip with awkward empty space.
   return (
-    '<div class="timeline__head">' +
-      '<span class="tab is-active">通知</span>' +
-    '</div>' +
+    '<header class="notif-head">' +
+      '<h2>通知</h2>' +
+    '</header>' +
     '<div id="notif-list">' +
       '<div class="stub"><p class="stub__sub">読み込み中…</p></div>' +
     '</div>'
