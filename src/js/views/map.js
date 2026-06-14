@@ -93,7 +93,11 @@ export async function hydrateMap() {
   }
   if (myVersion !== renderVersion) return;
 
-  const posts = await allPosts({ limit: 500 }).catch((err) => {
+  // 500 was overkill — for a small SNS there's no point shoving 500
+  // markers into the canvas, and the heavier Supabase round trip was
+  // the single biggest contributor to "/spots feels slow". 200 still
+  // covers every realistic case and shaves load time noticeably.
+  const posts = await allPosts({ limit: 200 }).catch((err) => {
     console.warn('hydrateMap: allPosts failed, rendering empty map', err);
     return [];
   });
@@ -158,10 +162,21 @@ export async function hydrateMap() {
     mapInst.fitBounds(ring.getBounds(), { padding: [4, 4], maxZoom: 19, animate: false });
   }
 
+  // Use circleMarker instead of marker:
+  //   - pure SVG, no per-pin image asset to lay out
+  //   - cheaper hit-testing
+  //   - scales with zoom (subjective improvement on cluttered areas)
+  // And bind the popup LAZILY: building 200 popup HTML strings up front
+  // (each one runs escape() over the body, calls isNearSpotSync, formats
+  // the locked banner) burned more time than the marker creation itself
+  // and was thrown away for every pin the user never clicked. Defer it
+  // to the first popupopen event per marker.
   markerLayer = L.layerGroup().addTo(mapInst);
   for (const p of spotted) {
-    const m = L.marker([p.spot.lat, p.spot.lng]);
-    m.bindPopup(pinPopupHtml(p), { className: 'map-popup' });
+    const m = L.circleMarker([p.spot.lat, p.spot.lng], {
+      radius: 7, weight: 2, color: '#f91880', fillColor: '#f91880', fillOpacity: 0.85,
+    });
+    m.bindPopup(() => pinPopupHtml(p), { className: 'map-popup' });
     markerLayer.addLayer(m);
   }
 
