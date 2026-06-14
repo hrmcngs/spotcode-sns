@@ -142,9 +142,13 @@ export async function hydrateNotifications() {
 }
 
 // Click delegation for Accept / Deny on inline follow-request rows.
-// Re-fetches the list after a state change so the row disappears (deny)
-// or upgrades to a plain "follow" entry (accept).
-export async function handleNotifAction(e) {
+// MUST stay synchronous — main.js uses
+//   if (handleNotifAction(e)) return;
+// to early-out when this handler took the event. An `async function`
+// returns a Promise (always truthy), which would unconditionally
+// short-circuit every later click handler (Edit profile, Like,
+// Report, Delete, …). Do the actual network work fire-and-forget.
+export function handleNotifAction(e) {
   const accept = e.target.closest('[data-notif-accept]');
   const deny   = e.target.closest('[data-notif-deny]');
   if (!accept && !deny) return false;
@@ -153,11 +157,8 @@ export async function handleNotifAction(e) {
   const handle = (accept || deny).getAttribute(accept ? 'data-notif-accept' : 'data-notif-deny');
   if (!handle) return true;
   const fn = accept ? acceptFollowRequest : denyFollowRequest;
-  try {
-    await fn(handle);
-    await hydrateNotifications();
-  } catch (err) {
-    alert((accept ? '承認' : '拒否') + 'に失敗しました: ' + err.message);
-  }
+  fn(handle)
+    .then(() => hydrateNotifications())
+    .catch((err) => alert((accept ? '承認' : '拒否') + 'に失敗しました: ' + err.message));
   return true;
 }
