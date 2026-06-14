@@ -11,6 +11,8 @@
     "build:electron:mac": "electron-builder --mac",
     "build:electron:win": "electron-builder --win",
     "build:electron:linux": "electron-builder --linux",
+    "release": "electron-builder --publish always",
+    "release:mac": "electron-builder --mac --publish always",
     "cap:sync": "cap sync",
     "cap:open:ios": "cap open ios",
     "cap:add:ios": "cap add ios"
@@ -31,24 +33,50 @@
       "!src/sw.js",
       "!**/*.map"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "hrmcngs",
+        "repo": "spotcode-sns"
+      }
+    ],
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] },
-        { "target": "zip", "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "category": "public.app-category.social-networking"
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Network"
     }
   },
   "dependencies": {
     "@capacitor/core": "^6.1.2",
-    "@capacitor/ios": "^6.1.2"
+    "@capacitor/ios": "^6.1.2",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.0",
