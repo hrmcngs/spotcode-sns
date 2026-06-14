@@ -8,12 +8,44 @@
     "start:web": "npx http-server src -p 8080 -o",
     "start:electron": "ELECTRON_RUN_AS_NODE= electron .",
     "build:electron": "electron-builder",
+    "build:electron:mac": "electron-builder --mac",
+    "build:electron:win": "electron-builder --win",
+    "build:electron:linux": "electron-builder --linux",
     "cap:sync": "cap sync",
     "cap:open:ios": "cap open ios",
     "cap:add:ios": "cap add ios"
   },
   "author": "hrmcngs",
   "license": "MIT",
+  "build": {
+    "appId": "io.github.hrmcngs.spotcode",
+    "productName": "spotcode-sns",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "package.json",
+      "!src/sw.js",
+      "!**/*.map"
+    ],
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.social-networking"
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Network"
+    }
+  },
   "dependencies": {
     "@capacitor/core": "^6.1.2",
     "@capacitor/ios": "^6.1.2"
