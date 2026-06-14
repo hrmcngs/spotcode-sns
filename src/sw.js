@@ -57,6 +57,14 @@ const SHELL = [
   './js/views/auth-modal.js',
   './js/views/edit-profile-modal.js',
   './js/views/report-modal.js',
+  // Locally-bundled Leaflet (gmap.js prefers these over the unpkg CDN).
+  './lib/leaflet/leaflet.js',
+  './lib/leaflet/leaflet.css',
+  './lib/leaflet/images/layers.png',
+  './lib/leaflet/images/layers-2x.png',
+  './lib/leaflet/images/marker-icon.png',
+  './lib/leaflet/images/marker-icon-2x.png',
+  './lib/leaflet/images/marker-shadow.png',
 ];
 
 self.addEventListener('install', (event) => {

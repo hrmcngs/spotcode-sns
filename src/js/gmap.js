@@ -6,8 +6,21 @@
 // just need a `loadMaps()` promise that resolves with the map library.
 
 const LEAFLET_VERSION = '1.9.4';
-const LEAFLET_CSS = 'https://unpkg.com/leaflet@' + LEAFLET_VERSION + '/dist/leaflet.css';
-const LEAFLET_JS  = 'https://unpkg.com/leaflet@' + LEAFLET_VERSION + '/dist/leaflet.js';
+// Prefer the locally-bundled copy of Leaflet over the unpkg CDN —
+// works offline (especially in the Electron `file://` build where
+// cross-origin script loads from a CDN can be slow or blocked by
+// the embedded Chromium's security policy) and removes the network
+// round trip on first map open.
+//
+// `import.meta.url` resolves to `…/js/gmap.js`, so going up one
+// segment lands at `…/lib/leaflet/…`. That works in every host
+// (http GH Pages, file:// Electron, capacitor://) without
+// having to know `window.__BASE__`.
+const LIB_BASE = new URL('../lib/leaflet/', import.meta.url).href;
+const LEAFLET_CSS = LIB_BASE + 'leaflet.css';
+const LEAFLET_JS  = LIB_BASE + 'leaflet.js';
+const LEAFLET_CSS_FALLBACK = 'https://unpkg.com/leaflet@' + LEAFLET_VERSION + '/dist/leaflet.css';
+const LEAFLET_JS_FALLBACK  = 'https://unpkg.com/leaflet@' + LEAFLET_VERSION + '/dist/leaflet.js';
 
 let leafletPromise = null;
 
@@ -15,11 +28,26 @@ export function isReady() {
   return !!window.L;
 }
 
+// Try the local bundled copy first, then the unpkg CDN if local
+// somehow 404s (e.g. dev server serving a partial tree). Promise-
+// based so the caller can `await loadMaps()` either way.
+function injectScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.dataset.leaflet = '1';
+    script.onload  = () => window.L ? resolve(window.L) : reject(new Error('LOAD_FAILED'));
+    script.onerror = () => reject(new Error('SCRIPT_ERROR'));
+    document.head.appendChild(script);
+  });
+}
+
 export function loadMaps() {
   if (window.L) return Promise.resolve(window.L);
   if (leafletPromise) return leafletPromise;
 
-  leafletPromise = new Promise((resolve, reject) => {
+  leafletPromise = (async () => {
     if (!document.querySelector('link[data-leaflet]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
@@ -27,18 +55,20 @@ export function loadMaps() {
       link.dataset.leaflet = '1';
       document.head.appendChild(link);
     }
-    const script = document.createElement('script');
-    script.src = LEAFLET_JS;
-    script.async = true;
-    script.defer = true;
-    script.dataset.leaflet = '1';
-    script.onload  = () => window.L ? resolve(window.L) : reject(new Error('LOAD_FAILED'));
-    script.onerror = () => {
-      leafletPromise = null;
-      reject(new Error('SCRIPT_ERROR'));
-    };
-    document.head.appendChild(script);
-  });
+    try {
+      return await injectScript(LEAFLET_JS);
+    } catch (err) {
+      console.warn('loadMaps: local Leaflet failed, falling back to CDN', err);
+      // Remove the failed script tag so the next try can attach a new one.
+      document.querySelectorAll('script[data-leaflet]').forEach(s => s.remove());
+      try {
+        return await injectScript(LEAFLET_JS_FALLBACK);
+      } catch (err2) {
+        leafletPromise = null;
+        throw err2;
+      }
+    }
+  })();
   return leafletPromise;
 }
 
