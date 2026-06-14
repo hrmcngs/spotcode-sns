@@ -1,8 +1,10 @@
 // Unified notifications inbox. One timeline aggregating every event
 // addressed to the current user:
 //   like / comment / repost / bookmark / quote / follow / follow_request
-// Pending follow requests get inline Accept / Deny buttons (the old
-// /requests page is still reachable for users who bookmarked it).
+//
+// Twitter-style 2-column row: avatar (with small action-type badge
+// overlayed on its bottom-right) on the left, body text on the right.
+// Pending follow requests get inline Accept / Deny buttons.
 
 import { notificationsForMe,
          acceptFollowRequest, denyFollowRequest } from '../interactions.js';
@@ -21,19 +23,19 @@ function escape(s) {
 }
 
 const META = {
-  like:           { ico: 'heart',  className: 'notif--like',     label: 'いいねしました' },
-  comment:        { ico: 'reply',  className: 'notif--comment',  label: 'コメントしました' },
-  repost:         { ico: 'fork',   className: 'notif--repost',   label: 'リポストしました' },
-  bookmark:       { ico: 'star',   className: 'notif--bookmark', label: '保存しました' },
-  quote:          { ico: 'chart',  className: 'notif--quote',    label: '引用しました' },
-  follow:         { ico: 'user',   className: 'notif--follow',   label: 'フォローしました' },
-  follow_request: { ico: 'user',   className: 'notif--request',  label: 'フォローをリクエストしました' },
+  like:           { ico: 'heart',  mod: 'like',     label: 'いいねしました' },
+  comment:        { ico: 'reply',  mod: 'comment',  label: 'コメントしました' },
+  repost:         { ico: 'fork',   mod: 'repost',   label: 'リポストしました' },
+  bookmark:       { ico: 'star',   mod: 'bookmark', label: '保存しました' },
+  quote:          { ico: 'chart',  mod: 'quote',    label: '引用しました' },
+  follow:         { ico: 'user',   mod: 'follow',   label: 'フォローしました' },
+  follow_request: { ico: 'user',   mod: 'request',  label: 'フォローをリクエストしました' },
 };
 
 function postExcerpt(post) {
   if (!post) return '';
   const body = String(post.body || '');
-  return body.length > 80 ? body.slice(0, 80) + '…' : body;
+  return body.length > 90 ? body.slice(0, 90) + '…' : body;
 }
 
 function renderRow(n) {
@@ -43,32 +45,48 @@ function renderRow(n) {
              : n.post ? url('/post/' + n.post.id)
              : profileUrl;
 
-  const headLine =
-    '<a class="notif-row__name" href="' + profileUrl + '">' + escape(n.actor.name) + '</a>' +
-    ' <span class="notif-row__handle">@' + escape(n.actor.handle) + '</span>' +
-    ' <span class="notif-row__action">' + escape(meta.label) + '</span>' +
-    ' <span class="notif-row__time">· ' + escape(relTime(n.createdAt)) + '</span>';
+  // Avatar cell — avatar circle with a small coloured badge overlayed
+  // in its lower-right corner carrying the action-type icon.
+  const avatarCell =
+    '<div class="notif__avatar">' +
+      renderAvatar(n.actor) +
+      '<span class="notif__badge notif__badge--' + meta.mod + '">' +
+        icon(meta.ico, { size: 12 }) +
+      '</span>' +
+    '</div>';
 
-  const contextLine =
-    n.type === 'comment'   ? '<div class="notif-row__quote">' + escape(n.body || '') + '</div>'
-  : n.type === 'quote'     ? '<div class="notif-row__quote">' + escape(n.body || '') + '</div>'
-  : n.post                 ? '<div class="notif-row__post">' + escape(postExcerpt(n.post)) + '</div>'
-  : '';
+  // Title line — name + handle + action label + relative time.
+  // Wrap @handle and · time so they break cleanly on narrow viewports.
+  const title =
+    '<div class="notif__title">' +
+      '<span class="notif__name">' + escape(n.actor.name) + '</span>' +
+      ' <span class="notif__handle">@' + escape(n.actor.handle) + '</span>' +
+      ' <span class="notif__action">' + escape(meta.label) + '</span>' +
+      ' <span class="notif__time">· ' + escape(relTime(n.createdAt)) + '</span>' +
+    '</div>';
 
+  // Context line — comment body / quote body / referenced post excerpt.
+  const context =
+    (n.type === 'comment' || n.type === 'quote')
+      ? '<div class="notif__quote">' + escape(n.body || '') + '</div>'
+    : n.post
+      ? '<div class="notif__post">' + escape(postExcerpt(n.post)) + '</div>'
+    : '';
+
+  // Inline Accept / Deny for pending follow requests.
   const actions = n.type === 'follow_request'
-    ? '<div class="notif-row__actions">' +
-        '<button class="btn btn--primary btn--sm" data-notif-accept="' + escape(n.actor.handle) + '">承認</button>' +
-        '<button class="btn btn--ghost btn--sm" data-notif-deny="' + escape(n.actor.handle) + '">拒否</button>' +
+    ? '<div class="notif__actions">' +
+        '<button type="button" class="btn btn--primary btn--sm" data-notif-accept="' + escape(n.actor.handle) + '">承認</button>' +
+        '<button type="button" class="btn btn--ghost   btn--sm" data-notif-deny="'   + escape(n.actor.handle) + '">拒否</button>' +
       '</div>'
     : '';
 
   return (
-    '<a class="notif-row ' + meta.className + '" href="' + link + '">' +
-      '<div class="notif-row__ico">' + icon(meta.ico, { size: 18 }) + '</div>' +
-      '<div class="notif-row__avatar">' + renderAvatar(n.actor) + '</div>' +
-      '<div class="notif-row__body">' +
-        '<div class="notif-row__head">' + headLine + '</div>' +
-        contextLine +
+    '<a class="notif notif--' + meta.mod + '" href="' + link + '">' +
+      avatarCell +
+      '<div class="notif__body">' +
+        title +
+        context +
         actions +
       '</div>' +
     '</a>'
@@ -116,7 +134,7 @@ export async function hydrateNotifications() {
     root.innerHTML =
       '<div class="stub">' +
         '<h2 class="stub__title">まだ通知はありません</h2>' +
-        '<p class="stub__sub">いいね / コメント / リポスト / 保存 / 引用 / フォロー があるとここに集まります。</p>' +
+        '<p class="stub__sub">いいね / コメント / リポスト / 保存 / 引用 / フォロー / リクエスト があるとここに集まります。</p>' +
       '</div>';
     return;
   }
@@ -131,6 +149,7 @@ export async function handleNotifAction(e) {
   const deny   = e.target.closest('[data-notif-deny]');
   if (!accept && !deny) return false;
   e.preventDefault();
+  e.stopPropagation(); // don't trigger the outer <a class="notif"> link
   const handle = (accept || deny).getAttribute(accept ? 'data-notif-accept' : 'data-notif-deny');
   if (!handle) return true;
   const fn = accept ? acceptFollowRequest : denyFollowRequest;
