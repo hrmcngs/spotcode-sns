@@ -109,10 +109,32 @@ export async function hydrateMap() {
                 : [TOKYO.lat, TOKYO.lng];
 
   mapInst = L.map(canvas, { zoomControl: true }).setView(center, here ? 15 : 13);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+  // ---- Base layers ----
+  // Default: OSM standard map. Two aerial options behind a layer
+  // switcher in the top-right corner: GSI シームレス空中写真 (very
+  // high resolution but Japan only) and Esri World Imagery (lower
+  // res but worldwide). All three are free and key-less; attribution
+  // ribbon goes in the bottom-right per each provider's policy.
+  const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
     maxZoom: 19,
-  }).addTo(mapInst);
+  });
+  const gsiAerial = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
+    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院 シームレス空中写真</a>',
+    maxZoom: 18,
+    maxNativeZoom: 18,
+  });
+  const esriAerial = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    maxZoom: 19,
+  });
+  osm.addTo(mapInst);
+  L.control.layers(
+    { '地図': osm, '航空写真 (日本)': gsiAerial, '航空写真 (世界)': esriAerial },
+    null,
+    { position: 'topright', collapsed: true }
+  ).addTo(mapInst);
 
   if (here) {
     L.circle(center, { radius: getRadius(), color: '#1d9bf0', weight: 1, fillOpacity: 0.08 }).addTo(mapInst);
