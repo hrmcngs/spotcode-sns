@@ -8,13 +8,17 @@
 // at render time — no SQL change required.
 
 const TTL_MS = 5 * 60 * 1000;
-let radiusM = 500;
+// Default unlock radius for reading a spot's post body. 100m is the
+// product spec from the user: pin locations are always public on the
+// map, but the body of an idea only unlocks when the viewer walks
+// within ~100m of the pin.
+let radiusM = 100;
 let cached = null;       // { lat, lng, ts } | null
 let denied = false;      // true once the user (or system) rejected access
 let pending = null;      // in-flight permission request, shared
 
 export function getRadius() { return radiusM; }
-export function setRadius(m) { radiusM = Math.max(50, Number(m) || 500); }
+export function setRadius(m) { radiusM = Math.max(20, Number(m) || 100); }
 export function permissionDenied() { return denied; }
 export function cachedLocation() { return cached; }
 
