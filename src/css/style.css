@@ -1248,6 +1248,34 @@ a.trend-item:hover { background: var(--surface-2); }
 
 .stub--inline { padding: 1.2rem 1rem; }
 
+/* ---------- quick-nav (Not-found / profile-not-found rescue links)
+   On mobile the sidebar is hidden behind the hamburger, so users
+   landing on a dead-end stub need an obvious set of "go to X"
+   buttons inline. */
+.quick-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: .5rem;
+  padding: 0 1.5rem 2rem;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.quick-nav__item {
+  display: flex; align-items: center; gap: .55rem;
+  padding: .7rem .9rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: .92rem;
+}
+.quick-nav__item:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.quick-nav__ico { display: inline-flex; color: var(--accent); }
+
 /* ---------- stub / empty page ---------- */
 .stub {
   padding: 3.5rem 1.5rem; text-align: center; color: var(--muted);
