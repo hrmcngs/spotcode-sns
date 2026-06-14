@@ -182,7 +182,12 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   }
   .hamburger:hover, .hamburger:focus-visible { background: var(--surface-2); outline: 0; }
 
-  /* The left rail becomes a sliding drawer instead of being hidden. */
+  /* The left rail becomes a sliding drawer instead of being hidden.
+     The viewport meta has `viewport-fit=cover`, which means the drawer
+     extends edge-to-edge on notched iPhones — without
+     `env(safe-area-inset-*)` the user-card row at the bottom gets
+     hidden under the iOS home indicator and the topmost nav item gets
+     clipped by the dynamic island. */
   .left-rail {
     display: block;
     position: fixed; top: 0; bottom: 0; left: 0;
@@ -192,7 +197,11 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
     background: var(--surface);
     border-right: 1px solid var(--border);
     box-shadow: 4px 0 24px rgba(0,0,0,.5);
-    padding: 1rem .85rem 1.2rem;
+    padding:
+      calc(1rem + env(safe-area-inset-top, 0px))
+      .85rem
+      calc(1.2rem + env(safe-area-inset-bottom, 0px))
+      calc(.85rem + env(safe-area-inset-left, 0px));
     overflow-y: auto;
     z-index: 200;
   }
