@@ -78,10 +78,16 @@ button { font: inherit; cursor: pointer; }
   display: flex; align-items: center; gap: .5rem;
   background: var(--bg); border: 1px solid var(--border);
   border-radius: 8px; padding: .35rem .7rem;
+  min-width: 0;
 }
 .topbar__search input {
   flex: 1; background: transparent; border: 0; outline: 0;
   color: var(--text); font: inherit;
+  min-width: 0;
+  /* `width: 100%` is what actually lets a flex child shrink past its
+     placeholder's intrinsic width on iOS Safari — flex:1 + min-width:0
+     alone isn't enough there. */
+  width: 100%;
 }
 .topbar__search input::placeholder { color: var(--muted); }
 .search-icon { color: var(--muted); }
@@ -168,6 +174,10 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   .topbar__actions #theme-toggle,
   .topbar__actions #ic-bell { display: none; }
   .topbar__actions .icon-btn { width: 30px; height: 30px; border-radius: 6px; }
+  /* No keyboard on touch devices — the / shortcut hint just takes
+     space and pushes the input edge off-screen. */
+  .topbar__search kbd { display: none; }
+  .topbar__search { padding: .3rem .55rem; gap: .35rem; }
 
   /* Hamburger button — shown only on mobile, opens the off-canvas
      sidenav so users can reach Home / Explore / Spots / etc on a

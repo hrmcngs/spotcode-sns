@@ -70,21 +70,33 @@ export async function hydrateMap() {
   const status = document.getElementById('map-status');
   if (!canvas) return;
 
-  let L, posts, here;
+  // Split the three awaits so a partial failure doesn't break the
+  // whole map. On mobile, ANY of these can fail individually:
+  //   - loadMaps()      → CDN slow / WKWebView CSP / offline
+  //   - allPosts()      → Supabase RLS / schema cache miss
+  //   - getMyLocation() → already resolves null on denial, but
+  //                       defend in depth in case that changes
+  // We only NEED Leaflet to render anything; posts and location are
+  // both nice-to-have and degrade to empty.
+  let L;
   try {
-    [L, posts, here] = await Promise.all([
-      loadMaps(),
-      allPosts({ limit: 500 }),
-      getMyLocation(),
-    ]);
+    L = await loadMaps();
   } catch (err) {
     if (myVersion !== renderVersion) return;
-    if (status) status.textContent = t('map.error') + ': ' + (err.message || '');
+    if (status) status.textContent = t('map.error') + ': Leaflet ' + (err.message || '');
+    console.error('hydrateMap: loadMaps failed', err);
     return;
   }
   if (myVersion !== renderVersion) return;
 
-  const spotted = posts.filter(p => p?.spot?.lat != null && p?.spot?.lng != null);
+  const posts = await allPosts({ limit: 500 }).catch((err) => {
+    console.warn('hydrateMap: allPosts failed, rendering empty map', err);
+    return [];
+  });
+  const here = await getMyLocation().catch(() => null);
+  if (myVersion !== renderVersion) return;
+
+  const spotted = (posts || []).filter(p => p?.spot?.lat != null && p?.spot?.lng != null);
 
   // Center on user's location if we have it, else on the first spot,
   // else default to Tokyo.
