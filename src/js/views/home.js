@@ -1,7 +1,8 @@
 import { renderIdeaForm } from '../idea-post.js';
-import { allPosts, hydrateQuotedPosts, cachedPosts } from '../data.js';
+import { allPosts, followingPosts, hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
+import { url }            from '../router.js';
 import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
 import { t }              from '../i18n.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
@@ -13,7 +14,28 @@ import { renderTimelineSkeleton } from '../skeleton.js';
 // dispatch, making posts visibly disappear "sometimes".
 let renderVersion = 0;
 
-function emptyTimeline(loggedIn) {
+// Per-tab cache scope keys for the timeline localStorage cache.
+const SCOPE = { foryou: 'home', following: 'following' };
+
+function emptyTimeline(tab, loggedIn) {
+  if (tab === 'following') {
+    if (!loggedIn) {
+      return (
+        '<div class="stub">' +
+          '<h2 class="stub__title">サインインしてください</h2>' +
+          '<p class="stub__sub">フォロー中の人の投稿を見るにはサインインが必要です。</p>' +
+          '<button class="btn btn--primary" data-auth="login">Log in</button>' +
+        '</div>'
+      );
+    }
+    return (
+      '<div class="stub">' +
+        '<h2 class="stub__title">まだフォローしている人がいません</h2>' +
+        '<p class="stub__sub">気になる人をフォローすると、その人の投稿だけがここに集まります。</p>' +
+        '<a class="back-home" href="' + url('/') + '">For you を見る</a>' +
+      '</div>'
+    );
+  }
   return (
     '<div class="stub">' +
       '<h2 class="stub__title">' + t('home.empty.title') + '</h2>' +
@@ -24,12 +46,11 @@ function emptyTimeline(loggedIn) {
   );
 }
 
-function loadingTimeline() {
-  // If we have a cached timeline from a previous visit, paint that
-  // immediately so the page never looks empty. The skeleton only shows
-  // for genuinely-first-time visitors. Either way, hydrateHome will
-  // refresh the list with live data once Supabase comes back.
-  const cached = cachedPosts('home');
+function loadingTimeline(tab) {
+  // If we have a cached timeline from a previous visit OF THE SAME
+  // tab, paint that immediately. Otherwise show the skeleton. Either
+  // way, hydrateHome will refresh with live data.
+  const cached = cachedPosts(SCOPE[tab] || 'home');
   if (cached && cached.length) {
     return '<div id="timeline-list-cached">' + cached.map(renderPost).join('') + '</div>';
   }
@@ -47,47 +68,54 @@ function errorTimeline(msg) {
   );
 }
 
-export function renderHome() {
+// `tab` ∈ { 'foryou', 'following' }. Default 'foryou' for backwards-
+// compat with any caller that doesn't pass the arg.
+export function renderHome(tab = 'foryou') {
   renderVersion++;
+  const cls = (key) => 'tab' + (tab === key ? ' is-active' : '');
   return [
     '<div class="timeline__head">',
-      '<a class="tab is-active" href="/">' + t('home.tab.foryou') + '</a>',
-      '<a class="tab" href="/">' + t('home.tab.following') + '</a>',
-      '<a class="tab" href="/spots">' + t('home.tab.spots') + '</a>',
+      '<a class="' + cls('foryou')    + '" href="' + url('/')          + '">' + t('home.tab.foryou')    + '</a>',
+      '<a class="' + cls('following') + '" href="' + url('/following') + '">' + t('home.tab.following') + '</a>',
+      '<a class="tab"                href="' + url('/spots')     + '">' + t('home.tab.spots')     + '</a>',
     '</div>',
     renderIdeaForm({ user: currentUser() }),
     '<div id="timeline-list">',
-      loadingTimeline(),
+      loadingTimeline(tab),
     '</div>',
   ].join('');
 }
 
-// Async fetch of the global timeline; replaces the loading skeleton with
-// the rendered posts (or the empty state). Like counts come in a second
-// hydration pass so the posts paint immediately. Guards every DOM write
-// against `renderVersion` so stale fetches don't clobber a fresh render.
-//
-// No geo-gate here — the timeline shows every post (spot-tagged or not,
-// nearby or not). The Map view (/spots) is where the location-gated
-// experience lives instead.
-export async function hydrateHome() {
+// Fetch + paint posts for the given tab. Guards every DOM write
+// against `renderVersion` so stale fetches don't clobber a fresh
+// render. `following` queries the followingPosts() helper which
+// returns [] for guests or for users following no-one.
+export async function hydrateHome(tab = 'foryou') {
   const myVersion = renderVersion;
   const list = document.getElementById('timeline-list');
   if (!list) return;
 
+  const me = currentUser();
+  // Logged-out Following tab — skip the network round trip, show
+  // the sign-in CTA directly.
+  if (tab === 'following' && !me) {
+    list.innerHTML = emptyTimeline('following', false);
+    return;
+  }
+
   let posts;
   try {
-    posts = await allPosts();
+    posts = tab === 'following' ? await followingPosts() : await allPosts();
   } catch (err) {
     if (myVersion !== renderVersion) return;
-    console.error('hydrateHome: allPosts failed', err);
+    console.error('hydrateHome: fetch failed', err);
     list.innerHTML = errorTimeline(err.message || '通信エラー');
     return;
   }
   if (myVersion !== renderVersion) return;
 
   if (!posts.length) {
-    list.innerHTML = emptyTimeline(!!currentUser());
+    list.innerHTML = emptyTimeline(tab, !!me);
     return;
   }
   list.innerHTML = posts.map(renderPost).join('');
