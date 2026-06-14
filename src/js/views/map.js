@@ -12,6 +12,7 @@ import { icon }     from '../icons.js';
 import { getMyLocation, isNearSpotSync, getRadius, permissionDenied,
          cachedLocation } from '../geo-gate.js';
 import { currentUser } from '../auth.js';
+import { timelineTabs } from './timeline-tabs.js';
 
 let renderVersion = 0;
 let mapInst = null;
@@ -28,6 +29,9 @@ function escape(s) {
 export function renderMap() {
   renderVersion++;
   return (
+    // Same For you / Following / Spots tab bar as Home so the user
+    // can jump back without a sidebar / hamburger detour.
+    timelineTabs('spots') +
     '<div class="map-head">' +
       '<div class="map-head__icon">' + icon('pin', { size: 24 }) + '</div>' +
       '<div>' +

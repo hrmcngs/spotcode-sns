@@ -6,6 +6,7 @@ import { url }            from '../router.js';
 import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
 import { t }              from '../i18n.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
+import { timelineTabs } from './timeline-tabs.js';
 
 // Monotonic counter incremented on every renderHome() so async hydrations
 // can detect when they've been superseded by a newer navigation / refresh
@@ -72,13 +73,8 @@ function errorTimeline(msg) {
 // compat with any caller that doesn't pass the arg.
 export function renderHome(tab = 'foryou') {
   renderVersion++;
-  const cls = (key) => 'tab' + (tab === key ? ' is-active' : '');
   return [
-    '<div class="timeline__head">',
-      '<a class="' + cls('foryou')    + '" href="' + url('/')          + '">' + t('home.tab.foryou')    + '</a>',
-      '<a class="' + cls('following') + '" href="' + url('/following') + '">' + t('home.tab.following') + '</a>',
-      '<a class="tab"                href="' + url('/spots')     + '">' + t('home.tab.spots')     + '</a>',
-    '</div>',
+    timelineTabs(tab),
     renderIdeaForm({ user: currentUser() }),
     '<div id="timeline-list">',
       loadingTimeline(tab),
