@@ -8,6 +8,7 @@ import { isFollowing, isRequested, followerCount, followingCount,
          hydrateProfileFollow } from '../interactions.js';
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
+import { quickNavLinks } from '../quick-nav.js';
 import { getBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
@@ -90,8 +91,8 @@ function notFound(handle) {
     '<div class="stub">' +
       '<h2 class="stub__title">@' + handle + ' ' + t('profile.not_found.title') + '</h2>' +
       '<p class="stub__sub">' + t('profile.not_found.sub') + '</p>' +
-      '<a class="back-home" href="/">' + t('profile.back') + '</a>' +
-    '</div>'
+    '</div>' +
+    quickNavLinks()
   );
 }
 

@@ -32,6 +32,7 @@ import { initIosZoomGuard }       from './ios-zoom.js';
 import { lockBodyScroll, unlockBodyScroll, forceUnlockBodyScroll } from './body-scroll-lock.js';
 import { fetchContributions, cachedContributions } from './github-activity.js';
 import { saveDraft, loadDraft, clearDraft, debounce } from './drafts.js';
+import { quickNavLinks } from './quick-nav.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -295,7 +296,12 @@ function dispatch(path) {
     });
   } else {
     document.title = 'Not found / spotcode-sns';
-    app.innerHTML = '<div class="stub"><h2 class="stub__title">Not found</h2><a class="back-home" href="/">← Back to home</a></div>';
+    app.innerHTML =
+      '<div class="stub">' +
+        '<h2 class="stub__title">ページが見つかりません</h2>' +
+        '<p class="stub__sub">URL が間違っているか、削除されたページです。</p>' +
+      '</div>' +
+      quickNavLinks();
   }
   renderRail().then((html) => { rail.innerHTML = html; });
   setActiveNav(path);
