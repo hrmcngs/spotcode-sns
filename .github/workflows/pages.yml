@@ -25,6 +25,15 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Stamp deploy SHA into service worker
+        # Replaces the __BUILD_SHA__ placeholder in src/sw.js with the
+        # short commit hash so every deploy gets a unique CACHE key and
+        # PRs never have to bump it (which used to cause sw.js conflicts
+        # on every parallel branch).
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          sed -i "s/__BUILD_SHA__/${sha}/" src/sw.js
+          grep '^const CACHE' src/sw.js
       - name: Upload static site artifact (src/)
         uses: actions/upload-pages-artifact@v3
         with:

@@ -5,9 +5,14 @@
 //   - precache the app shell on install
 //   - cache-first for same-origin GET requests
 //   - never intercept POSTs or cross-origin (Maps tiles, GitHub API, ...)
-//   - bump CACHE when shipping a new version to nuke the old shell
+//   - CACHE is stamped to the deploy commit by .github/workflows/pages.yml;
+//     never edit the placeholder in PRs — it would just cause merge conflicts.
 
+<<<<<<< HEAD
 const CACHE = 'spotcode-shell-v48';
+=======
+const CACHE = 'spotcode-shell-__BUILD_SHA__';
+>>>>>>> 3f598cf (chore(sw): stamp deploy SHA into CACHE so PRs stop conflicting on it)
 const SHELL = [
   './',
   './index.html',
