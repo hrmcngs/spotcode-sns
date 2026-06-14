@@ -22,24 +22,54 @@ function template() {
         '<div class="auth-divider"><span>or</span></div>' +
 
         // login pane
-        '<form class="auth-form" data-pane="login">' +
+        // For 1Password / iCloud Keychain / Google Password Manager
+        // to recognise the form and offer save / autofill:
+        //   - autocomplete="username" + "current-password" pair (the
+        //     password manager looks for that exact pairing — even on
+        //     an email-only login, "username" is what wins it).
+        //   - explicit id on every field so the manager can remember
+        //     which slot it filled.
+        //   - inputmode="email" for the right iOS / Android keyboard
+        //     and autocapitalize="off" so iOS doesn't capitalise
+        //     "Hiro" inside a typed address.
+        //   - method/action stub so iCloud Keychain treats the form
+        //     as a real login (otherwise Safari sometimes ignores it).
+        '<form class="auth-form" data-pane="login" method="post" action="#">' +
           '<h2 id="auth-title">Log in</h2>' +
-          '<label>Email<input type="email" name="email" required autocomplete="email"></label>' +
-          '<label>Password<input type="password" name="password" required autocomplete="current-password"></label>' +
+          '<label for="auth-login-email">Email' +
+            '<input id="auth-login-email" type="email" name="email" required ' +
+              'autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false">' +
+          '</label>' +
+          '<label for="auth-login-password">Password' +
+            '<input id="auth-login-password" type="password" name="password" required ' +
+              'autocomplete="current-password">' +
+          '</label>' +
           '<button type="submit" class="btn btn--primary btn--block">Log in</button>' +
           '<p class="auth-error" data-error></p>' +
         '</form>' +
 
         // register pane
-        '<form class="auth-form" data-pane="register" hidden>' +
+        // Sign-up: email is the username Supabase auth stores, so the
+        // credential the password manager saves should be email+password.
+        // Tag handle as autocomplete="off" so the manager doesn\'t save
+        // handle+password (which couldn\'t log in via Supabase anyway).
+        '<form class="auth-form" data-pane="register" hidden method="post" action="#">' +
           '<h2>Create your account</h2>' +
-          '<label>Display name<input name="name" required maxlength="40"></label>' +
-          '<label>Handle <span class="hint">(profile URL: /your_handle)</span>' +
-            '<input name="handle" required pattern="[A-Za-z0-9_]{2,20}" placeholder="2〜20 文字 半角英数_">' +
+          '<label for="auth-reg-name">Display name' +
+            '<input id="auth-reg-name" name="name" required maxlength="40" autocomplete="name">' +
           '</label>' +
-          '<label>Email<input type="email" name="email" required autocomplete="email"></label>' +
-          '<label>Password <span class="hint">(8 文字以上)</span>' +
-            '<input type="password" name="password" required minlength="8" autocomplete="new-password">' +
+          '<label for="auth-reg-handle">Handle <span class="hint">(profile URL: /your_handle)</span>' +
+            '<input id="auth-reg-handle" name="handle" required ' +
+              'pattern="[A-Za-z0-9_]{2,20}" placeholder="2〜20 文字 半角英数_" ' +
+              'autocomplete="off" autocapitalize="off" spellcheck="false">' +
+          '</label>' +
+          '<label for="auth-reg-email">Email' +
+            '<input id="auth-reg-email" type="email" name="email" required ' +
+              'autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false">' +
+          '</label>' +
+          '<label for="auth-reg-password">Password <span class="hint">(8 文字以上)</span>' +
+            '<input id="auth-reg-password" type="password" name="password" required ' +
+              'minlength="8" autocomplete="new-password">' +
           '</label>' +
 
           '<fieldset class="role-group">' +
@@ -51,7 +81,8 @@ function template() {
           '</fieldset>' +
 
           '<label data-gh-row>GitHub username <span class="hint" data-gh-hint>(Programmer は必須)</span>' +
-            '<input name="githubHandle" placeholder="octocat" pattern="[A-Za-z0-9-]{1,39}">' +
+            '<input id="auth-reg-github" name="githubHandle" placeholder="octocat" pattern="[A-Za-z0-9-]{1,39}" ' +
+              'autocomplete="off" autocapitalize="off" spellcheck="false">' +
             '<span class="gh-status" data-gh-status></span>' +
           '</label>' +
 
