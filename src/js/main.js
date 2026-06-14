@@ -6,7 +6,9 @@ import { renderProfile, hydrateProfileBadges, hydrateProfileActivity, hydratePro
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
-import { renderRequests, hydrateRequests } from './views/requests.js';
+// /requests folded into /notifications (follow_request rows have
+// inline Accept/Deny). Old `requests.js` is dead weight kept only for
+// the off chance someone re-introduces a dedicated requests page.
 import { renderNotifications, hydrateNotifications, handleNotifAction } from './views/notifications.js';
 import { renderPostDetail, hydratePostDetail, handleCommentDelete } from './views/post-detail.js';
 import { renderPostAnalytics, hydratePostAnalytics } from './views/post-analytics.js';
@@ -273,11 +275,11 @@ function dispatch(path) {
     document.title = 'Post / spotcode-sns';
     app.innerHTML = renderPostDetail(pid);
     hydratePostDetail(pid);
-  } else if (path === '/requests' || path === '/requests/') {
-    document.title = 'Requests / spotcode-sns';
-    app.innerHTML = renderRequests();
-    hydrateRequests();
-  } else if (path === '/notifications' || path === '/notifications/') {
+  } else if (path === '/notifications' || path === '/notifications/' ||
+             path === '/requests'      || path === '/requests/') {
+    // /requests is an alias for /notifications — the inbox shows
+    // follow_request rows with inline Accept / Deny. The old route
+    // stays valid so existing bookmarks don't 404.
     document.title = 'Notifications / spotcode-sns';
     app.innerHTML = renderNotifications();
     hydrateNotifications();
