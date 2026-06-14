@@ -542,6 +542,17 @@ initI18n();
 // optional columns are missing, instead of discovering them one
 // retry at a time per visible page.
 probeSchema();
+// Warm the geo-gate cache as early as possible. Without this, the
+// home / profile / spot timelines render with an empty location fix
+// → every spot-tagged post shows as locked until the viewer navigates
+// to the map. Fire-and-forget: if the browser-cached permission still
+// lets us through, this resolves in ~100ms with no UI prompt; if
+// permission was previously denied it resolves to null immediately.
+// On a successful fix we refresh() the current route so the in-flight
+// timeline re-renders with the now-warm geo state.
+import('./geo-gate.js').then(({ getMyLocation }) => {
+  getMyLocation().then((fix) => { if (fix) refresh(); }).catch(() => {});
+});
 initIosZoomGuard();
 
 // Mobile hamburger drawer — opens / closes the off-canvas sidenav.

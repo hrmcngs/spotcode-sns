@@ -7,6 +7,8 @@ import { icon }             from './icons.js';
 import { isLiked, likeCount, isReposted, isBookmarked } from './interactions.js';
 import { currentUser }      from './auth.js';
 import { renderAvatar }     from './avatar.js';
+import { isNearSpotSync, getRadius } from './geo-gate.js';
+import { isDevMode }        from './dev-mode.js';
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -127,6 +129,28 @@ function analyticsLink(postId) {
     icon('chart', { size: 16 }) + '</a>';
 }
 
+// Spot-tagged posts have their body gated by location: the viewer
+// has to be within geo-gate's radius of the pin to read it. Three
+// bypasses, in priority order:
+//   1. Viewer is the post author — see your own posts anywhere.
+//   2. Dev mode is on — admins / debug have full access.
+//   3. Post has no spot — nothing to gate against, always readable.
+function isLockedBySpot(p, me) {
+  if (!p.spot || p.spot.lat == null || p.spot.lng == null) return false;
+  if (me && p.authorHandle === me.handle) return false;
+  if (isDevMode()) return false;
+  return isNearSpotSync(p.spot.lat, p.spot.lng) !== true;
+}
+
+function lockedBanner() {
+  return (
+    '<div class="post__locked">' +
+      icon('pin', { size: 14, className: 'icon--inline' }) +
+      'ここから半径 ' + getRadius() + ' m 以内に来ると中身が読めます' +
+    '</div>'
+  );
+}
+
 export function renderPost(p) {
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
@@ -136,9 +160,10 @@ export function renderPost(p) {
   const reposted   = me && isReposted(p.id);
   const bookmarked = me && isBookmarked(p.id);
   const likes = likeCount(p.id);
-  const isOwn = me && p.authorHandle === me.handle;
+  const isOwn  = me && p.authorHandle === me.handle;
+  const locked = isLockedBySpot(p, me);
   return (
-    '<article class="post" data-post-id="' + escape(p.id) + '">' +
+    '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '">' +
       renderAvatar(u, { tag: 'a', href: profileUrl }) +
       '<div class="post__main">' +
         '<div class="post__head">' +
@@ -149,15 +174,20 @@ export function renderPost(p) {
           (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot) : '') +
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
-        '<div class="post__body">' + inlineFormat(escape(p.body)) + '</div>' +
-        spotAddress(p.spot) +
-        (p.githubLink
-          ? '<div class="post__meta"><a class="post__link" href="' + escape(p.githubLink) + '" target="_blank" rel="noopener">' +
-            icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(p.githubLink) + '</a></div>'
-          : '') +
-        files(p.files) +
-        commit(p.commit) +
-        quoteCard(p.quoteOf) +
+        (locked
+          ? lockedBanner() + spotAddress(p.spot)
+          : (
+            '<div class="post__body">' + inlineFormat(escape(p.body)) + '</div>' +
+            spotAddress(p.spot) +
+            (p.githubLink
+              ? '<div class="post__meta"><a class="post__link" href="' + escape(p.githubLink) + '" target="_blank" rel="noopener">' +
+                icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(p.githubLink) + '</a></div>'
+              : '') +
+            files(p.files) +
+            commit(p.commit) +
+            quoteCard(p.quoteOf)
+          )
+        ) +
         '<div class="post__actions">' +
           '<a class="act act--reply" title="コメント" href="' + url('/post/' + p.id) + '">' + icon('reply', { size: 16 }) + '<span>' + (a.replies || 0) + '</span></a>' +
           '<button class="act act--fork' + (reposted ? ' is-on' : '') + '" title="リポスト / 引用" data-post-id="' + escape(p.id) + '">' +
