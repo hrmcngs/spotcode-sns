@@ -115,8 +115,15 @@ export async function hydrateMap() {
   }).addTo(mapInst);
 
   if (here) {
-    L.circle(center, { radius: getRadius(), color: '#1d9bf0', weight: 1, fillOpacity: 0.08 }).addTo(mapInst);
+    // User position + unlock-radius ring. fitBounds() to the ring so
+    // its edge touches the canvas edge regardless of viewport size —
+    // that visually anchors the "you have to walk inside the blue
+    // circle to read the body" rule the geo-gate enforces.
+    const ring = L.circle(center, {
+      radius: getRadius(), color: '#1d9bf0', weight: 1, fillOpacity: 0.08,
+    }).addTo(mapInst);
     L.circleMarker(center, { radius: 6, color: '#1d9bf0', fillColor: '#1d9bf0', fillOpacity: 1 }).addTo(mapInst);
+    mapInst.fitBounds(ring.getBounds(), { padding: [4, 4], maxZoom: 19, animate: false });
   }
 
   markerLayer = L.layerGroup().addTo(mapInst);
