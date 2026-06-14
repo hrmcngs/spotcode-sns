@@ -105,7 +105,16 @@
     // got to run rewriteLinks() (e.g. a missing dep crashed main.js).
     // This script is intentionally inline + no-module so it runs even
     // when the ESM bootstrap is broken.
+    //
+    // SKIP this fix-up under file:// / capacitor:// / app:// (Electron,
+    // iOS Capacitor wrap, etc). In those builds the router uses HASH
+    // routing — converting `/settings` to `./settings` here would
+    // make the later click handler navigate to `/./settings` and hit
+    // the Not-found stub. The hash-routing variant is handled by
+    // router.js's rewriteLinks() once main.js does load.
     (function () {
+      var proto = location.protocol;
+      if (proto === 'file:' || proto === 'capacitor:' || proto === 'app:') return;
       var b = window.__BASE__ || '/';
       function fix(el) {
         var href = el.getAttribute('href');
