@@ -1098,6 +1098,54 @@ a.trend-item:hover { background: var(--surface-2); }
   .sk-avatar, .sk-name, .sk-handle, .sk-line, .sk-act { animation: none; }
 }
 
+/* ---------- notifications inbox ----------
+   One row per event addressed to the current user (like / comment /
+   repost / bookmark / quote / follow / follow_request). The 3-col
+   grid is icon + actor avatar + body. Action-specific tints come
+   from the .notif--<type> modifier on .notif-row. */
+.notif-row {
+  display: grid;
+  grid-template-columns: 32px 42px 1fr;
+  gap: .65rem;
+  padding: .85rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: inherit; text-decoration: none;
+}
+.notif-row:hover { background: color-mix(in srgb, var(--surface-2) 50%, transparent); }
+.notif-row__ico {
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: .25rem;
+  color: var(--muted);
+}
+.notif--like     .notif-row__ico { color: var(--like, #f91880); }
+.notif--repost   .notif-row__ico { color: var(--boost, #00ba7c); }
+.notif--bookmark .notif-row__ico { color: var(--warn, #ffd400); }
+.notif--comment  .notif-row__ico,
+.notif--quote    .notif-row__ico,
+.notif--follow   .notif-row__ico,
+.notif--request  .notif-row__ico { color: var(--accent); }
+.notif-row__avatar { display: flex; align-items: flex-start; }
+.notif-row__body { min-width: 0; }
+.notif-row__head { display: flex; align-items: baseline; gap: .35rem; flex-wrap: wrap; font-size: .92rem; }
+.notif-row__name   { color: var(--text); font-weight: 700; }
+.notif-row__handle { color: var(--muted); }
+.notif-row__action { color: var(--text); }
+.notif-row__time   { color: var(--muted); margin-left: auto; font-size: .85rem; }
+.notif-row__post {
+  margin-top: .35rem; padding: .4rem .6rem;
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+  border-radius: 8px;
+  font-size: .85rem; color: var(--muted);
+  white-space: pre-wrap; word-break: break-word;
+}
+.notif-row__quote {
+  margin-top: .35rem; color: var(--text);
+  white-space: pre-wrap; word-break: break-word;
+}
+.notif-row__actions {
+  display: flex; gap: .4rem; margin-top: .5rem;
+}
+
 /* ---------- post detail + comments ---------- */
 .post-detail .back-home { display: inline-block; padding: .8rem 1rem .2rem; }
 .post-detail__bar {

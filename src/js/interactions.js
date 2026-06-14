@@ -284,6 +284,176 @@ export async function denyFollowRequest(followerHandle) {
 }
 
 // ----------------------------------------------------------------------
+// UNIFIED NOTIFICATIONS
+// ----------------------------------------------------------------------
+//
+// Pull every event addressed to the current user — likes / comments
+// / reposts / bookmarks / quotes on their posts + follows + follow
+// requests — and return them as one timeline sorted newest-first.
+//
+// Each query is independent so a missing Stage (10/11 SQL not yet
+// run) just drops that notification type instead of failing the
+// whole page. Author identity of each event is embedded so the view
+// renders without a second round trip per row.
+//
+// Returns array of { type, actor, createdAt, post?, body?, status? }.
+//   type      'like' | 'comment' | 'repost' | 'bookmark' | 'quote' |
+//             'follow' | 'follow_request'
+//   actor     shaped profile of the person who took the action
+//   post      { id, body, createdAt } when the event is about one of
+//             my posts (everything except follow/follow_request)
+//   body      string — the comment body or the quoting post body
+//   status    'pending' | 'accepted' for follow events
+export async function notificationsForMe({ limit = 80 } = {}) {
+  let supa; try { supa = await getClient(); } catch { return []; }
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) return [];
+
+  // First grab my own post ids — every author-side event needs them.
+  // Capped at 200 so the IN-list stays small (Postgres / PostgREST
+  // handle bigger but the round trip gets chunky).
+  const { data: myPosts, error: myPostsErr } = await supa
+    .from('posts').select('id, body, created_at')
+    .eq('author_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (myPostsErr) console.warn('notificationsForMe: myPosts', myPostsErr);
+  const myPostIds = (myPosts || []).map(p => p.id);
+  const postById = new Map();
+  for (const p of (myPosts || [])) {
+    postById.set(p.id, {
+      id: p.id, body: p.body,
+      createdAt: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
+    });
+  }
+
+  // Build one promise per source. Each handles its own errors so a
+  // missing optional table / column doesn't kill the whole page.
+  const tasks = [];
+
+  // --- LIKES on my posts ---
+  if (myPostIds.length) tasks.push((async () => {
+    const { data, error } = await supa.from('likes')
+      .select('post_id, created_at, user:profiles!likes_user_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+      .in('post_id', myPostIds)
+      .neq('user_id', user.id)   // ignore self-likes
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) { console.warn('notif likes', error); return []; }
+    return (data || [])
+      .filter(r => r.user?.handle)
+      .map(r => ({
+        type: 'like',
+        actor: shapeProfile(r.user),
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+        post: postById.get(r.post_id),
+      }));
+  })());
+
+  // --- COMMENTS on my posts ---
+  if (myPostIds.length) tasks.push((async () => {
+    const { data, error } = await supa.from('comments')
+      .select('id, body, post_id, created_at, author:profiles!comments_author_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+      .in('post_id', myPostIds)
+      .neq('author_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) { console.warn('notif comments', error); return []; }
+    return (data || [])
+      .filter(r => r.author?.handle)
+      .map(r => ({
+        type: 'comment',
+        actor: shapeProfile(r.author),
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+        post: postById.get(r.post_id),
+        body: r.body,
+      }));
+  })());
+
+  // --- REPOSTS on my posts (Stage 11 — may not exist yet) ---
+  if (myPostIds.length) tasks.push((async () => {
+    const { data, error } = await supa.from('reposts')
+      .select('post_id, created_at, user:profiles!reposts_user_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+      .in('post_id', myPostIds)
+      .neq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) { return []; }   // table likely missing — silent skip
+    return (data || [])
+      .filter(r => r.user?.handle)
+      .map(r => ({
+        type: 'repost',
+        actor: shapeProfile(r.user),
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+        post: postById.get(r.post_id),
+      }));
+  })());
+
+  // --- BOOKMARKS on my posts (Stage 11 — RLS already lets author see) ---
+  if (myPostIds.length) tasks.push((async () => {
+    const { data, error } = await supa.from('bookmarks')
+      .select('post_id, created_at, user:profiles!bookmarks_user_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+      .in('post_id', myPostIds)
+      .neq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) { return []; }
+    return (data || [])
+      .filter(r => r.user?.handle)
+      .map(r => ({
+        type: 'bookmark',
+        actor: shapeProfile(r.user),
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+        post: postById.get(r.post_id),
+      }));
+  })());
+
+  // --- QUOTES of my posts (Stage 11 — posts with quote_of_post_id IN myPostIds) ---
+  if (myPostIds.length) tasks.push((async () => {
+    const { data, error } = await supa.from('posts')
+      .select('id, body, quote_of_post_id, created_at, author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+      .in('quote_of_post_id', myPostIds)
+      .neq('author_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) { return []; }
+    return (data || [])
+      .filter(r => r.author?.handle)
+      .map(r => ({
+        type: 'quote',
+        actor: shapeProfile(r.author),
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+        post: postById.get(r.quote_of_post_id),
+        body: r.body,
+        quotingPostId: r.id,
+      }));
+  })());
+
+  // --- FOLLOWS + FOLLOW REQUESTS targeting me ---
+  tasks.push((async () => {
+    const { data, error } = await supa.from('follows')
+      .select('status, created_at, follower:profiles!follows_follower_id_fkey(handle, name, avatar_url, avatar_shape, bio, is_private)')
+      .eq('target_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) { console.warn('notif follows', error); return []; }
+    return (data || [])
+      .filter(r => r.follower?.handle)
+      .map(r => ({
+        type: r.status === 'pending' ? 'follow_request' : 'follow',
+        actor: shapeProfile(r.follower),
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+        status: r.status,
+      }));
+  })());
+
+  const groups = await Promise.all(tasks);
+  const merged = [].concat(...groups);
+  merged.sort((a, b) => b.createdAt - a.createdAt);
+  return merged.slice(0, limit);
+}
+
+// ----------------------------------------------------------------------
 // REPOSTS / BOOKMARKS (Stage 11)
 // ----------------------------------------------------------------------
 //

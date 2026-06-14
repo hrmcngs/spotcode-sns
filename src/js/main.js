@@ -7,6 +7,7 @@ import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
 import { renderRequests, hydrateRequests } from './views/requests.js';
+import { renderNotifications, hydrateNotifications, handleNotifAction } from './views/notifications.js';
 import { renderPostDetail, hydratePostDetail, handleCommentDelete } from './views/post-detail.js';
 import { renderPostAnalytics, hydratePostAnalytics } from './views/post-analytics.js';
 import { renderFollowList, hydrateFollowList } from './views/follow-list.js';
@@ -224,7 +225,7 @@ function dispatch(path) {
   // mid-animation, …) the body would still be position:fixed and the
   // next page would render shifted. Force-clear once on every nav.
   forceUnlockBodyScroll();
-  const stubMatch      = path.match(/^\/(explore|repos|notifications)\/?$/);
+  const stubMatch      = path.match(/^\/(explore|repos)\/?$/);
   const mapMatch       = path === '/spots' || path === '/spots/';
   const spotMatch      = path.match(/^\/spot\/(.+?)\/?$/);
   const analyticsMatch = path.match(/^\/post\/([0-9a-fA-F-]{36})\/analytics\/?$/);
@@ -275,6 +276,10 @@ function dispatch(path) {
     document.title = 'Requests / spotcode-sns';
     app.innerHTML = renderRequests();
     hydrateRequests();
+  } else if (path === '/notifications' || path === '/notifications/') {
+    document.title = 'Notifications / spotcode-sns';
+    app.innerHTML = renderNotifications();
+    hydrateNotifications();
   } else if (stubMatch) {
     document.title = stubMatch[1] + ' / spotcode-sns';
     app.innerHTML = renderStub(stubMatch[1]);
@@ -621,6 +626,9 @@ document.addEventListener('click', (e) => {
     handleCommentDelete(cdel.getAttribute('data-comment-delete'));
     return;
   }
+
+  // Inline Accept / Deny on the notifications view's follow-request rows.
+  if (handleNotifAction(e)) return;
   if (e.target.closest('#edit-profile-btn')) {
     e.preventDefault();
     if (!currentUser()) return openAuth('login');
