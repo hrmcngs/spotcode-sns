@@ -13,7 +13,7 @@
     "build:electron:linux": "electron-builder --linux",
     "release": "electron-builder --publish always",
     "release:mac": "electron-builder --mac --publish always",
-    "cap:sync": "cap sync",
+    "cap:sync": "cap update ios && (test -L ios/App/App/public || (rm -rf ios/App/App/public && ln -s ../../../src ios/App/App/public)) && echo 'ios/App/App/public is symlinked to src/'",
     "cap:open:ios": "cap open ios",
     "cap:add:ios": "cap add ios"
   },

@@ -150,6 +150,11 @@ function shapePost(row) {
     spot:          row.spot || null,
     status:        row.status || 'wip',
     createdAt:     row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    // updated_at lands here when Postgres has a moddatetime / trigger on
+    // posts; missing column → undefined → "not edited". The renderer
+    // shows an "(編集済み)" pill only when editedAt > createdAt + 2s
+    // (debounce against same-tx clock skew).
+    editedAt:      row.updated_at ? new Date(row.updated_at).getTime() : null,
     quoteOfPostId: row.quote_of_post_id || null,
     actions: {
       replies:   row.comments_count   || 0,
@@ -435,6 +440,25 @@ export async function addPost(post) {
   );
   if (error) throw new Error(error.message);
   return shapePost(data);
+}
+
+// Edit an existing post — currently just the body, since that's what
+// the inline editor exposes. `.select()` forces PostgREST to return the
+// updated row so an RLS reject (not author / not dev with admin SQL)
+// surfaces as an empty array instead of looking like success.
+export async function updatePost(postId, fields) {
+  const supa = await getClient();
+  const patch = {};
+  if (typeof fields.body === 'string') patch.body = fields.body;
+  if (!Object.keys(patch).length) return null;
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').update(patch).eq('id', postId).select(cols)
+  );
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error('編集権限がありません（RLS により拒否）');
+  }
+  return shapePost(data[0]);
 }
 
 export async function removePost(postId) {

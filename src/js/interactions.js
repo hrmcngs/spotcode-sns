@@ -370,64 +370,63 @@ export async function notificationsForMe({ limit = 80 } = {}) {
       }));
   })());
 
-  // --- REPOSTS on my posts (Stage 11 — may not exist yet) ---
-  if (myPostIds.length) tasks.push((async () => {
-    const { data, error } = await supa.from('reposts')
-      .select('post_id, created_at, user:profiles!reposts_user_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
-      .in('post_id', myPostIds)
-      .neq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) { return []; }   // table likely missing — silent skip
-    return (data || [])
-      .filter(r => r.user?.handle)
-      .map(r => ({
-        type: 'repost',
-        actor: shapeProfile(r.user),
-        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
-        post: postById.get(r.post_id),
-      }));
-  })());
+  // Repost / bookmark / quote notifications removed by product request:
+  // users only want like, comment, follow, follow_request, mention here.
+  // The underlying tables still feed action counts on each post — only
+  // the inbox surface is trimmed.
 
-  // --- BOOKMARKS on my posts (Stage 11 — RLS already lets author see) ---
-  if (myPostIds.length) tasks.push((async () => {
-    const { data, error } = await supa.from('bookmarks')
-      .select('post_id, created_at, user:profiles!bookmarks_user_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
-      .in('post_id', myPostIds)
-      .neq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) { return []; }
-    return (data || [])
-      .filter(r => r.user?.handle)
-      .map(r => ({
-        type: 'bookmark',
-        actor: shapeProfile(r.user),
-        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
-        post: postById.get(r.post_id),
-      }));
-  })());
-
-  // --- QUOTES of my posts (Stage 11 — posts with quote_of_post_id IN myPostIds) ---
-  if (myPostIds.length) tasks.push((async () => {
-    const { data, error } = await supa.from('posts')
-      .select('id, body, quote_of_post_id, created_at, author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
-      .in('quote_of_post_id', myPostIds)
-      .neq('author_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) { return []; }
-    return (data || [])
-      .filter(r => r.author?.handle)
-      .map(r => ({
-        type: 'quote',
-        actor: shapeProfile(r.author),
-        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
-        post: postById.get(r.quote_of_post_id),
-        body: r.body,
-        quotingPostId: r.id,
-      }));
-  })());
+  // --- MENTIONS of me in any post body (someone else's post with
+  //     "@<myHandle>" in it). Uses ilike for a coarse server-side filter
+  //     and a strict word-boundary regex on the client so @aya doesn't
+  //     match @aya526dev. Requires we know my own handle; pulled from
+  //     the profiles table since the auth user only carries the id. ---
+  const { data: meProfile } = await supa
+    .from('profiles').select('handle').eq('id', user.id).maybeSingle();
+  const myHandle = meProfile?.handle;
+  if (myHandle) {
+    const mentionRe = new RegExp(
+      '(^|[^A-Za-z0-9_@])@' + myHandle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9_])',
+      'i'
+    );
+    tasks.push((async () => {
+      const { data, error } = await supa.from('posts')
+        .select('id, body, created_at, author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+        .ilike('body', '%@' + myHandle + '%')
+        .neq('author_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) { console.warn('notif mentions (posts)', error); return []; }
+      return (data || [])
+        .filter(r => r.author?.handle && mentionRe.test(r.body || ''))
+        .map(r => ({
+          type: 'mention',
+          actor: shapeProfile(r.author),
+          createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+          post: { id: r.id, body: r.body, createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now() },
+          body: r.body,
+        }));
+    })());
+    tasks.push((async () => {
+      const { data, error } = await supa.from('comments')
+        .select('id, body, post_id, created_at, author:profiles!comments_author_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+        .ilike('body', '%@' + myHandle + '%')
+        .neq('author_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) { console.warn('notif mentions (comments)', error); return []; }
+      return (data || [])
+        .filter(r => r.author?.handle && mentionRe.test(r.body || ''))
+        .map(r => ({
+          type: 'mention',
+          actor: shapeProfile(r.author),
+          createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+          // Link the row to the post being commented on so the inbox
+          // <a> navigates there; the body is the comment body.
+          post: { id: r.post_id },
+          body: r.body,
+        }));
+    })());
+  }
 
   // --- FOLLOWS + FOLLOW REQUESTS targeting me ---
   tasks.push((async () => {
