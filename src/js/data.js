@@ -49,7 +49,11 @@ export function getUser(handle) {
 //
 // 1 hour is short enough that a migration propagates to all sessions
 // within an hour, long enough to avoid retry-storming on a stable DB.
-const SCHEMA_CACHE_KEY = 'spotcode:schema-cache:v1';
+// v2: bumped so existing sessions with a stale `hasPhotos: false`
+// cached from before the Stage 12 migration was applied re-probe and
+// pick up the now-present column. Otherwise those clients silently
+// drop `photos` from every SELECT and show photo posts as text-only.
+const SCHEMA_CACHE_KEY = 'spotcode:schema-cache:v2';
 const SCHEMA_CACHE_TTL_MS = 60 * 60 * 1000;
 
 let hasCommentsCount  = true;
@@ -286,13 +290,28 @@ export function probeSchema() {
   probePromise = (async () => {
     try {
       const supa = await getClient();
+      // Optimistic reset: a cached `false` flag could be stale (e.g.
+      // user hit a missing-column error before the admin ran the
+      // migration). Flip every flag back to true before the probe so
+      // the first round trip actually verifies the live schema. If a
+      // column really doesn't exist, the retry loop below catches it
+      // and re-flips — same end state as before, but newly-migrated
+      // columns become visible without waiting for the TTL.
+      hasCommentsCount = hasRepostsCount = hasBookmarksCount = true;
+      hasQuotesCount = hasQuoteOf = hasPhotos = true;
+      let dirty = false;
       // Posts column probe — retry-loop drops one missing column per
       // round trip until the select succeeds or no more flags can flip.
       for (let i = 0; i <= OPTIONAL.length; i++) {
         const { error } = await supa.from('posts').select(postCols()).limit(1);
         if (!error) break;
         if (!isMissingOptionalColumn(error)) break;
+        dirty = true;
       }
+      // If the probe ended with all flags intact (success on the first
+      // try), persist that so a previously-cached `false` from before
+      // the migration doesn't keep getting re-loaded.
+      if (!dirty) persistSchemaCache();
     } catch {}
     // Parallel probe of optional tables. Dynamic import avoids a
     // circular dep between data.js ↔ interactions.js at module load.

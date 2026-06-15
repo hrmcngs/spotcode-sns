@@ -994,6 +994,72 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Code tool — insert a ``` fenced block at the textarea caret with
+  // the caret landing on the inner blank line. Saves the user typing
+  // the syntax (and gives a discoverability hint for Markdown).
+  const codeBtn = e.target.closest('.composer .compose-tool[title="code"]');
+  if (codeBtn) {
+    e.preventDefault();
+    const ta = document.querySelector('.composer textarea[name="text"]');
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    const before = ta.value.slice(0, start);
+    const after  = ta.value.slice(end);
+    // Add surrounding newlines only if we're not already at a line break
+    // — keeps fenced blocks formatted correctly in mid-paragraph paste.
+    const lead  = !before || before.endsWith('\n') ? '' : '\n';
+    const trail = !after  || after.startsWith('\n') ? '' : '\n';
+    const insert = lead + '```\n\n```' + trail;
+    ta.value = before + insert + after;
+    const caret = (before + lead + '```\n').length;
+    ta.setSelectionRange(caret, caret);
+    ta.focus();
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+
+  // Task list checkbox — toggle `- [ ]` ↔ `- [x]` in the source body
+  // for own posts, persist via updatePost, leave the UI updated.
+  // Non-author taps just preventDefault so the box never changes.
+  const taskBox = e.target.closest('.post__body--editable-tasks .md-task__box');
+  if (taskBox) {
+    const post = taskBox.closest('[data-post-id]');
+    if (!post) { e.preventDefault(); return; }
+    const idx = Number(taskBox.dataset.taskIdx);
+    if (!Number.isFinite(idx)) { e.preventDefault(); return; }
+    e.preventDefault();
+    // Build the new body from the CURRENT rendered checkboxes so we
+    // can't drift if multiple boxes toggled in flight. Pull the raw
+    // body via a hidden data attribute stamped on the post card.
+    const postId = post.getAttribute('data-post-id');
+    // Read the original markdown body from the post's data attribute,
+    // toggling the n-th task.
+    Promise.all([
+      import('./markdown.js'),
+      import('./data.js'),
+    ]).then(([{ toggleTaskInBody }, { getPost, updatePost: updateP }]) => {
+      // Get the current body. The render flow only stamps the rendered
+      // HTML, not the raw markdown, so re-fetch the post to be safe.
+      getPost(postId).then((p) => {
+        if (!p) return;
+        const next = toggleTaskInBody(p.body, idx);
+        if (next === p.body) return;
+        taskBox.disabled = true;
+        updateP(postId, { body: next })
+          .then(() => {
+            taskBox.checked = !taskBox.checked;
+            taskBox.disabled = false;
+          })
+          .catch((err) => {
+            alert('チェック更新に失敗: ' + err.message);
+            taskBox.disabled = false;
+          });
+      });
+    });
+    return;
+  }
+
   // Photo button — trigger the hidden file input. Mobile browsers
   // honour `capture="environment"` so the rear camera opens by default
   // (the picker still lets you switch to the library).

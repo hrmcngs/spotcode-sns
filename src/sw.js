@@ -47,6 +47,7 @@ const SHELL = [
   './js/drafts.js',
   './js/quick-nav.js',
   './js/mention-autocomplete.js',
+  './js/markdown.js',
   './js/skeleton.js',
   './js/github-activity.js',
   './js/github-verify.js',
