@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, shell } = require('electron');
 const path = require('path');
 
 // electron-updater is a runtime dep, but it's only meaningful for
@@ -56,7 +56,20 @@ function wireAutoUpdater(win) {
       defaultId: 0,
       cancelId: 1,
     }).then(({ response }) => {
-      if (response === 0) autoUpdater.quitAndInstall();
+      if (response !== 0) return;
+      // Try the in-place install first. On a properly-signed build this
+      // quits the app, swaps the bundle, and relaunches the new version.
+      autoUpdater.quitAndInstall();
+      // Safety net for unsigned macOS builds: Squirrel.Mac refuses to
+      // swap a bundle whose signature it can't verify, so quitAndInstall
+      // silently no-ops and the user is left staring at the same app.
+      // If we're still running 2s later, open the Releases page so they
+      // can install the new dmg manually. Windows/Linux paths reliably
+      // exit before this timer fires, so they only fall through here on
+      // a genuine failure.
+      setTimeout(() => {
+        shell.openExternal('https://github.com/hrmcngs/spotcode-sns/releases/latest');
+      }, 2000);
     });
   });
 

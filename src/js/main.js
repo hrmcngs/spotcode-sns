@@ -119,7 +119,7 @@ async function renderRail() {
         '<h3>' + t('rail.trending') + '</h3>' +
         '<div class="trend-list">' +
           trending.map((s, i) => (
-            '<a class="trend-item" href="' + url('/spot/' + encodeURIComponent(jpToRomaji(s.city) || s.city)) + '">' +
+            '<a class="trend-item" href="' + url('/spots/' + encodeURIComponent(jpToRomaji(s.city) || s.city)) + '">' +
               '<div class="trend-item__main">' +
                 '<span class="trend-item__cat">Trending · #' + (i + 1) + '</span>' +
                 '<span class="trend-item__name">' +
@@ -230,6 +230,7 @@ function dispatch(path) {
   forceUnlockBodyScroll();
   const stubMatch      = path.match(/^\/(repos)\/?$/);
   const mapMatch       = path === '/spots' || path === '/spots/';
+  const mapCityMatch   = path.match(/^\/spots\/(.+?)\/?$/);
   const spotMatch      = path.match(/^\/spot\/(.+?)\/?$/);
   const analyticsMatch = path.match(/^\/post\/([0-9a-fA-F-]{36})\/analytics\/?$/);
   const postMatch      = path.match(/^\/post\/([0-9a-fA-F-]{36})\/?$/);
@@ -269,6 +270,15 @@ function dispatch(path) {
     document.title = '@' + handle + ' ' + kind + ' / spotcode-sns';
     app.innerHTML = renderFollowList(handle, kind);
     hydrateFollowList(handle, kind);
+  } else if (mapCityMatch) {
+    // City-scoped map view — reached from the right-rail "Trending spots"
+    // card. Same canvas as /spots, but filtered and fit-bounded to a
+    // single 市区町村 so the user lands looking at that area.
+    const raw = decodeURIComponent(mapCityMatch[1]);
+    const city = romajiToJp(raw) || raw;
+    document.title = city + ' / spotcode-sns';
+    app.innerHTML = renderMap(city);
+    hydrateMap(city);
   } else if (mapMatch) {
     document.title = 'Map / spotcode-sns';
     app.innerHTML = renderMap();

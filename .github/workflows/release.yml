@@ -1,0 +1,81 @@
+name: Release
+
+# Tag-driven release flow, matching what Blockbench does:
+#   1. Bump "version" in package.json (e.g. 0.0.1 -> 0.1.0).
+#   2. Commit and push the version bump.
+#   3. Create a matching git tag and push it:
+#        git tag v0.1.0
+#        git push origin v0.1.0
+#   4. This workflow builds installers on macOS / Windows / Linux in
+#      parallel, then electron-builder uploads them — together with the
+#      `latest*.yml` metadata files that electron-updater reads — to a
+#      GitHub Release named after the package.json version.
+#
+# The tag's version MUST match package.json `version` exactly, otherwise
+# electron-builder refuses to publish. The leading "v" on the tag is
+# fine (electron-builder strips it).
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # required to create/upload to Releases
+
+jobs:
+  release:
+    name: Build & publish (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS is intentionally excluded — without a paid Apple Developer
+        # cert the unsigned .dmg gets flagged by Gatekeeper as "damaged",
+        # which is worse UX than just sending mac users to the PWA at
+        # https://hrmcngs.github.io/spotcode-sns/ (installable via
+        # Safari "Add to Dock" or Chrome "Install"). Local
+        # `npm run build:electron:mac` still works for testing.
+        os: [windows-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & publish to GitHub Releases
+        # electron-builder reads `build.publish` in package.json
+        # (provider: github, owner: hrmcngs, repo: spotcode-sns) and
+        # uploads dmg/zip/exe/AppImage/deb plus the latest*.yml manifests
+        # the auto-updater on installed apps polls for new versions.
+        #
+        # GH_TOKEN (not GITHUB_TOKEN) is the env var electron-builder
+        # looks for. The default `secrets.GITHUB_TOKEN` is fine — no PAT
+        # needed because `permissions.contents: write` above grants it
+        # release-write scope on this repo.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: npx --no-install electron-builder --publish always
+
+  publish:
+    # electron-builder uploads to a draft release (its default for stable
+    # versions) so a half-finished release never goes public. Flip the
+    # draft once all three platform jobs have succeeded — that way
+    # electron-updater clients only ever see fully-assembled releases.
+    # Runs only on full matrix success (no `if: always()`).
+    name: Publish release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Mark release as published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${GITHUB_REF_NAME}" --draft=false -R "${GITHUB_REPOSITORY}"

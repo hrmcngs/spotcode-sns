@@ -4,12 +4,22 @@
   <meta charset="utf-8">
   <title>spotcode-sns</title>
   <script>
-    // spa-github-pages style redirect: rewrite /spotcode-sns/<path>
-    // to /spotcode-sns/?/<path> so index.html can restore it.
-    // segmentCount = 1 for project pages (the "spotcode-sns" segment).
+    // spa-github-pages style redirect: rewrite /<base>/<path> to
+    // /<base>/?/<path> so index.html can restore it.
+    //
+    // segmentCount depends on where the app is hosted:
+    //   - GH Pages project URL  /spotcode-sns/foo → 1 ("spotcode-sns")
+    //   - root deploy / dev server /foo           → 0
+    // Hard-coding 1 broke local `npm run start:web` reloads: hitting
+    // /notifications on http-server falls through to this 404 page,
+    // segmentCount=1 treats "notifications" as the project base and
+    // redirects to /notifications/?/ — which 404s again, and each
+    // bounce appends another ~and~ segment from the accumulating
+    // query string. Match index.html's base-path detection so the
+    // redirect lands on the actual app index in both modes.
     (function () {
-      var segmentCount = 1;
       var l = window.location;
+      var segmentCount = (l.pathname.indexOf('/spotcode-sns/') === 0) ? 1 : 0;
       l.replace(
         l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
         l.pathname.split('/').slice(0, 1 + segmentCount).join('/') + '/?/' +

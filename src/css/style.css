@@ -17,6 +17,17 @@
   --radius: 12px;
   --radius-sm: 6px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* Actual rendered topbar height (padding .6rem×2 + .icon-btn 34px + 1px
+     border). Sticky bars (.timeline__head, .notif-head, side rails) used
+     to hard-code top: 64px which was ~10px taller than the real topbar,
+     so notifications/posts visibly scrolled through the gap and looked
+     like they were overlapping the page header. Tweak here, not in
+     every sticky rule. The mobile override below adjusts for smaller
+     .icon-btn (30px) and tighter .topbar padding (.5rem). */
+  --topbar-h: 54px;
+}
+@media (max-width: 640px) {
+  :root { --topbar-h: 47px; }
 }
 html[data-theme='light'] {
   --bg: #f6f8fa;
@@ -64,7 +75,15 @@ button { font: inherit; cursor: pointer; }
   grid-template-columns: 1fr minmax(280px, 520px) 1fr;
   align-items: center;
   gap: 1rem;
-  padding: .6rem 1rem;
+  /* viewport-fit=cover + apple-mobile-web-app-status-bar-style=black-translucent
+     puts the iOS status bar (clock, signal, battery) over our content. Pad the
+     top by env(safe-area-inset-top) so the brand/search/icons sit below it
+     instead of being overlapped. Left/right insets handle landscape notches. */
+  padding:
+    calc(.6rem + env(safe-area-inset-top, 0px))
+    calc(1rem + env(safe-area-inset-right, 0px))
+    .6rem
+    calc(1rem + env(safe-area-inset-left, 0px));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 50;
@@ -147,7 +166,7 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
    sat after the @media, source-order would win at equal specificity →
    on mobile the rail stays sticky, occupies a grid row above the
    timeline, and creates a huge empty gap below the topbar. */
-.left-rail { position: sticky; top: 64px; align-self: start; }
+.left-rail { position: sticky; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px)); align-self: start; }
 /* Tablet-ish: right rail gets cramped under ~1100px (the "Your
    activity" / "Trending spots" cards start wrapping their headings
    vertically), so drop it before that happens. Left rail keeps its
@@ -163,8 +182,25 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   .side-nav__item { justify-content: center; }
 }
 @media (max-width: 640px) {
-  .app-grid { grid-template-columns: 1fr; padding: .5rem; }
-  .topbar { grid-template-columns: auto auto 1fr auto; gap: .5rem; padding: .5rem .6rem; }
+  .app-grid {
+    grid-template-columns: 1fr;
+    /* Match the topbar safe-area handling: keep content clear of the
+       iOS home indicator at the bottom and notches at the sides. */
+    padding:
+      .5rem
+      calc(.5rem + env(safe-area-inset-right, 0px))
+      calc(.5rem + env(safe-area-inset-bottom, 0px))
+      calc(.5rem + env(safe-area-inset-left, 0px));
+  }
+  .topbar {
+    grid-template-columns: auto auto 1fr auto;
+    gap: .5rem;
+    padding:
+      calc(.5rem + env(safe-area-inset-top, 0px))
+      calc(.6rem + env(safe-area-inset-right, 0px))
+      .5rem
+      calc(.6rem + env(safe-area-inset-left, 0px));
+  }
   .brand-slash, .brand-repo { display: none; }
   /* On a 393px viewport the brand + search + 4 icons row overflows the
      topbar. Drop the always-present bell + theme toggle (still reachable
@@ -287,7 +323,11 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   min-width: 0;
 }
 .timeline__head {
-  position: sticky; top: 64px; z-index: 10;
+  /* The sticky topbar grows by env(safe-area-inset-top) on notched
+     iPhones (Capacitor wrap with viewport-fit=cover). If this row's
+     sticky offset stays at a flat 64px, the For you / Following / Spots
+     tabs end up tucked under the lower edge of the topbar. */
+  position: sticky; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px)); z-index: 10;
   display: flex;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -627,7 +667,7 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 .status-badge { font-size: .72rem !important; border-radius: 999px !important; padding: .15em .65em !important; }
 
 /* ---------- right rail (GitHub widgets, Twitter cards) ---------- */
-.right-rail { display: flex; flex-direction: column; gap: 1rem; position: sticky; top: 64px; align-self: start; }
+.right-rail { display: flex; flex-direction: column; gap: 1rem; position: sticky; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px)); align-self: start; }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1118,12 +1158,19 @@ a.trend-item:hover { background: var(--surface-2); }
    on the left, body text on the right. Action-specific tint comes
    from the .notif--<type> modifier on .notif. */
 .notif-head {
-  position: sticky; top: 64px; z-index: 10;
+  /* Page-header label. Stays compact (no separate chrome bar, no
+     border below) so it doesn't read as a duplicate of the topbar,
+     but needs enough vertical breathing room and font weight that
+     the first .notif row's 44px avatar doesn't visually crowd it
+     into looking like the header is being eaten by the row. */
   background: var(--surface);
-  padding: .8rem 1rem;
-  border-bottom: 1px solid var(--border);
+  padding: 1rem 1rem .9rem;
 }
-.notif-head h2 { margin: 0; font-size: 1.1rem; color: var(--text); }
+.notif-head h2 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text); }
+/* First .notif row pads itself a bit more from the header so the
+   avatar isn't shoulder-to-shoulder with the "通知" label. */
+.notif-head + #notif-list { margin-top: 0; }
+.notif-head + #notif-list > .notif:first-child { border-top: 0; padding-top: .8rem; }
 
 .notif {
   display: flex;
