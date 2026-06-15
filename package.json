@@ -1,6 +1,6 @@
 {
   "name": "spotcode-sns",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "description": "スポット紐付け型の開発者 SNS（Electron + Web）",
   "main": "electron/main.js",
