@@ -22,14 +22,21 @@ function escape(s) {
   }[c]));
 }
 
+// Inbox scope (per product request): like, comment, mention, follow,
+// follow_request. Repost / bookmark / quote no longer surface here —
+// the underlying tables still drive action counts on each post, but
+// users don't want them as inbox events.
+//
+// Follow events target YOU (not your post), so the active "フォロー
+// しました" reads ambiguously ("Alice followed [what?]"). Use the
+// passive form so the recipient instantly sees this is about being
+// followed. Same shape for the pending-request variant.
 const META = {
   like:           { ico: 'heart',  mod: 'like',     label: 'いいねしました' },
   comment:        { ico: 'reply',  mod: 'comment',  label: 'コメントしました' },
-  repost:         { ico: 'fork',   mod: 'repost',   label: 'リポストしました' },
-  bookmark:       { ico: 'star',   mod: 'bookmark', label: '保存しました' },
-  quote:          { ico: 'chart',  mod: 'quote',    label: '引用しました' },
-  follow:         { ico: 'user',   mod: 'follow',   label: 'フォローしました' },
-  follow_request: { ico: 'user',   mod: 'request',  label: 'フォローをリクエストしました' },
+  mention:        { ico: 'at',     mod: 'mention',  label: 'メンションされました' },
+  follow:         { ico: 'user',   mod: 'follow',   label: 'フォローされました' },
+  follow_request: { ico: 'user',   mod: 'request',  label: 'フォローリクエストされました' },
 };
 
 function postExcerpt(post) {
@@ -65,9 +72,12 @@ function renderRow(n) {
       ' <span class="notif__time">· ' + escape(relTime(n.createdAt)) + '</span>' +
     '</div>';
 
-  // Context line — comment body / quote body / referenced post excerpt.
+  // Context line — comment / mention body, or referenced post excerpt.
+  // Mentions render the mentioning text in the quote style because the
+  // actor's own words are what the recipient cares about, not the post
+  // they're commenting on.
   const context =
-    (n.type === 'comment' || n.type === 'quote')
+    (n.type === 'comment' || n.type === 'mention')
       ? '<div class="notif__quote">' + escape(n.body || '') + '</div>'
     : n.post
       ? '<div class="notif__post">' + escape(postExcerpt(n.post)) + '</div>'

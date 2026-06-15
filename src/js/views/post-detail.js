@@ -4,7 +4,7 @@
 // /post/<id>/analytics.
 
 import { getPost, hydrateQuotedPosts }  from '../data.js';
-import { renderPost }                   from '../post.js';
+import { renderPost, inlineFormat }     from '../post.js';
 import { renderAvatar }                 from '../avatar.js';
 import { currentUser }                  from '../auth.js';
 import { url }                          from '../router.js';
@@ -39,7 +39,7 @@ function renderComment(c, me) {
                 icon('trash', { size: 14 }) + '</button>'
             : '') +
         '</div>' +
-        '<div class="comment__body">' + escape(c.body) + '</div>' +
+        '<div class="comment__body">' + inlineFormat(escape(c.body)) + '</div>' +
       '</div>' +
     '</article>'
   );

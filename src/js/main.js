@@ -19,7 +19,7 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, allPosts, addPost, removePost, probeSchema } from './data.js';
+import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
@@ -35,6 +35,7 @@ import { lockBodyScroll, unlockBodyScroll, forceUnlockBodyScroll } from './body-
 import { fetchContributions, cachedContributions } from './github-activity.js';
 import { saveDraft, loadDraft, clearDraft, debounce } from './drafts.js';
 import { quickNavLinks } from './quick-nav.js';
+import { initMentionAutocomplete } from './mention-autocomplete.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -598,6 +599,7 @@ onRoute(dispatch);
 renderAuthArea();
 renderSideMe();
 initSearch();
+initMentionAutocomplete();
 
 onAuthChange(() => {
   // The signed-in identity changed (login / logout / profile update) —
@@ -652,6 +654,7 @@ document.addEventListener('click', (e) => {
   }
   if (e.target.closest('#logout-btn')) {
     e.preventDefault();
+    if (!confirm('ログアウトしますか？')) return;
     logout().finally(() => navigate('/'));
     return;
   }
@@ -685,13 +688,94 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Enter edit mode — swap the post body for a textarea + Save/Cancel.
+  // Only rendered on own posts, so no extra owner check needed here.
+  const editBtn = e.target.closest('.act--edit');
+  if (editBtn) {
+    e.preventDefault();
+    const post = editBtn.closest('[data-post-id]');
+    if (!post) return;
+    const body = post.querySelector('.post__body');
+    if (!body || body.querySelector('textarea')) return; // already editing
+    const original = body.textContent;
+    // Cache original DOM so Cancel restores formatting (mentions etc.).
+    body.dataset.originalHtml = body.innerHTML;
+    body.innerHTML =
+      '<textarea class="post__edit-input" rows="3">' +
+        // textareas treat raw text only — escape isn't needed because
+        // the browser handles it, but we do need < / & sanitised.
+        String(original).replace(/&/g, '&amp;').replace(/</g, '&lt;') +
+      '</textarea>' +
+      '<div class="post__edit-actions">' +
+        '<button type="button" class="btn btn--ghost btn--sm act--edit-cancel">キャンセル</button>' +
+        '<button type="button" class="btn btn--primary btn--sm act--edit-save">保存</button>' +
+      '</div>';
+    const ta = body.querySelector('textarea');
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    return;
+  }
+  const cancelBtn = e.target.closest('.act--edit-cancel');
+  if (cancelBtn) {
+    e.preventDefault();
+    const body = cancelBtn.closest('.post__body');
+    if (!body) return;
+    if (body.dataset.originalHtml != null) {
+      body.innerHTML = body.dataset.originalHtml;
+      delete body.dataset.originalHtml;
+    }
+    return;
+  }
+  const saveBtn = e.target.closest('.act--edit-save');
+  if (saveBtn) {
+    e.preventDefault();
+    const post = saveBtn.closest('[data-post-id]');
+    const body = saveBtn.closest('.post__body');
+    if (!post || !body) return;
+    const ta = body.querySelector('textarea');
+    if (!ta) return;
+    const newBody = ta.value.trim();
+    if (!newBody) { alert('本文を入力してください'); return; }
+    saveBtn.disabled = true;
+    ta.disabled = true;
+    updatePost(post.getAttribute('data-post-id'), { body: newBody })
+      .then(() => {
+        // Re-render the body inline — keep the post card in place so
+        // scroll position / surrounding cards don't jump.
+        // inlineFormat lives in post.js; cheaper than a full refresh().
+        import('./post.js').then(({ inlineFormat }) => {
+          const safe = newBody.replace(/[&<>"']/g, (c) => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+          }[c]));
+          body.innerHTML = inlineFormat(safe);
+          delete body.dataset.originalHtml;
+          // Stamp a synthetic "(編集済み)" pill if it isn't there yet.
+          const head = post.querySelector('.post__head');
+          if (head && !head.querySelector('.post__edited')) {
+            head.querySelector('.post__time')?.insertAdjacentHTML('afterend',
+              '<span class="post__edited">（編集済み）</span>');
+          }
+        });
+      })
+      .catch((err) => {
+        alert('編集に失敗しました: ' + err.message);
+        saveBtn.disabled = false;
+        ta.disabled = false;
+      });
+    return;
+  }
+
   // Delete own post (trash button — only rendered on own posts).
   const deleteBtn = e.target.closest('.act--delete');
   if (deleteBtn) {
     e.preventDefault();
     const post = deleteBtn.closest('[data-post-id]');
     if (!post) return;
-    if (!confirm('この投稿を削除しますか？元に戻せません。')) return;
+    const foreign = deleteBtn.hasAttribute('data-foreign-delete');
+    const msg = foreign
+      ? '他のユーザーの投稿を削除します。本当によろしいですか？元に戻せません。'
+      : 'この投稿を削除しますか？元に戻せません。';
+    if (!confirm(msg)) return;
     deleteBtn.disabled = true;
     // Optimistically fade the card so the user sees an immediate response,
     // then drop it from the DOM on success or restore on error.

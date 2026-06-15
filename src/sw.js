@@ -7,6 +7,19 @@
 //   - never intercept POSTs or cross-origin (Maps tiles, GitHub API, ...)
 //   - CACHE is stamped to the deploy commit by .github/workflows/pages.yml;
 //     never edit the placeholder in PRs — it would just cause merge conflicts.
+//
+// Local dev (localhost / 127.0.0.1) bypasses the cache entirely. The
+// CACHE key includes the literal `__BUILD_SHA__` placeholder when not
+// replaced by the deploy workflow, so it never rotates — every saved
+// edit to a precached JS / CSS file would otherwise be invisible until
+// the dev manually unregisters the SW. Network-first on localhost
+// fixes that and matches what you'd expect from `npm run start:web`.
+
+const IS_DEV_HOST = (
+  self.location.hostname === 'localhost' ||
+  self.location.hostname === '127.0.0.1' ||
+  self.location.hostname === '0.0.0.0'
+);
 
 const CACHE = 'spotcode-shell-__BUILD_SHA__';
 const SHELL = [
@@ -33,6 +46,7 @@ const SHELL = [
   './js/body-scroll-lock.js',
   './js/drafts.js',
   './js/quick-nav.js',
+  './js/mention-autocomplete.js',
   './js/skeleton.js',
   './js/github-activity.js',
   './js/github-verify.js',
@@ -89,6 +103,9 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // Bypass the SW completely during local dev so edits show up on
+  // reload without unregistering the worker. See IS_DEV_HOST comment.
+  if (IS_DEV_HOST) return;
 
   // Spot / profile / handle paths are SPA routes — index.html serves them.
   // Returning a stale cached entry for /spot/<city> would otherwise pin

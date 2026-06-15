@@ -17,11 +17,19 @@ function escape(s) {
 }
 
 // Very small inline-markdown pass over already-escaped body:
-//   `code`  → <code>code</code>
-// (Backticks are common in seed posts; treating them as code reads much
-// nicer than printing them literally.)
-function inlineFormat(escaped) {
-  return escaped.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+//   `code`     → <code>code</code>     (backticks read better than literal)
+//   @handle    → <a class="mention" href="/handle">@handle</a>
+//
+// `@handle` linkifies any [A-Za-z0-9_]+ following @, with a left-side
+// guard so we don't turn the @ in an email address into a mention.
+// Right-side bound is the regex character class itself — the next
+// non-word character ends the handle automatically. Exported so the
+// comment renderer (and any future text body) can reuse it.
+export function inlineFormat(escaped) {
+  return escaped
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/(^|[^A-Za-z0-9_@])@([A-Za-z0-9_]+)/g,
+      '$1<a class="mention" href="/$2">@$2</a>');
 }
 
 function files(list) {
@@ -161,6 +169,16 @@ export function renderPost(p) {
   const bookmarked = me && isBookmarked(p.id);
   const likes = likeCount(p.id);
   const isOwn  = me && p.authorHandle === me.handle;
+  // Dev mode acts as a moderator: show the delete (trash) button on
+  // anyone's post. The backend still enforces RLS — if the dev account
+  // doesn't have admin permission server-side, the call will fail with
+  // the existing "削除権限がありません" alert instead of silently no-op.
+  const canDelete = isOwn || isDevMode();
+  // Editing is author-only — dev mode acts as a moderator and gets the
+  // delete (destructive, irreversible) hammer, but rewriting someone
+  // else's words is a different threat model so we don't expose it.
+  const canEdit = isOwn;
+  const wasEdited = p.editedAt && p.editedAt - (p.createdAt || 0) > 2000;
   const locked = isLockedBySpot(p, me);
   return (
     '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '">' +
@@ -171,6 +189,7 @@ export function renderPost(p) {
           '<a class="post__handle" href="' + profileUrl + '">@' + escape(u.handle) + '</a>' +
           '<span class="post__sep">·</span>' +
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
+          (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">（編集済み）</span>' : '') +
           (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot) : '') +
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
@@ -198,8 +217,13 @@ export function renderPost(p) {
             icon('heart', { size: 16 }) + '<span>'  + likes + '</span></button>' +
           '<button class="act act--share" title="共有" data-post-id="' + escape(p.id) + '">' + icon('share', { size: 16 }) + '</button>' +
           (isOwn ? analyticsLink(p.id) : '') +
-          (isOwn
-            ? '<button class="act act--delete" title="この投稿を削除">' + icon('trash', { size: 16 }) + '</button>'
+          (canEdit
+            ? '<button class="act act--edit" title="この投稿を編集">' + icon('pencil', { size: 16 }) + '</button>'
+            : '') +
+          (canDelete
+            ? '<button class="act act--delete" title="' + (isOwn ? 'この投稿を削除' : '他のユーザーの投稿を削除（dev）') + '"' +
+                (isOwn ? '' : ' data-foreign-delete="1"') + '>' +
+              icon('trash', { size: 16 }) + '</button>'
             : '<button class="act act--report" title="report">' + icon('flag', { size: 16 }) + '</button>') +
         '</div>' +
       '</div>' +

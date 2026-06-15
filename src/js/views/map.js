@@ -224,7 +224,27 @@ export async function hydrateMap(city) {
     }
   }
 
-  // Leaflet measures container at init time; recompute once visible so
-  // tiles cover the full area on first paint.
-  setTimeout(() => mapInst && mapInst.invalidateSize(), 60);
+  // Leaflet measures container at init time and only requests tiles for
+  // the bounds it sees then. On mobile (iOS Safari especially) the
+  // viewport keeps changing while the URL bar collapses, so the
+  // measurement at init can be 0×0 and the user ends up with a blank
+  // canvas. Belt-and-suspenders:
+  //   1. Re-measure on a staircase of timeouts so we catch the layout
+  //      whenever it actually settles.
+  //   2. Re-measure whenever the canvas itself changes size (toolbar
+  //      collapse, orientation change, soft-keyboard).
+  const recompute = () => {
+    if (!mapInst) return;
+    mapInst.invalidateSize();
+    // After a real resize, the city-mode fit might be off — re-frame.
+    if (cityFiltered && cityFiltered.length > 1) {
+      const bounds = L.latLngBounds(cityFiltered.map(p => [p.spot.lat, p.spot.lng]));
+      mapInst.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
+    }
+  };
+  [60, 250, 600, 1500].forEach(ms => setTimeout(recompute, ms));
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => mapInst && mapInst.invalidateSize());
+    ro.observe(canvas);
+  }
 }
