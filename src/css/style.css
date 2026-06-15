@@ -17,6 +17,17 @@
   --radius: 12px;
   --radius-sm: 6px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* Actual rendered topbar height (padding .6rem×2 + .icon-btn 34px + 1px
+     border). Sticky bars (.timeline__head, .notif-head, side rails) used
+     to hard-code top: 64px which was ~10px taller than the real topbar,
+     so notifications/posts visibly scrolled through the gap and looked
+     like they were overlapping the page header. Tweak here, not in
+     every sticky rule. The mobile override below adjusts for smaller
+     .icon-btn (30px) and tighter .topbar padding (.5rem). */
+  --topbar-h: 54px;
+}
+@media (max-width: 640px) {
+  :root { --topbar-h: 47px; }
 }
 html[data-theme='light'] {
   --bg: #f6f8fa;
@@ -155,7 +166,7 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
    sat after the @media, source-order would win at equal specificity →
    on mobile the rail stays sticky, occupies a grid row above the
    timeline, and creates a huge empty gap below the topbar. */
-.left-rail { position: sticky; top: 64px; align-self: start; }
+.left-rail { position: sticky; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px)); align-self: start; }
 /* Tablet-ish: right rail gets cramped under ~1100px (the "Your
    activity" / "Trending spots" cards start wrapping their headings
    vertically), so drop it before that happens. Left rail keeps its
@@ -316,7 +327,7 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
      iPhones (Capacitor wrap with viewport-fit=cover). If this row's
      sticky offset stays at a flat 64px, the For you / Following / Spots
      tabs end up tucked under the lower edge of the topbar. */
-  position: sticky; top: calc(64px + env(safe-area-inset-top, 0px)); z-index: 10;
+  position: sticky; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px)); z-index: 10;
   display: flex;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -656,7 +667,7 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 .status-badge { font-size: .72rem !important; border-radius: 999px !important; padding: .15em .65em !important; }
 
 /* ---------- right rail (GitHub widgets, Twitter cards) ---------- */
-.right-rail { display: flex; flex-direction: column; gap: 1rem; position: sticky; top: 64px; align-self: start; }
+.right-rail { display: flex; flex-direction: column; gap: 1rem; position: sticky; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px)); align-self: start; }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1147,12 +1158,20 @@ a.trend-item:hover { background: var(--surface-2); }
    on the left, body text on the right. Action-specific tint comes
    from the .notif--<type> modifier on .notif. */
 .notif-head {
-  position: sticky; top: 64px; z-index: 10;
+  /* Tight inline label, not a separate "page header" block. The previous
+     padded + bordered version read as a redundant second chrome bar
+     between the topbar and the first .notif row — visually it looked
+     like the header and the first notification were overlapping/stacking
+     with weird empty space between them. Compact + no bottom border
+     lets it sit flush with the list below. */
   background: var(--surface);
-  padding: .8rem 1rem;
-  border-bottom: 1px solid var(--border);
+  padding: .65rem 1rem .4rem;
 }
-.notif-head h2 { margin: 0; font-size: 1.1rem; color: var(--text); }
+.notif-head h2 { margin: 0; font-size: 1rem; color: var(--text); }
+/* First .notif row sits immediately under the label with no extra
+   gap — its own top padding provides the visual breathing room. */
+.notif-head + #notif-list { margin-top: 0; }
+.notif-head + #notif-list > .notif:first-child { border-top: 0; padding-top: .6rem; }
 
 .notif {
   display: flex;
