@@ -71,7 +71,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Network"
+      "category": "Network",
+      "maintainer": "hrmcngs <78349683+hrmcngs@users.noreply.github.com>"
     }
   },
   "dependencies": {
