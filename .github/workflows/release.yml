@@ -56,3 +56,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: npx --no-install electron-builder --publish always
+
+  publish:
+    # electron-builder uploads to a draft release (its default for stable
+    # versions) so a half-finished release never goes public. Flip the
+    # draft once all three platform jobs have succeeded — that way
+    # electron-updater clients only ever see fully-assembled releases.
+    # Runs only on full matrix success (no `if: always()`).
+    name: Publish release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Mark release as published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${GITHUB_REF_NAME}" --draft=false -R "${GITHUB_REPOSITORY}"
