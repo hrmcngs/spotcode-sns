@@ -26,8 +26,9 @@ function escape(s) {
   }[c]));
 }
 
-export function renderMap() {
+export function renderMap(city) {
   renderVersion++;
+  const title = city ? escape(city) : t('map.title');
   return (
     // Same For you / Following / Spots tab bar as Home so the user
     // can jump back without a sidebar / hamburger detour.
@@ -35,7 +36,7 @@ export function renderMap() {
     '<div class="map-head">' +
       '<div class="map-head__icon">' + icon('pin', { size: 24 }) + '</div>' +
       '<div>' +
-        '<h2 class="map-head__title">' + t('map.title') + '</h2>' +
+        '<h2 class="map-head__title">' + title + '</h2>' +
         '<p class="map-head__sub" id="map-status">' + t('map.loading') + '</p>' +
       '</div>' +
     '</div>' +
@@ -68,7 +69,7 @@ function pinPopupHtml(post) {
     '</div>';
 }
 
-export async function hydrateMap() {
+export async function hydrateMap(city) {
   const myVersion = renderVersion;
   const canvas = document.getElementById('map-canvas');
   const status = document.getElementById('map-status');
@@ -113,11 +114,22 @@ export async function hydrateMap() {
   const approxIp = here ? null : await getApproxLocationViaIP().catch(() => null);
   if (myVersion !== renderVersion) return;
 
-  const spotted = (posts || []).filter(p => p?.spot?.lat != null && p?.spot?.lng != null);
+  const allSpotted = (posts || []).filter(p => p?.spot?.lat != null && p?.spot?.lng != null);
+  // City-scoped view (e.g. /spots/世田谷区 from the Trending card): drop
+  // pins outside the city so the canvas only shows that 市区町村's ideas
+  // and we can fitBounds onto them. Falls back to the unfiltered list
+  // if the city has no spots yet (avoids an empty Tokyo-default fly-in).
+  const cityFiltered = city
+    ? allSpotted.filter(p => p?.spot?.addressDetails?.city === city)
+    : null;
+  const spotted = (cityFiltered && cityFiltered.length) ? cityFiltered : allSpotted;
 
-  // Center: prefer the exact GPS fix, then IP approx, then the first
-  // spotted post, then a Tokyo default.
-  const center = here       ? [here.lat, here.lng]
+  // Center: in city mode prefer the city's spots (fitBounds below
+  // handles real positioning); otherwise prefer the exact GPS fix,
+  // then IP approx, then the first spotted post, then a Tokyo default.
+  const center = (cityFiltered && cityFiltered.length)
+                ? [cityFiltered[0].spot.lat, cityFiltered[0].spot.lng]
+                : here       ? [here.lat, here.lng]
                 : approxIp  ? [approxIp.lat, approxIp.lng]
                 : spotted[0] ? [spotted[0].spot.lat, spotted[0].spot.lng]
                 : [TOKYO.lat, TOKYO.lng];
@@ -155,11 +167,15 @@ export async function hydrateMap() {
     // its edge touches the canvas edge regardless of viewport size —
     // that visually anchors the "you have to walk inside the blue
     // circle to read the body" rule the geo-gate enforces.
-    const ring = L.circle(center, {
+    // In city-scoped mode we still draw the ring (the gate is still
+    // active) but defer the framing to the city-pins fitBounds below.
+    const ring = L.circle([here.lat, here.lng], {
       radius: getRadius(), color: '#1d9bf0', weight: 1, fillOpacity: 0.08,
     }).addTo(mapInst);
-    L.circleMarker(center, { radius: 6, color: '#1d9bf0', fillColor: '#1d9bf0', fillOpacity: 1 }).addTo(mapInst);
-    mapInst.fitBounds(ring.getBounds(), { padding: [4, 4], maxZoom: 19, animate: false });
+    L.circleMarker([here.lat, here.lng], { radius: 6, color: '#1d9bf0', fillColor: '#1d9bf0', fillOpacity: 1 }).addTo(mapInst);
+    if (!(cityFiltered && cityFiltered.length)) {
+      mapInst.fitBounds(ring.getBounds(), { padding: [4, 4], maxZoom: 19, animate: false });
+    }
   }
 
   // Use circleMarker instead of marker:
@@ -178,6 +194,19 @@ export async function hydrateMap() {
     });
     m.bindPopup(() => pinPopupHtml(p), { className: 'map-popup' });
     markerLayer.addLayer(m);
+  }
+
+  // City-scoped framing: fit the canvas to just this 市区町村's pins so
+  // the user lands looking at the area, not at their own location or
+  // the Tokyo default. Single pin → recenter at a sensible zoom (one
+  // point has no bounds).
+  if (cityFiltered && cityFiltered.length) {
+    if (cityFiltered.length === 1) {
+      mapInst.setView([cityFiltered[0].spot.lat, cityFiltered[0].spot.lng], 14);
+    } else {
+      const bounds = L.latLngBounds(cityFiltered.map(p => [p.spot.lat, p.spot.lng]));
+      mapInst.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
+    }
   }
 
   if (status) {

@@ -1158,20 +1158,19 @@ a.trend-item:hover { background: var(--surface-2); }
    on the left, body text on the right. Action-specific tint comes
    from the .notif--<type> modifier on .notif. */
 .notif-head {
-  /* Tight inline label, not a separate "page header" block. The previous
-     padded + bordered version read as a redundant second chrome bar
-     between the topbar and the first .notif row — visually it looked
-     like the header and the first notification were overlapping/stacking
-     with weird empty space between them. Compact + no bottom border
-     lets it sit flush with the list below. */
+  /* Page-header label. Stays compact (no separate chrome bar, no
+     border below) so it doesn't read as a duplicate of the topbar,
+     but needs enough vertical breathing room and font weight that
+     the first .notif row's 44px avatar doesn't visually crowd it
+     into looking like the header is being eaten by the row. */
   background: var(--surface);
-  padding: .65rem 1rem .4rem;
+  padding: 1rem 1rem .9rem;
 }
-.notif-head h2 { margin: 0; font-size: 1rem; color: var(--text); }
-/* First .notif row sits immediately under the label with no extra
-   gap — its own top padding provides the visual breathing room. */
+.notif-head h2 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text); }
+/* First .notif row pads itself a bit more from the header so the
+   avatar isn't shoulder-to-shoulder with the "通知" label. */
 .notif-head + #notif-list { margin-top: 0; }
-.notif-head + #notif-list > .notif:first-child { border-top: 0; padding-top: .6rem; }
+.notif-head + #notif-list > .notif:first-child { border-top: 0; padding-top: .8rem; }
 
 .notif {
   display: flex;
