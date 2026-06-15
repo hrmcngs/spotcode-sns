@@ -29,7 +29,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        # macOS is intentionally excluded — without a paid Apple Developer
+        # cert the unsigned .dmg gets flagged by Gatekeeper as "damaged",
+        # which is worse UX than just sending mac users to the PWA at
+        # https://hrmcngs.github.io/spotcode-sns/ (installable via
+        # Safari "Add to Dock" or Chrome "Install"). Local
+        # `npm run build:electron:mac` still works for testing.
+        os: [windows-latest, ubuntu-latest]
 
     steps:
       - uses: actions/checkout@v4
