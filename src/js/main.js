@@ -26,7 +26,7 @@ import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
          toggleRepost, toggleBookmark,
          hydrateMyFollows, clearInteractionsCache } from './interactions.js';
-import { renderAvatar } from './avatar.js';
+import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
@@ -223,6 +223,12 @@ function renderSideMe() {
 // Spot picked in the composer for the current home view, kept in memory
 // so the timeline can re-render without losing the chosen pin.
 let pendingSpot = null;
+// Photo data URLs queued for the next post submit. Capped at PHOTO_CAP
+// to keep the row size bounded — each entry is already resized to
+// ~1080px JPEG by fileToPhotoDataUrl, so a 4-photo post lands around
+// 500-700 KB worst case.
+const PHOTO_CAP = 4;
+let pendingPhotos = [];
 
 function dispatch(path) {
   // If a modal closed without unlocking (uncaught error path, navigation
@@ -460,8 +466,56 @@ function clearComposerUI() {
   if (linkToggle) linkToggle.setAttribute('aria-expanded', 'false');
   pendingSpot = null;
   syncSpotChip(null);
+  pendingPhotos = [];
+  renderPhotoPreviews();
   hideDraftBanner();
 }
+
+// Re-render the thumbnail row from pendingPhotos. Hidden when empty
+// so it doesn't reserve vertical space in the composer.
+function renderPhotoPreviews() {
+  const row = document.getElementById('compose-photos');
+  if (!row) return;
+  if (!pendingPhotos.length) {
+    row.hidden = true;
+    row.innerHTML = '';
+    return;
+  }
+  row.hidden = false;
+  row.innerHTML = pendingPhotos.map((src, i) => (
+    '<div class="compose-photo">' +
+      '<img src="' + src + '" alt="">' +
+      '<button type="button" class="compose-photo__remove" data-idx="' + i + '" aria-label="削除">×</button>' +
+    '</div>'
+  )).join('');
+}
+
+// File-input change → resize each picked file in parallel and append
+// to pendingPhotos (capped). Sourced from the composer-injected
+// hidden <input type="file">; we wire it once at document level so
+// it survives the composer being re-rendered by the router.
+document.addEventListener('change', async (e) => {
+  if (e.target?.id !== 'compose-photo-input') return;
+  const files = Array.from(e.target.files || []);
+  e.target.value = ''; // allow re-picking the same file later
+  if (!files.length) return;
+  const room = Math.max(0, PHOTO_CAP - pendingPhotos.length);
+  if (!room) { alert('写真は最大 ' + PHOTO_CAP + ' 枚までです'); return; }
+  const toProcess = files.slice(0, room);
+  try {
+    const urls = await Promise.all(toProcess.map(f => fileToPhotoDataUrl(f)));
+    pendingPhotos.push(...urls);
+    renderPhotoPreviews();
+    autosaveComposerDraft();
+  } catch (err) {
+    const reason =
+      err.message === 'NOT_IMAGE' ? '画像ファイルだけ選んでください'
+      : err.message === 'TOO_LARGE' ? '画像が大きすぎます（20MB まで）'
+      : err.message === 'IMAGE_DECODE' ? '画像を読み込めませんでした'
+      : err.message;
+    alert('写真の処理に失敗: ' + reason);
+  }
+});
 
 function showDraftBanner(message) {
   const b = document.getElementById('compose-draft-banner');
@@ -940,6 +994,27 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Photo button — trigger the hidden file input. Mobile browsers
+  // honour `capture="environment"` so the rear camera opens by default
+  // (the picker still lets you switch to the library).
+  if (e.target.closest('#compose-photo-btn')) {
+    e.preventDefault();
+    const input = document.getElementById('compose-photo-input');
+    if (input) input.click();
+    return;
+  }
+  // Remove a single queued photo from the preview row.
+  const removePhotoBtn = e.target.closest('.compose-photo__remove');
+  if (removePhotoBtn) {
+    e.preventDefault();
+    const idx = Number(removePhotoBtn.getAttribute('data-idx'));
+    if (Number.isFinite(idx)) {
+      pendingPhotos.splice(idx, 1);
+      renderPhotoPreviews();
+    }
+    return;
+  }
+
   // Save draft button — persist whatever is in the composer to
   // localStorage, then flash the "Draft saved" banner. Works offline.
   if (e.target.closest('[data-compose-draft]')) {
@@ -981,7 +1056,9 @@ document.addEventListener('submit', (e) => {
   if (!me) return openAuth('register');
   const ta = form.querySelector('textarea[name="text"]');
   const text = ta.value.trim();
-  if (!text) {
+  // Allow photo-only posts: empty body is fine when at least one photo
+  // is attached. Empty + no photo still rejects as before.
+  if (!text && !pendingPhotos.length) {
     ta.classList.add('is-error');
     ta.focus();
     return;
@@ -1004,6 +1081,7 @@ document.addEventListener('submit', (e) => {
     status: 'wip',
   };
   if (spotValue) post.spot = spotValue;
+  if (pendingPhotos.length) post.photos = pendingPhotos.slice();
 
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;

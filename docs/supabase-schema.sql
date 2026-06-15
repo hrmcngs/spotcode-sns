@@ -425,3 +425,15 @@ update public.posts p
    set reposts_count   = coalesce((select count(*) from public.reposts   r where r.post_id = p.id), 0),
        bookmarks_count = coalesce((select count(*) from public.bookmarks b where b.post_id = p.id), 0),
        quotes_count    = coalesce((select count(*) from public.posts     q where q.quote_of_post_id = p.id), 0);
+
+-- ----------------------------------------------------------------------
+-- Stage 12 — Photo attachments on posts
+-- ----------------------------------------------------------------------
+--
+-- Composer-attached photos live as data URLs in a jsonb array on each
+-- post row. Sized client-side to ~1080px JPEG before upload so a
+-- 4-photo post stays under ~700KB. Avoids needing a Supabase Storage
+-- bucket + signed URL flow for now; if storage size becomes an issue
+-- later, migrate to Storage with `posts.photo_paths text[]` instead.
+
+alter table public.posts add column if not exists photos jsonb default '[]'::jsonb;
