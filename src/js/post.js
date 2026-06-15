@@ -37,6 +37,20 @@ function files(list) {
   return '<div class="post__meta">' + list.map(([n, b]) => renderFileBadge(n, b)).join(' ') + '</div>';
 }
 
+// Composer-attached photos. Up to PHOTO_CAP (4) entries; layout is a
+// 1/2/2x2 grid depending on count so portrait/landscape mixes still
+// read cleanly without each photo eating a full row.
+function photos(list) {
+  if (!list || !list.length) return '';
+  const cls = 'post__photos post__photos--' + Math.min(4, list.length);
+  return '<div class="' + cls + '">' + list.map((src) => (
+    // Photos are data URLs, so loading="lazy" / decoding="async" are
+    // best-effort only — they help once a future Storage migration
+    // makes these into <img src="https://…"> with real bytes.
+    '<img class="post__photo" src="' + src + '" alt="" loading="lazy" decoding="async">'
+  )).join('') + '</div>';
+}
+
 function commit(c) {
   if (!c) return '';
   return (
@@ -202,6 +216,7 @@ export function renderPost(p) {
               ? '<div class="post__meta"><a class="post__link" href="' + escape(p.githubLink) + '" target="_blank" rel="noopener">' +
                 icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(p.githubLink) + '</a></div>'
               : '') +
+            photos(p.photos) +
             files(p.files) +
             commit(p.commit) +
             quoteCard(p.quoteOf)

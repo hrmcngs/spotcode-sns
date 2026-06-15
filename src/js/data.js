@@ -57,6 +57,7 @@ let hasRepostsCount   = true;
 let hasBookmarksCount = true;
 let hasQuotesCount    = true;
 let hasQuoteOf        = true;
+let hasPhotos         = true;
 
 (function loadSchemaCache() {
   try {
@@ -69,13 +70,14 @@ let hasQuoteOf        = true;
     if (v.hasBookmarksCount === false) hasBookmarksCount = false;
     if (v.hasQuotesCount    === false) hasQuotesCount    = false;
     if (v.hasQuoteOf        === false) hasQuoteOf        = false;
+    if (v.hasPhotos         === false) hasPhotos         = false;
   } catch {}
 })();
 function persistSchemaCache() {
   try {
     localStorage.setItem(SCHEMA_CACHE_KEY, JSON.stringify({
       at: Date.now(),
-      hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf,
+      hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf, hasPhotos,
     }));
   } catch {}
 }
@@ -87,6 +89,7 @@ function postCols() {
   if (hasBookmarksCount) extras.push('bookmarks_count');
   if (hasQuotesCount)    extras.push('quotes_count');
   if (hasQuoteOf)        extras.push('quote_of_post_id');
+  if (hasPhotos)         extras.push('photos');
   const head =
     'id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
@@ -103,14 +106,26 @@ const OPTIONAL = [
   { needle: 'bookmarks_count',  off: () => { if (hasBookmarksCount) { console.warn('posts.bookmarks_count missing — run Stage 11 SQL.'); hasBookmarksCount = false; return true; } return false; } },
   { needle: 'quotes_count',     off: () => { if (hasQuotesCount)    { console.warn('posts.quotes_count missing — run Stage 11 SQL.');    hasQuotesCount    = false; return true; } return false; } },
   { needle: 'quote_of_post_id', off: () => { if (hasQuoteOf)        { console.warn('posts.quote_of_post_id missing — run Stage 11 SQL.'); hasQuoteOf      = false; return true; } return false; } },
+  { needle: 'photos',           off: () => { if (hasPhotos)         { console.warn('posts.photos missing — run Stage 12 SQL: ALTER TABLE posts ADD COLUMN photos jsonb DEFAULT \'[]\'::jsonb.'); hasPhotos = false; return true; } return false; } },
 ];
 function isMissingOptionalColumn(error) {
   const msg = String(error?.message || '').toLowerCase();
   if (!msg.includes('does not exist')) return false;
+  // Two booleans: `matched` is whether the error CALLS OUT a known
+  // optional column (retry-worthy), `flipped` is whether we actually
+  // mutated a flag this call (persist-worthy). They diverge when a
+  // concurrent query already flipped the same flag a moment ago — in
+  // that case we still want to retry, because this caller's previous
+  // round trip ran with the column in the SELECT list.
+  let matched = false;
   let flipped = false;
-  for (const o of OPTIONAL) if (msg.includes(o.needle) && o.off()) flipped = true;
+  for (const o of OPTIONAL) {
+    if (!msg.includes(o.needle)) continue;
+    matched = true;
+    if (o.off()) flipped = true;
+  }
   if (flipped) persistSchemaCache();
-  return flipped;
+  return matched;
 }
 
 function shapeAuthor(a) {
@@ -155,6 +170,10 @@ function shapePost(row) {
     // shows an "(編集済み)" pill only when editedAt > createdAt + 2s
     // (debounce against same-tx clock skew).
     editedAt:      row.updated_at ? new Date(row.updated_at).getTime() : null,
+    // Composer-attached photos. Each entry is a data URL (JPEG) sized
+    // to ~1080px by fileToPhotoDataUrl(). Missing when the photos
+    // column isn't migrated yet → empty array, renderer skips silently.
+    photos:        Array.isArray(row.photos) ? row.photos : [],
     quoteOfPostId: row.quote_of_post_id || null,
     actions: {
       replies:   row.comments_count   || 0,
@@ -424,10 +443,16 @@ export async function hydrateQuotedPosts(posts) {
   }
 }
 
+const PHOTOS_MIGRATION_MSG =
+  '写真機能のマイグレーションが未実行です。Supabase で次の SQL を一度だけ実行してください: ' +
+  'ALTER TABLE posts ADD COLUMN IF NOT EXISTS photos jsonb DEFAULT \'[]\'::jsonb;';
+
 export async function addPost(post) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
   if (!user) throw new Error('ログインしていません');
+  const wantsPhotos = Array.isArray(post.photos) && post.photos.length > 0;
+
   const row = {
     author_id:   user.id,
     body:        post.body,
@@ -435,6 +460,35 @@ export async function addPost(post) {
     spot:        post.spot || null,
     status:      post.status || 'wip',
   };
+  if (wantsPhotos) row.photos = post.photos;
+
+  // When photos are attached: optimistically try with the column in
+  // place. If Postgres rejects with "photos does not exist", surface a
+  // clear migration message — do NOT fall through to the silent retry
+  // path, because that would post a text-only row and the user would
+  // think their photos vanished. (Optimistic vs. pre-checking hasPhotos
+  // matters when the user just ran the SQL but the cached flag is
+  // stale.) Other optional columns can still degrade through the
+  // resilient path on the SELECT side.
+  if (wantsPhotos) {
+    // Force hasPhotos true so postCols() includes it in the SELECT;
+    // a stale `false` would otherwise build a SELECT that misses the
+    // freshly-inserted photos column.
+    hasPhotos = true;
+    const { data, error } = await supa.from('posts').insert(row).select(postCols()).single();
+    if (error) {
+      const msg = String(error.message || '').toLowerCase();
+      if (msg.includes('photos') && msg.includes('does not exist')) {
+        isMissingOptionalColumn(error); // flip + persist for the session
+        throw new Error(PHOTOS_MIGRATION_MSG);
+      }
+      throw new Error(error.message);
+    }
+    return shapePost(data);
+  }
+
+  // No photos: use the resilient path so other optional Stages can
+  // degrade silently as before.
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').insert(row).select(cols).single()
   );

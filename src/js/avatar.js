@@ -65,6 +65,30 @@ export async function fileToAvatarDataUrl(file, max = 256) {
   return canvas.toDataURL('image/jpeg', 0.85);
 }
 
+// Same resize/encode pipeline as avatars but tuned for post-attached
+// photos: larger max edge (default 1080) and a tighter JPEG quality so
+// each photo lands in the 80-180 KB range. Used by the composer's
+// image button; the result is stored as a data URL in posts.photos
+// (jsonb array of strings) so we don't need a Supabase Storage bucket.
+export async function fileToPhotoDataUrl(file, max = 1080, quality = 0.72) {
+  if (!file) throw new Error('NO_FILE');
+  if (!/^image\//.test(file.type)) throw new Error('NOT_IMAGE');
+  if (file.size > 20 * 1024 * 1024) throw new Error('TOO_LARGE'); // 20MB pre-resize cap
+
+  const src = await readAsDataUrl(file);
+  const img = await loadImage(src);
+
+  const ratio = Math.min(1, max / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width  * ratio));
+  const h = Math.max(1, Math.round(img.height * ratio));
+  const canvas = document.createElement('canvas');
+  canvas.width  = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();

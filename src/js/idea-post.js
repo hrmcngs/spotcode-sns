@@ -46,9 +46,17 @@ export function renderIdeaForm({ user = null } = {}) {
           '<label class="compose-link__label" for="compose-github-input">' + t('home.composer.url') + '</label>' +
           '<input name="github" id="compose-github-input" type="url" placeholder="https://github.com/owner/repo/blob/...">' +
         '</div>' +
+        // Photo attachments preview row. Populated by main.js when the
+        // user picks files via the image tool; thumbnails carry an x
+        // button to remove individual photos before posting.
+        '<div class="compose-photos" id="compose-photos" hidden></div>' +
+        // Hidden file input. `accept="image/*"` opens the photo picker;
+        // `capture="environment"` hints mobile browsers to default to
+        // the rear camera (still falls back to the library on tap).
+        '<input type="file" id="compose-photo-input" accept="image/*" capture="environment" multiple hidden>' +
         '<div class="compose-actions">' +
           '<div class="compose-tools">' +
-            '<button type="button" class="compose-tool" title="image">' + icon('image', { size: 18 }) + '</button>' +
+            '<button type="button" class="compose-tool" id="compose-photo-btn" title="写真を追加">' + icon('image', { size: 18 }) + '</button>' +
             '<button type="button" class="compose-tool" title="code">'  + icon('code',  { size: 18 }) + '</button>' +
             '<button type="button" class="compose-tool" data-spot-pick title="' + t('picker.title') + '">' + icon('pin', { size: 18 }) + '</button>' +
             '<button type="button" class="compose-tool" title="poll">'  + icon('chart', { size: 18 }) + '</button>' +
