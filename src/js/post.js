@@ -16,21 +16,11 @@ function escape(s) {
   }[c]));
 }
 
-// Very small inline-markdown pass over already-escaped body:
-//   `code`     → <code>code</code>     (backticks read better than literal)
-//   @handle    → <a class="mention" href="/handle">@handle</a>
-//
-// `@handle` linkifies any [A-Za-z0-9_]+ following @, with a left-side
-// guard so we don't turn the @ in an email address into a mention.
-// Right-side bound is the regex character class itself — the next
-// non-word character ends the handle automatically. Exported so the
-// comment renderer (and any future text body) can reuse it.
-export function inlineFormat(escaped) {
-  return escaped
-    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
-    .replace(/(^|[^A-Za-z0-9_@])@([A-Za-z0-9_]+)/g,
-      '$1<a class="mention" href="/$2">@$2</a>');
-}
+// Re-export the markdown renderer as `inlineFormat` for back-compat
+// with comment / quote callers that still want the lightweight pass.
+// Post bodies use the full block renderer below.
+export { renderMarkdown as inlineFormat } from './markdown.js';
+import { renderMarkdown } from './markdown.js';
 
 function files(list) {
   if (!list || !list.length) return '';
@@ -210,7 +200,9 @@ export function renderPost(p) {
         (locked
           ? lockedBanner() + spotAddress(p.spot)
           : (
-            '<div class="post__body">' + inlineFormat(escape(p.body)) + '</div>' +
+            '<div class="post__body' + (canEdit ? ' post__body--editable-tasks' : '') + '">' +
+              renderMarkdown(escape(p.body), { editable: canEdit }) +
+            '</div>' +
             spotAddress(p.spot) +
             (p.githubLink
               ? '<div class="post__meta"><a class="post__link" href="' + escape(p.githubLink) + '" target="_blank" rel="noopener">' +

@@ -1182,6 +1182,56 @@ html[data-theme='light'] .profile-cover {
 }
 html[data-theme='light'] .post__body code { color: #6a3df0; }
 
+/* Markdown blocks inside post / comment bodies. Lightweight subset —
+   headings, fenced code, lists, GitHub-style task checkboxes. The
+   parser lives in src/js/markdown.js. */
+.md-h { margin: .5rem 0 .25rem; font-weight: 700; line-height: 1.3; color: var(--text); }
+.md-h--1 { font-size: 1.35rem; }
+.md-h--2 { font-size: 1.18rem; }
+.md-h--3 { font-size: 1.05rem; }
+.md-pre {
+  margin: .4rem 0;
+  padding: .65rem .8rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: .85em;
+  line-height: 1.5;
+  white-space: pre;
+}
+.md-pre code {
+  /* Reset the inline-code chip styling so it doesn't double-frame
+     inside a pre block. */
+  all: unset;
+  font-family: inherit;
+  color: var(--text);
+}
+.md-list {
+  margin: .25rem 0 .35rem;
+  padding-left: 1.4rem;
+}
+.md-list li { margin: .15rem 0; }
+.md-task {
+  list-style: none;
+  margin-left: -1.4rem;
+  display: flex; align-items: flex-start; gap: .45rem;
+}
+.md-task__box {
+  margin-top: .35em;
+  flex: 0 0 auto;
+  width: 16px; height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.md-task__box:disabled { cursor: default; opacity: .85; }
+.md-task__text { flex: 1 1 auto; min-width: 0; }
+.md-task__box:checked + .md-task__text {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 /* Compose tools: SVG buttons */
 .compose-tool { display: inline-flex; align-items: center; justify-content: center; }
 
