@@ -714,22 +714,24 @@ onAuthChange(() => {
 
 // ----- delegated UI events -----
 
-// When the composer textarea takes focus (click, tab key, or the
-// New idea button), scroll it into view so the sticky topbar + tab
-// bar don't cover its top half. `scroll-margin-top` on the element
-// itself takes care of the offset.
-document.addEventListener('focusin', (e) => {
-  const ta = e.target;
-  if (!(ta instanceof HTMLTextAreaElement)) return;
-  if (!ta.closest('.composer')) return;
-  ta.scrollIntoView({ block: 'start', behavior: 'smooth' });
-});
+// (Removed the global focusin → scrollIntoView handler that fired on
+// every textarea tap: it caused a small smooth-scroll the user didn't
+// ask for. The "New idea" CTA below still scrolls the composer into
+// view explicitly — that's the one place auto-scroll is intended.)
 
 document.getElementById('open-compose')?.addEventListener('click', () => {
   if (!currentUser()) return openAuth('register');
   navigate('/');
   setTimeout(() => {
-    document.querySelector('.composer textarea')?.focus();
+    const ta = document.querySelector('.composer textarea');
+    if (!ta) return;
+    // Only scroll when the textarea is actually offscreen — `New idea`
+    // tapped from a scrolled-down position should jump up, but tapping
+    // it while the composer is already visible shouldn't budge.
+    const r = ta.getBoundingClientRect();
+    const offscreen = r.top < 0 || r.top > window.innerHeight - 80;
+    if (offscreen) ta.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    ta.focus();
   }, 30);
 });
 
@@ -1036,6 +1038,23 @@ document.addEventListener('click', (e) => {
       if (!result) return;
       pendingSpot = result;
       syncSpotChip(result);
+    });
+    return;
+  }
+
+  // Click on a post photo → open the fullscreen lightbox at that index.
+  // Pulls every photo from the same post card so the lightbox can
+  // arrow / swipe between them.
+  const photoImg = e.target.closest('.post__photo');
+  if (photoImg) {
+    e.preventDefault();
+    const card = photoImg.closest('.post__photos');
+    if (!card) return;
+    const all = [...card.querySelectorAll('.post__photo')];
+    const idx = all.indexOf(photoImg);
+    const srcs = all.map(img => img.getAttribute('src')).filter(Boolean);
+    import('./views/photo-lightbox.js').then(({ openLightbox }) => {
+      openLightbox(srcs, Math.max(0, idx));
     });
     return;
   }

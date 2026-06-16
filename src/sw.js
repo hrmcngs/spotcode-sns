@@ -70,6 +70,7 @@ const SHELL = [
   './js/views/notifications.js',
   './js/views/quote-modal.js',
   './js/views/poll-modal.js',
+  './js/views/photo-lightbox.js',
   './js/views/auth-modal.js',
   './js/views/edit-profile-modal.js',
   './js/views/report-modal.js',
