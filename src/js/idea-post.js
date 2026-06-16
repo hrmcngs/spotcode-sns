@@ -50,10 +50,13 @@ export function renderIdeaForm({ user = null } = {}) {
         // user picks files via the image tool; thumbnails carry an x
         // button to remove individual photos before posting.
         '<div class="compose-photos" id="compose-photos" hidden></div>' +
-        // Hidden file input. `accept="image/*"` opens the photo picker;
-        // `capture="environment"` hints mobile browsers to default to
-        // the rear camera (still falls back to the library on tap).
-        '<input type="file" id="compose-photo-input" accept="image/*" capture="environment" multiple hidden>' +
+        // Hidden file input. `accept="image/*"` opens the photo picker.
+        // `capture` is intentionally NOT set: iOS Safari crashes on the
+        // `capture + multiple` combination for some WebKit versions,
+        // and the iOS action sheet that opens without `capture` already
+        // lets the user pick "Take Photo" or "Photo Library" — so we
+        // don't lose camera access by dropping it.
+        '<input type="file" id="compose-photo-input" accept="image/*" multiple hidden>' +
         '<div class="compose-actions">' +
           '<div class="compose-tools">' +
             '<button type="button" class="compose-tool" id="compose-photo-btn" title="写真を追加">' + icon('image', { size: 18 }) + '</button>' +
