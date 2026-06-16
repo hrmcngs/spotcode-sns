@@ -203,32 +203,25 @@ function lockedBanner() {
   );
 }
 
-// Returns true when `viewer` is allowed to see a restricted post by
-// `author`. Author always sees their own; otherwise viewer must be on
-// the author's close-friends list OR share the same organization
-// (case-insensitive, trimmed). Returns false for guests.
-function isInRestrictedAudience(author, viewer) {
-  if (!author || !viewer) return false;
-  if (viewer.handle === author.handle) return true;
-  if (Array.isArray(author.closeFriends) && author.closeFriends.includes(viewer.handle)) return true;
-  const a = (author.organization || '').trim().toLowerCase();
-  const v = (viewer.organization || '').trim().toLowerCase();
-  if (a && v && a === v) return true;
-  return false;
-}
+// Tiny lookup so we can print a 🔒 hint next to restricted posts.
+// The actual gating is enforced by Stage 18 RLS — by the time a row
+// arrives at this renderer it has already been allow-listed for the
+// viewer, so we don't re-check. Only the badge text differs.
+const VIS_HINT = {
+  public:    null,
+  mutuals:   '🔁 相互フォローのみ',
+  following: '➡️ フォロー中のみ',
+  friends:   '💚 親しい友達のみ',
+  org:       '🏢 同じ組織のみ',
+  restricted:'🔒 親しい友達 / 組織のみ',
+};
 
 export function renderPost(p) {
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
   const profileUrl = url('/' + u.handle);
   const me = currentUser();
-  // Restricted-visibility gate: if the author limited the post to
-  // close-friends + same-org and the viewer isn't in that audience,
-  // drop the card entirely. Author info comes from the embedded
-  // join (p.author) which carries closeFriends + organization.
-  if (p.visibility === 'restricted' && !isInRestrictedAudience(p.author, me)) {
-    return '';
-  }
+  const visHint = VIS_HINT[p.visibility] || null;
   const liked      = me && isLiked(p.id);
   const reposted   = me && isReposted(p.id);
   const bookmarked = me && isBookmarked(p.id);
@@ -257,6 +250,7 @@ export function renderPost(p) {
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">（編集済み）</span>' : '') +
           (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot) : '') +
           (p.kind === 'idea' ? ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">💡 ' + escape(t('kind.idea')) + '</span>' : '') +
+          (visHint ? ' <span class="post__vis" title="' + escape(visHint) + '">' + escape(visHint) + '</span>' : '') +
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
         (locked

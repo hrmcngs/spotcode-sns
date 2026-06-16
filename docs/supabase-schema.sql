@@ -670,3 +670,118 @@ create policy "poll votes visible only on viewable posts"
 -- Note: posts.select RLS already filters, so the EXISTS effectively
 -- becomes "the viewer can see the parent post". Postgres optimises
 -- the join through.
+
+-- ----------------------------------------------------------------------
+-- Stage 18 — Granular post visibility (5 audience options)
+-- ----------------------------------------------------------------------
+--
+-- Stage 16 shipped a binary public / restricted toggle. Stage 18
+-- swaps it for five named audiences so the author can pick exactly
+-- who sees a given post:
+--
+--   public     — anyone (current default)
+--   mutuals    — viewers who follow the author AND are followed by
+--                the author back (accepted both ways)
+--   following  — viewers the author follows (one-way)
+--   friends    — viewers on the author's close_friends list
+--   org        — viewers in the same organization as the author
+--
+-- 'restricted' (Stage 16) is kept in the CHECK so old rows stay
+-- valid; it's treated as "friends OR org" in the policy (same
+-- behaviour as before this stage). The composer no longer offers
+-- it as a new value.
+
+alter table public.posts drop constraint if exists posts_visibility_check;
+alter table public.posts add constraint posts_visibility_check
+  check (visibility in ('public', 'restricted', 'mutuals', 'following', 'friends', 'org'));
+
+drop policy if exists "posts visible to allowed viewers" on public.posts;
+create policy "posts visible to allowed viewers"
+  on public.posts for select
+  using (
+    -- Anonymous + public-from-public-account.
+    (
+      posts.visibility = 'public'
+      and exists (
+        select 1 from public.profiles ap
+        where ap.id = posts.author_id and not ap.is_private
+      )
+    )
+    -- Author themselves.
+    or auth.uid() = posts.author_id
+    -- Admins (moderation).
+    or exists (
+      select 1 from public.profiles vp
+      where vp.id = auth.uid() and vp.is_admin = true
+    )
+    -- Authenticated viewer rules.
+    or exists (
+      select 1 from public.profiles ap
+      left join public.profiles vp on vp.id = auth.uid()
+      where ap.id = posts.author_id
+      and (
+        -- Public post on a private account → approved follower OR
+        -- close friend OR same-org viewer.
+        (
+          ap.is_private and posts.visibility = 'public' and (
+            exists (
+              select 1 from public.follows f
+              where f.follower_id = auth.uid()
+              and f.target_id = ap.id
+              and f.status = 'accepted'
+            )
+            or (vp.id is not null and vp.handle = any(ap.close_friends))
+            or (
+              ap.organization is not null and vp.organization is not null
+              and lower(trim(ap.organization)) = lower(trim(vp.organization))
+            )
+          )
+        )
+        -- Mutual-only: both directions of follow must be accepted.
+        or (
+          posts.visibility = 'mutuals' and vp.id is not null
+          and exists (
+            select 1 from public.follows f1
+            where f1.follower_id = auth.uid() and f1.target_id = ap.id
+            and f1.status = 'accepted'
+          )
+          and exists (
+            select 1 from public.follows f2
+            where f2.follower_id = ap.id and f2.target_id = auth.uid()
+            and f2.status = 'accepted'
+          )
+        )
+        -- Following-only: the author follows the viewer (author chose
+        -- to share with people they themselves follow).
+        or (
+          posts.visibility = 'following' and vp.id is not null
+          and exists (
+            select 1 from public.follows f
+            where f.follower_id = ap.id and f.target_id = auth.uid()
+            and f.status = 'accepted'
+          )
+        )
+        -- Close friends only.
+        or (
+          posts.visibility = 'friends' and vp.id is not null
+          and vp.handle = any(ap.close_friends)
+        )
+        -- Same organization only.
+        or (
+          posts.visibility = 'org' and vp.id is not null
+          and ap.organization is not null and vp.organization is not null
+          and lower(trim(ap.organization)) = lower(trim(vp.organization))
+        )
+        -- Legacy "restricted" (Stage 16) — friends OR org.
+        or (
+          posts.visibility = 'restricted' and vp.id is not null and (
+            vp.handle = any(ap.close_friends)
+            or (
+              ap.organization is not null and vp.organization is not null
+              and lower(trim(ap.organization)) = lower(trim(vp.organization))
+            )
+          )
+        )
+      )
+    )
+  );

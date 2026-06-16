@@ -236,7 +236,9 @@ let pendingPoll = null;
 // `idea` tag toggle. Mirrors the .compose-kind-toggle button state and
 // rides on addPost / updatePost.
 let pendingKind = null; // null | 'idea'
-// 'public' (default) or 'restricted' (close friends + same-org only).
+// One of: 'public' | 'mutuals' | 'following' | 'friends' | 'org'.
+// The actual gating happens server-side via Stage 18 RLS — this
+// value just rides on the addPost payload.
 let pendingVisibility = 'public';
 
 function dispatch(path) {
@@ -499,13 +501,11 @@ function syncKindToggle() {
   btn.dataset.kind = on ? 'idea' : 'off';
 }
 
-// Same for the visibility toggle (public/restricted).
+// Push the pendingVisibility back onto the <select> so a draft restore
+// or a clear-after-submit reflects the right option.
 function syncVisToggle() {
-  const btn = document.getElementById('compose-vis-toggle');
-  if (!btn) return;
-  const on = pendingVisibility === 'restricted';
-  btn.setAttribute('aria-pressed', String(on));
-  btn.dataset.vis = on ? 'restricted' : 'public';
+  const sel = document.getElementById('compose-vis-select');
+  if (sel) sel.value = pendingVisibility;
 }
 
 // Re-render the small pill that announces "📊 投票が添付されています"
@@ -551,6 +551,15 @@ function renderPhotoPreviews() {
 // hidden <input type="file">; we wire it once at document level so
 // it survives the composer being re-rendered by the router.
 document.addEventListener('change', async (e) => {
+  // Audience picker — store the selection so the next addPost knows
+  // who the post is for. Allowed values match the Stage 18 CHECK.
+  if (e.target?.id === 'compose-vis-select') {
+    const v = String(e.target.value || 'public');
+    const ALLOWED = new Set(['public', 'mutuals', 'following', 'friends', 'org']);
+    pendingVisibility = ALLOWED.has(v) ? v : 'public';
+    autosaveComposerDraft();
+    return;
+  }
   if (e.target?.id !== 'compose-photo-input') return;
   const files = Array.from(e.target.files || []);
   e.target.value = ''; // allow re-picking the same file later
@@ -646,9 +655,12 @@ function restoreComposerDraft() {
     pendingKind = 'idea';
     syncKindToggle();
   }
-  if (d.visibility === 'restricted') {
-    pendingVisibility = 'restricted';
-    syncVisToggle();
+  if (typeof d.visibility === 'string' && d.visibility !== 'public') {
+    const ALLOWED = new Set(['mutuals', 'following', 'friends', 'org', 'restricted']);
+    if (ALLOWED.has(d.visibility)) {
+      pendingVisibility = d.visibility;
+      syncVisToggle();
+    }
   }
   showDraftBanner();
 }
@@ -1123,15 +1135,8 @@ document.addEventListener('click', (e) => {
     autosaveComposerDraft();
     return;
   }
-  // Visibility toggle — public ↔ restricted (close friends + same org).
-  const visBtn = e.target.closest('#compose-vis-toggle');
-  if (visBtn) {
-    e.preventDefault();
-    pendingVisibility = pendingVisibility === 'restricted' ? 'public' : 'restricted';
-    syncVisToggle();
-    autosaveComposerDraft();
-    return;
-  }
+  // (Visibility is now a <select> handled via the document 'change'
+  // listener below — no click toggle.)
 
   // Chart tool — open the poll-attach modal. Modal resolves with
   // { question, options[], deadlineAt } on Confirm, { delete: true }
@@ -1342,7 +1347,7 @@ document.addEventListener('submit', (e) => {
   if (pendingPhotos.length) post.photos = pendingPhotos.slice();
   if (pendingPoll) post.poll = pendingPoll;
   if (pendingKind) post.kind = pendingKind;
-  if (pendingVisibility === 'restricted') post.visibility = 'restricted';
+  if (pendingVisibility && pendingVisibility !== 'public') post.visibility = pendingVisibility;
 
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;

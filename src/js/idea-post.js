@@ -47,12 +47,19 @@ export function renderIdeaForm({ user = null } = {}) {
             '<span class="compose-kind-toggle__icon">💡</span>' +
             '<span class="compose-kind-toggle__label">' + t('kind.idea') + '</span>' +
           '</button>' +
-          // Visibility toggle. Active = restricted (close friends +
-          // same org). Off = public (anyone can see).
-          '<button type="button" class="compose-vis-toggle" id="compose-vis-toggle" aria-pressed="false" data-vis="public" title="' + t('compose.vis.hint') + '">' +
-            '<span class="compose-vis-toggle__icon">🔒</span>' +
-            '<span class="compose-vis-toggle__label">' + t('compose.vis.restricted') + '</span>' +
-          '</button>' +
+          // Audience picker — 5 options, RLS enforced server-side.
+          // Native <select> for a compact UI that uses the OS picker
+          // on mobile. Default 'public'.
+          '<label class="compose-vis-select" title="' + t('compose.vis.hint') + '">' +
+            '<span class="compose-vis-select__caption">' + t('compose.vis.label') + '</span>' +
+            '<select id="compose-vis-select" name="visibility">' +
+              '<option value="public">🌐 ' + t('compose.vis.public') + '</option>' +
+              '<option value="mutuals">🔁 ' + t('compose.vis.mutuals') + '</option>' +
+              '<option value="following">➡️ ' + t('compose.vis.following') + '</option>' +
+              '<option value="friends">💚 ' + t('compose.vis.friends') + '</option>' +
+              '<option value="org">🏢 ' + t('compose.vis.org') + '</option>' +
+            '</select>' +
+          '</label>' +
         '</div>' +
         '<div class="compose-link" id="compose-link-row" hidden>' +
           '<label class="compose-link__label" for="compose-github-input">' + t('home.composer.url') + '</label>' +

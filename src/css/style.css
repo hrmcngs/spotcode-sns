@@ -562,27 +562,42 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 }
 .compose-kind-toggle__icon { font-size: 1em; }
 
-/* Same shape as the idea-tag pill but a different accent (green) so
-   it reads as a separate axis (visibility, not kind). Active = post
-   limited to close friends + same organization. */
-.compose-vis-toggle {
-  display: inline-flex; align-items: center; gap: .3em;
+/* Audience picker — native <select> wrapped in a pill so it lines up
+   with the spot / link / idea chips. Sized so the OS picker is one
+   tap on mobile. */
+.compose-vis-select {
+  display: inline-flex; align-items: center; gap: .35em;
   background: transparent; border: 1px dashed var(--border);
   color: var(--muted); cursor: pointer;
-  padding: .2em .65em; border-radius: 999px;
+  padding: .15em .55em; border-radius: 999px;
   font-size: .78rem; font-weight: 600;
 }
-.compose-vis-toggle:hover {
+.compose-vis-select:focus-within {
   color: var(--green, #2ea043);
   border-color: color-mix(in srgb, var(--green, #2ea043) 55%, transparent);
 }
-.compose-vis-toggle[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--green, #2ea043) 14%, transparent);
-  color: var(--green, #2ea043);
-  border-color: color-mix(in srgb, var(--green, #2ea043) 50%, transparent);
-  border-style: solid;
+.compose-vis-select__caption { color: var(--muted); }
+.compose-vis-select select {
+  background: transparent; border: 0; color: inherit;
+  font: inherit; cursor: pointer;
+  padding: .1em .2em;
+  appearance: none; -webkit-appearance: none;
 }
-.compose-vis-toggle__icon { font-size: 1em; }
+.compose-vis-select select option { color: var(--text); background: var(--surface); }
+
+/* Audience hint badge on rendered posts (post head). Same silhouette
+   as the kind badge, neutral colour so it doesn't compete with the
+   idea / status badges. */
+.post__vis {
+  display: inline-flex; align-items: center;
+  padding: .05em .55em;
+  border-radius: 999px;
+  font-size: .76em; font-weight: 600;
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  vertical-align: middle;
+}
 
 /* Idea kind badge on rendered posts. Slots into .post__head alongside
    the status badge / spot chip. */
