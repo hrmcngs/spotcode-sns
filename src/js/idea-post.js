@@ -44,15 +44,28 @@ export function renderIdeaForm({ user = null } = {}) {
           // Idea tag toggle. Active = post will be saved with kind="idea"
           // and rendered with an idea badge. Off = regular note.
           '<button type="button" class="compose-kind-toggle" id="compose-kind-toggle" aria-pressed="false" data-kind="off">' +
-            '<span class="compose-kind-toggle__icon">💡</span>' +
+            icon('spark', { size: 12, className: 'icon--inline' }) +
             '<span class="compose-kind-toggle__label">' + t('kind.idea') + '</span>' +
           '</button>' +
-          // Visibility toggle. Active = restricted (close friends +
-          // same org). Off = public (anyone can see).
-          '<button type="button" class="compose-vis-toggle" id="compose-vis-toggle" aria-pressed="false" data-vis="public" title="' + t('compose.vis.hint') + '">' +
-            '<span class="compose-vis-toggle__icon">🔒</span>' +
-            '<span class="compose-vis-toggle__label">' + t('compose.vis.restricted') + '</span>' +
-          '</button>' +
+          // Audience picker — 5 options, RLS enforced server-side.
+          // Native <select> overlay for the OS picker; visible display
+          // shows only the icon + current selection (no "Audience" /
+          // "表示する人" caption) so the pill stays the same width in
+          // every language. The full label lives in the title tooltip
+          // and the select's aria-label for accessibility.
+          '<label class="compose-vis-select" title="' + t('compose.vis.label') + ' — ' + t('compose.vis.hint') + '">' +
+            '<span class="compose-vis-select__icon" data-vis-icon>' +
+              icon('globe', { size: 12, className: 'icon--inline' }) +
+            '</span>' +
+            '<span class="compose-vis-select__current" data-vis-current>' + t('compose.vis.public') + '</span>' +
+            '<select id="compose-vis-select" name="visibility" aria-label="' + t('compose.vis.label') + '">' +
+              '<option value="public">' + t('compose.vis.public') + '</option>' +
+              '<option value="mutuals">' + t('compose.vis.mutuals') + '</option>' +
+              '<option value="following">' + t('compose.vis.following') + '</option>' +
+              '<option value="friends">' + t('compose.vis.friends') + '</option>' +
+              '<option value="org">' + t('compose.vis.org') + '</option>' +
+            '</select>' +
+          '</label>' +
         '</div>' +
         '<div class="compose-link" id="compose-link-row" hidden>' +
           '<label class="compose-link__label" for="compose-github-input">' + t('home.composer.url') + '</label>' +

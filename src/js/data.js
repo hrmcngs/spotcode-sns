@@ -111,14 +111,11 @@ function postCols() {
   const head =
     'id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
-  // Embedded author select. close_friends + organization land here so
-  // the renderer can check "is the viewer on this author's audience
-  // list" without a second profile fetch; both get dropped from the
-  // select on a "column does not exist" error.
-  const authorCols = ['handle', 'name', 'avatar_url', 'avatar_shape'];
-  if (hasCloseFriends) authorCols.push('close_friends');
-  if (hasOrganization) authorCols.push('organization');
-  return head + ', author:profiles!posts_author_id_fkey(' + authorCols.join(', ') + ')';
+  // Embedded author select. Kept minimal — the visibility audience
+  // check (close_friends / organization) is enforced server-side via
+  // Stage 18 RLS, so we don't need to leak those onto the API
+  // response anymore.
+  return head + ', author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)';
 }
 
 // Optional-column / table degradation map. Each entry: a substring
@@ -167,10 +164,6 @@ function shapeAuthor(a) {
     avatar:      (name[0] || '?').toUpperCase(),
     avatarImage: a.avatar_url || null,
     avatarShape: a.avatar_shape || 'round',
-    // Surfaced so the renderer can decide whether the viewer is on
-    // the author's close-friends list / in the same organization.
-    closeFriends: Array.isArray(a.close_friends) ? a.close_friends : [],
-    organization: a.organization || '',
   };
 }
 
@@ -218,10 +211,14 @@ function shapePost(row) {
     // as a single source of truth so the composer toggle, the badge
     // renderer and any future "Ideas only" filter all agree.
     kind:          row.kind === 'idea' ? 'idea' : null,
-    // 'restricted' = only the author's close friends + same-org viewers
-    // see this post. 'public' (default) = anyone. Filtered in post.js
-    // renderPost so a non-eligible viewer's timeline just skips the row.
-    visibility:    row.visibility === 'restricted' ? 'restricted' : 'public',
+    // Audience for the post. One of:
+    //   'public' (default), 'mutuals', 'following', 'friends', 'org',
+    //   or the legacy 'restricted' (= friends OR org).
+    // RLS (Stage 18) does the actual gating server-side — by the time
+    // this row arrives at the renderer it has already been allow-
+    // listed for the current viewer.
+    visibility:    (['public','mutuals','following','friends','org','restricted'].includes(row.visibility)
+                      ? row.visibility : 'public'),
     quoteOfPostId: row.quote_of_post_id || null,
     actions: {
       replies:   row.comments_count   || 0,
@@ -533,7 +530,10 @@ export async function addPost(post) {
   };
   if (wantsPhotos) row.photos = post.photos;
   if (post.kind === 'idea' && hasKind) row.kind = 'idea';
-  if (post.visibility === 'restricted' && hasVisibility) row.visibility = 'restricted';
+  if (hasVisibility && typeof post.visibility === 'string' &&
+      ['mutuals','following','friends','org','restricted'].includes(post.visibility)) {
+    row.visibility = post.visibility;
+  }
   if (wantsPoll) {
     // Stamp createdAt on the poll for ordering on the renderer.
     row.poll = {

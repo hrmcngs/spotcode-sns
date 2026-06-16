@@ -148,7 +148,7 @@ export function renderProfile(handle) {
           (u.role === 'programmer' ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
         '</div>' +
         '<div class="profile-handle">@' + u.handle +
-          (u.isPrivate ? ' <span class="profile-lock" title="非公開アカウント">🔒</span>' : '') +
+          (u.isPrivate ? ' <span class="profile-lock" title="非公開アカウント">' + icon('lock', { size: 12, className: 'icon--inline' }) + '</span>' : '') +
         '</div>' +
       '</div>' +
       (u.bio ? '<p class="profile-bio">' + u.bio + '</p>' : '') +
@@ -275,7 +275,7 @@ async function hydrateProfileBody(handle, myVersion) {
     const requested = me && isRequested(me.handle, handle);
     list.innerHTML =
       '<div class="stub">' +
-        '<h2 class="stub__title">🔒 このアカウントは非公開です</h2>' +
+        '<h2 class="stub__title">' + icon('lock', { size: 18, className: 'icon--inline' }) + 'このアカウントは非公開です</h2>' +
         '<p class="stub__sub">' +
           (requested
             ? '<strong>承認待ち</strong>です。@' + handle + ' が承認すると投稿が見られるようになります。'

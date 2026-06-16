@@ -3,6 +3,7 @@ import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping 
 import { canBeDev, isDevMode, setDevMode } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile } from '../auth.js';
+import { icon } from '../icons.js';
 
 function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
@@ -24,14 +25,16 @@ function privacyCard() {
   return (
     '<section class="settings-card">' +
       '<h2>' + t('settings.privacy.title') + ' <span class="settings-tag">' +
-        (priv ? '🔒 ' + t('settings.privacy.private') : '🌐 ' + t('settings.privacy.public')) +
+        icon(priv ? 'lock' : 'globe', { size: 12, className: 'icon--inline' }) +
+        (priv ? t('settings.privacy.private') : t('settings.privacy.public')) +
       '</span></h2>' +
       '<p class="settings__hint">' +
         (priv ? t('settings.privacy.hint_private') : t('settings.privacy.hint_public')) +
       '</p>' +
       '<div class="settings-form__actions">' +
         '<button type="button" class="btn btn--' + (priv ? 'ghost' : 'primary') + '" id="privacy-toggle">' +
-          (priv ? '🌐 ' + t('settings.privacy.go_public') : '🔒 ' + t('settings.privacy.go_private')) +
+          icon(priv ? 'globe' : 'lock', { size: 14, className: 'icon--inline' }) +
+          (priv ? t('settings.privacy.go_public') : t('settings.privacy.go_private')) +
         '</button>' +
       '</div>' +
       '<p class="settings-status" id="privacy-status"></p>' +
@@ -40,12 +43,15 @@ function privacyCard() {
   );
 }
 
-// Edit the audience for "restricted" posts — close-friends handles
-// (comma-separated) + free-text organization.
+// Edit the per-list audiences used by 「親しい友達」 and 「同じ組織」
+// post visibilities. Both lists are curated handles — the user adds
+// or removes names manually. The free-text `organization` field is
+// kept as a profile label but no longer drives visibility matching.
 function audienceCard() {
   const me = currentUser();
   if (!me) return '';
   const friends = Array.isArray(me.closeFriends) ? me.closeFriends.join(', ') : '';
+  const orgMembers = Array.isArray(me.orgMembers) ? me.orgMembers.join(', ') : '';
   return (
     '<section class="settings-card">' +
       '<h2>' + t('settings.audience.title') + '</h2>' +
@@ -54,6 +60,10 @@ function audienceCard() {
         '<label>' + t('settings.audience.friends') +
           '<input name="closeFriends" type="text" autocomplete="off" spellcheck="false" ' +
             'placeholder="alice, bob, carol" value="' + attr(friends) + '">' +
+        '</label>' +
+        '<label>' + t('settings.audience.org_members') +
+          '<input name="orgMembers" type="text" autocomplete="off" spellcheck="false" ' +
+            'placeholder="dave, erin, frank" value="' + attr(orgMembers) + '">' +
         '</label>' +
         '<label>' + t('settings.audience.org') +
           '<input name="organization" type="text" autocomplete="off" maxlength="80" ' +
@@ -267,15 +277,17 @@ export function bindSettings() {
     const me = currentUser();
     if (!me) return;
     const fd = new FormData(audienceForm);
-    const raw = String(fd.get('closeFriends') || '');
-    // Strip whitespace, leading @, and empties; dedupe.
-    const closeFriends = [...new Set(raw.split(/[,\s]+/)
+    // Both lists use the same parser — split on commas/whitespace,
+    // strip a leading "@", drop empties, dedupe.
+    const parseHandles = (raw) => [...new Set(String(raw || '').split(/[,\s]+/)
       .map(h => h.replace(/^@/, '').trim()).filter(Boolean))];
+    const closeFriends = parseHandles(fd.get('closeFriends'));
+    const orgMembers   = parseHandles(fd.get('orgMembers'));
     const organization = String(fd.get('organization') || '').trim();
     const status = document.getElementById('audience-status');
     if (status) status.textContent = t('settings.audience.saving');
     try {
-      await updateProfile({ closeFriends, organization });
+      await updateProfile({ closeFriends, orgMembers, organization });
       if (status) {
         status.textContent = t('settings.audience.saved');
         status.className = 'settings-status is-ok';

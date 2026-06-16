@@ -50,10 +50,12 @@ function projectUser(authUser, profile) {
     website:     profile.website   || '',
     twitter:     profile.twitter   || '',
     instagram:   profile.instagram || '',
-    // Stage 16 — restricted-visibility audience. closeFriends is an
-    // array of handles (NOT ids) so the user can edit the list by
-    // typing handles in settings without a profile lookup per name.
+    // Stage 16 / 19 — visibility audiences. Two curated handle lists
+    // (close friends + org members) plus a free-text org label that
+    // shows on profiles but is NOT used for visibility matching
+    // anymore (Stage 19).
     closeFriends: Array.isArray(profile.close_friends) ? profile.close_friends : [],
+    orgMembers:   Array.isArray(profile.org_members)   ? profile.org_members   : [],
     organization: profile.organization || '',
     joined:      profile.created_at ? String(profile.created_at).slice(0, 7) : '',
   };
@@ -242,9 +244,11 @@ export async function updateProfile(patch) {
   if (patch.instagram != null)         db.instagram    = sanitizeHandle(patch.instagram);
   if (patch.closeFriends != null)      db.close_friends = (Array.isArray(patch.closeFriends) ? patch.closeFriends : [])
                                                             .map(h => String(h).trim()).filter(Boolean);
+  if (patch.orgMembers   != null)      db.org_members   = (Array.isArray(patch.orgMembers) ? patch.orgMembers : [])
+                                                            .map(h => String(h).trim()).filter(Boolean);
   if (patch.organization != null)      db.organization  = String(patch.organization).trim().slice(0, 80) || null;
 
-  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'organization']);
+  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'org_members', 'organization']);
   if (Object.keys(db).length) {
     // Retry loop: PostgREST returns one missing column per request.
     // For each error, identify the column and drop it ONLY if it's in
