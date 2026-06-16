@@ -203,17 +203,19 @@ function lockedBanner() {
   );
 }
 
-// Tiny lookup so we can print a 🔒 hint next to restricted posts.
-// The actual gating is enforced by Stage 18 RLS — by the time a row
-// arrives at this renderer it has already been allow-listed for the
-// viewer, so we don't re-check. Only the badge text differs.
+// Tiny lookup so we can stamp a small hint badge next to restricted
+// posts. The actual gating is enforced by Stage 18 RLS — by the time
+// a row arrives at this renderer it has already been allow-listed
+// for the viewer, so this is purely informational.
+//
+// Icon names match icons.js; the label is i18n-keyed.
 const VIS_HINT = {
   public:    null,
-  mutuals:   '🔁 相互フォローのみ',
-  following: '➡️ フォロー中のみ',
-  friends:   '💚 親しい友達のみ',
-  org:       '🏢 同じ組織のみ',
-  restricted:'🔒 親しい友達 / 組織のみ',
+  mutuals:   { ico: 'fork',        labelKey: 'post.vis.mutuals' },
+  following: { ico: 'arrow_right', labelKey: 'post.vis.following' },
+  friends:   { ico: 'heart',       labelKey: 'post.vis.friends' },
+  org:       { ico: 'building',    labelKey: 'post.vis.org' },
+  restricted:{ ico: 'lock',        labelKey: 'post.vis.restricted' },
 };
 
 export function renderPost(p) {
@@ -249,8 +251,16 @@ export function renderPost(p) {
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">（編集済み）</span>' : '') +
           (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot) : '') +
-          (p.kind === 'idea' ? ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">💡 ' + escape(t('kind.idea')) + '</span>' : '') +
-          (visHint ? ' <span class="post__vis" title="' + escape(visHint) + '">' + escape(visHint) + '</span>' : '') +
+          (p.kind === 'idea'
+            ? ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">' +
+                icon('spark', { size: 12, className: 'icon--inline' }) + escape(t('kind.idea')) +
+              '</span>'
+            : '') +
+          (visHint
+            ? ' <span class="post__vis" title="' + escape(t(visHint.labelKey)) + '">' +
+                icon(visHint.ico, { size: 12, className: 'icon--inline' }) + escape(t(visHint.labelKey)) +
+              '</span>'
+            : '') +
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
         (locked

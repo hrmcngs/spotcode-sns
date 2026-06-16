@@ -3,6 +3,7 @@ import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping 
 import { canBeDev, isDevMode, setDevMode } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile } from '../auth.js';
+import { icon } from '../icons.js';
 
 function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
@@ -24,14 +25,16 @@ function privacyCard() {
   return (
     '<section class="settings-card">' +
       '<h2>' + t('settings.privacy.title') + ' <span class="settings-tag">' +
-        (priv ? '🔒 ' + t('settings.privacy.private') : '🌐 ' + t('settings.privacy.public')) +
+        icon(priv ? 'lock' : 'globe', { size: 12, className: 'icon--inline' }) +
+        (priv ? t('settings.privacy.private') : t('settings.privacy.public')) +
       '</span></h2>' +
       '<p class="settings__hint">' +
         (priv ? t('settings.privacy.hint_private') : t('settings.privacy.hint_public')) +
       '</p>' +
       '<div class="settings-form__actions">' +
         '<button type="button" class="btn btn--' + (priv ? 'ghost' : 'primary') + '" id="privacy-toggle">' +
-          (priv ? '🌐 ' + t('settings.privacy.go_public') : '🔒 ' + t('settings.privacy.go_private')) +
+          icon(priv ? 'globe' : 'lock', { size: 14, className: 'icon--inline' }) +
+          (priv ? t('settings.privacy.go_public') : t('settings.privacy.go_private')) +
         '</button>' +
       '</div>' +
       '<p class="settings-status" id="privacy-status"></p>' +

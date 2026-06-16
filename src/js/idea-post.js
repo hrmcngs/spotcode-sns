@@ -44,25 +44,26 @@ export function renderIdeaForm({ user = null } = {}) {
           // Idea tag toggle. Active = post will be saved with kind="idea"
           // and rendered with an idea badge. Off = regular note.
           '<button type="button" class="compose-kind-toggle" id="compose-kind-toggle" aria-pressed="false" data-kind="off">' +
-            '<span class="compose-kind-toggle__icon">💡</span>' +
+            icon('spark', { size: 12, className: 'icon--inline' }) +
             '<span class="compose-kind-toggle__label">' + t('kind.idea') + '</span>' +
           '</button>' +
           // Audience picker — 5 options, RLS enforced server-side.
-          // Native <select> for the OS picker on mobile, but absolutely
-          // positioned over a visible label so the pill hugs the
-          // currently-selected text (the native <select> would
-          // otherwise reserve width for its widest option and leave
-          // a huge empty band inside the pill).
+          // Native <select> overlay for the OS picker on mobile; the
+          // visible display uses our SVG icons (the inline icon for
+          // the current selection is swapped on change). <option>
+          // elements can only carry plain text, so they get no icon.
           '<label class="compose-vis-select" title="' + t('compose.vis.hint') + '">' +
             '<span class="compose-vis-select__caption">' + t('compose.vis.label') + '</span>' +
-            '<span class="compose-vis-select__current" data-vis-current>🌐 ' + t('compose.vis.public') + '</span>' +
-            '<span class="compose-vis-select__caret" aria-hidden="true">▾</span>' +
+            '<span class="compose-vis-select__icon" data-vis-icon>' +
+              icon('globe', { size: 12, className: 'icon--inline' }) +
+            '</span>' +
+            '<span class="compose-vis-select__current" data-vis-current>' + t('compose.vis.public') + '</span>' +
             '<select id="compose-vis-select" name="visibility" aria-label="' + t('compose.vis.label') + '">' +
-              '<option value="public">🌐 ' + t('compose.vis.public') + '</option>' +
-              '<option value="mutuals">🔁 ' + t('compose.vis.mutuals') + '</option>' +
-              '<option value="following">➡️ ' + t('compose.vis.following') + '</option>' +
-              '<option value="friends">💚 ' + t('compose.vis.friends') + '</option>' +
-              '<option value="org">🏢 ' + t('compose.vis.org') + '</option>' +
+              '<option value="public">' + t('compose.vis.public') + '</option>' +
+              '<option value="mutuals">' + t('compose.vis.mutuals') + '</option>' +
+              '<option value="following">' + t('compose.vis.following') + '</option>' +
+              '<option value="friends">' + t('compose.vis.friends') + '</option>' +
+              '<option value="org">' + t('compose.vis.org') + '</option>' +
             '</select>' +
           '</label>' +
         '</div>' +

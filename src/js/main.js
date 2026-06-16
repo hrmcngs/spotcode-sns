@@ -240,6 +240,18 @@ let pendingKind = null; // null | 'idea'
 // The actual gating happens server-side via Stage 18 RLS — this
 // value just rides on the addPost payload.
 let pendingVisibility = 'public';
+// Map each audience to one of the SVG icons from icons.js so the
+// composer pill and the post-card hint badge share visuals (and so
+// the design stays icon-consistent with the rest of the app instead
+// of using OS-rendered Unicode emoji).
+const VIS_ICONS = {
+  public:    'globe',
+  mutuals:   'fork',
+  following: 'arrow_right',
+  friends:   'heart',
+  org:       'building',
+  restricted:'lock',
+};
 
 function dispatch(path) {
   // If a modal closed without unlocking (uncaught error path, navigation
@@ -509,13 +521,15 @@ function syncVisToggle() {
   if (!sel) return;
   sel.value = pendingVisibility;
   const display = document.querySelector('[data-vis-current]');
+  const iconEl  = document.querySelector('[data-vis-icon]');
   const picked  = sel.options[sel.selectedIndex];
   if (display && picked) display.textContent = picked.textContent;
+  if (iconEl) iconEl.innerHTML = icon(VIS_ICONS[pendingVisibility] || 'globe', { size: 12, className: 'icon--inline' });
 }
 
-// Re-render the small pill that announces "📊 投票が添付されています"
-// in the composer, mirroring the spot-chip pattern. Click → re-open
-// the poll modal to edit.
+// Re-render the small pill that announces an attached poll in the
+// composer, mirroring the spot-chip pattern. Click → re-open the
+// poll modal to edit.
 function renderPollChip() {
   let chip = document.getElementById('compose-poll-chip');
   if (!pendingPoll) { if (chip) chip.remove(); return; }
@@ -523,7 +537,7 @@ function renderPollChip() {
     (pendingPoll.options.length > 2 ? ` …+${pendingPoll.options.length - 2}` : '');
   const html =
     '<button type="button" class="spot-chip spot-chip--set" id="compose-poll-chip" title="クリックして編集">' +
-      '📊 投票: ' + labelOpts +
+      icon('chart', { size: 12, className: 'icon--inline' }) + '投票: ' + labelOpts +
     '</button>';
   if (chip) chip.outerHTML = html;
   else {
@@ -558,16 +572,18 @@ function renderPhotoPreviews() {
 document.addEventListener('change', async (e) => {
   // Audience picker — store the selection so the next addPost knows
   // who the post is for. Allowed values match the Stage 18 CHECK.
-  // Also mirror the picked option's display text onto the visible
-  // span (the native <select> is positioned invisibly over it).
+  // Also mirror the picked option's display text + matching SVG icon
+  // onto the visible spans (the native <select> sits invisibly over).
   if (e.target?.id === 'compose-vis-select') {
     const sel = e.target;
     const v = String(sel.value || 'public');
     const ALLOWED = new Set(['public', 'mutuals', 'following', 'friends', 'org']);
     pendingVisibility = ALLOWED.has(v) ? v : 'public';
     const display = document.querySelector('[data-vis-current]');
+    const iconEl  = document.querySelector('[data-vis-icon]');
     const picked  = sel.options[sel.selectedIndex];
     if (display && picked) display.textContent = picked.textContent;
+    if (iconEl) iconEl.innerHTML = icon(VIS_ICONS[pendingVisibility] || 'globe', { size: 12, className: 'icon--inline' });
     autosaveComposerDraft();
     return;
   }
