@@ -581,7 +581,17 @@ export async function removePost(postId) {
     .from('posts').delete().eq('id', postId).select('id');
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) {
-    throw new Error('削除権限がありません（RLS により拒否、または既に削除済み）');
+    // Empty result usually means the moderator delete policy isn't
+    // installed yet (Stage 15). Mention it so dev users know what to
+    // run — own-post deletes hit a different policy and don't end up
+    // here.
+    throw new Error(
+      '削除権限がありません。他ユーザーの投稿を消すには Stage 15 SQL を実行してください: ' +
+      'ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_admin boolean DEFAULT false; ' +
+      'UPDATE profiles SET is_admin = true WHERE handle IN (\'hrmcngs\'); ' +
+      'CREATE POLICY "admins can delete any post" ON posts FOR DELETE ' +
+      'USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true));'
+    );
   }
   return true;
 }
