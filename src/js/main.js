@@ -233,6 +233,9 @@ let pendingPhotos = [];
 // pendingPhotos — lives in memory while composing, included on
 // addPost, cleared on submit / discard.
 let pendingPoll = null;
+// `idea` tag toggle. Mirrors the .compose-kind-toggle button state and
+// rides on addPost / updatePost.
+let pendingKind = null; // null | 'idea'
 
 function dispatch(path) {
   // If a modal closed without unlocking (uncaught error path, navigation
@@ -449,6 +452,7 @@ function readComposerState() {
     body:       ta ? ta.value : '',
     githubLink: gh ? gh.value : '',
     spot:       pendingSpot,
+    kind:       pendingKind,
   };
 }
 
@@ -474,7 +478,20 @@ function clearComposerUI() {
   renderPhotoPreviews();
   pendingPoll = null;
   renderPollChip();
+  pendingKind = null;
+  syncKindToggle();
   hideDraftBanner();
+}
+
+// Reflect pendingKind on the toggle button (pressed style + data attr).
+// Safe to call when the button isn't in the DOM — e.g. logged-out
+// composer-gate has no toggle to update.
+function syncKindToggle() {
+  const btn = document.getElementById('compose-kind-toggle');
+  if (!btn) return;
+  const on = pendingKind === 'idea';
+  btn.setAttribute('aria-pressed', String(on));
+  btn.dataset.kind = on ? 'idea' : 'off';
 }
 
 // Re-render the small pill that announces "📊 投票が添付されています"
@@ -610,6 +627,10 @@ function restoreComposerDraft() {
   if (d.spot && d.spot.lat != null && d.spot.lng != null) {
     pendingSpot = d.spot;
     syncSpotChip(d.spot);
+  }
+  if (d.kind === 'idea') {
+    pendingKind = 'idea';
+    syncKindToggle();
   }
   showDraftBanner();
 }
@@ -1019,6 +1040,18 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Idea tag toggle — flips pendingKind between null and 'idea' and
+  // syncs the button's pressed/data-kind state so the next submit
+  // picks up the new value.
+  const kindBtn = e.target.closest('#compose-kind-toggle');
+  if (kindBtn) {
+    e.preventDefault();
+    pendingKind = pendingKind === 'idea' ? null : 'idea';
+    syncKindToggle();
+    autosaveComposerDraft();
+    return;
+  }
+
   // Chart tool — open the poll-attach modal. Modal resolves with
   // { question, options[], deadlineAt } on Confirm, { delete: true }
   // on Remove, null on Cancel.
@@ -1227,6 +1260,7 @@ document.addEventListener('submit', (e) => {
   if (spotValue) post.spot = spotValue;
   if (pendingPhotos.length) post.photos = pendingPhotos.slice();
   if (pendingPoll) post.poll = pendingPoll;
+  if (pendingKind) post.kind = pendingKind;
 
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;

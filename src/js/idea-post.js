@@ -41,6 +41,12 @@ export function renderIdeaForm({ user = null } = {}) {
             icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
             '<span>' + t('home.composer.add_url') + '</span>' +
           '</button>' +
+          // Idea tag toggle. Active = post will be saved with kind="idea"
+          // and rendered with a 💡 アイデア badge. Off = regular note.
+          '<button type="button" class="compose-kind-toggle" id="compose-kind-toggle" aria-pressed="false" data-kind="off">' +
+            '<span class="compose-kind-toggle__icon">💡</span>' +
+            '<span class="compose-kind-toggle__label">アイデア</span>' +
+          '</button>' +
         '</div>' +
         '<div class="compose-link" id="compose-link-row" hidden>' +
           '<label class="compose-link__label" for="compose-github-input">' + t('home.composer.url') + '</label>' +

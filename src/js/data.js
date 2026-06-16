@@ -63,6 +63,7 @@ let hasQuotesCount    = true;
 let hasQuoteOf        = true;
 let hasPhotos         = true;
 let hasPoll           = true;
+let hasKind           = true;
 
 (function loadSchemaCache() {
   try {
@@ -77,13 +78,14 @@ let hasPoll           = true;
     if (v.hasQuoteOf        === false) hasQuoteOf        = false;
     if (v.hasPhotos         === false) hasPhotos         = false;
     if (v.hasPoll           === false) hasPoll           = false;
+    if (v.hasKind           === false) hasKind           = false;
   } catch {}
 })();
 function persistSchemaCache() {
   try {
     localStorage.setItem(SCHEMA_CACHE_KEY, JSON.stringify({
       at: Date.now(),
-      hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf, hasPhotos, hasPoll,
+      hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf, hasPhotos, hasPoll, hasKind,
     }));
   } catch {}
 }
@@ -97,6 +99,7 @@ function postCols() {
   if (hasQuoteOf)        extras.push('quote_of_post_id');
   if (hasPhotos)         extras.push('photos');
   if (hasPoll)           extras.push('poll');
+  if (hasKind)           extras.push('kind');
   const head =
     'id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
@@ -115,6 +118,7 @@ const OPTIONAL = [
   { needle: 'quote_of_post_id', off: () => { if (hasQuoteOf)        { console.warn('posts.quote_of_post_id missing — run Stage 11 SQL.'); hasQuoteOf      = false; return true; } return false; } },
   { needle: 'photos',           off: () => { if (hasPhotos)         { console.warn('posts.photos missing — run Stage 12 SQL: ALTER TABLE posts ADD COLUMN photos jsonb DEFAULT \'[]\'::jsonb.'); hasPhotos = false; return true; } return false; } },
   { needle: 'poll',             off: () => { if (hasPoll)           { console.warn('posts.poll missing — run Stage 13 SQL: ALTER TABLE posts ADD COLUMN poll jsonb.'); hasPoll = false; return true; } return false; } },
+  { needle: 'kind',             off: () => { if (hasKind)           { console.warn('posts.kind missing — run Stage 14 SQL: ALTER TABLE posts ADD COLUMN kind text.'); hasKind = false; return true; } return false; } },
 ];
 function isMissingOptionalColumn(error) {
   const msg = String(error?.message || '').toLowerCase();
@@ -188,6 +192,10 @@ function shapePost(row) {
     // contend with each other. Null when no poll attached or column
     // not migrated yet.
     poll:          row.poll && typeof row.poll === 'object' ? row.poll : null,
+    // Post kind tag. Currently 'idea' or null (= regular note). Read
+    // as a single source of truth so the composer toggle, the badge
+    // renderer and any future "Ideas only" filter all agree.
+    kind:          row.kind === 'idea' ? 'idea' : null,
     quoteOfPostId: row.quote_of_post_id || null,
     actions: {
       replies:   row.comments_count   || 0,
@@ -308,7 +316,7 @@ export function probeSchema() {
       // and re-flips — same end state as before, but newly-migrated
       // columns become visible without waiting for the TTL.
       hasCommentsCount = hasRepostsCount = hasBookmarksCount = true;
-      hasQuotesCount = hasQuoteOf = hasPhotos = hasPoll = true;
+      hasQuotesCount = hasQuoteOf = hasPhotos = hasPoll = hasKind = true;
       let dirty = false;
       // Posts column probe — retry-loop drops one missing column per
       // round trip until the select succeeds or no more flags can flip.
@@ -497,6 +505,7 @@ export async function addPost(post) {
     status:      post.status || 'wip',
   };
   if (wantsPhotos) row.photos = post.photos;
+  if (post.kind === 'idea' && hasKind) row.kind = 'idea';
   if (wantsPoll) {
     // Stamp createdAt on the poll for ordering on the renderer.
     row.poll = {
@@ -549,6 +558,10 @@ export async function updatePost(postId, fields) {
   const supa = await getClient();
   const patch = {};
   if (typeof fields.body === 'string') patch.body = fields.body;
+  // `kind` accepts the string 'idea' to tag, or null to untag.
+  if (fields.kind === 'idea' || fields.kind === null) {
+    if (hasKind) patch.kind = fields.kind;
+  }
   if (!Object.keys(patch).length) return null;
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').update(patch).eq('id', postId).select(cols)

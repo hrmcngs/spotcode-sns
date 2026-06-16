@@ -539,6 +539,43 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   border-style: solid;
 }
+
+/* Idea tag toggle — same silhouette as the GitHub link toggle so they
+   read as siblings. Active state uses the amber/yellow accent to set
+   it apart from the blue link-toggle and from any spot chip. */
+.compose-kind-toggle {
+  display: inline-flex; align-items: center; gap: .3em;
+  background: transparent; border: 1px dashed var(--border);
+  color: var(--muted); cursor: pointer;
+  padding: .2em .65em; border-radius: 999px;
+  font-size: .78rem; font-weight: 600;
+}
+.compose-kind-toggle:hover {
+  color: #febc2e;
+  border-color: color-mix(in srgb, #febc2e 55%, transparent);
+}
+.compose-kind-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, #febc2e 14%, transparent);
+  color: #febc2e;
+  border-color: color-mix(in srgb, #febc2e 50%, transparent);
+  border-style: solid;
+}
+.compose-kind-toggle__icon { font-size: 1em; }
+
+/* Idea kind badge on rendered posts. Slots into .post__head alongside
+   the status badge / spot chip. */
+.post__kind {
+  display: inline-flex; align-items: center; gap: .2em;
+  padding: .05em .55em;
+  border-radius: 999px;
+  font-size: .76em; font-weight: 700;
+  vertical-align: middle;
+}
+.post__kind--idea {
+  background: color-mix(in srgb, #febc2e 18%, transparent);
+  color: #febc2e;
+  border: 1px solid color-mix(in srgb, #febc2e 40%, transparent);
+}
 .compose-link {
   display: flex; flex-direction: column; gap: .25rem;
   padding: .3rem 0;

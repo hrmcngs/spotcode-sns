@@ -472,3 +472,15 @@ create policy "voters can change their own vote"
   on public.poll_votes for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "voters can drop their own vote"
   on public.poll_votes for delete using (auth.uid() = user_id);
+
+-- ----------------------------------------------------------------------
+-- Stage 14 — Post kind tag ("idea" or unset)
+-- ----------------------------------------------------------------------
+--
+-- A simple text column so a post can be marked as "an idea" vs. a
+-- regular note. NULL = regular. Kept open-ended on purpose so future
+-- additions (e.g. 'question', 'bug', 'release') don't need another
+-- ALTER. The renderer only highlights 'idea' today.
+
+alter table public.posts add column if not exists kind text;
+create index if not exists posts_kind_idx on public.posts (kind) where kind is not null;
