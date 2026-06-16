@@ -23,16 +23,15 @@ function privacyCard() {
   const priv = !!me.isPrivate;
   return (
     '<section class="settings-card">' +
-      '<h2>アカウントの公開範囲 <span class="settings-tag">' +
-        (priv ? '🔒 非公開' : '🌐 公開') + '</span></h2>' +
+      '<h2>' + t('settings.privacy.title') + ' <span class="settings-tag">' +
+        (priv ? '🔒 ' + t('settings.privacy.private') : '🌐 ' + t('settings.privacy.public')) +
+      '</span></h2>' +
       '<p class="settings__hint">' +
-        (priv
-          ? '<strong>非公開</strong>です。投稿はフォロー承認した人だけが読めます。新しいフォローは「リクエスト」扱いになり、あなたの承認を待ちます。'
-          : '<strong>公開</strong>です。投稿は誰でも読めて、フォローは自動で承認されます。鍵をかけると非公開アカウントに切り替わります。') +
+        (priv ? t('settings.privacy.hint_private') : t('settings.privacy.hint_public')) +
       '</p>' +
       '<div class="settings-form__actions">' +
         '<button type="button" class="btn btn--' + (priv ? 'ghost' : 'primary') + '" id="privacy-toggle">' +
-          (priv ? '🌐 公開に戻す' : '🔒 非公開にする') +
+          (priv ? '🌐 ' + t('settings.privacy.go_public') : '🔒 ' + t('settings.privacy.go_private')) +
         '</button>' +
       '</div>' +
       '<p class="settings-status" id="privacy-status"></p>' +
@@ -44,81 +43,61 @@ function userCards() {
   return (
     privacyCard() +
     '<section class="settings-card">' +
-      '<h2>Map</h2>' +
-      '<p class="settings__hint">' +
-        'スポットの pin 選択には ' +
-        '<a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a>' +
-        ' のタイル、住所取得には ' +
-        '<a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a>' +
-        '、描画には ' +
-        '<a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a>' +
-        ' を使っています。<strong>API キーや課金アカウントは不要</strong>、誰でもそのまま使えます。' +
-      '</p>' +
+      '<h2>' + t('settings.map.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.map.hint') + '</p>' +
       '<div class="settings-form__actions">' +
-        '<button type="button" class="btn btn--ghost" id="map-test">地図ライブラリの動作確認</button>' +
+        '<button type="button" class="btn btn--ghost" id="map-test">' + t('settings.map.test') + '</button>' +
       '</div>' +
-      '<p class="settings-status" id="map-status">未確認</p>' +
+      '<p class="settings-status" id="map-status">' + t('settings.status.unverified') + '</p>' +
     '</section>' +
 
     '<section class="settings-card">' +
-      '<h2>About</h2>' +
-      '<p class="settings__hint">' +
-        'spotcode-sns は、歩いた場所に紐づくアイデアを残すための SNS のプロトタイプです。' +
-        'アカウント・投稿は標準同梱の共有 DB に自動で保存されるので、何も設定しなくても他の端末からログインしたり他のユーザーの投稿を見たりできます。' +
-      '</p>' +
+      '<h2>' + t('settings.about.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.about.body') + '</p>' +
     '</section>'
   );
 }
 
 function devCards({ cfg, override, usingOverride }) {
   return (
-    '<h2 class="settings__section">Developer settings</h2>' +
-    '<p class="settings__section-hint">この区画はホワイトリストに載っているアカウントだけに表示されます。一般ユーザーには Supabase の上書きや内部 DB の情報は出ません。</p>' +
+    '<h2 class="settings__section">' + t('settings.dev.section') + '</h2>' +
+    '<p class="settings__section-hint">' + t('settings.dev.section_hint') + '</p>' +
 
     '<section class="settings-card">' +
-      '<h2>Developer mode <span class="settings-tag">' + (isDevMode() ? 'ON' : 'OFF') + '</span></h2>' +
-      '<p class="settings__hint">' +
-        '通報キューや内部 ID などの開発者向け UI を表示するかどうかのトグル。topbar に黄色い「dev」チップが立つかどうかで現在の状態が分かる。' +
-      '</p>' +
+      '<h2>' + t('settings.dev.title') + ' <span class="settings-tag">' + (isDevMode() ? 'ON' : 'OFF') + '</span></h2>' +
+      '<p class="settings__hint">' + t('settings.dev.hint') + '</p>' +
       '<div class="settings-form__actions">' +
         '<button type="button" class="btn btn--' + (isDevMode() ? 'ghost' : 'primary') + '" id="dev-mode-toggle">' +
-          (isDevMode() ? 'OFF にする' : 'ON にする') +
+          (isDevMode() ? t('settings.dev.on') : t('settings.dev.off')) +
         '</button>' +
       '</div>' +
     '</section>' +
 
     '<section class="settings-card">' +
-      '<h2>Supabase (cross-device sync)' +
-        (isConfigured() ? ' <span class="settings-tag is-ok">connected</span>'
-                        : ' <span class="settings-tag">未設定</span>') + '</h2>' +
+      '<h2>' + t('settings.supa.title') +
+        (isConfigured() ? ' <span class="settings-tag is-ok">' + t('settings.supa.connected') + '</span>'
+                        : ' <span class="settings-tag">' + t('settings.supa.not_set') + '</span>') + '</h2>' +
       '<p class="settings__hint">' +
-        (usingOverride
-          ? '現在は <strong>あなたが /settings で設定した独自プロジェクト</strong>に接続しています。'
-          : '現在は <strong>spotcode-sns に標準同梱の共有プロジェクト</strong>に接続しています。' +
-            'アカウント・投稿・いいね等が他のユーザーと同じ DB に保存されるので、' +
-            '別端末からのログインや他のユーザーの検索が動きます。何も設定する必要はありません。') +
+        (usingOverride ? t('settings.supa.hint_override') : t('settings.supa.hint_default')) +
       '</p>' +
       '<dl class="settings-kv">' +
         '<dt>Project URL</dt><dd><code>' + attr(maskHost(cfg.url)) + '</code></dd>' +
         '<dt>Mode</dt><dd>' +
           (usingOverride
-            ? '<span class="settings-tag">自分の Supabase で上書き中</span>'
-            : '<span class="settings-tag is-ok">共有プロジェクト (default)</span>') +
+            ? '<span class="settings-tag">' + t('settings.supa.mode_override') + '</span>'
+            : '<span class="settings-tag is-ok">' + t('settings.supa.mode_default') + '</span>') +
         '</dd>' +
       '</dl>' +
       '<div class="settings-form__actions">' +
-        '<button type="button" class="btn btn--ghost btn--sm" id="supa-test">接続テスト</button>' +
+        '<button type="button" class="btn btn--ghost btn--sm" id="supa-test">' + t('settings.supa.test') + '</button>' +
         '<button type="button" class="btn btn--ghost btn--sm" id="supa-toggle-override">' +
-          (usingOverride ? '上書きをやめて共有 DB に戻す' : '自分の Supabase に上書きする') +
+          (usingOverride ? t('settings.supa.stop_override') : t('settings.supa.start_override')) +
         '</button>' +
       '</div>' +
-      '<p class="settings-status" id="supa-status">未確認</p>' +
+      '<p class="settings-status" id="supa-status">' + t('settings.status.unverified') + '</p>' +
 
       '<form class="settings-form" id="supa-form" hidden>' +
-        '<p class="settings__hint">自分の Supabase プロジェクトに切り替えるには、' +
-          '<a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a>' +
-          ' で Free プロジェクトを作って Project Settings → API から URL と Publishable key をコピーして貼ってください。' +
-        '</p>' +
+        '<p class="settings__hint">' + t('settings.supa.howto') + '</p>' +
         '<label>Project URL' +
           '<input name="url" type="url" autocomplete="off" spellcheck="false" ' +
             'placeholder="https://xxxx.supabase.co" value="' + attr(override.url) + '">' +
@@ -128,17 +107,14 @@ function devCards({ cfg, override, usingOverride }) {
             'placeholder="sb_publishable_…">' +
         '</label>' +
         '<div class="settings-form__actions">' +
-          '<button type="submit" class="btn btn--primary">保存して上書き</button>' +
+          '<button type="submit" class="btn btn--primary">' + t('settings.supa.save') + '</button>' +
           (usingOverride
-            ? '<button type="button" class="btn btn--ghost" id="supa-clear">上書きを削除</button>'
+            ? '<button type="button" class="btn btn--ghost" id="supa-clear">' + t('settings.supa.clear') + '</button>'
             : '') +
         '</div>' +
       '</form>' +
 
-      '<p class="settings__note">' +
-        '⚠️ <strong>secret / service_role</strong> キーは絶対に貼らないでください。このアプリは静的サイトなので、貼った瞬間に丸見えになり DB を破壊される可能性があります。' +
-        '貼っていいのは <code>sb_publishable_…</code> または旧形式の <code>anon public</code> JWT のみです。' +
-      '</p>' +
+      '<p class="settings__note">' + t('settings.supa.security_note') + '</p>' +
     '</section>'
   );
 }
@@ -178,11 +154,11 @@ export function bindSettings() {
       mapStatus.className = 'settings-status' + (k ? ' is-' + k : '');
     };
     mapBtn.addEventListener('click', async () => {
-      show('Leaflet を読み込み中…');
+      show(t('settings.map.loading'));
       try {
         await loadMaps();
-        show('OK — Leaflet と OpenStreetMap が読み込めました', 'ok');
-      } catch (err) { show('読み込みに失敗しました: ' + err.message, 'bad'); }
+        show(t('settings.map.ok'), 'ok');
+      } catch (err) { show(t('settings.map.failed') + ': ' + err.message, 'bad'); }
     });
   }
 
@@ -204,20 +180,20 @@ export function bindSettings() {
     const fd = new FormData(supaForm);
     const url = String(fd.get('url') || '').trim();
     const anonKey = String(fd.get('anonKey') || '').trim();
-    if (!url || !anonKey) { show('Project URL と key の両方を入れてください', 'bad'); return; }
+    if (!url || !anonKey) { show(t('settings.supa.err.missing'), 'bad'); return; }
     if (!/^https:\/\/.+\.supabase\.(co|in)/i.test(url)) {
-      show('URL は https://xxxx.supabase.co 形式で入力してください', 'bad');
+      show(t('settings.supa.err.bad_url'), 'bad');
       return;
     }
     setConfig({ url, anonKey });
-    show('上書き保存しました。リロードして反映します…', 'ok');
+    show(t('settings.supa.saved'), 'ok');
     setTimeout(() => location.reload(), 400);
   });
 
   document.getElementById('supa-clear')?.addEventListener('click', () => {
-    if (!confirm('上書きを削除して共有プロジェクトに戻しますか？')) return;
+    if (!confirm(t('settings.supa.confirm_clear'))) return;
     setConfig({ url: '', anonKey: '' });
-    show('上書きを削除しました。リロードします…', 'ok');
+    show(t('settings.supa.cleared'), 'ok');
     setTimeout(() => location.reload(), 400);
   });
 
@@ -238,17 +214,17 @@ export function bindSettings() {
     const me = currentUser();
     if (!me) return;
     privBtn.disabled = true;
-    if (privStatus) privStatus.textContent = '更新中…';
+    if (privStatus) privStatus.textContent = t('settings.privacy.updating');
     try {
       await updateProfile({ isPrivate: !me.isPrivate });
       if (privStatus) {
-        privStatus.textContent = '反映しました。リロードします…';
+        privStatus.textContent = t('settings.privacy.updated');
         privStatus.className = 'settings-status is-ok';
       }
       setTimeout(() => location.reload(), 400);
     } catch (ex) {
       if (privStatus) {
-        privStatus.textContent = '失敗: ' + (ex.message || ex);
+        privStatus.textContent = t('settings.privacy.failed') + ': ' + (ex.message || ex);
         privStatus.className = 'settings-status is-bad';
       }
       privBtn.disabled = false;
@@ -263,14 +239,14 @@ export function bindSettings() {
   });
 
   document.getElementById('supa-test')?.addEventListener('click', async () => {
-    show('Supabase に接続中…', '');
+    show(t('settings.supa.testing'), '');
     try {
       await ping();
-      show('OK — Supabase に接続できました', 'ok');
+      show(t('settings.supa.test_ok'), 'ok');
     } catch (err) {
-      const msg = err.message === 'NO_CONFIG' ? 'URL / anon key を保存してください'
-                : err.message === 'AUTH_FAILED' ? 'anon key が無効です'
-                : '接続に失敗しました: ' + err.message;
+      const msg = err.message === 'NO_CONFIG' ? t('settings.supa.err.no_config')
+                : err.message === 'AUTH_FAILED' ? t('settings.supa.err.auth_failed')
+                : t('settings.supa.err.connect_failed') + ': ' + err.message;
       show(msg, 'bad');
     }
   });

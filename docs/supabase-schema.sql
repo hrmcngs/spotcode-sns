@@ -484,3 +484,32 @@ create policy "voters can drop their own vote"
 
 alter table public.posts add column if not exists kind text;
 create index if not exists posts_kind_idx on public.posts (kind) where kind is not null;
+
+-- ----------------------------------------------------------------------
+-- Stage 15 — Server-side admin flag so the client-side ALLOWED_HANDLES
+-- list in dev-mode.js translates to actual delete permission.
+-- ----------------------------------------------------------------------
+--
+-- Without this, dev mode shows the trash button on every post but the
+-- backend RLS only matches "delete your OWN post". The delete attempt
+-- comes back with "削除権限がありません" and the moderator is stuck.
+--
+-- Editing someone else's post is a different threat model (rewriting
+-- someone's words) — there's no matching update policy here on
+-- purpose. Admins get the delete hammer, not the keyboard.
+
+alter table public.profiles add column if not exists is_admin boolean default false;
+
+-- Seed: handle(s) that match the dev-mode.js allowlist. Adjust as the
+-- ALLOWED_HANDLES list grows.
+update public.profiles set is_admin = true where handle in ('hrmcngs');
+
+drop policy if exists "admins can delete any post" on public.posts;
+create policy "admins can delete any post"
+  on public.posts for delete
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid() and is_admin = true
+    )
+  );

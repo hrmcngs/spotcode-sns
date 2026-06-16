@@ -20,8 +20,30 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // In packaged builds: shut DevTools off completely so users can't
+      // open the Elements panel and inspect the source. Development
+      // (`npm run start:electron`) keeps them on for debugging.
+      devTools: !app.isPackaged,
     },
   });
+  // Belt-and-suspenders: even if a future menu rebuild exposes the
+  // "Toggle Developer Tools" item, swallow Cmd/Ctrl-Shift-I and F12 in
+  // production so they can't pop the inspector. Dev builds skip this.
+  if (app.isPackaged) {
+    win.webContents.on('before-input-event', (event, input) => {
+      const isDevShortcut =
+        input.key === 'F12' ||
+        (input.shift && (input.meta || input.control) &&
+          (input.key === 'I' || input.key === 'i' ||
+           input.key === 'J' || input.key === 'j' ||
+           input.key === 'C' || input.key === 'c'));
+      if (isDevShortcut) event.preventDefault();
+    });
+    win.webContents.on('devtools-opened', () => win.webContents.closeDevTools());
+    // Swallow the native right-click context menu in production — the
+    // "Inspect Element" entry on it is the easiest path to source.
+    win.webContents.on('context-menu', (event) => event.preventDefault());
+  }
   win.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
   return win;
 }
