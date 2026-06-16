@@ -538,3 +538,135 @@ alter table public.profiles
 alter table public.posts
   add column if not exists visibility text default 'public'
     check (visibility in ('public', 'restricted'));
+
+-- ----------------------------------------------------------------------
+-- Stage 17 — Server-side enforcement of visibility / privacy
+-- ----------------------------------------------------------------------
+--
+-- Replaces the wide-open "posts are public" SELECT policy. The old
+-- policy let anyone (even anon) read every row, so the "private
+-- account" flag (Stage 8) and "restricted" visibility (Stage 16)
+-- were soft — client-side filtering only. This stage moves the gate
+-- into the database so a curl request with the anon key can't see
+-- what it isn't supposed to.
+--
+-- Rules:
+--   • Anonymous viewer: only public posts from public accounts.
+--   • Author: always sees their own.
+--   • Authenticated viewer + post from public account + public
+--     visibility: visible.
+--   • Authenticated viewer + post from private account + public
+--     visibility: visible only if (a) approved follower, or (b)
+--     on the author's close-friends list, or (c) same organization.
+--   • Restricted visibility: visible only to author + close friends
+--     + same-org viewers, regardless of public/private account.
+--   • Admins (Stage 15 `is_admin`) see everything — needed for
+--     moderation (reports, deletes).
+
+drop policy if exists "posts are public" on public.posts;
+drop policy if exists "posts visible to allowed viewers" on public.posts;
+
+create policy "posts visible to allowed viewers"
+  on public.posts for select
+  using (
+    -- Anonymous + public/public is the cheapest branch — keep it first.
+    (
+      posts.visibility = 'public'
+      and exists (
+        select 1 from public.profiles ap
+        where ap.id = posts.author_id and not ap.is_private
+      )
+    )
+    -- Author themselves.
+    or auth.uid() = posts.author_id
+    -- Admins (moderation).
+    or exists (
+      select 1 from public.profiles vp
+      where vp.id = auth.uid() and vp.is_admin = true
+    )
+    -- Authenticated viewer rules.
+    or exists (
+      select 1 from public.profiles ap
+      left join public.profiles vp on vp.id = auth.uid()
+      where ap.id = posts.author_id
+      and (
+        -- Public post on a private account → approved follower OR
+        -- close friend OR same-org viewer.
+        (
+          ap.is_private and posts.visibility = 'public' and (
+            exists (
+              select 1 from public.follows f
+              where f.follower_id = auth.uid()
+              and f.target_id = ap.id
+              and f.status = 'accepted'
+            )
+            or (vp.id is not null and vp.handle = any(ap.close_friends))
+            or (
+              ap.organization is not null and vp.organization is not null
+              and lower(trim(ap.organization)) = lower(trim(vp.organization))
+            )
+          )
+        )
+        -- Restricted visibility → close friends or same org, regardless
+        -- of whether the account itself is public or private.
+        or (
+          posts.visibility = 'restricted' and vp.id is not null and (
+            vp.handle = any(ap.close_friends)
+            or (
+              ap.organization is not null and vp.organization is not null
+              and lower(trim(ap.organization)) = lower(trim(vp.organization))
+            )
+          )
+        )
+      )
+    )
+  );
+
+-- Likes / comments / bookmarks / reposts inherit visibility from the
+-- referenced post — drop their public-select policies and rebuild
+-- with an EXISTS check on the post being visible. Otherwise someone
+-- could enumerate likes/comments on restricted posts and infer
+-- existence/content.
+
+drop policy if exists "likes are public" on public.likes;
+create policy "likes visible only on viewable posts"
+  on public.likes for select
+  using (
+    exists (select 1 from public.posts p where p.id = likes.post_id)
+  );
+
+-- Reposts / bookmarks / poll_votes follow the same pattern — if you
+-- can't see the parent post, you shouldn't be able to enumerate its
+-- engagement either (otherwise existence + popularity leaks).
+
+drop policy if exists "users see reposts" on public.reposts;
+drop policy if exists "reposts visible only on viewable posts" on public.reposts;
+create policy "reposts visible only on viewable posts"
+  on public.reposts for select
+  using (
+    exists (select 1 from public.posts p where p.id = reposts.post_id)
+  );
+
+drop policy if exists "users see bookmarks" on public.bookmarks;
+drop policy if exists "bookmarks visible only on viewable posts" on public.bookmarks;
+-- Bookmarks were already author-scoped in Stage 11; we still want to
+-- prevent OTHER users from probing whether someone bookmarked a given
+-- restricted post.
+create policy "bookmarks visible only on viewable posts"
+  on public.bookmarks for select
+  using (
+    auth.uid() = user_id
+    or exists (select 1 from public.posts p where p.id = bookmarks.post_id)
+  );
+
+drop policy if exists "poll votes are public" on public.poll_votes;
+drop policy if exists "poll votes visible only on viewable posts" on public.poll_votes;
+create policy "poll votes visible only on viewable posts"
+  on public.poll_votes for select
+  using (
+    exists (select 1 from public.posts p where p.id = poll_votes.post_id)
+  );
+
+-- Note: posts.select RLS already filters, so the EXISTS effectively
+-- becomes "the viewer can see the parent post". Postgres optimises
+-- the join through.

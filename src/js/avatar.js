@@ -5,6 +5,8 @@
 //   user.avatarImage  — base64 data: URL of an uploaded image (optional)
 //   user.avatarShape  — 'round' (default) | 'square'
 
+import { safeImageUrl, cssUrlValue, safeLinkUrl } from './safe-url.js';
+
 function escapeAttr(s) {
   return String(s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -27,14 +29,23 @@ export function renderAvatar(user, {
   if (user && user.avatarShape === 'square') cls.push('avatar--square');
   if (extra) cls.push(extra);
 
-  const img = user && user.avatarImage;
+  // Drop the image entirely if it's not a recognised image URL (data:
+  // image/* or http(s)). Otherwise a value like
+  //   ');background:url(javascript:...
+  // would break out of the CSS url() literal and inject arbitrary
+  // rules. The text fallback (`user.avatar`) renders instead.
+  const rawImg = user && user.avatarImage;
+  const img = safeImageUrl(rawImg);
   const inner = img ? '' : escapeAttr(user?.avatar || '?');
   const style = img
-    ? ' style="background-image:url(\'' + img + '\');background-size:cover;background-position:center;color:transparent"'
+    ? ' style="background-image:url(\'' + cssUrlValue(img) + '\');background-size:cover;background-position:center;color:transparent"'
     : '';
+  // Same guard for the href — accept only http(s)/mailto/tel/relative
+  // (so a profile link can't carry a javascript: scheme).
+  const safeHref = safeLinkUrl(href) || '#';
 
   const opening = tag === 'a'
-    ? '<a class="' + cls.join(' ') + '" href="' + escapeAttr(href) + '"' +
+    ? '<a class="' + cls.join(' ') + '" href="' + escapeAttr(safeHref) + '"' +
         (title ? ' title="' + escapeAttr(title) + '"' : '') + style + '>'
     : '<' + tag + ' class="' + cls.join(' ') + '"' +
         (title ? ' title="' + escapeAttr(title) + '"' : '') + style + '>';
