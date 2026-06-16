@@ -596,6 +596,109 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 }
 .compose-vis-select select option { color: var(--text); background: var(--surface); }
 
+/* Instagram-style audience editor (Close friends / Org members in
+   /settings). Chips on top show the curated list with × to remove;
+   the search input below queries profiles and renders matches with
+   a + button. Saved state is the source of truth — every add/remove
+   POSTs immediately. */
+.audience-editor {
+  display: flex; flex-direction: column; gap: .5rem;
+  padding: .75rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+.audience-editor:last-child { border-bottom: 0; }
+.audience-editor__label {
+  display: flex; align-items: baseline; gap: .4rem;
+  font-weight: 600; color: var(--text);
+  font-size: .92rem;
+}
+.audience-editor__count { color: var(--muted); font-weight: 500; font-size: .85em; }
+.audience-editor__chips {
+  display: flex; flex-wrap: wrap; gap: .35rem;
+  min-height: 1.5rem;
+}
+.audience-chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .15rem .35rem .15rem .25rem;
+  background: var(--surface-2);
+  border-radius: 999px;
+  font-size: .85rem;
+}
+.audience-chip .avatar { width: 22px; height: 22px; font-size: .65rem; }
+.audience-chip__handle { color: var(--text); }
+.audience-chip__remove {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: transparent; border: 0;
+  color: var(--muted); cursor: pointer;
+  font-size: 14px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.audience-chip__remove:hover {
+  background: color-mix(in srgb, var(--danger, #f85149) 18%, transparent);
+  color: var(--danger, #f85149);
+}
+.audience-editor__search { position: relative; }
+.audience-editor__search input {
+  width: 100%;
+  padding: .45rem .65rem;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  font: inherit;
+}
+.audience-editor__search input:focus {
+  outline: 0; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.audience-editor__results {
+  margin-top: .4rem;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.audience-editor__results[hidden] { display: none; }
+.audience-editor__empty {
+  padding: .65rem .85rem;
+  color: var(--muted); font-size: .87rem;
+}
+.audience-result {
+  display: flex; align-items: center; gap: .55rem;
+  padding: .5rem .65rem;
+  background: transparent; border: 0; border-bottom: 1px solid var(--border);
+  color: var(--text); text-align: left;
+  font: inherit; cursor: pointer;
+}
+.audience-result:last-child { border-bottom: 0; }
+.audience-result:hover:not(:disabled) { background: var(--surface-2); }
+.audience-result.is-added { opacity: .55; cursor: default; }
+.audience-result .avatar { width: 28px; height: 28px; font-size: .75rem; flex: 0 0 auto; }
+.audience-result__text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.audience-result__name {
+  font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.audience-result__handle {
+  color: var(--muted); font-size: .82rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.audience-result__add {
+  flex: 0 0 auto;
+  width: 24px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.audience-result.is-added .audience-result__add {
+  background: color-mix(in srgb, var(--green, #2ea043) 22%, transparent);
+  color: var(--green, #2ea043);
+}
+.audience-editor__status:empty { display: none; }
+
 /* Audience hint badge on rendered posts (post head). Same silhouette
    as the kind badge, neutral colour so it doesn't compete with the
    idea / status badges. */
