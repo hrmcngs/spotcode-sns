@@ -6,8 +6,9 @@ import { currentUser, updateProfile } from '../auth.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
 import { getUser } from '../data.js';
-import { searchProfiles } from '../profiles.js';
+import { searchProfiles, fetchProfileByHandle } from '../profiles.js';
 import { debounce } from '../drafts.js';
+import { hydrateMyFollows, myFollowingHandles } from '../interactions.js';
 
 // In-memory state for the two audience-list editors so add/remove
 // can re-render without a round trip. Initialised in renderSettings()
@@ -378,6 +379,28 @@ export function bindSettings() {
     }).join('');
   }
 
+  // Default candidate set: handles the current user already follows.
+  // Picking close-friends / org members from "people you follow" is
+  // the common case, so we show them without forcing a search query.
+  // Missing profile metadata (avatar / name) → use the handle as a
+  // best-effort label; fetchProfileByHandle hydrates the cache in
+  // the background and a follow-up showSuggestions paints the names.
+  function showSuggestions(kind) {
+    const taken = new Set(audienceState[kind]);
+    const me = currentUser();
+    const handles = myFollowingHandles()
+      .filter(h => !taken.has(h) && (!me || h !== me.handle));
+    const profiles = handles.map(h => getUser(h) || { handle: h, name: h });
+    rerenderResults(kind, profiles, profiles.length ? '__suggestions__' : '');
+    // Background-fill missing profiles, then re-render once when any
+    // arrive. Cheap: each handle gets fetched at most once.
+    const missing = profiles.filter(p => !p.avatar && !p.name).map(p => p.handle);
+    if (missing.length) {
+      Promise.allSettled(missing.map(h => fetchProfileByHandle(h)))
+        .then((rs) => { if (rs.some(r => r.status === 'fulfilled' && r.value)) showSuggestions(kind); });
+    }
+  }
+
   // Per-kind debounced search so typing fast doesn't fire one
   // round trip per keystroke.
   const debouncedSearch = {
@@ -402,8 +425,19 @@ export function bindSettings() {
     const kind = input.getAttribute('data-audience-search');
     if (!kind || !debouncedSearch[kind]) return;
     const q = input.value.trim().replace(/^@/, '');
-    if (!q) { rerenderResults(kind, [], ''); return; }
+    // Empty query: don't blank the suggestions panel — show the
+    // follow-based candidates again. Typing brings up search.
+    if (!q) { showSuggestions(kind); return; }
     debouncedSearch[kind](q);
+  });
+  // Also re-show suggestions when the input gets focus (covers
+  // tap-to-open without typing).
+  document.addEventListener('focusin', (e) => {
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const kind = input.getAttribute('data-audience-search');
+    if (!kind) return;
+    if (!input.value.trim()) showSuggestions(kind);
   });
 
   document.addEventListener('click', (e) => {
@@ -453,6 +487,16 @@ export function bindSettings() {
   });
 
   } // end _audienceWired guard
+
+  // Paint default candidates on every /settings open. Waits for
+  // the follow list to be hydrated so the suggestions aren't empty
+  // on a fresh session.
+  if (currentUser()) {
+    hydrateMyFollows().then(() => {
+      showSuggestions('closeFriends');
+      showSuggestions('orgMembers');
+    });
+  }
 
   // Org label form (free-text "Organization" — profile display only).
   const orgLabelForm = document.getElementById('org-label-form');
