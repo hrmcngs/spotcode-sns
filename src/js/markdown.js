@@ -38,8 +38,14 @@ function inlinePass(s) {
     .replace(/(^|[^_\w])_([^_\s][^_\n]*?[^_\s]|[^_\s])_(?!\w)/g, '$1<em>$2</em>')
     // Links — validate the URL against an allowlist so an attacker can't
     // smuggle `javascript:` past escape() via [click](javascript:...).
+    // `url` arrives already escape()'d (input was HTML-escaped before
+    // markdown ran), so the `"` inside is `&quot;` — safe to inject
+    // into a quoted attribute. `target="_blank"` + `rel="noopener
+    // noreferrer"` cuts off the reverse-tabnabbing path.
     .replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (m, text, url) =>
-      SAFE_URL.test(url) ? '<a href="' + url + '" rel="noopener">' + text + '</a>' : m
+      SAFE_URL.test(url)
+        ? '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>'
+        : m
     )
     // Mentions last so an explicit [link](url) takes precedence over a
     // bare @handle inside the link text.

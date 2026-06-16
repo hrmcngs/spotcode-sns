@@ -35,6 +35,35 @@ function privacyCard() {
         '</button>' +
       '</div>' +
       '<p class="settings-status" id="privacy-status"></p>' +
+    '</section>' +
+    audienceCard()
+  );
+}
+
+// Edit the audience for "restricted" posts — close-friends handles
+// (comma-separated) + free-text organization.
+function audienceCard() {
+  const me = currentUser();
+  if (!me) return '';
+  const friends = Array.isArray(me.closeFriends) ? me.closeFriends.join(', ') : '';
+  return (
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.audience.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.audience.hint') + '</p>' +
+      '<form class="settings-form" id="audience-form">' +
+        '<label>' + t('settings.audience.friends') +
+          '<input name="closeFriends" type="text" autocomplete="off" spellcheck="false" ' +
+            'placeholder="alice, bob, carol" value="' + attr(friends) + '">' +
+        '</label>' +
+        '<label>' + t('settings.audience.org') +
+          '<input name="organization" type="text" autocomplete="off" maxlength="80" ' +
+            'placeholder="' + attr(t('settings.audience.org_placeholder')) + '" value="' + attr(me.organization || '') + '">' +
+        '</label>' +
+        '<div class="settings-form__actions">' +
+          '<button type="submit" class="btn btn--primary">' + t('settings.audience.save') + '</button>' +
+        '</div>' +
+        '<p class="settings-status" id="audience-status"></p>' +
+      '</form>' +
     '</section>'
   );
 }
@@ -228,6 +257,34 @@ export function bindSettings() {
         privStatus.className = 'settings-status is-bad';
       }
       privBtn.disabled = false;
+    }
+  });
+
+  // Audience form (close friends + organization) — Stage 16.
+  const audienceForm = document.getElementById('audience-form');
+  audienceForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const me = currentUser();
+    if (!me) return;
+    const fd = new FormData(audienceForm);
+    const raw = String(fd.get('closeFriends') || '');
+    // Strip whitespace, leading @, and empties; dedupe.
+    const closeFriends = [...new Set(raw.split(/[,\s]+/)
+      .map(h => h.replace(/^@/, '').trim()).filter(Boolean))];
+    const organization = String(fd.get('organization') || '').trim();
+    const status = document.getElementById('audience-status');
+    if (status) status.textContent = t('settings.audience.saving');
+    try {
+      await updateProfile({ closeFriends, organization });
+      if (status) {
+        status.textContent = t('settings.audience.saved');
+        status.className = 'settings-status is-ok';
+      }
+    } catch (ex) {
+      if (status) {
+        status.textContent = t('settings.audience.failed') + ': ' + (ex.message || ex);
+        status.className = 'settings-status is-bad';
+      }
     }
   });
 

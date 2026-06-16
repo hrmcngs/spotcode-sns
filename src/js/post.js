@@ -10,6 +10,7 @@ import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
 import { isDevMode }        from './dev-mode.js';
 import { t }                from './i18n.js';
+import { safeLinkUrl }      from './safe-url.js';
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -33,12 +34,15 @@ function files(list) {
 // read cleanly without each photo eating a full row.
 function photos(list) {
   if (!list || !list.length) return '';
-  const cls = 'post__photos post__photos--' + Math.min(4, list.length);
-  return '<div class="' + cls + '">' + list.map((src) => (
-    // Photos are data URLs, so loading="lazy" / decoding="async" are
-    // best-effort only — they help once a future Storage migration
-    // makes these into <img src="https://…"> with real bytes.
-    '<img class="post__photo" src="' + src + '" alt="" loading="lazy" decoding="async">'
+  // Validate every src against the image allowlist (data:image/* or
+  // http(s)). Anything else — e.g. a junk DB row with `javascript:`
+  // injected — gets dropped instead of rendered.
+  const safe = list.map(safeLinkUrl).filter(Boolean)
+    .filter((s) => /^(?:https?:\/\/|data:image\/)/i.test(s));
+  if (!safe.length) return '';
+  const cls = 'post__photos post__photos--' + Math.min(4, safe.length);
+  return '<div class="' + cls + '">' + safe.map((src) => (
+    '<img class="post__photo" src="' + escape(src) + '" alt="" loading="lazy" decoding="async">'
   )).join('') + '</div>';
 }
 
@@ -128,7 +132,7 @@ function spotChip(spot) {
     const label = spot.label || (Number(spot.lat).toFixed(4) + ', ' + Number(spot.lng).toFixed(4));
     const gmaps = gmapsUrl(spot);
     const title = spot.address ? 'Google Maps で開く — ' + spot.address : 'Google Maps で開く';
-    return '<a class="spot-chip" href="' + gmaps + '" target="_blank" rel="noopener" title="' + escape(title) + '">' +
+    return '<a class="spot-chip" href="' + escape(gmaps) + '" target="_blank" rel="noopener noreferrer" title="' + escape(title) + '">' +
       pinIcon + escape(label) + '</a>';
   }
   return '<span class="spot-chip">' + pinIcon + escape(spot) + '</span>';
@@ -199,11 +203,32 @@ function lockedBanner() {
   );
 }
 
+// Returns true when `viewer` is allowed to see a restricted post by
+// `author`. Author always sees their own; otherwise viewer must be on
+// the author's close-friends list OR share the same organization
+// (case-insensitive, trimmed). Returns false for guests.
+function isInRestrictedAudience(author, viewer) {
+  if (!author || !viewer) return false;
+  if (viewer.handle === author.handle) return true;
+  if (Array.isArray(author.closeFriends) && author.closeFriends.includes(viewer.handle)) return true;
+  const a = (author.organization || '').trim().toLowerCase();
+  const v = (viewer.organization || '').trim().toLowerCase();
+  if (a && v && a === v) return true;
+  return false;
+}
+
 export function renderPost(p) {
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
   const profileUrl = url('/' + u.handle);
   const me = currentUser();
+  // Restricted-visibility gate: if the author limited the post to
+  // close-friends + same-org and the viewer isn't in that audience,
+  // drop the card entirely. Author info comes from the embedded
+  // join (p.author) which carries closeFriends + organization.
+  if (p.visibility === 'restricted' && !isInRestrictedAudience(p.author, me)) {
+    return '';
+  }
   const liked      = me && isLiked(p.id);
   const reposted   = me && isReposted(p.id);
   const bookmarked = me && isBookmarked(p.id);
@@ -241,10 +266,14 @@ export function renderPost(p) {
               renderMarkdown(escape(p.body), { editable: canEdit }) +
             '</div>' +
             spotAddress(p.spot) +
-            (p.githubLink
-              ? '<div class="post__meta"><a class="post__link" href="' + escape(p.githubLink) + '" target="_blank" rel="noopener">' +
-                icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(p.githubLink) + '</a></div>'
-              : '') +
+            // Author-supplied URL — validated against the safeLinkUrl
+            // allowlist so a `javascript:` scheme can't slip past.
+            ((() => {
+              const safe = safeLinkUrl(p.githubLink);
+              if (!safe) return '';
+              return '<div class="post__meta"><a class="post__link" href="' + escape(safe) + '" target="_blank" rel="noopener noreferrer">' +
+                icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(safe) + '</a></div>';
+            })()) +
             photos(p.photos) +
             poll(p.poll) +
             files(p.files) +
