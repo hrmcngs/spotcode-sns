@@ -785,3 +785,108 @@ create policy "posts visible to allowed viewers"
       )
     )
   );
+
+-- ----------------------------------------------------------------------
+-- Stage 19 — Org membership as an explicit handle list
+-- ----------------------------------------------------------------------
+--
+-- Stage 16's `organization` was a free-text label and the org-match
+-- rule (Stage 18) compared two users' text values. That has two
+-- failure modes:
+--   • Casing / whitespace / typos let people in by accident.
+--   • A viewer can SET their `organization` to any string the author
+--     used and silently join the audience.
+--
+-- Stage 19 replaces the comparison with an explicit allow-list
+-- maintained by the author — same UX as close_friends but a second
+-- list. The text `organization` field stays as a free-form label
+-- (still shown on profiles) but is NOT used for visibility matching
+-- anymore. Old `organization`-only profiles fall back to a manual
+-- migration: the author needs to add the relevant handles to
+-- `org_members` once.
+
+alter table public.profiles
+  add column if not exists org_members text[] default '{}';
+
+drop policy if exists "posts visible to allowed viewers" on public.posts;
+create policy "posts visible to allowed viewers"
+  on public.posts for select
+  using (
+    -- Anonymous + public-from-public-account.
+    (
+      posts.visibility = 'public'
+      and exists (
+        select 1 from public.profiles ap
+        where ap.id = posts.author_id and not ap.is_private
+      )
+    )
+    -- Author themselves.
+    or auth.uid() = posts.author_id
+    -- Admins (moderation).
+    or exists (
+      select 1 from public.profiles vp
+      where vp.id = auth.uid() and vp.is_admin = true
+    )
+    -- Authenticated viewer rules.
+    or exists (
+      select 1 from public.profiles ap
+      left join public.profiles vp on vp.id = auth.uid()
+      where ap.id = posts.author_id
+      and (
+        -- Public post on a private account → approved follower OR
+        -- close friend OR explicit org member.
+        (
+          ap.is_private and posts.visibility = 'public' and (
+            exists (
+              select 1 from public.follows f
+              where f.follower_id = auth.uid()
+              and f.target_id = ap.id
+              and f.status = 'accepted'
+            )
+            or (vp.id is not null and vp.handle = any(ap.close_friends))
+            or (vp.id is not null and vp.handle = any(ap.org_members))
+          )
+        )
+        -- Mutual-only: both directions of follow must be accepted.
+        or (
+          posts.visibility = 'mutuals' and vp.id is not null
+          and exists (
+            select 1 from public.follows f1
+            where f1.follower_id = auth.uid() and f1.target_id = ap.id
+            and f1.status = 'accepted'
+          )
+          and exists (
+            select 1 from public.follows f2
+            where f2.follower_id = ap.id and f2.target_id = auth.uid()
+            and f2.status = 'accepted'
+          )
+        )
+        -- Following-only: the author follows the viewer.
+        or (
+          posts.visibility = 'following' and vp.id is not null
+          and exists (
+            select 1 from public.follows f
+            where f.follower_id = ap.id and f.target_id = auth.uid()
+            and f.status = 'accepted'
+          )
+        )
+        -- Close friends only — viewer is on the author's curated list.
+        or (
+          posts.visibility = 'friends' and vp.id is not null
+          and vp.handle = any(ap.close_friends)
+        )
+        -- Same-org only — viewer is on the author's curated org_members.
+        or (
+          posts.visibility = 'org' and vp.id is not null
+          and vp.handle = any(ap.org_members)
+        )
+        -- Legacy "restricted" (Stage 16) — friends OR (curated org member).
+        or (
+          posts.visibility = 'restricted' and vp.id is not null and (
+            vp.handle = any(ap.close_friends)
+            or vp.handle = any(ap.org_members)
+          )
+        )
+      )
+    )
+  );
