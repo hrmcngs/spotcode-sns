@@ -794,10 +794,16 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 }
 .poll__opt:disabled { cursor: default; }
 .poll__opt-bar {
-  position: absolute; inset: 0 auto 0 0;
-  width: 0;
+  position: absolute; inset: 0 0 0 0;
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-  transition: width .25s ease;
+  /* Animate scale instead of width so the browser composites on the
+     GPU (no reflow). With a dozen poll cards on a timeline, the old
+     `transition: width .25s` triggered a layout per frame per bar
+     and the whole page chugged for a quarter-second on every reload. */
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform .25s ease;
+  will-change: transform;
   pointer-events: none;
 }
 .poll__opt-text { position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; word-break: break-word; }

@@ -616,11 +616,14 @@ export async function hydratePolls(posts) {
       const bar = btn.querySelector('.poll__opt-bar');
       const txt = btn.querySelector('.poll__opt-pct');
       if (reveal) {
-        bar.style.width = pct + '%';
+        // Bar fills via transform: scaleX (GPU-composited, no reflow).
+        // Was `width = N%` which triggered a layout per animation
+        // frame per bar — janky on first paint with many polls.
+        bar.style.transform = 'scaleX(' + (pct / 100) + ')';
         txt.textContent = pct + '%';
         btn.classList.toggle('poll__opt--mine', tally.myChoice === i);
       } else {
-        bar.style.width = '0%';
+        bar.style.transform = 'scaleX(0)';
         txt.textContent = '';
       }
       btn.disabled = closed || tally.myChoice != null;
