@@ -513,3 +513,28 @@ create policy "admins can delete any post"
       where id = auth.uid() and is_admin = true
     )
   );
+
+-- ----------------------------------------------------------------------
+-- Stage 16 — Restricted post visibility (close friends + organization)
+-- ----------------------------------------------------------------------
+--
+-- A per-post visibility tag plus two new profile fields so a viewer
+-- can be checked against "is this author's close friend OR in the
+-- same organization". Filtering is done client-side today (matches
+-- the existing geo-gate pattern); RLS still returns the row to any
+-- authenticated user, so this is a "soft" privacy setting and not a
+-- security boundary. Tightening to RLS-enforced visibility is a
+-- follow-up.
+--
+-- `close_friends` stores handles (not ids) so the author can edit the
+-- list from the profile UI without a profiles-id round trip per name.
+-- `organization` is free-text — a GitHub org, a company name, a
+-- school, whatever the user wants to use as the cohort key.
+
+alter table public.profiles
+  add column if not exists close_friends text[] default '{}',
+  add column if not exists organization  text;
+
+alter table public.posts
+  add column if not exists visibility text default 'public'
+    check (visibility in ('public', 'restricted'));

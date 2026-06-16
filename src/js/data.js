@@ -64,6 +64,9 @@ let hasQuoteOf        = true;
 let hasPhotos         = true;
 let hasPoll           = true;
 let hasKind           = true;
+let hasVisibility     = true;
+let hasCloseFriends   = true;
+let hasOrganization   = true;
 
 (function loadSchemaCache() {
   try {
@@ -79,13 +82,17 @@ let hasKind           = true;
     if (v.hasPhotos         === false) hasPhotos         = false;
     if (v.hasPoll           === false) hasPoll           = false;
     if (v.hasKind           === false) hasKind           = false;
+    if (v.hasVisibility     === false) hasVisibility     = false;
+    if (v.hasCloseFriends   === false) hasCloseFriends   = false;
+    if (v.hasOrganization   === false) hasOrganization   = false;
   } catch {}
 })();
 function persistSchemaCache() {
   try {
     localStorage.setItem(SCHEMA_CACHE_KEY, JSON.stringify({
       at: Date.now(),
-      hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf, hasPhotos, hasPoll, hasKind,
+      hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf,
+      hasPhotos, hasPoll, hasKind, hasVisibility, hasCloseFriends, hasOrganization,
     }));
   } catch {}
 }
@@ -100,10 +107,18 @@ function postCols() {
   if (hasPhotos)         extras.push('photos');
   if (hasPoll)           extras.push('poll');
   if (hasKind)           extras.push('kind');
+  if (hasVisibility)     extras.push('visibility');
   const head =
     'id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
-  return head + ', author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)';
+  // Embedded author select. close_friends + organization land here so
+  // the renderer can check "is the viewer on this author's audience
+  // list" without a second profile fetch; both get dropped from the
+  // select on a "column does not exist" error.
+  const authorCols = ['handle', 'name', 'avatar_url', 'avatar_shape'];
+  if (hasCloseFriends) authorCols.push('close_friends');
+  if (hasOrganization) authorCols.push('organization');
+  return head + ', author:profiles!posts_author_id_fkey(' + authorCols.join(', ') + ')';
 }
 
 // Optional-column / table degradation map. Each entry: a substring
@@ -119,6 +134,9 @@ const OPTIONAL = [
   { needle: 'photos',           off: () => { if (hasPhotos)         { console.warn('posts.photos missing — run Stage 12 SQL: ALTER TABLE posts ADD COLUMN photos jsonb DEFAULT \'[]\'::jsonb.'); hasPhotos = false; return true; } return false; } },
   { needle: 'poll',             off: () => { if (hasPoll)           { console.warn('posts.poll missing — run Stage 13 SQL: ALTER TABLE posts ADD COLUMN poll jsonb.'); hasPoll = false; return true; } return false; } },
   { needle: 'kind',             off: () => { if (hasKind)           { console.warn('posts.kind missing — run Stage 14 SQL: ALTER TABLE posts ADD COLUMN kind text.'); hasKind = false; return true; } return false; } },
+  { needle: 'visibility',       off: () => { if (hasVisibility)     { console.warn('posts.visibility missing — run Stage 16 SQL: ALTER TABLE posts ADD COLUMN visibility text DEFAULT \'public\'.'); hasVisibility = false; return true; } return false; } },
+  { needle: 'close_friends',    off: () => { if (hasCloseFriends)   { console.warn('profiles.close_friends missing — run Stage 16 SQL.'); hasCloseFriends = false; return true; } return false; } },
+  { needle: 'organization',     off: () => { if (hasOrganization)   { console.warn('profiles.organization missing — run Stage 16 SQL.'); hasOrganization = false; return true; } return false; } },
 ];
 function isMissingOptionalColumn(error) {
   const msg = String(error?.message || '').toLowerCase();
@@ -149,6 +167,10 @@ function shapeAuthor(a) {
     avatar:      (name[0] || '?').toUpperCase(),
     avatarImage: a.avatar_url || null,
     avatarShape: a.avatar_shape || 'round',
+    // Surfaced so the renderer can decide whether the viewer is on
+    // the author's close-friends list / in the same organization.
+    closeFriends: Array.isArray(a.close_friends) ? a.close_friends : [],
+    organization: a.organization || '',
   };
 }
 
@@ -196,6 +218,10 @@ function shapePost(row) {
     // as a single source of truth so the composer toggle, the badge
     // renderer and any future "Ideas only" filter all agree.
     kind:          row.kind === 'idea' ? 'idea' : null,
+    // 'restricted' = only the author's close friends + same-org viewers
+    // see this post. 'public' (default) = anyone. Filtered in post.js
+    // renderPost so a non-eligible viewer's timeline just skips the row.
+    visibility:    row.visibility === 'restricted' ? 'restricted' : 'public',
     quoteOfPostId: row.quote_of_post_id || null,
     actions: {
       replies:   row.comments_count   || 0,
@@ -317,6 +343,7 @@ export function probeSchema() {
       // columns become visible without waiting for the TTL.
       hasCommentsCount = hasRepostsCount = hasBookmarksCount = true;
       hasQuotesCount = hasQuoteOf = hasPhotos = hasPoll = hasKind = true;
+      hasVisibility = hasCloseFriends = hasOrganization = true;
       let dirty = false;
       // Posts column probe — retry-loop drops one missing column per
       // round trip until the select succeeds or no more flags can flip.
@@ -506,6 +533,7 @@ export async function addPost(post) {
   };
   if (wantsPhotos) row.photos = post.photos;
   if (post.kind === 'idea' && hasKind) row.kind = 'idea';
+  if (post.visibility === 'restricted' && hasVisibility) row.visibility = 'restricted';
   if (wantsPoll) {
     // Stamp createdAt on the poll for ordering on the renderer.
     row.poll = {

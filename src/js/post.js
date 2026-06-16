@@ -199,11 +199,32 @@ function lockedBanner() {
   );
 }
 
+// Returns true when `viewer` is allowed to see a restricted post by
+// `author`. Author always sees their own; otherwise viewer must be on
+// the author's close-friends list OR share the same organization
+// (case-insensitive, trimmed). Returns false for guests.
+function isInRestrictedAudience(author, viewer) {
+  if (!author || !viewer) return false;
+  if (viewer.handle === author.handle) return true;
+  if (Array.isArray(author.closeFriends) && author.closeFriends.includes(viewer.handle)) return true;
+  const a = (author.organization || '').trim().toLowerCase();
+  const v = (viewer.organization || '').trim().toLowerCase();
+  if (a && v && a === v) return true;
+  return false;
+}
+
 export function renderPost(p) {
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
   const profileUrl = url('/' + u.handle);
   const me = currentUser();
+  // Restricted-visibility gate: if the author limited the post to
+  // close-friends + same-org and the viewer isn't in that audience,
+  // drop the card entirely. Author info comes from the embedded
+  // join (p.author) which carries closeFriends + organization.
+  if (p.visibility === 'restricted' && !isInRestrictedAudience(p.author, me)) {
+    return '';
+  }
   const liked      = me && isLiked(p.id);
   const reposted   = me && isReposted(p.id);
   const bookmarked = me && isBookmarked(p.id);

@@ -50,6 +50,11 @@ function projectUser(authUser, profile) {
     website:     profile.website   || '',
     twitter:     profile.twitter   || '',
     instagram:   profile.instagram || '',
+    // Stage 16 — restricted-visibility audience. closeFriends is an
+    // array of handles (NOT ids) so the user can edit the list by
+    // typing handles in settings without a profile lookup per name.
+    closeFriends: Array.isArray(profile.close_friends) ? profile.close_friends : [],
+    organization: profile.organization || '',
     joined:      profile.created_at ? String(profile.created_at).slice(0, 7) : '',
   };
 }
@@ -235,8 +240,11 @@ export async function updateProfile(patch) {
   if (patch.website   != null)         db.website      = String(patch.website).trim().slice(0, 200) || null;
   if (patch.twitter   != null)         db.twitter      = sanitizeHandle(patch.twitter);
   if (patch.instagram != null)         db.instagram    = sanitizeHandle(patch.instagram);
+  if (patch.closeFriends != null)      db.close_friends = (Array.isArray(patch.closeFriends) ? patch.closeFriends : [])
+                                                            .map(h => String(h).trim()).filter(Boolean);
+  if (patch.organization != null)      db.organization  = String(patch.organization).trim().slice(0, 80) || null;
 
-  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram']);
+  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'organization']);
   if (Object.keys(db).length) {
     // Retry loop: PostgREST returns one missing column per request.
     // For each error, identify the column and drop it ONLY if it's in

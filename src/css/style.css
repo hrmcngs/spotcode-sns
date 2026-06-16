@@ -562,6 +562,28 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 }
 .compose-kind-toggle__icon { font-size: 1em; }
 
+/* Same shape as the idea-tag pill but a different accent (green) so
+   it reads as a separate axis (visibility, not kind). Active = post
+   limited to close friends + same organization. */
+.compose-vis-toggle {
+  display: inline-flex; align-items: center; gap: .3em;
+  background: transparent; border: 1px dashed var(--border);
+  color: var(--muted); cursor: pointer;
+  padding: .2em .65em; border-radius: 999px;
+  font-size: .78rem; font-weight: 600;
+}
+.compose-vis-toggle:hover {
+  color: var(--green, #2ea043);
+  border-color: color-mix(in srgb, var(--green, #2ea043) 55%, transparent);
+}
+.compose-vis-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--green, #2ea043) 14%, transparent);
+  color: var(--green, #2ea043);
+  border-color: color-mix(in srgb, var(--green, #2ea043) 50%, transparent);
+  border-style: solid;
+}
+.compose-vis-toggle__icon { font-size: 1em; }
+
 /* Idea kind badge on rendered posts. Slots into .post__head alongside
    the status badge / spot chip. */
 .post__kind {

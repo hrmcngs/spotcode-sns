@@ -236,6 +236,8 @@ let pendingPoll = null;
 // `idea` tag toggle. Mirrors the .compose-kind-toggle button state and
 // rides on addPost / updatePost.
 let pendingKind = null; // null | 'idea'
+// 'public' (default) or 'restricted' (close friends + same-org only).
+let pendingVisibility = 'public';
 
 function dispatch(path) {
   // If a modal closed without unlocking (uncaught error path, navigation
@@ -453,6 +455,7 @@ function readComposerState() {
     githubLink: gh ? gh.value : '',
     spot:       pendingSpot,
     kind:       pendingKind,
+    visibility: pendingVisibility,
   };
 }
 
@@ -480,6 +483,8 @@ function clearComposerUI() {
   renderPollChip();
   pendingKind = null;
   syncKindToggle();
+  pendingVisibility = 'public';
+  syncVisToggle();
   hideDraftBanner();
 }
 
@@ -492,6 +497,15 @@ function syncKindToggle() {
   const on = pendingKind === 'idea';
   btn.setAttribute('aria-pressed', String(on));
   btn.dataset.kind = on ? 'idea' : 'off';
+}
+
+// Same for the visibility toggle (public/restricted).
+function syncVisToggle() {
+  const btn = document.getElementById('compose-vis-toggle');
+  if (!btn) return;
+  const on = pendingVisibility === 'restricted';
+  btn.setAttribute('aria-pressed', String(on));
+  btn.dataset.vis = on ? 'restricted' : 'public';
 }
 
 // Re-render the small pill that announces "📊 投票が添付されています"
@@ -631,6 +645,10 @@ function restoreComposerDraft() {
   if (d.kind === 'idea') {
     pendingKind = 'idea';
     syncKindToggle();
+  }
+  if (d.visibility === 'restricted') {
+    pendingVisibility = 'restricted';
+    syncVisToggle();
   }
   showDraftBanner();
 }
@@ -1105,6 +1123,15 @@ document.addEventListener('click', (e) => {
     autosaveComposerDraft();
     return;
   }
+  // Visibility toggle — public ↔ restricted (close friends + same org).
+  const visBtn = e.target.closest('#compose-vis-toggle');
+  if (visBtn) {
+    e.preventDefault();
+    pendingVisibility = pendingVisibility === 'restricted' ? 'public' : 'restricted';
+    syncVisToggle();
+    autosaveComposerDraft();
+    return;
+  }
 
   // Chart tool — open the poll-attach modal. Modal resolves with
   // { question, options[], deadlineAt } on Confirm, { delete: true }
@@ -1315,6 +1342,7 @@ document.addEventListener('submit', (e) => {
   if (pendingPhotos.length) post.photos = pendingPhotos.slice();
   if (pendingPoll) post.poll = pendingPoll;
   if (pendingKind) post.kind = pendingKind;
+  if (pendingVisibility === 'restricted') post.visibility = 'restricted';
 
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;
