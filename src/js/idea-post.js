@@ -42,10 +42,10 @@ export function renderIdeaForm({ user = null } = {}) {
             '<span>' + t('home.composer.add_url') + '</span>' +
           '</button>' +
           // Idea tag toggle. Active = post will be saved with kind="idea"
-          // and rendered with a 💡 アイデア badge. Off = regular note.
+          // and rendered with an idea badge. Off = regular note.
           '<button type="button" class="compose-kind-toggle" id="compose-kind-toggle" aria-pressed="false" data-kind="off">' +
             '<span class="compose-kind-toggle__icon">💡</span>' +
-            '<span class="compose-kind-toggle__label">アイデア</span>' +
+            '<span class="compose-kind-toggle__label">' + t('kind.idea') + '</span>' +
           '</button>' +
         '</div>' +
         '<div class="compose-link" id="compose-link-row" hidden>' +

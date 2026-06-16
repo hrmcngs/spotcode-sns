@@ -9,6 +9,7 @@ import { currentUser }      from './auth.js';
 import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
 import { isDevMode }        from './dev-mode.js';
+import { t }                from './i18n.js';
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -230,7 +231,7 @@ export function renderPost(p) {
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">（編集済み）</span>' : '') +
           (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot) : '') +
-          (p.kind === 'idea' ? ' <span class="post__kind post__kind--idea" title="アイデアタグ">💡 アイデア</span>' : '') +
+          (p.kind === 'idea' ? ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">💡 ' + escape(t('kind.idea')) + '</span>' : '') +
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
         (locked

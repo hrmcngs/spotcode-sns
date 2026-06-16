@@ -87,6 +87,30 @@ const DICT = {
     'picker.cancel':           'Cancel',
     'picker.geo.no_browser':   'このブラウザは Geolocation に対応していません',
     'picker.geo.denied':       '位置情報の利用が許可されていません。ブラウザの設定を確認してください。',
+    'picker.reset_auto':       '自動取得に戻す',
+    'picker.hint.house':       '番地: {n}（自動取得）',
+    'picker.hint.no_house':    '⚠ 番地は自動取得できませんでした — 上の住所欄に「6-17-2」など追記してください',
+    'picker.hint.no_address':  '住所が見つかりません — 上の住所欄に直接入力してください',
+
+    // ---------------- post kind tag ----------------
+    'kind.idea':               'アイデア',
+    'kind.idea.title':         'アイデアタグ',
+
+    // ---------------- notifications ----------------
+    'notif.page.title':        '通知',
+    'notif.loading':           '読み込み中…',
+    'notif.signin.title':      'サインインしてください',
+    'notif.signin.sub':        '通知はサインインしたユーザー宛のものを表示します。',
+    'notif.error.title':       '読み込み失敗',
+    'notif.empty.title':       'まだ通知はありません',
+    'notif.empty.sub':         'いいね・コメント・メンション・フォロー・フォロリクがあるとここに集まります。',
+    'notif.accept':            '承認',
+    'notif.deny':              '拒否',
+    'notif.label.like':        'いいねしました',
+    'notif.label.comment':     'コメントしました',
+    'notif.label.mention':     'メンションされました',
+    'notif.label.follow':      'フォローされました',
+    'notif.label.follow_request': 'フォローリクエストされました',
 
     // ---------------- settings ----------------
     'settings.title':          'Settings',
@@ -212,6 +236,30 @@ const DICT = {
     'picker.cancel':           'Cancel',
     'picker.geo.no_browser':   'This browser does not support Geolocation',
     'picker.geo.denied':       'Location access denied. Check your browser settings.',
+    'picker.reset_auto':       'Reset to auto-detected',
+    'picker.hint.house':       'House number: {n} (auto-detected)',
+    'picker.hint.no_house':    '⚠ House number could not be auto-detected — add it (e.g. "6-17-2") in the address field above.',
+    'picker.hint.no_address':  'No address found — type one directly in the address field above.',
+
+    // ---------------- post kind tag ----------------
+    'kind.idea':               'idea',
+    'kind.idea.title':         'Idea tag',
+
+    // ---------------- notifications ----------------
+    'notif.page.title':        'Notifications',
+    'notif.loading':           'Loading…',
+    'notif.signin.title':      'Sign in to see notifications',
+    'notif.signin.sub':        'Notifications shown here are addressed to the signed-in user.',
+    'notif.error.title':       'Failed to load',
+    'notif.empty.title':       'No notifications yet',
+    'notif.empty.sub':         'Likes, comments, mentions, follows and follow requests land here.',
+    'notif.accept':            'Accept',
+    'notif.deny':              'Deny',
+    'notif.label.like':        'liked your post',
+    'notif.label.comment':     'commented',
+    'notif.label.mention':     'mentioned you',
+    'notif.label.follow':      'followed you',
+    'notif.label.follow_request': 'requested to follow you',
 
     'settings.title':          'Settings',
     'settings.lang.title':     'Language',
