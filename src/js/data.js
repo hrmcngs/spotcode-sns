@@ -645,55 +645,6 @@ export async function votePoll(postId, optionIdx) {
   return true;
 }
 
-// ----------------------------------------------------------------------
-// POLL VOTES — separate table so per-row jsonb writes don't contend.
-// ----------------------------------------------------------------------
-
-// Per-poll tally: returns { counts: [n, n, …], total, myChoice|null }.
-// `myChoice` is the option index the current user voted for, or null
-// when they haven't voted (also for guests).
-export async function pollTally(postId) {
-  if (!postId) return { counts: [], total: 0, myChoice: null };
-  const supa = await getClient();
-  const { data: { user } } = await supa.auth.getUser();
-  const { data, error } = await supa
-    .from('poll_votes').select('option_idx, user_id').eq('post_id', postId);
-  if (error) {
-    // Table not migrated yet → return empty tally so the renderer
-    // still shows the question + options, just without bars.
-    return { counts: [], total: 0, myChoice: null };
-  }
-  const rows = data || [];
-  const counts = [];
-  let myChoice = null;
-  for (const r of rows) {
-    const k = Number(r.option_idx);
-    counts[k] = (counts[k] || 0) + 1;
-    if (user && r.user_id === user.id) myChoice = k;
-  }
-  return { counts, total: rows.length, myChoice };
-}
-
-// Cast / change a vote. One row per (post, user) enforced by the
-// primary key in the migration; we UPSERT so re-voting overwrites.
-export async function votePoll(postId, optionIdx) {
-  if (!postId) throw new Error('NO_POST');
-  const supa = await getClient();
-  const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしていません');
-  const { error } = await supa.from('poll_votes')
-    .upsert({ post_id: postId, user_id: user.id, option_idx: optionIdx },
-            { onConflict: 'post_id,user_id' });
-  if (error) {
-    const msg = String(error.message || '').toLowerCase();
-    if (msg.includes('poll_votes') && (msg.includes('does not exist') || msg.includes('not found'))) {
-      throw new Error(POLL_MIGRATION_MSG);
-    }
-    throw new Error(error.message);
-  }
-  return true;
-}
-
 // Relative-time formatter ("just now", "5m", "3h", "2d").
 export function relTime(ts) {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
