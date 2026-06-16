@@ -3,7 +3,7 @@ import { allPosts, followingPosts, hydrateQuotedPosts, cachedPosts } from '../da
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
 import { url }            from '../router.js';
-import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
+import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls } from '../interactions.js';
 import { t }              from '../i18n.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { timelineTabs } from './timeline-tabs.js';
@@ -130,4 +130,5 @@ export async function hydrateHome(tab = 'foryou') {
   }
   if (myVersion !== renderVersion) return;
   list.innerHTML = posts.map(renderPost).join('');
+  hydratePolls(posts).catch(() => {});
 }

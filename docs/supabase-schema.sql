@@ -437,3 +437,38 @@ update public.posts p
 -- later, migrate to Storage with `posts.photo_paths text[]` instead.
 
 alter table public.posts add column if not exists photos jsonb default '[]'::jsonb;
+
+-- ----------------------------------------------------------------------
+-- Stage 13 — Polls with per-user vote tracking
+-- ----------------------------------------------------------------------
+--
+-- posts.poll holds the question + options + deadline as a single jsonb
+-- blob (immutable once attached — there is no edit-poll UI). Each
+-- vote lands as a separate row in poll_votes so concurrent votes
+-- don't contend on a jsonb update. (post_id, user_id) is the primary
+-- key so re-voting just UPSERTs over the old row.
+
+alter table public.posts add column if not exists poll jsonb;
+
+create table if not exists public.poll_votes (
+  post_id    uuid not null references public.posts(id)  on delete cascade,
+  user_id    uuid not null references auth.users(id)    on delete cascade,
+  option_idx int  not null,
+  created_at timestamptz default now(),
+  primary key (post_id, user_id)
+);
+create index if not exists poll_votes_post_idx on public.poll_votes (post_id);
+
+alter table public.poll_votes enable row level security;
+drop policy if exists "poll votes are public"            on public.poll_votes;
+drop policy if exists "voters can insert their own vote" on public.poll_votes;
+drop policy if exists "voters can change their own vote" on public.poll_votes;
+drop policy if exists "voters can drop their own vote"   on public.poll_votes;
+create policy "poll votes are public"
+  on public.poll_votes for select using (true);
+create policy "voters can insert their own vote"
+  on public.poll_votes for insert with check (auth.uid() = user_id);
+create policy "voters can change their own vote"
+  on public.poll_votes for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "voters can drop their own vote"
+  on public.poll_votes for delete using (auth.uid() = user_id);

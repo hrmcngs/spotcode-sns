@@ -10,7 +10,7 @@ import { currentUser }                  from '../auth.js';
 import { url }                          from '../router.js';
 import { icon }                         from '../icons.js';
 import { getComments, addComment, removeComment,
-         hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
+         hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls } from '../interactions.js';
 import { relTime }                      from '../data.js';
 
 let renderVersion = 0;
@@ -118,6 +118,7 @@ export async function hydratePostDetail(id) {
       hydrateQuotedPosts([post]),
     ]);
   } catch {}
+  hydratePolls([post]).catch(() => {});
   if (myVersion !== renderVersion) return;
 
   let comments = [];

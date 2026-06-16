@@ -229,6 +229,10 @@ let pendingSpot = null;
 // 500-700 KB worst case.
 const PHOTO_CAP = 4;
 let pendingPhotos = [];
+// Poll attached to the next submit. Same lifecycle as pendingSpot /
+// pendingPhotos — lives in memory while composing, included on
+// addPost, cleared on submit / discard.
+let pendingPoll = null;
 
 function dispatch(path) {
   // If a modal closed without unlocking (uncaught error path, navigation
@@ -468,7 +472,28 @@ function clearComposerUI() {
   syncSpotChip(null);
   pendingPhotos = [];
   renderPhotoPreviews();
+  pendingPoll = null;
+  renderPollChip();
   hideDraftBanner();
+}
+
+// Re-render the small pill that announces "📊 投票が添付されています"
+// in the composer, mirroring the spot-chip pattern. Click → re-open
+// the poll modal to edit.
+function renderPollChip() {
+  let chip = document.getElementById('compose-poll-chip');
+  if (!pendingPoll) { if (chip) chip.remove(); return; }
+  const labelOpts = pendingPoll.options.slice(0, 2).join(' / ') +
+    (pendingPoll.options.length > 2 ? ` …+${pendingPoll.options.length - 2}` : '');
+  const html =
+    '<button type="button" class="spot-chip spot-chip--set" id="compose-poll-chip" title="クリックして編集">' +
+      '📊 投票: ' + labelOpts +
+    '</button>';
+  if (chip) chip.outerHTML = html;
+  else {
+    const meta = document.querySelector('.compose-meta');
+    if (meta) meta.insertAdjacentHTML('beforeend', html);
+  }
 }
 
 // Re-render the thumbnail row from pendingPhotos. Hidden when empty
@@ -994,6 +1019,59 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Chart tool — open the poll-attach modal. Modal resolves with
+  // { question, options[], deadlineAt } on Confirm, { delete: true }
+  // on Remove, null on Cancel.
+  const pollBtn = e.target.closest('.composer .compose-tool[title="poll"]');
+  if (pollBtn) {
+    e.preventDefault();
+    import('./views/poll-modal.js').then(({ openPollModal }) => {
+      openPollModal(pendingPoll).then((res) => {
+        if (res === null) return;            // cancel
+        if (res.delete)   { pendingPoll = null; }
+        else              { pendingPoll = res; }
+        renderPollChip();
+        autosaveComposerDraft();
+      });
+    });
+    return;
+  }
+  // Click the chip itself to re-open / edit the attached poll.
+  if (e.target.closest('#compose-poll-chip')) {
+    e.preventDefault();
+    import('./views/poll-modal.js').then(({ openPollModal }) => {
+      openPollModal(pendingPoll).then((res) => {
+        if (res === null) return;
+        if (res.delete)   pendingPoll = null;
+        else              pendingPoll = res;
+        renderPollChip();
+        autosaveComposerDraft();
+      });
+    });
+    return;
+  }
+
+  // Vote on a poll option (rendered post body).
+  const voteBtn = e.target.closest('.poll__opt');
+  if (voteBtn) {
+    e.preventDefault();
+    const post = voteBtn.closest('[data-post-id]');
+    const idx = Number(voteBtn.getAttribute('data-poll-idx'));
+    if (!post || !Number.isFinite(idx)) return;
+    const me = currentUser();
+    if (!me) { openAuth('login'); return; }
+    voteBtn.disabled = true;
+    import('./data.js').then(({ votePoll }) => {
+      votePoll(post.getAttribute('data-post-id'), idx)
+        .then(() => refresh())
+        .catch((err) => {
+          alert(err.message || '投票に失敗しました');
+          voteBtn.disabled = false;
+        });
+    });
+    return;
+  }
+
   // Code tool — insert a ``` fenced block at the textarea caret with
   // the caret landing on the inner blank line. Saves the user typing
   // the syntax (and gives a discoverability hint for Markdown).
@@ -1122,9 +1200,9 @@ document.addEventListener('submit', (e) => {
   if (!me) return openAuth('register');
   const ta = form.querySelector('textarea[name="text"]');
   const text = ta.value.trim();
-  // Allow photo-only posts: empty body is fine when at least one photo
-  // is attached. Empty + no photo still rejects as before.
-  if (!text && !pendingPhotos.length) {
+  // Allow photo-only / poll-only posts: empty body is fine when there
+  // IS an attachment (photo or poll). Empty + no attachment rejects.
+  if (!text && !pendingPhotos.length && !pendingPoll) {
     ta.classList.add('is-error');
     ta.focus();
     return;
@@ -1148,6 +1226,7 @@ document.addEventListener('submit', (e) => {
   };
   if (spotValue) post.spot = spotValue;
   if (pendingPhotos.length) post.photos = pendingPhotos.slice();
+  if (pendingPoll) post.poll = pendingPoll;
 
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;

@@ -4,7 +4,7 @@ import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, isRequested, followerCount, followingCount,
-         hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine,
+         hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls,
          hydrateProfileFollow } from '../interactions.js';
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
@@ -324,6 +324,7 @@ async function hydrateProfileBody(handle, myVersion) {
   } catch (err) { console.warn('hydrate batch (profile)', err); return; }
   if (myVersion !== renderVersion) return;
   list.innerHTML = posts.map(renderPost).join('');
+  hydratePolls(posts).catch(() => {});
 }
 
 // Resolves badges asynchronously after the profile is rendered, so the

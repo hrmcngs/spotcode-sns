@@ -3,7 +3,7 @@
 
 import { postsByCity, hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderPost }        from '../post.js';
-import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine } from '../interactions.js';
+import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls } from '../interactions.js';
 import { icon }              from '../icons.js';
 import { t }                 from '../i18n.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
@@ -68,4 +68,5 @@ export async function hydrateSpot(city) {
   } catch (err) { console.warn('hydrate batch (spot)', err); return; }
   if (myVersion !== renderVersion) return;
   list.innerHTML = posts.map(renderPost).join('');
+  hydratePolls(posts).catch(() => {});
 }
