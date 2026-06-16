@@ -31,14 +31,23 @@ export function isReady() {
 // Try the local bundled copy first, then the unpkg CDN if local
 // somehow 404s (e.g. dev server serving a partial tree). Promise-
 // based so the caller can `await loadMaps()` either way.
-function injectScript(src) {
+//
+// `timeoutMs` guards against the script load stalling silently on
+// mobile networks — without it, a half-fetched leaflet.js would
+// leave `await loadMaps()` hanging forever and /spots would sit on
+// "マップを読み込み中..." with a blank canvas.
+function injectScript(src, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = src;
     script.async = true;
     script.dataset.leaflet = '1';
-    script.onload  = () => window.L ? resolve(window.L) : reject(new Error('LOAD_FAILED'));
-    script.onerror = () => reject(new Error('SCRIPT_ERROR'));
+    let timer = setTimeout(() => {
+      script.remove();
+      reject(new Error('TIMEOUT'));
+    }, timeoutMs);
+    script.onload  = () => { clearTimeout(timer); window.L ? resolve(window.L) : reject(new Error('LOAD_FAILED')); };
+    script.onerror = () => { clearTimeout(timer); reject(new Error('SCRIPT_ERROR')); };
     document.head.appendChild(script);
   });
 }
@@ -56,13 +65,21 @@ export function loadMaps() {
       document.head.appendChild(link);
     }
     try {
-      return await injectScript(LEAFLET_JS);
+      return await injectScript(LEAFLET_JS, 8000);
     } catch (err) {
-      console.warn('loadMaps: local Leaflet failed, falling back to CDN', err);
+      console.warn('loadMaps: local Leaflet failed (' + err.message + '), falling back to CDN');
       // Remove the failed script tag so the next try can attach a new one.
       document.querySelectorAll('script[data-leaflet]').forEach(s => s.remove());
+      // Also force-load the CDN CSS in case the local CSS hung too.
+      if (!document.querySelector('link[data-leaflet-fallback]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = LEAFLET_CSS_FALLBACK;
+        link.dataset.leafletFallback = '1';
+        document.head.appendChild(link);
+      }
       try {
-        return await injectScript(LEAFLET_JS_FALLBACK);
+        return await injectScript(LEAFLET_JS_FALLBACK, 12000);
       } catch (err2) {
         leafletPromise = null;
         throw err2;

@@ -43,7 +43,7 @@ function template() {
               '<span class="picker-address-field__label">' + t('picker.address') + '</span>' +
               '<input type="text" id="picker-address-input" class="picker-address-input" ' +
                 'placeholder="' + t('picker.address_placeholder') + '" autocomplete="off" spellcheck="false">' +
-              '<button type="button" id="picker-address-reset" class="picker-address-reset" hidden title="自動取得に戻す">↺</button>' +
+              '<button type="button" id="picker-address-reset" class="picker-address-reset" hidden title="' + t('picker.reset_auto') + '">↺</button>' +
             '</label>' +
             '<div id="picker-address-hint" class="picker-address-hint"></div>' +
             '<div id="picker-coords" class="picker-coords"></div>' +
@@ -186,13 +186,13 @@ async function doReverseGeocode(lat, lng, autoFillLabel) {
   }
   if (hint) {
     if (det.houseNumber) {
-      hint.textContent = '番地: ' + det.houseNumber + '（自動取得）';
+      hint.textContent = t('picker.hint.house', { n: det.houseNumber });
       hint.className = 'picker-address-hint';
     } else if (address) {
-      hint.textContent = '⚠ 番地は自動取得できませんでした — 上の住所欄に「6-17-2」など追記してください';
+      hint.textContent = t('picker.hint.no_house');
       hint.className = 'picker-address-hint is-warn';
     } else {
-      hint.textContent = '住所が見つかりません — 上の住所欄に直接入力してください';
+      hint.textContent = t('picker.hint.no_address');
       hint.className = 'picker-address-hint is-warn';
     }
   }

@@ -577,6 +577,59 @@ export async function hydrateBookmarksMine(postIds) {
   for (const id of postIds) bookmarks.set(id, { mine: mine.has(id) });
 }
 
+// Paint poll bars + percentages onto already-rendered .poll cards.
+// One bulk SELECT for every poll on the page, then walk the DOM and
+// update each card's option buttons. Skipped silently when the
+// poll_votes table isn't migrated yet — bars stay empty, votes
+// throw migration-not-run when attempted.
+export async function hydratePolls(posts) {
+  if (!posts || !posts.length) return;
+  const withPoll = posts.filter(p => p.poll && Array.isArray(p.poll.options));
+  if (!withPoll.length) return;
+  let supa; try { supa = await getClient(); } catch { return; }
+  const { data: { user } } = await supa.auth.getUser();
+  const ids = withPoll.map(p => p.id);
+  const { data, error } = await supa.from('poll_votes')
+    .select('post_id, option_idx, user_id').in('post_id', ids);
+  if (error) return; // table likely missing — silent
+  // Aggregate by post_id.
+  const byPost = new Map();
+  for (const row of (data || [])) {
+    let bucket = byPost.get(row.post_id);
+    if (!bucket) { bucket = { counts: [], total: 0, myChoice: null }; byPost.set(row.post_id, bucket); }
+    const k = Number(row.option_idx);
+    bucket.counts[k] = (bucket.counts[k] || 0) + 1;
+    bucket.total += 1;
+    if (user && row.user_id === user.id) bucket.myChoice = k;
+  }
+  // Paint.
+  for (const p of withPoll) {
+    const card = document.querySelector('.post[data-post-id="' + p.id + '"] .poll');
+    if (!card) continue;
+    const tally = byPost.get(p.id) || { counts: [], total: 0, myChoice: null };
+    const closed = (Date.now() >= p.poll.deadlineAt);
+    const reveal = closed || tally.myChoice != null;
+    const opts = card.querySelectorAll('.poll__opt');
+    opts.forEach((btn, i) => {
+      const n = tally.counts[i] || 0;
+      const pct = tally.total ? Math.round(100 * n / tally.total) : 0;
+      const bar = btn.querySelector('.poll__opt-bar');
+      const txt = btn.querySelector('.poll__opt-pct');
+      if (reveal) {
+        bar.style.width = pct + '%';
+        txt.textContent = pct + '%';
+        btn.classList.toggle('poll__opt--mine', tally.myChoice === i);
+      } else {
+        bar.style.width = '0%';
+        txt.textContent = '';
+      }
+      btn.disabled = closed || tally.myChoice != null;
+    });
+    const totalSlot = card.querySelector('.poll__total');
+    if (totalSlot) totalSlot.textContent = tally.total + ' 票';
+  }
+}
+
 export async function toggleRepost(postId) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();

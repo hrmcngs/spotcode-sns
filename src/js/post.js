@@ -9,6 +9,7 @@ import { currentUser }      from './auth.js';
 import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
 import { isDevMode }        from './dev-mode.js';
+import { t }                from './i18n.js';
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -39,6 +40,41 @@ function photos(list) {
     // makes these into <img src="https://…"> with real bytes.
     '<img class="post__photo" src="' + src + '" alt="" loading="lazy" decoding="async">'
   )).join('') + '</div>';
+}
+
+// Poll card. Renders the question + options. Voting state and tallies
+// are hydrated asynchronously by hydratePolls() — at first paint each
+// option shows as a clickable button with no counts, and the bars +
+// percentages swap in once pollTally() resolves.
+function poll(p) {
+  if (!p || !Array.isArray(p.options) || p.options.length < 2) return '';
+  const remaining = p.deadlineAt - Date.now();
+  const closed = remaining <= 0;
+  const deadlineText = closed ? '投票終了'
+    : remaining < 60_000 ? 'まもなく終了'
+    : remaining < 3600_000 ? 'あと ' + Math.floor(remaining / 60_000) + ' 分'
+    : remaining < 86400_000 ? 'あと ' + Math.floor(remaining / 3600_000) + ' 時間'
+    : 'あと ' + Math.floor(remaining / 86400_000) + ' 日';
+  return (
+    '<div class="poll" data-poll-closed="' + (closed ? '1' : '0') + '">' +
+      '<div class="poll__q">' + escape(p.question || '') + '</div>' +
+      '<div class="poll__opts">' +
+        p.options.map((opt, i) =>
+          '<button type="button" class="poll__opt" data-poll-idx="' + i +
+            '"' + (closed ? ' disabled' : '') + '>' +
+            '<span class="poll__opt-bar"></span>' +
+            '<span class="poll__opt-text">' + escape(opt) + '</span>' +
+            '<span class="poll__opt-pct"></span>' +
+          '</button>'
+        ).join('') +
+      '</div>' +
+      '<div class="poll__meta">' +
+        '<span class="poll__total">0 票</span>' +
+        '<span class="poll__sep">·</span>' +
+        '<span class="poll__deadline">' + deadlineText + '</span>' +
+      '</div>' +
+    '</div>'
+  );
 }
 
 function commit(c) {
@@ -195,6 +231,7 @@ export function renderPost(p) {
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">（編集済み）</span>' : '') +
           (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot) : '') +
+          (p.kind === 'idea' ? ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">💡 ' + escape(t('kind.idea')) + '</span>' : '') +
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
         (locked
@@ -209,6 +246,7 @@ export function renderPost(p) {
                 icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(p.githubLink) + '</a></div>'
               : '') +
             photos(p.photos) +
+            poll(p.poll) +
             files(p.files) +
             commit(p.commit) +
             quoteCard(p.quoteOf)

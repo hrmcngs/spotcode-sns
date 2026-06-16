@@ -13,6 +13,7 @@ import { renderAvatar }  from '../avatar.js';
 import { url }           from '../router.js';
 import { icon }          from '../icons.js';
 import { relTime }       from '../data.js';
+import { t }             from '../i18n.js';
 
 let renderVersion = 0;
 
@@ -31,12 +32,14 @@ function escape(s) {
 // しました" reads ambiguously ("Alice followed [what?]"). Use the
 // passive form so the recipient instantly sees this is about being
 // followed. Same shape for the pending-request variant.
+// Labels resolved through i18n so the same notification row reads
+// "いいねしました" or "liked your post" depending on the viewer's language.
 const META = {
-  like:           { ico: 'heart',  mod: 'like',     label: 'いいねしました' },
-  comment:        { ico: 'reply',  mod: 'comment',  label: 'コメントしました' },
-  mention:        { ico: 'at',     mod: 'mention',  label: 'メンションされました' },
-  follow:         { ico: 'user',   mod: 'follow',   label: 'フォローされました' },
-  follow_request: { ico: 'user',   mod: 'request',  label: 'フォローリクエストされました' },
+  like:           { ico: 'heart',  mod: 'like',     labelKey: 'notif.label.like' },
+  comment:        { ico: 'reply',  mod: 'comment',  labelKey: 'notif.label.comment' },
+  mention:        { ico: 'at',     mod: 'mention',  labelKey: 'notif.label.mention' },
+  follow:         { ico: 'user',   mod: 'follow',   labelKey: 'notif.label.follow' },
+  follow_request: { ico: 'user',   mod: 'request',  labelKey: 'notif.label.follow_request' },
 };
 
 function postExcerpt(post) {
@@ -68,7 +71,7 @@ function renderRow(n) {
     '<div class="notif__title">' +
       '<span class="notif__name">' + escape(n.actor.name) + '</span>' +
       ' <span class="notif__handle">@' + escape(n.actor.handle) + '</span>' +
-      ' <span class="notif__action">' + escape(meta.label) + '</span>' +
+      ' <span class="notif__action">' + escape(t(meta.labelKey)) + '</span>' +
       ' <span class="notif__time">· ' + escape(relTime(n.createdAt)) + '</span>' +
     '</div>';
 
@@ -86,8 +89,8 @@ function renderRow(n) {
   // Inline Accept / Deny for pending follow requests.
   const actions = n.type === 'follow_request'
     ? '<div class="notif__actions">' +
-        '<button type="button" class="btn btn--primary btn--sm" data-notif-accept="' + escape(n.actor.handle) + '">承認</button>' +
-        '<button type="button" class="btn btn--ghost   btn--sm" data-notif-deny="'   + escape(n.actor.handle) + '">拒否</button>' +
+        '<button type="button" class="btn btn--primary btn--sm" data-notif-accept="' + escape(n.actor.handle) + '">' + t('notif.accept') + '</button>' +
+        '<button type="button" class="btn btn--ghost   btn--sm" data-notif-deny="'   + escape(n.actor.handle) + '">' + t('notif.deny')   + '</button>' +
       '</div>'
     : '';
 
@@ -111,10 +114,10 @@ export function renderNotifications() {
   // bar and (b) reserved a tall sticky strip with awkward empty space.
   return (
     '<header class="notif-head">' +
-      '<h2>通知</h2>' +
+      '<h2>' + t('notif.page.title') + '</h2>' +
     '</header>' +
     '<div id="notif-list">' +
-      '<div class="stub"><p class="stub__sub">読み込み中…</p></div>' +
+      '<div class="stub"><p class="stub__sub">' + t('notif.loading') + '</p></div>' +
     '</div>'
   );
 }
@@ -128,9 +131,9 @@ export async function hydrateNotifications() {
   if (!me) {
     root.innerHTML =
       '<div class="stub">' +
-        '<h2 class="stub__title">サインインしてください</h2>' +
-        '<p class="stub__sub">通知はサインインしたユーザー宛のものを表示します。</p>' +
-        '<button class="btn btn--primary" data-auth="login">Log in</button>' +
+        '<h2 class="stub__title">' + t('notif.signin.title') + '</h2>' +
+        '<p class="stub__sub">' + t('notif.signin.sub') + '</p>' +
+        '<button class="btn btn--primary" data-auth="login">' + t('nav.login') + '</button>' +
       '</div>';
     return;
   }
@@ -139,7 +142,7 @@ export async function hydrateNotifications() {
   try { items = await notificationsForMe(); }
   catch (err) {
     if (myVersion !== renderVersion) return;
-    root.innerHTML = '<div class="stub"><h2 class="stub__title">読み込み失敗</h2><p class="stub__sub">' + escape(err.message || '') + '</p></div>';
+    root.innerHTML = '<div class="stub"><h2 class="stub__title">' + t('notif.error.title') + '</h2><p class="stub__sub">' + escape(err.message || '') + '</p></div>';
     return;
   }
   if (myVersion !== renderVersion) return;
@@ -147,8 +150,8 @@ export async function hydrateNotifications() {
   if (!items.length) {
     root.innerHTML =
       '<div class="stub">' +
-        '<h2 class="stub__title">まだ通知はありません</h2>' +
-        '<p class="stub__sub">いいね / コメント / リポスト / 保存 / 引用 / フォロー / リクエスト があるとここに集まります。</p>' +
+        '<h2 class="stub__title">' + t('notif.empty.title') + '</h2>' +
+        '<p class="stub__sub">' + t('notif.empty.sub') + '</p>' +
       '</div>';
     return;
   }

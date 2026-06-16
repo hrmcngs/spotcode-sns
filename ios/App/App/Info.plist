@@ -45,5 +45,23 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!--
+		Usage-description strings for every iOS-protected API the app
+		touches. Without these, iOS TERMINATES the process the moment
+		the user taps the photo button / the map asks for a location —
+		surfacing to the user as "the app crashed". The strings here
+		appear verbatim in the permission prompt, so write them as
+		first-person explanations.
+	-->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>投稿に写真を添付するために写真ライブラリへアクセスします。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>投稿用にその場で撮った写真を添付するためカメラを使用します。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>投稿に添付した写真を保存するために写真ライブラリへ書き込みます。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>マップ表示と「半径 100m 以内のスポットだけ読める」機能のため、現在地を使用します。</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>マップ表示と「半径 100m 以内のスポットだけ読める」機能のため、現在地を使用します。</string>
 </dict>
 </plist>

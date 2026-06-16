@@ -229,6 +229,13 @@ let pendingSpot = null;
 // 500-700 KB worst case.
 const PHOTO_CAP = 4;
 let pendingPhotos = [];
+// Poll attached to the next submit. Same lifecycle as pendingSpot /
+// pendingPhotos — lives in memory while composing, included on
+// addPost, cleared on submit / discard.
+let pendingPoll = null;
+// `idea` tag toggle. Mirrors the .compose-kind-toggle button state and
+// rides on addPost / updatePost.
+let pendingKind = null; // null | 'idea'
 
 function dispatch(path) {
   // If a modal closed without unlocking (uncaught error path, navigation
@@ -445,6 +452,7 @@ function readComposerState() {
     body:       ta ? ta.value : '',
     githubLink: gh ? gh.value : '',
     spot:       pendingSpot,
+    kind:       pendingKind,
   };
 }
 
@@ -468,7 +476,41 @@ function clearComposerUI() {
   syncSpotChip(null);
   pendingPhotos = [];
   renderPhotoPreviews();
+  pendingPoll = null;
+  renderPollChip();
+  pendingKind = null;
+  syncKindToggle();
   hideDraftBanner();
+}
+
+// Reflect pendingKind on the toggle button (pressed style + data attr).
+// Safe to call when the button isn't in the DOM — e.g. logged-out
+// composer-gate has no toggle to update.
+function syncKindToggle() {
+  const btn = document.getElementById('compose-kind-toggle');
+  if (!btn) return;
+  const on = pendingKind === 'idea';
+  btn.setAttribute('aria-pressed', String(on));
+  btn.dataset.kind = on ? 'idea' : 'off';
+}
+
+// Re-render the small pill that announces "📊 投票が添付されています"
+// in the composer, mirroring the spot-chip pattern. Click → re-open
+// the poll modal to edit.
+function renderPollChip() {
+  let chip = document.getElementById('compose-poll-chip');
+  if (!pendingPoll) { if (chip) chip.remove(); return; }
+  const labelOpts = pendingPoll.options.slice(0, 2).join(' / ') +
+    (pendingPoll.options.length > 2 ? ` …+${pendingPoll.options.length - 2}` : '');
+  const html =
+    '<button type="button" class="spot-chip spot-chip--set" id="compose-poll-chip" title="クリックして編集">' +
+      '📊 投票: ' + labelOpts +
+    '</button>';
+  if (chip) chip.outerHTML = html;
+  else {
+    const meta = document.querySelector('.compose-meta');
+    if (meta) meta.insertAdjacentHTML('beforeend', html);
+  }
 }
 
 // Re-render the thumbnail row from pendingPhotos. Hidden when empty
@@ -586,6 +628,10 @@ function restoreComposerDraft() {
     pendingSpot = d.spot;
     syncSpotChip(d.spot);
   }
+  if (d.kind === 'idea') {
+    pendingKind = 'idea';
+    syncKindToggle();
+  }
   showDraftBanner();
 }
 
@@ -668,22 +714,24 @@ onAuthChange(() => {
 
 // ----- delegated UI events -----
 
-// When the composer textarea takes focus (click, tab key, or the
-// New idea button), scroll it into view so the sticky topbar + tab
-// bar don't cover its top half. `scroll-margin-top` on the element
-// itself takes care of the offset.
-document.addEventListener('focusin', (e) => {
-  const ta = e.target;
-  if (!(ta instanceof HTMLTextAreaElement)) return;
-  if (!ta.closest('.composer')) return;
-  ta.scrollIntoView({ block: 'start', behavior: 'smooth' });
-});
+// (Removed the global focusin → scrollIntoView handler that fired on
+// every textarea tap: it caused a small smooth-scroll the user didn't
+// ask for. The "New idea" CTA below still scrolls the composer into
+// view explicitly — that's the one place auto-scroll is intended.)
 
 document.getElementById('open-compose')?.addEventListener('click', () => {
   if (!currentUser()) return openAuth('register');
   navigate('/');
   setTimeout(() => {
-    document.querySelector('.composer textarea')?.focus();
+    const ta = document.querySelector('.composer textarea');
+    if (!ta) return;
+    // Only scroll when the textarea is actually offscreen — `New idea`
+    // tapped from a scrolled-down position should jump up, but tapping
+    // it while the composer is already visible shouldn't budge.
+    const r = ta.getBoundingClientRect();
+    const offscreen = r.top < 0 || r.top > window.innerHeight - 80;
+    if (offscreen) ta.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    ta.focus();
   }, 30);
 });
 
@@ -994,6 +1042,88 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Click on a post photo → open the fullscreen lightbox at that index.
+  // Pulls every photo from the same post card so the lightbox can
+  // arrow / swipe between them.
+  const photoImg = e.target.closest('.post__photo');
+  if (photoImg) {
+    e.preventDefault();
+    const card = photoImg.closest('.post__photos');
+    if (!card) return;
+    const all = [...card.querySelectorAll('.post__photo')];
+    const idx = all.indexOf(photoImg);
+    const srcs = all.map(img => img.getAttribute('src')).filter(Boolean);
+    import('./views/photo-lightbox.js').then(({ openLightbox }) => {
+      openLightbox(srcs, Math.max(0, idx));
+    });
+    return;
+  }
+
+  // Idea tag toggle — flips pendingKind between null and 'idea' and
+  // syncs the button's pressed/data-kind state so the next submit
+  // picks up the new value.
+  const kindBtn = e.target.closest('#compose-kind-toggle');
+  if (kindBtn) {
+    e.preventDefault();
+    pendingKind = pendingKind === 'idea' ? null : 'idea';
+    syncKindToggle();
+    autosaveComposerDraft();
+    return;
+  }
+
+  // Chart tool — open the poll-attach modal. Modal resolves with
+  // { question, options[], deadlineAt } on Confirm, { delete: true }
+  // on Remove, null on Cancel.
+  const pollBtn = e.target.closest('.composer .compose-tool[title="poll"]');
+  if (pollBtn) {
+    e.preventDefault();
+    import('./views/poll-modal.js').then(({ openPollModal }) => {
+      openPollModal(pendingPoll).then((res) => {
+        if (res === null) return;            // cancel
+        if (res.delete)   { pendingPoll = null; }
+        else              { pendingPoll = res; }
+        renderPollChip();
+        autosaveComposerDraft();
+      });
+    });
+    return;
+  }
+  // Click the chip itself to re-open / edit the attached poll.
+  if (e.target.closest('#compose-poll-chip')) {
+    e.preventDefault();
+    import('./views/poll-modal.js').then(({ openPollModal }) => {
+      openPollModal(pendingPoll).then((res) => {
+        if (res === null) return;
+        if (res.delete)   pendingPoll = null;
+        else              pendingPoll = res;
+        renderPollChip();
+        autosaveComposerDraft();
+      });
+    });
+    return;
+  }
+
+  // Vote on a poll option (rendered post body).
+  const voteBtn = e.target.closest('.poll__opt');
+  if (voteBtn) {
+    e.preventDefault();
+    const post = voteBtn.closest('[data-post-id]');
+    const idx = Number(voteBtn.getAttribute('data-poll-idx'));
+    if (!post || !Number.isFinite(idx)) return;
+    const me = currentUser();
+    if (!me) { openAuth('login'); return; }
+    voteBtn.disabled = true;
+    import('./data.js').then(({ votePoll }) => {
+      votePoll(post.getAttribute('data-post-id'), idx)
+        .then(() => refresh())
+        .catch((err) => {
+          alert(err.message || '投票に失敗しました');
+          voteBtn.disabled = false;
+        });
+    });
+    return;
+  }
+
   // Code tool — insert a ``` fenced block at the textarea caret with
   // the caret landing on the inner blank line. Saves the user typing
   // the syntax (and gives a discoverability hint for Markdown).
@@ -1122,9 +1252,9 @@ document.addEventListener('submit', (e) => {
   if (!me) return openAuth('register');
   const ta = form.querySelector('textarea[name="text"]');
   const text = ta.value.trim();
-  // Allow photo-only posts: empty body is fine when at least one photo
-  // is attached. Empty + no photo still rejects as before.
-  if (!text && !pendingPhotos.length) {
+  // Allow photo-only / poll-only posts: empty body is fine when there
+  // IS an attachment (photo or poll). Empty + no attachment rejects.
+  if (!text && !pendingPhotos.length && !pendingPoll) {
     ta.classList.add('is-error');
     ta.focus();
     return;
@@ -1148,6 +1278,8 @@ document.addEventListener('submit', (e) => {
   };
   if (spotValue) post.spot = spotValue;
   if (pendingPhotos.length) post.photos = pendingPhotos.slice();
+  if (pendingPoll) post.poll = pendingPoll;
+  if (pendingKind) post.kind = pendingKind;
 
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;

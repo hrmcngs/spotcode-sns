@@ -62,6 +62,8 @@ let hasBookmarksCount = true;
 let hasQuotesCount    = true;
 let hasQuoteOf        = true;
 let hasPhotos         = true;
+let hasPoll           = true;
+let hasKind           = true;
 
 (function loadSchemaCache() {
   try {
@@ -75,13 +77,15 @@ let hasPhotos         = true;
     if (v.hasQuotesCount    === false) hasQuotesCount    = false;
     if (v.hasQuoteOf        === false) hasQuoteOf        = false;
     if (v.hasPhotos         === false) hasPhotos         = false;
+    if (v.hasPoll           === false) hasPoll           = false;
+    if (v.hasKind           === false) hasKind           = false;
   } catch {}
 })();
 function persistSchemaCache() {
   try {
     localStorage.setItem(SCHEMA_CACHE_KEY, JSON.stringify({
       at: Date.now(),
-      hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf, hasPhotos,
+      hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf, hasPhotos, hasPoll, hasKind,
     }));
   } catch {}
 }
@@ -94,6 +98,8 @@ function postCols() {
   if (hasQuotesCount)    extras.push('quotes_count');
   if (hasQuoteOf)        extras.push('quote_of_post_id');
   if (hasPhotos)         extras.push('photos');
+  if (hasPoll)           extras.push('poll');
+  if (hasKind)           extras.push('kind');
   const head =
     'id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
@@ -111,6 +117,8 @@ const OPTIONAL = [
   { needle: 'quotes_count',     off: () => { if (hasQuotesCount)    { console.warn('posts.quotes_count missing — run Stage 11 SQL.');    hasQuotesCount    = false; return true; } return false; } },
   { needle: 'quote_of_post_id', off: () => { if (hasQuoteOf)        { console.warn('posts.quote_of_post_id missing — run Stage 11 SQL.'); hasQuoteOf      = false; return true; } return false; } },
   { needle: 'photos',           off: () => { if (hasPhotos)         { console.warn('posts.photos missing — run Stage 12 SQL: ALTER TABLE posts ADD COLUMN photos jsonb DEFAULT \'[]\'::jsonb.'); hasPhotos = false; return true; } return false; } },
+  { needle: 'poll',             off: () => { if (hasPoll)           { console.warn('posts.poll missing — run Stage 13 SQL: ALTER TABLE posts ADD COLUMN poll jsonb.'); hasPoll = false; return true; } return false; } },
+  { needle: 'kind',             off: () => { if (hasKind)           { console.warn('posts.kind missing — run Stage 14 SQL: ALTER TABLE posts ADD COLUMN kind text.'); hasKind = false; return true; } return false; } },
 ];
 function isMissingOptionalColumn(error) {
   const msg = String(error?.message || '').toLowerCase();
@@ -178,6 +186,16 @@ function shapePost(row) {
     // to ~1080px by fileToPhotoDataUrl(). Missing when the photos
     // column isn't migrated yet → empty array, renderer skips silently.
     photos:        Array.isArray(row.photos) ? row.photos : [],
+    // Composer-attached poll. Shape: { question, options[], deadlineAt,
+    // createdAt }. Vote counts live in the separate poll_votes table —
+    // counted on demand by the renderer so per-row jsonb writes don't
+    // contend with each other. Null when no poll attached or column
+    // not migrated yet.
+    poll:          row.poll && typeof row.poll === 'object' ? row.poll : null,
+    // Post kind tag. Currently 'idea' or null (= regular note). Read
+    // as a single source of truth so the composer toggle, the badge
+    // renderer and any future "Ideas only" filter all agree.
+    kind:          row.kind === 'idea' ? 'idea' : null,
     quoteOfPostId: row.quote_of_post_id || null,
     actions: {
       replies:   row.comments_count   || 0,
@@ -298,7 +316,7 @@ export function probeSchema() {
       // and re-flips — same end state as before, but newly-migrated
       // columns become visible without waiting for the TTL.
       hasCommentsCount = hasRepostsCount = hasBookmarksCount = true;
-      hasQuotesCount = hasQuoteOf = hasPhotos = true;
+      hasQuotesCount = hasQuoteOf = hasPhotos = hasPoll = hasKind = true;
       let dirty = false;
       // Posts column probe — retry-loop drops one missing column per
       // round trip until the select succeeds or no more flags can flip.
@@ -465,12 +483,19 @@ export async function hydrateQuotedPosts(posts) {
 const PHOTOS_MIGRATION_MSG =
   '写真機能のマイグレーションが未実行です。Supabase で次の SQL を一度だけ実行してください: ' +
   'ALTER TABLE posts ADD COLUMN IF NOT EXISTS photos jsonb DEFAULT \'[]\'::jsonb;';
+const POLL_MIGRATION_MSG =
+  '投票機能のマイグレーションが未実行です。Supabase で次の SQL を一度だけ実行してください: ' +
+  'ALTER TABLE posts ADD COLUMN IF NOT EXISTS poll jsonb; ' +
+  'CREATE TABLE IF NOT EXISTS poll_votes (post_id uuid REFERENCES posts(id) ON DELETE CASCADE, ' +
+  'user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE, option_idx int NOT NULL, ' +
+  'created_at timestamptz DEFAULT now(), PRIMARY KEY (post_id, user_id));';
 
 export async function addPost(post) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
   if (!user) throw new Error('ログインしていません');
   const wantsPhotos = Array.isArray(post.photos) && post.photos.length > 0;
+  const wantsPoll = post.poll && Array.isArray(post.poll.options) && post.poll.options.length >= 2;
 
   const row = {
     author_id:   user.id,
@@ -480,26 +505,36 @@ export async function addPost(post) {
     status:      post.status || 'wip',
   };
   if (wantsPhotos) row.photos = post.photos;
+  if (post.kind === 'idea' && hasKind) row.kind = 'idea';
+  if (wantsPoll) {
+    // Stamp createdAt on the poll for ordering on the renderer.
+    row.poll = {
+      question:   post.poll.question,
+      options:    post.poll.options,
+      deadlineAt: post.poll.deadlineAt,
+      createdAt:  Date.now(),
+    };
+  }
 
-  // When photos are attached: optimistically try with the column in
-  // place. If Postgres rejects with "photos does not exist", surface a
-  // clear migration message — do NOT fall through to the silent retry
-  // path, because that would post a text-only row and the user would
-  // think their photos vanished. (Optimistic vs. pre-checking hasPhotos
-  // matters when the user just ran the SQL but the cached flag is
-  // stale.) Other optional columns can still degrade through the
-  // resilient path on the SELECT side.
-  if (wantsPhotos) {
-    // Force hasPhotos true so postCols() includes it in the SELECT;
-    // a stale `false` would otherwise build a SELECT that misses the
-    // freshly-inserted photos column.
-    hasPhotos = true;
+  // When photos OR poll are attached: optimistically try with the
+  // columns in place. If Postgres rejects with one of them missing,
+  // surface a clear migration message — do NOT fall through to the
+  // silent retry path, because that would post a text-only row and the
+  // user would think their attachment vanished. Other optional columns
+  // (counts etc.) can still degrade through the resilient SELECT pass.
+  if (wantsPhotos || wantsPoll) {
+    if (wantsPhotos) hasPhotos = true;
+    if (wantsPoll)   hasPoll   = true;
     const { data, error } = await supa.from('posts').insert(row).select(postCols()).single();
     if (error) {
       const msg = String(error.message || '').toLowerCase();
-      if (msg.includes('photos') && msg.includes('does not exist')) {
-        isMissingOptionalColumn(error); // flip + persist for the session
+      if (wantsPhotos && msg.includes('photos') && msg.includes('does not exist')) {
+        isMissingOptionalColumn(error);
         throw new Error(PHOTOS_MIGRATION_MSG);
+      }
+      if (wantsPoll && msg.includes('poll') && msg.includes('does not exist')) {
+        isMissingOptionalColumn(error);
+        throw new Error(POLL_MIGRATION_MSG);
       }
       throw new Error(error.message);
     }
@@ -523,6 +558,10 @@ export async function updatePost(postId, fields) {
   const supa = await getClient();
   const patch = {};
   if (typeof fields.body === 'string') patch.body = fields.body;
+  // `kind` accepts the string 'idea' to tag, or null to untag.
+  if (fields.kind === 'idea' || fields.kind === null) {
+    if (hasKind) patch.kind = fields.kind;
+  }
   if (!Object.keys(patch).length) return null;
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').update(patch).eq('id', postId).select(cols)
@@ -543,6 +582,55 @@ export async function removePost(postId) {
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) {
     throw new Error('削除権限がありません（RLS により拒否、または既に削除済み）');
+  }
+  return true;
+}
+
+// ----------------------------------------------------------------------
+// POLL VOTES — separate table so per-row jsonb writes don't contend.
+// ----------------------------------------------------------------------
+
+// Per-poll tally: returns { counts: [n, n, …], total, myChoice|null }.
+// `myChoice` is the option index the current user voted for, or null
+// when they haven't voted (also for guests).
+export async function pollTally(postId) {
+  if (!postId) return { counts: [], total: 0, myChoice: null };
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  const { data, error } = await supa
+    .from('poll_votes').select('option_idx, user_id').eq('post_id', postId);
+  if (error) {
+    // Table not migrated yet → return empty tally so the renderer
+    // still shows the question + options, just without bars.
+    return { counts: [], total: 0, myChoice: null };
+  }
+  const rows = data || [];
+  const counts = [];
+  let myChoice = null;
+  for (const r of rows) {
+    const k = Number(r.option_idx);
+    counts[k] = (counts[k] || 0) + 1;
+    if (user && r.user_id === user.id) myChoice = k;
+  }
+  return { counts, total: rows.length, myChoice };
+}
+
+// Cast / change a vote. One row per (post, user) enforced by the
+// primary key in the migration; we UPSERT so re-voting overwrites.
+export async function votePoll(postId, optionIdx) {
+  if (!postId) throw new Error('NO_POST');
+  const supa = await getClient();
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) throw new Error('ログインしていません');
+  const { error } = await supa.from('poll_votes')
+    .upsert({ post_id: postId, user_id: user.id, option_idx: optionIdx },
+            { onConflict: 'post_id,user_id' });
+  if (error) {
+    const msg = String(error.message || '').toLowerCase();
+    if (msg.includes('poll_votes') && (msg.includes('does not exist') || msg.includes('not found'))) {
+      throw new Error(POLL_MIGRATION_MSG);
+    }
+    throw new Error(error.message);
   }
   return true;
 }

@@ -539,6 +539,43 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   border-style: solid;
 }
+
+/* Idea tag toggle — same silhouette as the GitHub link toggle so they
+   read as siblings. Active state uses the amber/yellow accent to set
+   it apart from the blue link-toggle and from any spot chip. */
+.compose-kind-toggle {
+  display: inline-flex; align-items: center; gap: .3em;
+  background: transparent; border: 1px dashed var(--border);
+  color: var(--muted); cursor: pointer;
+  padding: .2em .65em; border-radius: 999px;
+  font-size: .78rem; font-weight: 600;
+}
+.compose-kind-toggle:hover {
+  color: #febc2e;
+  border-color: color-mix(in srgb, #febc2e 55%, transparent);
+}
+.compose-kind-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, #febc2e 14%, transparent);
+  color: #febc2e;
+  border-color: color-mix(in srgb, #febc2e 50%, transparent);
+  border-style: solid;
+}
+.compose-kind-toggle__icon { font-size: 1em; }
+
+/* Idea kind badge on rendered posts. Slots into .post__head alongside
+   the status badge / spot chip. */
+.post__kind {
+  display: inline-flex; align-items: center; gap: .2em;
+  padding: .05em .55em;
+  border-radius: 999px;
+  font-size: .76em; font-weight: 700;
+  vertical-align: middle;
+}
+.post__kind--idea {
+  background: color-mix(in srgb, #febc2e 18%, transparent);
+  color: #febc2e;
+  border: 1px solid color-mix(in srgb, #febc2e 40%, transparent);
+}
 .compose-link {
   display: flex; flex-direction: column; gap: .25rem;
   padding: .3rem 0;
@@ -655,10 +692,164 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   object-fit: cover;
   display: block;
   background: var(--surface-2);
+  cursor: zoom-in;
   /* Single-photo posts let the natural aspect ratio breathe; multi-
      photo grids stretch each cell so the grid stays even. */
 }
 .post__photos--1 .post__photo { max-height: 480px; height: auto; }
+
+/* Fullscreen photo lightbox — opens when a .post__photo is tapped.
+   Pinch / wheel / double-tap to zoom up to 5x, drag to pan when
+   zoomed, arrow buttons + arrow keys to step through. */
+.lightbox {
+  position: fixed; inset: 0;
+  z-index: 1400;
+  display: flex; align-items: center; justify-content: center;
+}
+.lightbox[hidden] { display: none; }
+.lightbox__backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, .92);
+  cursor: zoom-out;
+}
+.lightbox__stage {
+  position: relative;
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+.lightbox__img {
+  max-width: 100%;
+  max-height: 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: center center;
+  transition: transform .08s ease-out;
+  will-change: transform;
+}
+.lightbox__close {
+  position: absolute; top: calc(.5rem + env(safe-area-inset-top, 0px)); right: .75rem;
+  z-index: 2;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+  color: #fff; border: 0; cursor: pointer;
+  font-size: 22px; line-height: 1;
+}
+.lightbox__close:hover { background: rgba(0, 0, 0, .8); }
+.lightbox__nav {
+  position: absolute; top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .45);
+  color: #fff; border: 0; cursor: pointer;
+  font-size: 32px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.lightbox__nav:hover { background: rgba(0, 0, 0, .7); }
+.lightbox__nav--prev { left: .5rem; }
+.lightbox__nav--next { right: .5rem; }
+.lightbox__counter {
+  position: absolute;
+  bottom: calc(.6rem + env(safe-area-inset-bottom, 0px));
+  left: 50%; transform: translateX(-50%);
+  z-index: 2;
+  color: #fff; font-size: .85rem;
+  background: rgba(0, 0, 0, .45);
+  padding: .2rem .65rem; border-radius: 999px;
+  pointer-events: none;
+}
+
+/* Poll card inside a post — Twitter-style. Voting buttons turn into
+   "result bars" with a tinted fill once the viewer has voted or the
+   deadline has passed; the bar width is set inline by hydratePolls. */
+.poll {
+  margin-top: .55rem;
+  padding: .65rem .8rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2) 50%, transparent);
+}
+.poll__q { font-weight: 600; color: var(--text); margin-bottom: .5rem; word-break: break-word; }
+.poll__opts { display: flex; flex-direction: column; gap: .35rem; }
+.poll__opt {
+  position: relative;
+  display: flex; align-items: center; gap: .55rem;
+  width: 100%;
+  padding: .5rem .75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.poll__opt:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+.poll__opt:disabled { cursor: default; }
+.poll__opt-bar {
+  position: absolute; inset: 0 auto 0 0;
+  width: 0;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  transition: width .25s ease;
+  pointer-events: none;
+}
+.poll__opt-text { position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; word-break: break-word; }
+.poll__opt-pct  { position: relative; z-index: 1; color: var(--muted); font-variant-numeric: tabular-nums; font-size: .85rem; }
+.poll__opt--mine { border-color: var(--accent); }
+.poll__opt--mine .poll__opt-text { font-weight: 600; }
+.poll__meta {
+  display: flex; gap: .35rem; align-items: baseline;
+  margin-top: .45rem;
+  color: var(--muted); font-size: .82rem;
+}
+.poll__deadline { color: var(--muted); }
+.poll[data-poll-closed="1"] .poll__deadline { color: var(--warn); }
+
+/* Poll modal — same skin as quote-modal. */
+.poll-form { display: flex; flex-direction: column; gap: .65rem; }
+.poll-form__label { display: flex; flex-direction: column; gap: .25rem; font-weight: 600; color: var(--muted); font-size: .9rem; }
+.poll-form__label input {
+  font: inherit; padding: .5rem .65rem;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.poll-form__label input:focus {
+  outline: 0; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.poll-form__options { display: flex; flex-direction: column; gap: .4rem; }
+.poll-form__option {
+  display: flex; align-items: center; gap: .5rem;
+}
+.poll-form__num {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--surface-2); color: var(--muted);
+  font-size: .8rem; font-weight: 700;
+  flex: 0 0 auto;
+}
+.poll-form__option input {
+  flex: 1 1 auto; min-width: 0;
+  font: inherit; padding: .45rem .65rem;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.poll-form__rm {
+  width: 28px; height: 28px;
+  border-radius: 50%; border: 1px solid var(--border);
+  background: transparent; color: var(--muted);
+  cursor: pointer; line-height: 1;
+}
+.poll-form__rm:hover { background: var(--surface-2); color: var(--danger, #f85149); }
+.poll-form__add { align-self: flex-start; }
+.poll-form__presets { display: flex; flex-wrap: wrap; gap: .35rem; }
 .post__time:hover { color: var(--accent); text-decoration: underline; }
 .post__body { margin-top: .15rem; white-space: pre-wrap; word-wrap: break-word; }
 /* Geo-gate locked variant: viewer is outside the post's spot radius
