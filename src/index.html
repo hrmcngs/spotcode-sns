@@ -50,6 +50,34 @@
       }
     }(window.location));
   </script>
+  <script>
+    // Console hardening for the web build. The browser DevTools cannot
+    // actually be hidden from a determined user — the Inspector is
+    // built into every browser — but a loud warning deters the casual
+    // "paste this in the console and your account is mine" social-
+    // engineering attack (this is the same pattern Facebook uses).
+    //
+    // Suppressed on localhost so dev iteration isn't hostile.
+    (function () {
+      var dev = location.hostname === 'localhost' ||
+                location.hostname === '127.0.0.1' ||
+                location.protocol === 'file:' ||
+                location.protocol === 'capacitor:';
+      if (dev) return;
+      var warn = function () {
+        console.log('%cStop!', 'color:#f91880;font-size:32px;font-weight:700;');
+        console.log(
+          '%cこの画面に表示されているコードや手順を、誰かに言われるがままに貼り付けないでください。\n' +
+          'アカウントを乗っ取られるためのよくある手口です。\n' +
+          '開発者でないなら、このパネルは閉じて構いません。',
+          'font-size:13px;line-height:1.6;'
+        );
+      };
+      // Print once now; also re-print whenever the user clears the
+      // console so they don't get a blank canvas.
+      try { warn(); } catch (_) {}
+    })();
+  </script>
 </head>
 <body>
   <nav class="topbar">
