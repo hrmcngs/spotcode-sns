@@ -92,6 +92,12 @@ export function followingCount(handle) { return followCounts.get(handle)?.follow
 export function isFollowing(_myHandle, targetHandle) { return followsMine.has(targetHandle); }
 export function isRequested(_myHandle, targetHandle) { return requestsMine.has(targetHandle); }
 
+// Snapshot of the handles the current user follows (accepted only),
+// used as the default candidate set for the audience editor — picking
+// from "people you already follow" is the common case for who you
+// want on a close-friends / org-members list.
+export function myFollowingHandles() { return Array.from(followsMine); }
+
 async function userIdFromHandle(handle) {
   const supa = await getClient();
   const { data } = await supa.from('profiles').select('id').eq('handle', handle).maybeSingle();
