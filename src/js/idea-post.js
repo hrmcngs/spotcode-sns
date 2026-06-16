@@ -48,11 +48,16 @@ export function renderIdeaForm({ user = null } = {}) {
             '<span class="compose-kind-toggle__label">' + t('kind.idea') + '</span>' +
           '</button>' +
           // Audience picker — 5 options, RLS enforced server-side.
-          // Native <select> for a compact UI that uses the OS picker
-          // on mobile. Default 'public'.
+          // Native <select> for the OS picker on mobile, but absolutely
+          // positioned over a visible label so the pill hugs the
+          // currently-selected text (the native <select> would
+          // otherwise reserve width for its widest option and leave
+          // a huge empty band inside the pill).
           '<label class="compose-vis-select" title="' + t('compose.vis.hint') + '">' +
             '<span class="compose-vis-select__caption">' + t('compose.vis.label') + '</span>' +
-            '<select id="compose-vis-select" name="visibility">' +
+            '<span class="compose-vis-select__current" data-vis-current>🌐 ' + t('compose.vis.public') + '</span>' +
+            '<span class="compose-vis-select__caret" aria-hidden="true">▾</span>' +
+            '<select id="compose-vis-select" name="visibility" aria-label="' + t('compose.vis.label') + '">' +
               '<option value="public">🌐 ' + t('compose.vis.public') + '</option>' +
               '<option value="mutuals">🔁 ' + t('compose.vis.mutuals') + '</option>' +
               '<option value="following">➡️ ' + t('compose.vis.following') + '</option>' +

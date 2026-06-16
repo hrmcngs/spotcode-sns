@@ -566,6 +566,7 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
    with the spot / link / idea chips. Sized so the OS picker is one
    tap on mobile. */
 .compose-vis-select {
+  position: relative;
   display: inline-flex; align-items: center; gap: .35em;
   background: transparent; border: 1px dashed var(--border);
   color: var(--muted); cursor: pointer;
@@ -577,11 +578,21 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   border-color: color-mix(in srgb, var(--green, #2ea043) 55%, transparent);
 }
 .compose-vis-select__caption { color: var(--muted); }
+.compose-vis-select__current { color: var(--text); }
+.compose-vis-select__caret   { color: var(--muted); font-size: .85em; line-height: 1; }
+/* The native <select> covers the whole pill invisibly. Clicking the
+   pill triggers the OS picker; the visible label is the
+   .compose-vis-select__current span which mirrors the selection.
+   This way the pill width follows the currently-selected text
+   instead of being padded out to the widest option's width. */
 .compose-vis-select select {
-  background: transparent; border: 0; color: inherit;
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  margin: 0; padding: 0; border: 0;
+  background: transparent; color: transparent;
   font: inherit; cursor: pointer;
-  padding: .1em .2em;
   appearance: none; -webkit-appearance: none;
+  opacity: 0;
 }
 .compose-vis-select select option { color: var(--text); background: var(--surface); }
 

@@ -502,10 +502,15 @@ function syncKindToggle() {
 }
 
 // Push the pendingVisibility back onto the <select> so a draft restore
-// or a clear-after-submit reflects the right option.
+// or a clear-after-submit reflects the right option. Also re-mirrors
+// the option text onto the visible display span.
 function syncVisToggle() {
   const sel = document.getElementById('compose-vis-select');
-  if (sel) sel.value = pendingVisibility;
+  if (!sel) return;
+  sel.value = pendingVisibility;
+  const display = document.querySelector('[data-vis-current]');
+  const picked  = sel.options[sel.selectedIndex];
+  if (display && picked) display.textContent = picked.textContent;
 }
 
 // Re-render the small pill that announces "📊 投票が添付されています"
@@ -553,10 +558,16 @@ function renderPhotoPreviews() {
 document.addEventListener('change', async (e) => {
   // Audience picker — store the selection so the next addPost knows
   // who the post is for. Allowed values match the Stage 18 CHECK.
+  // Also mirror the picked option's display text onto the visible
+  // span (the native <select> is positioned invisibly over it).
   if (e.target?.id === 'compose-vis-select') {
-    const v = String(e.target.value || 'public');
+    const sel = e.target;
+    const v = String(sel.value || 'public');
     const ALLOWED = new Set(['public', 'mutuals', 'following', 'friends', 'org']);
     pendingVisibility = ALLOWED.has(v) ? v : 'public';
+    const display = document.querySelector('[data-vis-current]');
+    const picked  = sel.options[sel.selectedIndex];
+    if (display && picked) display.textContent = picked.textContent;
     autosaveComposerDraft();
     return;
   }
