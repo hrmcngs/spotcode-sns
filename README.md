@@ -21,6 +21,9 @@ npm run start:web         # http://localhost:8080
 # Electron (要: npm install で electron をインストール)
 npm install
 npm run start:electron
+
+# App
+npm run cap:open:ios   
 ```
 
 ## 構成

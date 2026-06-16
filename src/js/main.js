@@ -1042,6 +1042,41 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Click anywhere on a post card → open /post/<id>. Excludes the
+  // interactive children that have their own behaviour (avatar/name/
+  // handle links, action buttons, mention links, photo lightbox,
+  // task checkboxes, poll vote buttons, the body text itself so the
+  // user can still select-to-copy) and skips when there's an active
+  // text selection. Also skipped when the click bubbled up from
+  // inside a quoted-card inside another post (those have their own
+  // navigation).
+  if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+    const card = e.target.closest('.post[data-post-id]');
+    if (card && !e.target.closest(
+      // Bail out only for things that have their own click behaviour.
+      // The body is INCLUDED so clicking anywhere on the text navigates
+      // to the detail page; drag-select stays safe via the getSelection
+      // check below.
+      'a, button, input, textarea, label, ' +
+      '.post__photo, .md-task__box, .poll, .quote-card, .post__edit-input'
+    )) {
+      const sel = window.getSelection && window.getSelection();
+      const hasText = sel && sel.toString && sel.toString().length > 0;
+      if (!hasText) {
+        e.preventDefault();
+        navigate('/post/' + card.getAttribute('data-post-id'));
+        return;
+      }
+    }
+  }
+
+  // Click on the "コメント (N)" header → focus the comment textarea so
+  // the keyboard pops without an extra tap.
+  if (e.target.closest('.comment-list-head')) {
+    const ta = document.querySelector('#comment-form textarea[name="body"]');
+    if (ta) { e.preventDefault(); ta.focus(); return; }
+  }
+
   // Click on a post photo → open the fullscreen lightbox at that index.
   // Pulls every photo from the same post card so the lightbox can
   // arrow / swipe between them.

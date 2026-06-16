@@ -601,7 +601,23 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   padding: 1rem;
   border-bottom: 1px solid var(--border);
   transition: background .12s;
+  /* Whole card is a click target (→ /post/<id>); explicit pointer
+     cursor makes it discoverable. The .post__body opt-out below
+     restores the text I-beam so users can still select-to-copy
+     without feeling like they're about to navigate away. */
+  cursor: pointer;
 }
+.post a,
+.post button,
+.post input,
+.post textarea,
+.post .quote-card { cursor: auto; }
+.post .post__photo { cursor: zoom-in; }
+.post a, .post button { cursor: pointer; }
+/* Body text keeps the text I-beam (so drag-select feels right) even
+   though the click navigates — the getSelection() guard in the
+   handler stops a drag-select from triggering navigation. */
+.post .post__body { cursor: text; }
 .post:hover { background: color-mix(in srgb, var(--surface-2) 50%, transparent); }
 .post__head { display: flex; align-items: baseline; gap: .35rem; flex-wrap: wrap; }
 .post__name { font-weight: 700; }
@@ -1704,8 +1720,12 @@ a.mention:hover { text-decoration: underline; }
 
 .comment-list-head {
   padding: .8rem 1rem .4rem;
+  /* Tapping the header focuses the comment textarea — make that
+     affordance visible so users don't have to guess. */
+  cursor: pointer;
 }
-.comment-list-head h3 { font-size: 1rem; margin: 0; }
+.comment-list-head:hover h3 { color: var(--accent); }
+.comment-list-head h3 { font-size: 1rem; margin: 0; transition: color .12s; }
 .comment-list-head .dim { color: var(--muted); font-weight: 500; }
 
 .comment-form {
