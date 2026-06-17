@@ -145,6 +145,10 @@ export function renderProfile(handle) {
       '</div>' +
       '<div class="profile-id">' +
         '<div class="profile-name">' + u.name +
+          (u.isOrg ? ' <span class="role-badge role-badge--org" title="' + t('profile.badge.org') + '">' +
+                       icon('building', { size: 12, className: 'icon--inline' }) +
+                       t('profile.badge.org') +
+                     '</span>' : '') +
           (u.role === 'programmer' ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
         '</div>' +
         '<div class="profile-handle">@' + u.handle +

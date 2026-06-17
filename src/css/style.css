@@ -1361,6 +1361,14 @@ html[data-theme='light'] .profile-cover {
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   margin-left: .35rem;
 }
+.role-badge--org {
+  display: inline-flex; align-items: center; gap: .25em;
+  font-family: var(--font); font-size: .68rem; letter-spacing: .02em;
+  background: color-mix(in srgb, var(--muted) 15%, transparent);
+  color: var(--muted);
+  border-color: color-mix(in srgb, var(--muted) 30%, transparent);
+}
+.role-badge--org .icon { stroke: currentColor; fill: none; }
 .profile-gh {
   color: var(--accent);
 }

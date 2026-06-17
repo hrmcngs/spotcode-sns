@@ -49,7 +49,35 @@ function privacyCard() {
       '</div>' +
       '<p class="settings-status" id="privacy-status"></p>' +
     '</section>' +
+    accountTypeCard() +
     audienceCard()
+  );
+}
+
+// Switch an existing account between 個人 and 組織. Visually surfaces
+// the Organization badge on the profile page; doesn't change any RLS
+// rule (visibility is still about close_friends / org_members lists).
+function accountTypeCard() {
+  const me = currentUser();
+  if (!me) return '';
+  const isOrg = !!me.isOrg;
+  return (
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.kind.title') + ' <span class="settings-tag">' +
+        icon(isOrg ? 'building' : 'user', { size: 12, className: 'icon--inline' }) +
+        (isOrg ? t('settings.kind.org') : t('settings.kind.user')) +
+      '</span></h2>' +
+      '<p class="settings__hint">' +
+        (isOrg ? t('settings.kind.hint_org') : t('settings.kind.hint_user')) +
+      '</p>' +
+      '<div class="settings-form__actions">' +
+        '<button type="button" class="btn btn--' + (isOrg ? 'ghost' : 'primary') + '" id="kind-toggle">' +
+          icon(isOrg ? 'user' : 'building', { size: 14, className: 'icon--inline' }) +
+          (isOrg ? t('settings.kind.go_user') : t('settings.kind.go_org')) +
+        '</button>' +
+      '</div>' +
+      '<p class="settings-status" id="kind-status"></p>' +
+    '</section>'
   );
 }
 
@@ -313,6 +341,32 @@ export function bindSettings() {
     }
   });
 
+  // Account-type toggle (個人 / 組織). Same pattern as the privacy
+  // toggle — flip is_org and reload so every cached view picks up
+  // the new badge state.
+  const kindBtn    = document.getElementById('kind-toggle');
+  const kindStatus = document.getElementById('kind-status');
+  kindBtn?.addEventListener('click', async () => {
+    const me = currentUser();
+    if (!me) return;
+    kindBtn.disabled = true;
+    if (kindStatus) kindStatus.textContent = t('settings.kind.updating');
+    try {
+      await updateProfile({ isOrg: !me.isOrg });
+      if (kindStatus) {
+        kindStatus.textContent = t('settings.kind.updated');
+        kindStatus.className = 'settings-status is-ok';
+      }
+      setTimeout(() => location.reload(), 400);
+    } catch (ex) {
+      if (kindStatus) {
+        kindStatus.textContent = t('settings.kind.failed') + ': ' + (ex.message || ex);
+        kindStatus.className = 'settings-status is-bad';
+      }
+      kindBtn.disabled = false;
+    }
+  });
+
   // ----- Instagram-style audience editors (close friends + org) -----
   //
   // State lives in `audienceState` (top of file). Every add/remove
@@ -488,15 +542,11 @@ export function bindSettings() {
 
   } // end _audienceWired guard
 
-  // Paint default candidates on every /settings open. Waits for
-  // the follow list to be hydrated so the suggestions aren't empty
-  // on a fresh session.
-  if (currentUser()) {
-    hydrateMyFollows().then(() => {
-      showSuggestions('closeFriends');
-      showSuggestions('orgMembers');
-    });
-  }
+  // Warm the follow list in the background so the suggestion panel
+  // has data the moment the user focuses the search input. We do
+  // NOT paint suggestions here — they only appear once the input
+  // gets focus, so the editor is quiet by default.
+  if (currentUser()) hydrateMyFollows();
 
   // Org label form (free-text "Organization" — profile display only).
   const orgLabelForm = document.getElementById('org-label-form');
