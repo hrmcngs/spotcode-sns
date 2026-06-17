@@ -64,13 +64,13 @@ function getMentionToken(ta) {
       // Word boundary on the left — same rule the inlineFormat
       // linkifier uses, so what gets linkified later matches what
       // we autocomplete now.
-      if (i === 0 || /[^A-Za-z0-9_@]/.test(prev)) {
+      if (i === 0 || /[^A-Za-z0-9_@-]/.test(prev)) {
         const token = value.slice(i + 1, pos);
         return { start: i, end: pos, token };
       }
       return null;
     }
-    if (!/[A-Za-z0-9_]/.test(c)) return null;
+    if (!/[A-Za-z0-9_-]/.test(c)) return null;
     i--;
   }
   return null;

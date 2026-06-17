@@ -391,7 +391,7 @@ export async function notificationsForMe({ limit = 80 } = {}) {
   const myHandle = meProfile?.handle;
   if (myHandle) {
     const mentionRe = new RegExp(
-      '(^|[^A-Za-z0-9_@])@' + myHandle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9_])',
+      '(^|[^A-Za-z0-9_@-])@' + myHandle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9_-])',
       'i'
     );
     tasks.push((async () => {

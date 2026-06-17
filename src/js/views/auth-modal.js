@@ -60,7 +60,7 @@ function template() {
           '</label>' +
           '<label for="auth-reg-handle">Handle <span class="hint">(profile URL: /your_handle)</span>' +
             '<input id="auth-reg-handle" name="handle" required ' +
-              'pattern="[A-Za-z0-9_]{2,20}" placeholder="2〜20 文字 半角英数_" ' +
+              'pattern="[A-Za-z0-9_][A-Za-z0-9_-]{1,19}" placeholder="2〜20 文字 半角英数 _ -" ' +
               'autocomplete="off" autocapitalize="off" spellcheck="false">' +
           '</label>' +
           '<label for="auth-reg-email">Email' +

@@ -264,8 +264,8 @@ function dispatch(path) {
   const spotMatch      = path.match(/^\/spot\/(.+?)\/?$/);
   const analyticsMatch = path.match(/^\/post\/([0-9a-fA-F-]{36})\/analytics\/?$/);
   const postMatch      = path.match(/^\/post\/([0-9a-fA-F-]{36})\/?$/);
-  const followMatch    = path.match(/^\/([A-Za-z0-9_]+)\/(following|followers)\/?$/);
-  const userMatch      = path.match(/^\/([A-Za-z0-9_]+)\/?$/);
+  const followMatch    = path.match(/^\/([A-Za-z0-9_][A-Za-z0-9_-]*)\/(following|followers)\/?$/);
+  const userMatch      = path.match(/^\/([A-Za-z0-9_][A-Za-z0-9_-]*)\/?$/);
 
   if (path === '/' || path === '') {
     document.title = 'spotcode-sns';
