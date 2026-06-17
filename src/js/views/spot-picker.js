@@ -157,26 +157,40 @@ function setPick(lat, lng, { autoFillLabel = false } = {}) {
   doReverseGeocode(lat, lng, autoFillLabel);
 }
 
-// Dev mode is unbounded; otherwise the pin must be within
-// NON_DEV_RADIUS_M of geoAnchor. Returns true while the anchor is
-// still pending so the initial Tokyo seed in dev / the geolocation-
-// loading state in non-dev don't disable Confirm prematurely.
+// Dev mode is unbounded. Otherwise the pin must be within
+// NON_DEV_RADIUS_M of geoAnchor, AND the anchor itself must be set
+// — earlier versions returned `true` while the anchor was still
+// pending, which let users click around on the default Tokyo view
+// before geolocation resolved and submit whatever pin they liked.
 function isPickInBounds() {
   if (isDevMode()) return true;
-  if (!geoAnchor || !pickedPos || !window.L) return true;
+  if (!pickedPos || !window.L) return false;
+  if (!geoAnchor) return false;
   const dist = window.L.latLng(geoAnchor.lat, geoAnchor.lng)
                 .distanceTo(window.L.latLng(pickedPos.lat, pickedPos.lng));
   return dist <= NON_DEV_RADIUS_M;
 }
 
+// Three-state banner for non-dev users:
+//   anchor pending → grey "現在地を取得中…" so they know why Confirm
+//     is disabled and don't conclude "Confirm is just broken"
+//   in bounds      → blue advisory "50m 以内で微調整できます"
+//   out of bounds  → red warning "範囲外です"
 function updateOutOfBoundsWarning() {
   const banner = document.getElementById('picker-locked-hint');
   if (!banner) return;
   if (isDevMode()) { banner.hidden = true; return; }
   banner.hidden = false;
+  const slot = banner.querySelector('[data-locked-text]');
+  if (!geoAnchor) {
+    banner.classList.remove('is-bad');
+    banner.classList.add('is-pending');
+    if (slot) slot.textContent = t('picker.geo_loading');
+    return;
+  }
+  banner.classList.remove('is-pending');
   const out = !isPickInBounds();
   banner.classList.toggle('is-bad', out);
-  const slot = banner.querySelector('[data-locked-text]');
   if (slot) slot.textContent = out ? t('picker.out_of_range') : t('picker.locked_to_geo');
 }
 
@@ -407,8 +421,10 @@ export function pickSpot() {
   }
   // Re-evaluate dev mode every open — the toggle in /settings can
   // flip between picker invocations and the hint needs to follow.
-  const lockedHint = document.getElementById('picker-locked-hint');
-  if (lockedHint) lockedHint.hidden = isDevMode();
+  // updateOutOfBoundsWarning() paints the "locating…" pending state
+  // straight away in non-dev so the user knows what's happening
+  // while geolocation is in flight.
+  updateOutOfBoundsWarning();
   document.getElementById('picker-confirm').disabled = true;
   document.getElementById('picker-coords').textContent       = '';
   document.getElementById('picker-address-meta').innerHTML   = '';
