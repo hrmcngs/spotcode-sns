@@ -14,6 +14,12 @@
 import { read, write } from './storage.js';
 
 const KEY = 'spotcode:saved-accounts';
+// Set by switchAccount() before it triggers a reload; consumed by
+// initAuth() on the next page load so the actual session swap
+// happens on a fresh runtime instead of fighting supabase-js's
+// in-page state machine (auto-refresh timers, in-flight requests,
+// stale onAuthStateChange subscribers).
+const PENDING_KEY = 'spotcode:pending-account-switch';
 
 function load() {
   const list = read(KEY, []);
@@ -76,4 +82,19 @@ export function rememberAccount({ user, session }) {
 export function forgetAccount(id) {
   const list = load().filter(r => r.id !== id);
   save(list);
+}
+
+// Mark `id` as the account the user wants to switch to on the next
+// page load. The caller is expected to follow this with a reload.
+export function setPendingSwitch(id) {
+  if (id) try { localStorage.setItem(PENDING_KEY, String(id)); } catch {}
+}
+
+// Read-and-clear: called once at boot by initAuth so a stale flag
+// can't trigger an unexpected switch on a subsequent reload.
+export function consumePendingSwitch() {
+  let v = null;
+  try { v = localStorage.getItem(PENDING_KEY); } catch {}
+  try { localStorage.removeItem(PENDING_KEY); } catch {}
+  return v || null;
 }

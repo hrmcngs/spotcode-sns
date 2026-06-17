@@ -421,19 +421,30 @@ export function bindSettings() {
     accountsStatus.textContent = msg || '';
     accountsStatus.className = 'settings-status' + (cls ? ' is-' + cls : '');
   }
+  // The click handler is intentionally short — switchAccount() itself
+  // stages a localStorage flag and triggers a page reload. The new
+  // session is minted in initAuth() on the reloaded runtime, where
+  // supabase-js's auto-refresh timer hasn't started yet so it can't
+  // race with our refreshSession call. switchAccount() returns a
+  // never-resolving Promise to keep the UI disabled until the reload
+  // takes over.
+  function setAccountButtonsDisabled(disabled) {
+    document.querySelectorAll(
+      '[data-account-switch], [data-account-forget], #account-add'
+    ).forEach(b => { b.disabled = disabled; });
+  }
   document.querySelectorAll('[data-account-switch]').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-account-switch');
-      btn.disabled = true;
+      setAccountButtonsDisabled(true);
       setAccountStatus(t('settings.accounts.switching'));
-      try {
-        await switchAccount(id);
-        setAccountStatus(t('settings.accounts.switched'), 'ok');
-        setTimeout(() => location.reload(), 400);
-      } catch (ex) {
+      // No await — switchAccount synchronously schedules the reload.
+      // The only way it rejects is the guard-case "saved entry gone";
+      // surface that and re-enable buttons.
+      switchAccount(id).catch((ex) => {
         setAccountStatus((ex.message || String(ex)), 'bad');
-        btn.disabled = false;
-      }
+        setAccountButtonsDisabled(false);
+      });
     });
   });
   document.querySelectorAll('[data-account-forget]').forEach(btn => {
