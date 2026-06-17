@@ -237,16 +237,19 @@ export async function switchAccount(id) {
   const refreshToken = getRefreshToken(id);
   if (!refreshToken) throw new Error('保存済みアカウントが見つかりません');
   const supa = await getClient();
-  // signOut first so the currently-active session is fully torn down
-  // before we set the new one — otherwise supabase-js sometimes holds
-  // onto the old user metadata in flight.
-  try { await supa.auth.signOut(); } catch {}
-  const { error } = await supa.auth.refreshSession({ refresh_token: refreshToken });
-  if (error) {
+  // Refresh the target account's session FIRST and only swap on
+  // success — supabase-js replaces the active session atomically
+  // when refreshSession resolves with new tokens. A previous version
+  // signed the user out up-front and then tried to refresh, which
+  // stranded them in a fully-logged-out state any time the saved
+  // refresh token had expired (or any time the network blipped).
+  const { data, error } = await supa.auth.refreshSession({ refresh_token: refreshToken });
+  if (error || !data?.session) {
     // Refresh token expired or revoked — drop it from the list so the
-    // user gets a clean "log in again" prompt instead of a stuck row.
+    // row doesn't keep failing on every click, but leave the current
+    // session untouched so the user stays logged in.
     forgetAccount(id);
-    throw new Error('セッションの有効期限が切れています。再ログインしてください。');
+    throw new Error('保存されたセッションの有効期限が切れています。このアカウントを再度ログインしてください。');
   }
   await refreshFromSession();
   return cachedUser;
