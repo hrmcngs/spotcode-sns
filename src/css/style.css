@@ -2276,6 +2276,18 @@ a.mention:hover { text-decoration: underline; }
   border: 1px solid var(--border); border-radius: 8px;
   padding: .45em .7em; font: inherit;
 }
+/* Locked-to-current-location hint sits between the toolbar and the
+   map for non-dev users. Subtle accent stripe so it reads as an
+   advisory, not an error. */
+.picker-locked-hint {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .55rem 1rem;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  font-size: .85rem;
+}
+.picker-locked-hint .icon { stroke: currentColor; fill: none; flex: 0 0 auto; }
 .picker-map {
   width: 100%;
   height: min(52vh, 480px);

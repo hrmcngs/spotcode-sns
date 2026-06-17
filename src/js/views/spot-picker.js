@@ -5,6 +5,7 @@ import { loadMaps, reverseGeocode, reverseGeocodeGSI, pickBuildingName, formatJa
 import { icon } from '../icons.js';
 import { t } from '../i18n.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
+import { isDevMode } from '../dev-mode.js';
 
 let rootEl    = null;
 let mapInst   = null;
@@ -32,6 +33,14 @@ function template() {
             icon('pin', { size: 14, className: 'icon--inline' }) + t('picker.use_geo') +
           '</button>' +
           '<input type="text" id="picker-label" placeholder="' + t('picker.label_placeholder') + '">' +
+        '</div>' +
+
+        // Only shown when isDevMode() is false (set by mount()). Tells the
+        // user the pin will track their actual location and other taps
+        // on the map are ignored, so they don't waste time trying.
+        '<div id="picker-locked-hint" class="picker-locked-hint" hidden>' +
+          icon('pin', { size: 14, className: 'icon--inline' }) +
+          '<span>' + t('picker.locked_to_geo') + '</span>' +
         '</div>' +
 
         '<div id="picker-map" class="picker-map"></div>' +
@@ -217,6 +226,13 @@ async function initMap() {
   const container = document.getElementById('picker-map');
   if (!container) return;
 
+  // Non-dev users can only pin their current geolocation. Dev mode
+  // keeps the click/drag-anywhere affordance so you can prototype
+  // posts from the comfort of a desk chair. The map still renders
+  // for everyone — only the input handlers and the marker's
+  // draggable flag depend on dev mode.
+  const dev = isDevMode();
+
   mapInst = L.map(container, { zoomControl: true }).setView([TOKYO.lat, TOKYO.lng], 16);
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -224,17 +240,26 @@ async function initMap() {
     maxZoom: 19,
   }).addTo(mapInst);
 
-  markerInst = L.marker([TOKYO.lat, TOKYO.lng], { draggable: true }).addTo(mapInst);
+  markerInst = L.marker([TOKYO.lat, TOKYO.lng], { draggable: dev }).addTo(mapInst);
 
-  setPick(TOKYO.lat, TOKYO.lng);
-
-  mapInst.on('click', (ev) => {
-    setPick(ev.latlng.lat, ev.latlng.lng);
-  });
-  markerInst.on('dragend', () => {
-    const ll = markerInst.getLatLng();
-    setPick(ll.lat, ll.lng);
-  });
+  if (dev) {
+    // Dev convenience: seed a pin at the default centre so confirm is
+    // immediately available. Non-dev users have to fetch their actual
+    // location first — confirm stays disabled until that lands.
+    setPick(TOKYO.lat, TOKYO.lng);
+    mapInst.on('click', (ev) => {
+      setPick(ev.latlng.lat, ev.latlng.lng);
+    });
+    markerInst.on('dragend', () => {
+      const ll = markerInst.getLatLng();
+      setPick(ll.lat, ll.lng);
+    });
+  } else {
+    // Auto-trigger the geolocation flow on open so the picker is
+    // useful without an extra tap. useGeolocation already handles
+    // the permission-denied / timeout cases.
+    useGeolocation();
+  }
 
   // Leaflet measures container at init; redraw once visible so tiles fill it.
   setTimeout(() => mapInst.invalidateSize(), 60);
@@ -301,6 +326,10 @@ export function pickSpot() {
   pickedAddress = '';
   pickedAddressDetails = null;
   geocodeSeq++;
+  // Re-evaluate dev mode every open — the toggle in /settings can
+  // flip between picker invocations and the hint needs to follow.
+  const lockedHint = document.getElementById('picker-locked-hint');
+  if (lockedHint) lockedHint.hidden = isDevMode();
   document.getElementById('picker-confirm').disabled = true;
   document.getElementById('picker-coords').textContent       = '';
   document.getElementById('picker-address-meta').innerHTML   = '';
