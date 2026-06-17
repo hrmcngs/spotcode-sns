@@ -125,7 +125,7 @@ export async function fetchGithubProfile(handle) {
 }
 
 function emailLooksValid(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
-function handleLooksValid(h) { return /^[A-Za-z0-9_]{2,20}$/.test(h); }
+function handleLooksValid(h) { return /^[A-Za-z0-9_][A-Za-z0-9_-]{1,19}$/.test(h); }
 
 async function isHandleTaken(handle) {
   const supa = await getClient();
@@ -146,7 +146,7 @@ function translateAuthError(msg) {
 export async function register({ email, password, handle, name, role, githubHandle, kind }) {
   if (!emailLooksValid(email))           throw new Error('メールアドレスの形式が正しくありません');
   if (!password || password.length < 8)  throw new Error('パスワードは 8 文字以上にしてください');
-  if (!handleLooksValid(handle))         throw new Error('ハンドルは半角英数_の 2〜20 文字');
+  if (!handleLooksValid(handle))         throw new Error('ハンドルは半角英数 _ - の 2〜20 文字（先頭は - 不可）');
   if (!name || !name.trim())             throw new Error('表示名を入力してください');
   if (role === 'programmer' && !githubHandle) {
     throw new Error('Programmer ロールは GitHub 連携が必須です');

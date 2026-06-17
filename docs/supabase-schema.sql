@@ -903,3 +903,17 @@ create policy "posts visible to allowed viewers"
 
 alter table public.profiles
   add column if not exists is_org boolean default false;
+
+-- ===================================================================
+-- Stage 21 — allow hyphens in handles
+-- ===================================================================
+-- Match GitHub's rule: alphanumerics, underscore and hyphen, 2–20
+-- chars total, leading character can't be a hyphen. Lets people use
+-- handles like `Drowse-Lab`. The original check rejected anything
+-- with a hyphen because the character class was [A-Za-z0-9_].
+
+alter table public.profiles
+  drop constraint if exists profiles_handle_check;
+alter table public.profiles
+  add constraint profiles_handle_check
+  check (handle ~ '^[A-Za-z0-9_][A-Za-z0-9_-]{1,19}$');

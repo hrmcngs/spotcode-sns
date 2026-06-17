@@ -49,7 +49,7 @@ function inlinePass(s) {
     )
     // Mentions last so an explicit [link](url) takes precedence over a
     // bare @handle inside the link text.
-    .replace(/(^|[^A-Za-z0-9_@])@([A-Za-z0-9_]+)/g,
+    .replace(/(^|[^A-Za-z0-9_@-])@([A-Za-z0-9_][A-Za-z0-9_-]*)/g,
       '$1<a class="mention" href="/$2">@$2</a>');
 }
 
