@@ -2591,3 +2591,42 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   color: var(--muted);
   opacity: .85;
 }
+
+/* ---------- profile "More" popover ---------- */
+.profile-more-menu {
+  position: fixed;
+  z-index: 1500;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  padding: .3rem;
+  display: flex; flex-direction: column;
+}
+.profile-more-menu__item {
+  display: flex; align-items: center; gap: .55rem;
+  background: transparent; border: 0; color: var(--text);
+  padding: .55rem .7rem; border-radius: 7px;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.profile-more-menu__item:hover { background: var(--surface-2); }
+.profile-more-menu__item--bad { color: var(--danger); }
+.profile-more-menu__item--bad:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.profile-more-menu__item .icon { stroke: currentColor; fill: none; }
+
+.profile-toast {
+  position: fixed; z-index: 1600;
+  left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  transform: translate(-50%, 16px);
+  background: var(--text); color: var(--bg);
+  padding: .5rem .85rem; border-radius: 999px;
+  font-size: .85rem; font-weight: 600;
+  opacity: 0; pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.profile-toast.is-show {
+  opacity: 1; transform: translate(-50%, 0);
+}

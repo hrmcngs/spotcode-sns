@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
-import { renderProfile, hydrateProfileBadges, hydrateProfileActivity, hydrateProfile, setProfileTab } from './views/profile.js';
+import { renderProfile, hydrateProfileBadges, hydrateProfileActivity, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
@@ -832,6 +832,14 @@ document.addEventListener('click', (e) => {
     e.preventDefault();
     if (!currentUser()) return openAuth('login');
     openEditProfile();
+    return;
+  }
+
+  // Profile "More" button — opens the copy-link / report-user popover.
+  const moreBtn = e.target.closest('[data-profile-more]');
+  if (moreBtn) {
+    e.preventDefault();
+    openProfileMore(moreBtn.getAttribute('data-profile-more'), moreBtn);
     return;
   }
 
