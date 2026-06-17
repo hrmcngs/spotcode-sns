@@ -603,6 +603,35 @@ export function bindSettings() {
     if (!input.value.trim()) showSuggestions(kind);
   });
 
+  // Enter on the search input adds the typed handle directly to the
+  // list — saves the user from having to click the "+" on a candidate
+  // row. If the typed text doesn't match the handle format, fall
+  // through so the user gets the search-results panel instead.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const kind = input.getAttribute('data-audience-search');
+    if (!kind || !audienceState[kind]) return;
+    e.preventDefault();
+    const handle = input.value.trim().replace(/^@/, '');
+    // Same validation as auth.js — handle must look like a handle.
+    if (!/^[A-Za-z0-9_][A-Za-z0-9_-]{1,19}$/.test(handle)) {
+      showAudienceStatus(kind, 'settings.audience.invalid_handle', 'bad');
+      return;
+    }
+    if (audienceState[kind].includes(handle)) {
+      input.value = '';
+      showSuggestions(kind);
+      return;
+    }
+    audienceState[kind].push(handle);
+    input.value = '';
+    rerenderChips(kind);
+    showSuggestions(kind);
+    persistAudience(kind);
+  });
+
   document.addEventListener('click', (e) => {
     // Add a handle to the list.
     const addBtn = e.target.closest('[data-audience-add]');
