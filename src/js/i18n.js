@@ -80,6 +80,9 @@ const DICT = {
     // ---------------- spot picker ----------------
     'picker.title':            '場所を選ぶ',
     'picker.use_geo':          '現在地を使う',
+    'picker.locked_to_geo':    '投稿のピンは「現在地から半径 50m 以内」で微調整できます（建物の入口など）。',
+    'picker.out_of_range':     '範囲外です。50m 円の中に戻してください。',
+    'picker.geo_loading':      '現在地を取得中… 取れるまで投稿はできません。',
     'picker.label_placeholder':'ラベル（任意・建物名や店名）',
     'picker.address':          '住所',
     'picker.address_placeholder':'地図をクリックして取得…',
@@ -320,6 +323,9 @@ const DICT = {
 
     'picker.title':            'Pick a location',
     'picker.use_geo':          'Use current location',
+    'picker.locked_to_geo':    'You can fine-tune the pin within 50 m of your current location (entrance, back of the building, etc.).',
+    'picker.out_of_range':     'Out of range. Move the pin back inside the 50 m circle.',
+    'picker.geo_loading':      'Locating your current position… you cannot post until this resolves.',
     'picker.label_placeholder':'Label (optional — building or shop name)',
     'picker.address':          'Address',
     'picker.address_placeholder':'Click the map to fill…',

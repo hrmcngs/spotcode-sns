@@ -5,17 +5,26 @@ import { loadMaps, reverseGeocode, reverseGeocodeGSI, pickBuildingName, formatJa
 import { icon } from '../icons.js';
 import { t } from '../i18n.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
+import { isDevMode } from '../dev-mode.js';
 
 let rootEl    = null;
 let mapInst   = null;
 let markerInst = null;
+let radiusCircle = null;
 let resolveFn = null;
 let pickedPos = null;
 let pickedAddress = '';
 let pickedAddressDetails = null;
 let geocodeSeq = 0;
+// Anchor position the non-dev radius is measured from. Set when
+// useGeolocation() succeeds; null until then (confirm stays disabled).
+let geoAnchor = null;
 
 const TOKYO = { lat: 35.681236, lng: 139.767125 };
+// How far a non-dev user can drift the pin away from the device's
+// real geolocation. 50m covers "the right entrance of this building"
+// without enabling location spoofing. Dev mode ignores this.
+const NON_DEV_RADIUS_M = 50;
 
 function template() {
   return (
@@ -32,6 +41,14 @@ function template() {
             icon('pin', { size: 14, className: 'icon--inline' }) + t('picker.use_geo') +
           '</button>' +
           '<input type="text" id="picker-label" placeholder="' + t('picker.label_placeholder') + '">' +
+        '</div>' +
+
+        // Only shown when isDevMode() is false (set by mount()). Tells the
+        // user the pin will track their actual location and other taps
+        // on the map are ignored, so they don't waste time trying.
+        '<div id="picker-locked-hint" class="picker-locked-hint" hidden>' +
+          icon('pin', { size: 14, className: 'icon--inline' }) +
+          '<span data-locked-text>' + t('picker.locked_to_geo') + '</span>' +
         '</div>' +
 
         '<div id="picker-map" class="picker-map"></div>' +
@@ -121,7 +138,12 @@ function setPick(lat, lng, { autoFillLabel = false } = {}) {
   if (markerInst) markerInst.setLatLng([lat, lng]);
   document.getElementById('picker-coords').textContent =
     'lat ' + lat.toFixed(6) + ', lng ' + lng.toFixed(6);
-  document.getElementById('picker-confirm').disabled = false;
+  // Non-dev gate: only enable Confirm when the pin is within the
+  // allowed radius of the geolocation anchor. The hint banner
+  // explains the rule, and updateOutOfBoundsWarning() paints a
+  // live "outside range" message if applicable.
+  document.getElementById('picker-confirm').disabled = !isPickInBounds();
+  updateOutOfBoundsWarning();
 
   pickedAddress = '';
   pickedAddressDetails = null;
@@ -133,6 +155,43 @@ function setPick(lat, lng, { autoFillLabel = false } = {}) {
     hint.className   = 'picker-address-hint is-loading';
   }
   doReverseGeocode(lat, lng, autoFillLabel);
+}
+
+// Dev mode is unbounded. Otherwise the pin must be within
+// NON_DEV_RADIUS_M of geoAnchor, AND the anchor itself must be set
+// — earlier versions returned `true` while the anchor was still
+// pending, which let users click around on the default Tokyo view
+// before geolocation resolved and submit whatever pin they liked.
+function isPickInBounds() {
+  if (isDevMode()) return true;
+  if (!pickedPos || !window.L) return false;
+  if (!geoAnchor) return false;
+  const dist = window.L.latLng(geoAnchor.lat, geoAnchor.lng)
+                .distanceTo(window.L.latLng(pickedPos.lat, pickedPos.lng));
+  return dist <= NON_DEV_RADIUS_M;
+}
+
+// Three-state banner for non-dev users:
+//   anchor pending → grey "現在地を取得中…" so they know why Confirm
+//     is disabled and don't conclude "Confirm is just broken"
+//   in bounds      → blue advisory "50m 以内で微調整できます"
+//   out of bounds  → red warning "範囲外です"
+function updateOutOfBoundsWarning() {
+  const banner = document.getElementById('picker-locked-hint');
+  if (!banner) return;
+  if (isDevMode()) { banner.hidden = true; return; }
+  banner.hidden = false;
+  const slot = banner.querySelector('[data-locked-text]');
+  if (!geoAnchor) {
+    banner.classList.remove('is-bad');
+    banner.classList.add('is-pending');
+    if (slot) slot.textContent = t('picker.geo_loading');
+    return;
+  }
+  banner.classList.remove('is-pending');
+  const out = !isPickInBounds();
+  banner.classList.toggle('is-bad', out);
+  if (slot) slot.textContent = out ? t('picker.out_of_range') : t('picker.locked_to_geo');
 }
 
 async function doReverseGeocode(lat, lng, autoFillLabel) {
@@ -205,6 +264,28 @@ async function doReverseGeocode(lat, lng, autoFillLabel) {
   }
 }
 
+// Draw / update the soft-coloured circle that shows the allowed
+// fine-tune area to a non-dev user. Skipped entirely in dev mode
+// — there are no bounds and a circle would be misleading. Reuses
+// the radiusCircle layer when it already exists so opening the
+// picker twice doesn't pile circles up on the map.
+function drawRadius(lat, lng) {
+  if (isDevMode() || !mapInst || !window.L) return;
+  const L = window.L;
+  if (radiusCircle) {
+    radiusCircle.setLatLng([lat, lng]);
+    return;
+  }
+  radiusCircle = L.circle([lat, lng], {
+    radius: NON_DEV_RADIUS_M,
+    color: 'rgba(29,155,240,.55)',
+    weight: 1,
+    fillColor: 'rgba(29,155,240,.12)',
+    fillOpacity: 1,
+    interactive: false,
+  }).addTo(mapInst);
+}
+
 async function initMap() {
   showError('');
   let L;
@@ -217,6 +298,13 @@ async function initMap() {
   const container = document.getElementById('picker-map');
   if (!container) return;
 
+  // Dev mode unlocks the radius constraint entirely; everyone else
+  // can still fine-tune the pin, but only within NON_DEV_RADIUS_M of
+  // the device's geolocation. The marker is always draggable so the
+  // "tap-and-hold" gesture works on phones — the snap-back logic in
+  // dragend enforces the bound.
+  const dev = isDevMode();
+
   mapInst = L.map(container, { zoomControl: true }).setView([TOKYO.lat, TOKYO.lng], 16);
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -226,8 +314,12 @@ async function initMap() {
 
   markerInst = L.marker([TOKYO.lat, TOKYO.lng], { draggable: true }).addTo(mapInst);
 
-  setPick(TOKYO.lat, TOKYO.lng);
-
+  // Drag + tap are always free — no snap-back, no silent-ignore.
+  // Earlier code constrained the marker on dragend, which felt like
+  // "can't move" to users overshooting the (intentionally small)
+  // radius. setPick() does the gating now: out-of-range positions
+  // are accepted into the marker state but disable Confirm and flip
+  // the hint banner to a red warning.
   mapInst.on('click', (ev) => {
     setPick(ev.latlng.lat, ev.latlng.lng);
   });
@@ -235,6 +327,18 @@ async function initMap() {
     const ll = markerInst.getLatLng();
     setPick(ll.lat, ll.lng);
   });
+
+  if (dev) {
+    // Dev convenience: seed a pin at the default centre so confirm is
+    // immediately available. Non-dev users have to fetch their actual
+    // location first — confirm stays disabled until that lands.
+    setPick(TOKYO.lat, TOKYO.lng);
+  } else {
+    // Auto-trigger the geolocation flow on open so the picker is
+    // useful without an extra tap. useGeolocation already handles
+    // the permission-denied / timeout cases and sets geoAnchor.
+    useGeolocation();
+  }
 
   // Leaflet measures container at init; redraw once visible so tiles fill it.
   setTimeout(() => mapInst.invalidateSize(), 60);
@@ -251,7 +355,14 @@ function useGeolocation() {
     showError('');
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
-    if (mapInst) mapInst.setView([lat, lng], 18);
+    // Anchor non-dev radius enforcement to whatever geolocation
+    // returns. The marker can drift within NON_DEV_RADIUS_M of this
+    // point; further away and dragend snaps back / clicks are ignored.
+    geoAnchor = { lat, lng };
+    if (mapInst) {
+      mapInst.setView([lat, lng], 18);
+      drawRadius(lat, lng);
+    }
     setPick(lat, lng, { autoFillLabel: true });
   }
 
@@ -301,6 +412,19 @@ export function pickSpot() {
   pickedAddress = '';
   pickedAddressDetails = null;
   geocodeSeq++;
+  geoAnchor = null;
+  // Drop any radius overlay left over from a previous session. A
+  // fresh anchor (or dev mode) will redraw / suppress it.
+  if (radiusCircle && mapInst) {
+    try { mapInst.removeLayer(radiusCircle); } catch {}
+    radiusCircle = null;
+  }
+  // Re-evaluate dev mode every open — the toggle in /settings can
+  // flip between picker invocations and the hint needs to follow.
+  // updateOutOfBoundsWarning() paints the "locating…" pending state
+  // straight away in non-dev so the user knows what's happening
+  // while geolocation is in flight.
+  updateOutOfBoundsWarning();
   document.getElementById('picker-confirm').disabled = true;
   document.getElementById('picker-coords').textContent       = '';
   document.getElementById('picker-address-meta').innerHTML   = '';
