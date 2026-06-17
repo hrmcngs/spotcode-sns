@@ -230,7 +230,12 @@ export function renderProfile(handle) {
         '<span><b id="profile-postcount">…</b> ' + t('profile.stat.posts') + '</span>' +
       '</div>' +
       renderOrgMembers(u) +
-      (u.github?.handle
+      // Personal-skill badges (始めたて Lisper など) belong to the
+      // individual who wrote the code — orgs are containers, not
+      // authors — so skip them on `is_org` accounts. badges.js also
+      // defends in depth by short-circuiting when the linked GitHub
+      // handle resolves to type=Organization.
+      (u.github?.handle && !u.isOrg
         ? '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
             '<span class="profile-badges__loading">バッジを取得中…</span>' +
           '</div>'
