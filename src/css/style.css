@@ -777,6 +777,38 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .profile-members__empty { color: var(--muted); font-size: .85rem; margin: 0; }
+
+/* GitHub-org-style People grid: compact square avatar tiles, name on
+   hover via the title attr. Used on `is_org` profile pages so the
+   roster reads as "this org has X people" instead of an Instagram
+   chip list. The text label inside each tile is kept in the DOM for
+   screen readers / fallback rendering but visually collapsed. */
+.profile-members--gh .profile-members__grid {
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: .35rem;
+}
+.profile-members--gh .profile-members__row {
+  flex-direction: column;
+  padding: .2rem;
+  border-radius: 8px;
+  border-color: transparent;
+  background: transparent;
+}
+.profile-members--gh .profile-members__row:hover {
+  background: var(--surface-2);
+}
+.profile-members--gh .profile-members__row .avatar {
+  width: 44px; height: 44px;
+  border-radius: 8px;
+  font-size: 1.1rem;
+}
+.profile-members--gh .profile-members__text {
+  /* sr-only — name still in DOM for screen readers and the link title */
+  position: absolute;
+  width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0);
+  white-space: nowrap; border: 0;
+}
 .audience-editor__status:empty { display: none; }
 
 /* Audience hint badge on rendered posts (post head). Same silhouette
@@ -1350,6 +1382,32 @@ html[data-theme='light'] .profile-cover {
 .profile-id { padding: .8rem 1rem 0; }
 .profile-name { font-size: 1.3rem; font-weight: 800; line-height: 1.2; }
 .profile-handle { color: var(--muted); }
+/* "Organization" subtitle on `is_org` profiles — mirrors GitHub's
+   `<h2 class="h3 text-normal mb-2">Organization</h2>` row under the
+   display name. */
+.profile-org-subtitle {
+  display: inline-flex; align-items: center; gap: .35em;
+  margin-top: .15rem;
+  font-size: 1rem; font-weight: 500;
+  color: var(--muted);
+}
+.profile-org-subtitle .icon { stroke: currentColor; fill: none; }
+
+/* Org variant of the profile header: square avatar (not round), more
+   muted cover gradient — GitHub orgs don't get the vibrant banner the
+   personal profiles do. */
+.profile-header--org .profile-cover {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 70%, transparent), var(--bg));
+  height: 110px;
+}
+html[data-theme='light'] .profile-header--org .profile-cover {
+  background:
+    linear-gradient(180deg, var(--surface-2), var(--bg));
+}
+.profile-header--org .avatar--xl.avatar--square {
+  border-radius: 12px;
+}
 .profile-bio { padding: .6rem 1rem 0; white-space: pre-wrap; }
 .profile-meta {
   display: flex; flex-wrap: wrap; gap: 1rem;

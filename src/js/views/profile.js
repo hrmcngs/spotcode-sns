@@ -90,17 +90,24 @@ function renderOrgMembers(u) {
       '</section>'
     );
   }
+  // GitHub-org-style: compact avatar-only tiles with the name as a
+  // hover tooltip. The CSS hides .profile-members__text on this
+  // variant so the avatar grid stays tight (GitHub's "People" panel
+  // is just rounded-square avatars in a 7-wide grid).
   return (
-    '<section class="profile-members" id="profile-members-' + u.handle + '">' +
+    '<section class="profile-members profile-members--gh" id="profile-members-' + u.handle + '">' +
       '<h3 class="profile-members__title">' + t('profile.org_members.title') +
         ' <span class="profile-members__count">' + handles.length + '</span>' +
       '</h3>' +
       '<div class="profile-members__grid">' +
         handles.map(h => {
           const m = getUser(h) || { handle: h, name: h, avatar: (h[0] || '?').toUpperCase() };
+          // Force square avatar to mirror GitHub's people tile look.
+          const tile = Object.assign({}, m, { avatarShape: 'square' });
+          const label = (m.name && m.name !== h) ? (m.name + ' (@' + h + ')') : ('@' + h);
           return (
-            '<a class="profile-members__row" href="' + url('/' + h) + '">' +
-              renderAvatar(m, { size: 'md' }) +
+            '<a class="profile-members__row" href="' + url('/' + h) + '" title="' + escAttr(label) + '" aria-label="' + escAttr(label) + '">' +
+              renderAvatar(tile, { size: 'md' }) +
               '<span class="profile-members__text">' +
                 '<span class="profile-members__name">' + escAttr(m.name || h) + '</span>' +
                 '<span class="profile-members__handle">@' + escAttr(h) + '</span>' +
@@ -172,11 +179,16 @@ export function renderProfile(handle) {
                        :              'Follow';
   const followBtnCls   = (followed || requested) ? 'btn--ghost is-following' : 'btn--primary';
 
+  // GitHub-org-style header: square avatar, "Organization" subtitle in
+  // place of the small inline badge, and a header modifier class the
+  // CSS uses to swap in a compact People grid. Personal accounts get
+  // the original layout — only `is_org` profiles change.
+  const orgU = u.isOrg ? Object.assign({}, u, { avatarShape: 'square' }) : u;
   const header = (
-    '<header class="profile-header">' +
+    '<header class="profile-header' + (u.isOrg ? ' profile-header--org' : '') + '">' +
       '<div class="profile-cover"></div>' +
       '<div class="profile-top">' +
-        renderAvatar(u, { size: 'xl' }) +
+        renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
           (isMe
             ? '<button class="btn btn--ghost" id="logout-btn">' + t('nav.logout') + '</button>' +
@@ -189,12 +201,14 @@ export function renderProfile(handle) {
       '</div>' +
       '<div class="profile-id">' +
         '<div class="profile-name">' + u.name +
-          (u.isOrg ? ' <span class="role-badge role-badge--org" title="' + t('profile.badge.org') + '">' +
-                       icon('building', { size: 12, className: 'icon--inline' }) +
-                       t('profile.badge.org') +
-                     '</span>' : '') +
           (u.role === 'programmer' ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
         '</div>' +
+        (u.isOrg
+          ? '<div class="profile-org-subtitle">' +
+              icon('building', { size: 14, className: 'icon--inline' }) +
+              t('profile.badge.org') +
+            '</div>'
+          : '') +
         '<div class="profile-handle">@' + u.handle +
           (u.isPrivate ? ' <span class="profile-lock" title="非公開アカウント">' + icon('lock', { size: 12, className: 'icon--inline' }) + '</span>' : '') +
         '</div>' +
