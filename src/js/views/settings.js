@@ -501,10 +501,17 @@ export function bindSettings() {
   // hits Supabase via searchProfiles, then renders matches with a
   // + button — already-listed handles render greyed-out.
 
+  // Two flavours of status: known i18n key (showAudienceStatus) and
+  // raw text (showAudienceStatusText) so persistAudience can surface
+  // the actual server error — including "DB column missing, run
+  // Stage X SQL" — instead of a generic localised "failed".
   function showAudienceStatus(kind, key, cls) {
+    showAudienceStatusText(kind, t(key), cls);
+  }
+  function showAudienceStatusText(kind, text, cls) {
     const el = document.querySelector('[data-audience-status="' + kind + '"]');
     if (!el) return;
-    el.textContent = t(key);
+    el.textContent = text;
     el.className = 'settings-status audience-editor__status' + (cls ? ' is-' + cls : '');
   }
 
@@ -516,7 +523,14 @@ export function bindSettings() {
       await updateProfile({ [kind]: audienceState[kind].slice() });
       showAudienceStatus(kind, 'settings.audience.saved', 'ok');
     } catch (ex) {
-      showAudienceStatus(kind, 'settings.audience.failed', 'bad');
+      // Roll the in-memory state back to the DB truth so the chip
+      // that the user just added doesn't keep "ghost-rendering" while
+      // the persisted list is actually empty. The next render will
+      // pick up the unchanged cachedUser.
+      const fresh = currentUser();
+      audienceState[kind] = Array.isArray(fresh?.[kind]) ? fresh[kind].slice() : [];
+      rerenderChips(kind);
+      showAudienceStatusText(kind, t('settings.audience.failed') + ': ' + (ex.message || String(ex)), 'bad');
       console.warn('persistAudience', ex);
     }
   }

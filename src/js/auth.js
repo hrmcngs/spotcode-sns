@@ -303,19 +303,34 @@ export async function updateProfile(patch) {
   if (patch.organization != null)      db.organization  = String(patch.organization).trim().slice(0, 80) || null;
 
   const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'org_members', 'organization', 'is_org']);
+  // Track which columns we had to drop so we can surface a real error
+  // when the patch was *entirely* dropped — previously the function
+  // returned "success" silently, leaving the user with a green
+  // "saved" status and no data persisted (looked like the editor
+  // was broken).
+  const droppedCols = [];
   if (Object.keys(db).length) {
     // Retry loop: PostgREST returns one missing column per request.
     // For each error, identify the column and drop it ONLY if it's in
     // the known-optional set — otherwise rethrow (don't silently lose
     // user data on a typo / RLS bug).
+    let lastErrorMsg = '';
     for (let i = 0; i < 5; i++) {
       const { error } = await supa.from('profiles').update(db).eq('id', cachedUser.id);
       if (!error) break;
+      lastErrorMsg = error.message || '';
       const col = parseMissingCol(error);
-      if (!col || !OPTIONAL_PROFILE_COLS.has(col) || !(col in db)) throw new Error(error.message);
-      console.warn('profiles.' + col + ' missing — run Stage 9 SQL. Dropping from this save.');
+      if (!col || !OPTIONAL_PROFILE_COLS.has(col) || !(col in db)) throw new Error(lastErrorMsg);
+      console.warn('profiles.' + col + ' missing — run the corresponding Stage SQL (see docs/supabase-schema.sql). Dropping from this save.');
+      droppedCols.push(col);
       delete db[col];
       if (Object.keys(db).length === 0) break;
+    }
+    if (droppedCols.length && Object.keys(db).length === 0) {
+      throw new Error(
+        'DB に列が無いため保存できませんでした: ' + droppedCols.join(', ') +
+        '。docs/supabase-schema.sql の該当 Stage を Supabase で実行してください。'
+      );
     }
   }
   await refreshFromSession();
