@@ -10,13 +10,21 @@ import { isDevMode } from '../dev-mode.js';
 let rootEl    = null;
 let mapInst   = null;
 let markerInst = null;
+let radiusCircle = null;
 let resolveFn = null;
 let pickedPos = null;
 let pickedAddress = '';
 let pickedAddressDetails = null;
 let geocodeSeq = 0;
+// Anchor position the non-dev radius is measured from. Set when
+// useGeolocation() succeeds; null until then (confirm stays disabled).
+let geoAnchor = null;
 
 const TOKYO = { lat: 35.681236, lng: 139.767125 };
+// How far a non-dev user can drift the pin away from the device's
+// real geolocation. 50m covers "the right entrance of this building"
+// without enabling location spoofing. Dev mode ignores this.
+const NON_DEV_RADIUS_M = 50;
 
 function template() {
   return (
@@ -214,6 +222,48 @@ async function doReverseGeocode(lat, lng, autoFillLabel) {
   }
 }
 
+// Draw / update the soft-coloured circle that shows the allowed
+// fine-tune area to a non-dev user. Skipped entirely in dev mode
+// — there are no bounds and a circle would be misleading. Reuses
+// the radiusCircle layer when it already exists so opening the
+// picker twice doesn't pile circles up on the map.
+function drawRadius(lat, lng) {
+  if (isDevMode() || !mapInst || !window.L) return;
+  const L = window.L;
+  if (radiusCircle) {
+    radiusCircle.setLatLng([lat, lng]);
+    return;
+  }
+  radiusCircle = L.circle([lat, lng], {
+    radius: NON_DEV_RADIUS_M,
+    color: 'rgba(29,155,240,.55)',
+    weight: 1,
+    fillColor: 'rgba(29,155,240,.12)',
+    fillOpacity: 1,
+    interactive: false,
+  }).addTo(mapInst);
+}
+
+// Constrain a candidate position to within NON_DEV_RADIUS_M of the
+// geolocation anchor. If the candidate is inside the circle it's
+// returned unchanged; outside, we snap to the point on the circle
+// boundary along the same bearing. Returns the candidate verbatim
+// in dev mode (no anchor to measure against).
+function constrainToRadius(L, lat, lng) {
+  if (isDevMode() || !geoAnchor) return { lat, lng };
+  const anchor = L.latLng(geoAnchor.lat, geoAnchor.lng);
+  const target = L.latLng(lat, lng);
+  const dist = anchor.distanceTo(target);
+  if (dist <= NON_DEV_RADIUS_M) return { lat, lng };
+  // Snap to the boundary: interpolate along the line from anchor to
+  // target so the snapped point is the closest legal one.
+  const ratio = NON_DEV_RADIUS_M / dist;
+  return {
+    lat: anchor.lat + (target.lat - anchor.lat) * ratio,
+    lng: anchor.lng + (target.lng - anchor.lng) * ratio,
+  };
+}
+
 async function initMap() {
   showError('');
   let L;
@@ -226,11 +276,11 @@ async function initMap() {
   const container = document.getElementById('picker-map');
   if (!container) return;
 
-  // Non-dev users can only pin their current geolocation. Dev mode
-  // keeps the click/drag-anywhere affordance so you can prototype
-  // posts from the comfort of a desk chair. The map still renders
-  // for everyone — only the input handlers and the marker's
-  // draggable flag depend on dev mode.
+  // Dev mode unlocks the radius constraint entirely; everyone else
+  // can still fine-tune the pin, but only within NON_DEV_RADIUS_M of
+  // the device's geolocation. The marker is always draggable so the
+  // "tap-and-hold" gesture works on phones — the snap-back logic in
+  // dragend enforces the bound.
   const dev = isDevMode();
 
   mapInst = L.map(container, { zoomControl: true }).setView([TOKYO.lat, TOKYO.lng], 16);
@@ -240,24 +290,39 @@ async function initMap() {
     maxZoom: 19,
   }).addTo(mapInst);
 
-  markerInst = L.marker([TOKYO.lat, TOKYO.lng], { draggable: dev }).addTo(mapInst);
+  markerInst = L.marker([TOKYO.lat, TOKYO.lng], { draggable: true }).addTo(mapInst);
+
+  mapInst.on('click', (ev) => {
+    // Non-dev: ignore clicks outside the radius — snapping a click
+    // 500m away to the boundary is more confusing than helpful.
+    if (!dev && geoAnchor) {
+      const dist = L.latLng(geoAnchor.lat, geoAnchor.lng)
+                    .distanceTo(L.latLng(ev.latlng.lat, ev.latlng.lng));
+      if (dist > NON_DEV_RADIUS_M) return;
+    }
+    setPick(ev.latlng.lat, ev.latlng.lng);
+  });
+  markerInst.on('dragend', () => {
+    const ll = markerInst.getLatLng();
+    // Snap the marker back onto the circle if it left the bounds.
+    // Dragging is interactive so visualising the snap matters more
+    // than for clicks (which we silently ignore above).
+    const constrained = constrainToRadius(L, ll.lat, ll.lng);
+    if (constrained.lat !== ll.lat || constrained.lng !== ll.lng) {
+      markerInst.setLatLng([constrained.lat, constrained.lng]);
+    }
+    setPick(constrained.lat, constrained.lng);
+  });
 
   if (dev) {
     // Dev convenience: seed a pin at the default centre so confirm is
     // immediately available. Non-dev users have to fetch their actual
     // location first — confirm stays disabled until that lands.
     setPick(TOKYO.lat, TOKYO.lng);
-    mapInst.on('click', (ev) => {
-      setPick(ev.latlng.lat, ev.latlng.lng);
-    });
-    markerInst.on('dragend', () => {
-      const ll = markerInst.getLatLng();
-      setPick(ll.lat, ll.lng);
-    });
   } else {
     // Auto-trigger the geolocation flow on open so the picker is
     // useful without an extra tap. useGeolocation already handles
-    // the permission-denied / timeout cases.
+    // the permission-denied / timeout cases and sets geoAnchor.
     useGeolocation();
   }
 
@@ -276,7 +341,14 @@ function useGeolocation() {
     showError('');
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
-    if (mapInst) mapInst.setView([lat, lng], 18);
+    // Anchor non-dev radius enforcement to whatever geolocation
+    // returns. The marker can drift within NON_DEV_RADIUS_M of this
+    // point; further away and dragend snaps back / clicks are ignored.
+    geoAnchor = { lat, lng };
+    if (mapInst) {
+      mapInst.setView([lat, lng], 18);
+      drawRadius(lat, lng);
+    }
     setPick(lat, lng, { autoFillLabel: true });
   }
 
@@ -326,6 +398,13 @@ export function pickSpot() {
   pickedAddress = '';
   pickedAddressDetails = null;
   geocodeSeq++;
+  geoAnchor = null;
+  // Drop any radius overlay left over from a previous session. A
+  // fresh anchor (or dev mode) will redraw / suppress it.
+  if (radiusCircle && mapInst) {
+    try { mapInst.removeLayer(radiusCircle); } catch {}
+    radiusCircle = null;
+  }
   // Re-evaluate dev mode every open — the toggle in /settings can
   // flip between picker invocations and the hint needs to follow.
   const lockedHint = document.getElementById('picker-locked-hint');
