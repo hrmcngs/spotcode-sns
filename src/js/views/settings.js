@@ -542,15 +542,11 @@ export function bindSettings() {
 
   } // end _audienceWired guard
 
-  // Paint default candidates on every /settings open. Waits for
-  // the follow list to be hydrated so the suggestions aren't empty
-  // on a fresh session.
-  if (currentUser()) {
-    hydrateMyFollows().then(() => {
-      showSuggestions('closeFriends');
-      showSuggestions('orgMembers');
-    });
-  }
+  // Warm the follow list in the background so the suggestion panel
+  // has data the moment the user focuses the search input. We do
+  // NOT paint suggestions here — they only appear once the input
+  // gets focus, so the editor is quiet by default.
+  if (currentUser()) hydrateMyFollows();
 
   // Org label form (free-text "Organization" — profile display only).
   const orgLabelForm = document.getElementById('org-label-form');
