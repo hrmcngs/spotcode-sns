@@ -232,24 +232,66 @@ export async function logout() {
 // login form. Re-mints a fresh session from the stored refresh token;
 // supabase-js fires onAuthStateChange which refreshes cachedUser and
 // updates the saved-accounts entry with the rotated tokens.
+//
+// Three defenses against the "consecutive switches log me out" bug:
+// (1) Mutex: only one switch runs at a time. Concurrent clicks queue
+//     instead of interleaving — supabase-js's auto-refresh timer and
+//     our manual refreshSession can otherwise step on each other and
+//     leave the session in a half-cleared state.
+// (2) refreshSession FIRST (no pre-signOut). On failure the caller's
+//     current account stays intact instead of being stranded.
+// (3) Snapshot + rollback. If refreshSession fails and supabase-js
+//     also dropped the current session as a side-effect (some
+//     versions do), restore it via setSession so the user doesn't
+//     get kicked out of the account they were just using.
+let switchInFlight = null;
 export async function switchAccount(id) {
+  if (switchInFlight) {
+    // Coalesce a follow-up click on the same target onto the in-flight
+    // promise; reject a click on a different target so the caller can
+    // surface a "please wait" hint.
+    if (switchInFlight.targetId === id) return switchInFlight.promise;
+    throw new Error('別のアカウントへの切り替え処理中です。完了してから操作してください。');
+  }
   if (cachedUser && cachedUser.id === id) return cachedUser;
   const refreshToken = getRefreshToken(id);
   if (!refreshToken) throw new Error('保存済みアカウントが見つかりません');
   const supa = await getClient();
-  // signOut first so the currently-active session is fully torn down
-  // before we set the new one — otherwise supabase-js sometimes holds
-  // onto the old user metadata in flight.
-  try { await supa.auth.signOut(); } catch {}
-  const { error } = await supa.auth.refreshSession({ refresh_token: refreshToken });
-  if (error) {
-    // Refresh token expired or revoked — drop it from the list so the
-    // user gets a clean "log in again" prompt instead of a stuck row.
-    forgetAccount(id);
-    throw new Error('セッションの有効期限が切れています。再ログインしてください。');
+
+  // Snapshot the current session BEFORE we touch supabase-js, so we
+  // can put it back if refreshSession fails noisily and takes the
+  // active session with it.
+  const { data: snap } = await supa.auth.getSession();
+  const previousSession = snap?.session || null;
+
+  const promise = (async () => {
+    const { data, error } = await supa.auth.refreshSession({ refresh_token: refreshToken });
+    if (error || !data?.session) {
+      // Restore the previous session if supabase-js dropped it as a
+      // side-effect of the failed refresh. setSession is idempotent
+      // when the same tokens are passed, so this is safe even in
+      // versions that don't clear the session on failure.
+      if (previousSession) {
+        try {
+          await supa.auth.setSession({
+            access_token:  previousSession.access_token,
+            refresh_token: previousSession.refresh_token,
+          });
+        } catch {}
+      }
+      forgetAccount(id);
+      throw new Error('保存されたセッションの有効期限が切れています。このアカウントを再度ログインしてください。');
+    }
+    await refreshFromSession();
+    return cachedUser;
+  })();
+
+  switchInFlight = { targetId: id, promise };
+  try {
+    return await promise;
+  } finally {
+    switchInFlight = null;
   }
-  await refreshFromSession();
-  return cachedUser;
 }
 
 // Normalise a Twitter / Instagram handle: strip @, any URL prefix,

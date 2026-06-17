@@ -421,18 +421,34 @@ export function bindSettings() {
     accountsStatus.textContent = msg || '';
     accountsStatus.className = 'settings-status' + (cls ? ' is-' + cls : '');
   }
+  // Lock all account-related buttons together while a switch is
+  // in flight. A user mashing two Switch rows in succession used to
+  // fire overlapping refreshSession calls — supabase-js handles them
+  // serially but the in-between session transitions confused our
+  // onAuthStateChange handler enough to leave both rows looking
+  // logged out. One switch at a time, no exceptions.
+  function setAccountButtonsDisabled(disabled) {
+    document.querySelectorAll(
+      '[data-account-switch], [data-account-forget], #account-add'
+    ).forEach(b => { b.disabled = disabled; });
+  }
   document.querySelectorAll('[data-account-switch]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-account-switch');
-      btn.disabled = true;
+      setAccountButtonsDisabled(true);
       setAccountStatus(t('settings.accounts.switching'));
       try {
         await switchAccount(id);
         setAccountStatus(t('settings.accounts.switched'), 'ok');
-        setTimeout(() => location.reload(), 400);
+        // Reload immediately rather than waiting 400ms: the delay was
+        // for the "switched" message to be readable, but it gave the
+        // user a window to fire another switch before the page came
+        // back, which was the root cause of the consecutive-switch
+        // logout bug.
+        location.reload();
       } catch (ex) {
         setAccountStatus((ex.message || String(ex)), 'bad');
-        btn.disabled = false;
+        setAccountButtonsDisabled(false);
       }
     });
   });
