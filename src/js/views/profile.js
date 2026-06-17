@@ -69,6 +69,57 @@ function renderProfileLinks(u) {
   return '<div class="profile-links">' + links.join('') + '</div>';
 }
 
+// Member list for organization accounts. The `org_members` column was
+// originally the "same-org audience" allowlist on personal accounts;
+// on an `is_org` profile it doubles as the public roster the org
+// publishes. Empty + non-owner viewer → render nothing so we don't
+// pollute the layout with a blank section.
+function renderOrgMembers(u) {
+  if (!u.isOrg) return '';
+  const me = currentUser();
+  const isOwner = me && me.handle === u.handle;
+  const handles = Array.isArray(u.orgMembers) ? u.orgMembers : [];
+  if (!handles.length && !isOwner) return '';
+  if (!handles.length) {
+    return (
+      '<section class="profile-members" id="profile-members-' + u.handle + '">' +
+        '<h3 class="profile-members__title">' + t('profile.org_members.title') +
+          ' <span class="profile-members__count">0</span>' +
+        '</h3>' +
+        '<p class="profile-members__empty">' + t('profile.org_members.empty_owner') + '</p>' +
+      '</section>'
+    );
+  }
+  // GitHub-org-style: compact avatar-only tiles with the name as a
+  // hover tooltip. The CSS hides .profile-members__text on this
+  // variant so the avatar grid stays tight (GitHub's "People" panel
+  // is just rounded-square avatars in a 7-wide grid).
+  return (
+    '<section class="profile-members profile-members--gh" id="profile-members-' + u.handle + '">' +
+      '<h3 class="profile-members__title">' + t('profile.org_members.title') +
+        ' <span class="profile-members__count">' + handles.length + '</span>' +
+      '</h3>' +
+      '<div class="profile-members__grid">' +
+        handles.map(h => {
+          const m = getUser(h) || { handle: h, name: h, avatar: (h[0] || '?').toUpperCase() };
+          // Force square avatar to mirror GitHub's people tile look.
+          const tile = Object.assign({}, m, { avatarShape: 'square' });
+          const label = (m.name && m.name !== h) ? (m.name + ' (@' + h + ')') : ('@' + h);
+          return (
+            '<a class="profile-members__row" href="' + url('/' + h) + '" title="' + escAttr(label) + '" aria-label="' + escAttr(label) + '">' +
+              renderAvatar(tile, { size: 'md' }) +
+              '<span class="profile-members__text">' +
+                '<span class="profile-members__name">' + escAttr(m.name || h) + '</span>' +
+                '<span class="profile-members__handle">@' + escAttr(h) + '</span>' +
+              '</span>' +
+            '</a>'
+          );
+        }).join('') +
+      '</div>' +
+    '</section>'
+  );
+}
+
 // 53 weeks × 7 days of zeros — gives renderGrass() something to paint
 // while we wait for the real GitHub data to come back.
 function emptyGrid() {
@@ -128,11 +179,16 @@ export function renderProfile(handle) {
                        :              'Follow';
   const followBtnCls   = (followed || requested) ? 'btn--ghost is-following' : 'btn--primary';
 
+  // GitHub-org-style header: square avatar, "Organization" subtitle in
+  // place of the small inline badge, and a header modifier class the
+  // CSS uses to swap in a compact People grid. Personal accounts get
+  // the original layout — only `is_org` profiles change.
+  const orgU = u.isOrg ? Object.assign({}, u, { avatarShape: 'square' }) : u;
   const header = (
-    '<header class="profile-header">' +
+    '<header class="profile-header' + (u.isOrg ? ' profile-header--org' : '') + '">' +
       '<div class="profile-cover"></div>' +
       '<div class="profile-top">' +
-        renderAvatar(u, { size: 'xl' }) +
+        renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
           (isMe
             ? '<button class="btn btn--ghost" id="logout-btn">' + t('nav.logout') + '</button>' +
@@ -145,12 +201,14 @@ export function renderProfile(handle) {
       '</div>' +
       '<div class="profile-id">' +
         '<div class="profile-name">' + u.name +
-          (u.isOrg ? ' <span class="role-badge role-badge--org" title="' + t('profile.badge.org') + '">' +
-                       icon('building', { size: 12, className: 'icon--inline' }) +
-                       t('profile.badge.org') +
-                     '</span>' : '') +
           (u.role === 'programmer' ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
         '</div>' +
+        (u.isOrg
+          ? '<div class="profile-org-subtitle">' +
+              icon('building', { size: 14, className: 'icon--inline' }) +
+              t('profile.badge.org') +
+            '</div>'
+          : '') +
         '<div class="profile-handle">@' + u.handle +
           (u.isPrivate ? ' <span class="profile-lock" title="非公開アカウント">' + icon('lock', { size: 12, className: 'icon--inline' }) + '</span>' : '') +
         '</div>' +
@@ -171,6 +229,7 @@ export function renderProfile(handle) {
         '<a href="' + url('/' + u.handle + '/followers') + '"><b>' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +
         '<span><b id="profile-postcount">…</b> ' + t('profile.stat.posts') + '</span>' +
       '</div>' +
+      renderOrgMembers(u) +
       (u.github?.handle
         ? '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
             '<span class="profile-badges__loading">バッジを取得中…</span>' +
@@ -247,7 +306,32 @@ export async function hydrateProfile(handle) {
   if (app) app.innerHTML = renderProfile(handle);
   // renderProfile bumped renderVersion — capture the new value for the
   // body hydration below.
+  hydrateOrgMembers(handle).catch(() => {});
   await hydrateProfileBody(handle, renderVersion);
+}
+
+// For org accounts: members are listed by handle only; fetch the full
+// profile for any that aren't in the local cache so the row paints
+// the right avatar + display name instead of a handle-only stub.
+async function hydrateOrgMembers(handle) {
+  const u = getUser(handle);
+  if (!u || !u.isOrg) return;
+  const handles = Array.isArray(u.orgMembers) ? u.orgMembers : [];
+  if (!handles.length) return;
+  const missing = handles.filter(h => {
+    const m = getUser(h);
+    return !m || (!m.avatarImage && (!m.name || m.name === h));
+  });
+  if (!missing.length) return;
+  await Promise.allSettled(missing.map(h => fetchProfileByHandle(h)));
+  // Repaint just the members section so the rest of the profile
+  // isn't disturbed mid-tab-load.
+  const sec = document.getElementById('profile-members-' + u.handle);
+  if (!sec) return;
+  const fresh = getUser(handle);
+  if (!fresh) return;
+  const html = renderOrgMembers(fresh);
+  if (html) sec.outerHTML = html;
 }
 
 // Called from main.js when the user clicks one of the profile tabs.

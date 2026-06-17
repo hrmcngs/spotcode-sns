@@ -13,10 +13,17 @@
 //   fetchGithubProfile(h) — same public GitHub API lookup as before
 
 import { getClient } from './supa.js';
+import { rememberAccount, forgetAccount, getRefreshToken } from './saved-accounts.js';
 
 const subscribers = new Set();
 let cachedUser = null;
 let initialized = false;
+
+// Re-export the public list-view directly so view code can import from
+// './auth.js' without having to know about saved-accounts.js. The
+// refresh-token-bearing helpers (rememberAccount / getRefreshToken)
+// stay private to this module so they can't leak via import paths.
+export { listSavedAccounts, forgetAccount as removeSavedAccount } from './saved-accounts.js';
 
 function emit() { subscribers.forEach(fn => { try { fn(cachedUser); } catch {} }); }
 
@@ -88,6 +95,9 @@ async function refreshFromSession() {
   if (!session) { cachedUser = null; emit(); return; }
   const profile = await loadProfile(session.user.id);
   cachedUser = projectUser(session.user, profile);
+  // Snapshot the session in the saved-accounts list so the user can
+  // flip back to this account later without re-typing their password.
+  if (cachedUser) rememberAccount({ user: cachedUser, session });
   emit();
 }
 
@@ -108,6 +118,9 @@ export async function initAuth() {
     if (!session) { cachedUser = null; emit(); return; }
     const profile = await loadProfile(session.user.id);
     cachedUser = projectUser(session.user, profile);
+    // Persist the latest refresh_token — supabase-js rotates it on
+    // every refresh, and a stale one is useless for switchAccount.
+    if (cachedUser) rememberAccount({ user: cachedUser, session });
     emit();
   });
 }
@@ -202,12 +215,41 @@ export async function login({ email, password }) {
 }
 
 export async function logout() {
+  const me = cachedUser;
   try {
     const supa = await getClient();
     await supa.auth.signOut();
   } catch {}
+  // Mirror the user's mental model: "I logged out → my account isn't
+  // on this device anymore." If they want it back in the switcher
+  // they can log in again.
+  if (me?.id) forgetAccount(me.id);
   cachedUser = null;
   emit();
+}
+
+// Flip into a different saved account without going through the
+// login form. Re-mints a fresh session from the stored refresh token;
+// supabase-js fires onAuthStateChange which refreshes cachedUser and
+// updates the saved-accounts entry with the rotated tokens.
+export async function switchAccount(id) {
+  if (cachedUser && cachedUser.id === id) return cachedUser;
+  const refreshToken = getRefreshToken(id);
+  if (!refreshToken) throw new Error('保存済みアカウントが見つかりません');
+  const supa = await getClient();
+  // signOut first so the currently-active session is fully torn down
+  // before we set the new one — otherwise supabase-js sometimes holds
+  // onto the old user metadata in flight.
+  try { await supa.auth.signOut(); } catch {}
+  const { error } = await supa.auth.refreshSession({ refresh_token: refreshToken });
+  if (error) {
+    // Refresh token expired or revoked — drop it from the list so the
+    // user gets a clean "log in again" prompt instead of a stuck row.
+    forgetAccount(id);
+    throw new Error('セッションの有効期限が切れています。再ログインしてください。');
+  }
+  await refreshFromSession();
+  return cachedUser;
 }
 
 // Normalise a Twitter / Instagram handle: strip @, any URL prefix,
@@ -261,19 +303,34 @@ export async function updateProfile(patch) {
   if (patch.organization != null)      db.organization  = String(patch.organization).trim().slice(0, 80) || null;
 
   const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'org_members', 'organization', 'is_org']);
+  // Track which columns we had to drop so we can surface a real error
+  // when the patch was *entirely* dropped — previously the function
+  // returned "success" silently, leaving the user with a green
+  // "saved" status and no data persisted (looked like the editor
+  // was broken).
+  const droppedCols = [];
   if (Object.keys(db).length) {
     // Retry loop: PostgREST returns one missing column per request.
     // For each error, identify the column and drop it ONLY if it's in
     // the known-optional set — otherwise rethrow (don't silently lose
     // user data on a typo / RLS bug).
+    let lastErrorMsg = '';
     for (let i = 0; i < 5; i++) {
       const { error } = await supa.from('profiles').update(db).eq('id', cachedUser.id);
       if (!error) break;
+      lastErrorMsg = error.message || '';
       const col = parseMissingCol(error);
-      if (!col || !OPTIONAL_PROFILE_COLS.has(col) || !(col in db)) throw new Error(error.message);
-      console.warn('profiles.' + col + ' missing — run Stage 9 SQL. Dropping from this save.');
+      if (!col || !OPTIONAL_PROFILE_COLS.has(col) || !(col in db)) throw new Error(lastErrorMsg);
+      console.warn('profiles.' + col + ' missing — run the corresponding Stage SQL (see docs/supabase-schema.sql). Dropping from this save.');
+      droppedCols.push(col);
       delete db[col];
       if (Object.keys(db).length === 0) break;
+    }
+    if (droppedCols.length && Object.keys(db).length === 0) {
+      throw new Error(
+        'DB に列が無いため保存できませんでした: ' + droppedCols.join(', ') +
+        '。docs/supabase-schema.sql の該当 Stage を Supabase で実行してください。'
+      );
     }
   }
   await refreshFromSession();

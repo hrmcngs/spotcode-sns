@@ -2,7 +2,8 @@ import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
-import { currentUser, updateProfile } from '../auth.js';
+import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
+import { openAuth } from './auth-modal.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
 import { getUser } from '../data.js';
@@ -50,7 +51,8 @@ function privacyCard() {
       '<p class="settings-status" id="privacy-status"></p>' +
     '</section>' +
     accountTypeCard() +
-    audienceCard()
+    audienceCard() +
+    orgLabelCard()
   );
 }
 
@@ -99,8 +101,24 @@ function audienceCard() {
       '<p class="settings__hint">' + t('settings.audience.hint') + '</p>' +
       audienceEditor('closeFriends', t('settings.audience.friends')) +
       audienceEditor('orgMembers',   t('settings.audience.org_members')) +
+    '</section>'
+  );
+}
+
+// Free-text "organization" label, shown on the profile as a plain
+// string. Lives in its own card so the Save button isn't visually
+// inside the audience-list editor (where it confused users into
+// thinking it would save the lists too — the lists auto-save on
+// add/remove and have no Save button of their own).
+function orgLabelCard() {
+  const me = currentUser();
+  if (!me) return '';
+  return (
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.org_label.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.org_label.hint') + '</p>' +
       '<form class="settings-form" id="org-label-form">' +
-        '<label>' + t('settings.audience.org') +
+        '<label>' + t('settings.org_label.label') +
           '<input name="organization" type="text" autocomplete="off" maxlength="80" ' +
             'placeholder="' + attr(t('settings.audience.org_placeholder')) + '" value="' + attr(me.organization || '') + '">' +
         '</label>' +
@@ -149,8 +167,61 @@ function audienceChip(kind, handle) {
   );
 }
 
+// Twitter-style account switcher backed by saved-accounts.js. Each
+// row is a saved login on this device; clicking switches the active
+// session via refresh_token, and × forgets the entry without
+// touching the actual account. "Add another account" sign-outs the
+// current session so the auth modal lets you log in fresh.
+function accountsCard() {
+  const me = currentUser();
+  if (!me) return '';
+  const saved = listSavedAccounts();
+  const rows = saved.map(acc => {
+    const active = acc.id === me.id;
+    const u = { handle: acc.handle, name: acc.name, avatarImage: acc.avatarUrl,
+                avatarShape: acc.avatarShape, avatar: (acc.name[0] || '?').toUpperCase() };
+    return (
+      '<div class="account-row' + (active ? ' is-active' : '') + '" data-account-id="' + attr(acc.id) + '">' +
+        renderAvatar(u, { size: 'md' }) +
+        '<div class="account-row__id">' +
+          '<div class="account-row__name">' + attr(acc.name) +
+            (active ? ' <span class="account-row__badge">' + t('settings.accounts.current') + '</span>' : '') +
+          '</div>' +
+          '<div class="account-row__handle">@' + attr(acc.handle) +
+            (acc.email ? ' · ' + attr(acc.email) : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="account-row__actions">' +
+          (active
+            ? ''
+            : '<button type="button" class="btn btn--ghost btn--sm" data-account-switch="' + attr(acc.id) + '">' +
+                t('settings.accounts.switch') +
+              '</button>') +
+          '<button type="button" class="account-row__forget" data-account-forget="' + attr(acc.id) + '" ' +
+            'aria-label="' + attr(t('settings.accounts.forget')) + '" title="' + attr(t('settings.accounts.forget')) + '">×</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+  return (
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.accounts.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.accounts.hint') + '</p>' +
+      '<div class="accounts-list">' + rows + '</div>' +
+      '<div class="settings-form__actions">' +
+        '<button type="button" class="btn btn--ghost" id="account-add">' +
+          icon('plus', { size: 14, className: 'icon--inline' }) +
+          t('settings.accounts.add') +
+        '</button>' +
+      '</div>' +
+      '<p class="settings-status" id="accounts-status"></p>' +
+    '</section>'
+  );
+}
+
 function userCards() {
   return (
+    accountsCard() +
     privacyCard() +
     '<section class="settings-card">' +
       '<h2>' + t('settings.map.title') + '</h2>' +
@@ -341,6 +412,61 @@ export function bindSettings() {
     }
   });
 
+  // Account switcher: per-row "Switch" + × handlers, plus the
+  // "Add another account" button that sign-outs the current session
+  // and pops the auth modal so the user can log into a different one.
+  const accountsStatus = document.getElementById('accounts-status');
+  function setAccountStatus(msg, cls) {
+    if (!accountsStatus) return;
+    accountsStatus.textContent = msg || '';
+    accountsStatus.className = 'settings-status' + (cls ? ' is-' + cls : '');
+  }
+  document.querySelectorAll('[data-account-switch]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-account-switch');
+      btn.disabled = true;
+      setAccountStatus(t('settings.accounts.switching'));
+      try {
+        await switchAccount(id);
+        setAccountStatus(t('settings.accounts.switched'), 'ok');
+        setTimeout(() => location.reload(), 400);
+      } catch (ex) {
+        setAccountStatus((ex.message || String(ex)), 'bad');
+        btn.disabled = false;
+      }
+    });
+  });
+  document.querySelectorAll('[data-account-forget]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-account-forget');
+      if (!confirm(t('settings.accounts.confirm_forget'))) return;
+      removeSavedAccount(id);
+      // Reload so the card re-renders cleanly. The active Supabase
+      // session is untouched — "Remove from list" only affects the
+      // switcher list, it doesn't log the user out.
+      location.reload();
+    });
+  });
+  document.getElementById('account-add')?.addEventListener('click', () => {
+    // Just open the auth modal — signInWithPassword / signUp on the
+    // form will replace the active session, and the previous account
+    // stays in the saved list because we never call forgetAccount.
+    // We don't pre-signOut: that fires onAuthStateChange with
+    // session=null mid-flight, which makes the topbar / page flip
+    // to a "logged out" state for a beat before the modal opens.
+    const meBefore = currentUser();
+    const off = onAuthChange((u) => {
+      // Reload only on transition to a DIFFERENT user — closing the
+      // modal without logging in fires no auth change, so this
+      // subscription stays dormant until the user actually switches.
+      if (u && (!meBefore || u.id !== meBefore.id)) {
+        off();
+        location.reload();
+      }
+    });
+    openAuth('login');
+  });
+
   // Account-type toggle (個人 / 組織). Same pattern as the privacy
   // toggle — flip is_org and reload so every cached view picks up
   // the new badge state.
@@ -375,10 +501,17 @@ export function bindSettings() {
   // hits Supabase via searchProfiles, then renders matches with a
   // + button — already-listed handles render greyed-out.
 
+  // Two flavours of status: known i18n key (showAudienceStatus) and
+  // raw text (showAudienceStatusText) so persistAudience can surface
+  // the actual server error — including "DB column missing, run
+  // Stage X SQL" — instead of a generic localised "failed".
   function showAudienceStatus(kind, key, cls) {
+    showAudienceStatusText(kind, t(key), cls);
+  }
+  function showAudienceStatusText(kind, text, cls) {
     const el = document.querySelector('[data-audience-status="' + kind + '"]');
     if (!el) return;
-    el.textContent = t(key);
+    el.textContent = text;
     el.className = 'settings-status audience-editor__status' + (cls ? ' is-' + cls : '');
   }
 
@@ -390,7 +523,14 @@ export function bindSettings() {
       await updateProfile({ [kind]: audienceState[kind].slice() });
       showAudienceStatus(kind, 'settings.audience.saved', 'ok');
     } catch (ex) {
-      showAudienceStatus(kind, 'settings.audience.failed', 'bad');
+      // Roll the in-memory state back to the DB truth so the chip
+      // that the user just added doesn't keep "ghost-rendering" while
+      // the persisted list is actually empty. The next render will
+      // pick up the unchanged cachedUser.
+      const fresh = currentUser();
+      audienceState[kind] = Array.isArray(fresh?.[kind]) ? fresh[kind].slice() : [];
+      rerenderChips(kind);
+      showAudienceStatusText(kind, t('settings.audience.failed') + ': ' + (ex.message || String(ex)), 'bad');
       console.warn('persistAudience', ex);
     }
   }
@@ -492,6 +632,35 @@ export function bindSettings() {
     const kind = input.getAttribute('data-audience-search');
     if (!kind) return;
     if (!input.value.trim()) showSuggestions(kind);
+  });
+
+  // Enter on the search input adds the typed handle directly to the
+  // list — saves the user from having to click the "+" on a candidate
+  // row. If the typed text doesn't match the handle format, fall
+  // through so the user gets the search-results panel instead.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const kind = input.getAttribute('data-audience-search');
+    if (!kind || !audienceState[kind]) return;
+    e.preventDefault();
+    const handle = input.value.trim().replace(/^@/, '');
+    // Same validation as auth.js — handle must look like a handle.
+    if (!/^[A-Za-z0-9_][A-Za-z0-9_-]{1,19}$/.test(handle)) {
+      showAudienceStatus(kind, 'settings.audience.invalid_handle', 'bad');
+      return;
+    }
+    if (audienceState[kind].includes(handle)) {
+      input.value = '';
+      showSuggestions(kind);
+      return;
+    }
+    audienceState[kind].push(handle);
+    input.value = '';
+    rerenderChips(kind);
+    showSuggestions(kind);
+    persistAudience(kind);
   });
 
   document.addEventListener('click', (e) => {
