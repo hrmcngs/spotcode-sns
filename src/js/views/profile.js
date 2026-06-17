@@ -69,6 +69,50 @@ function renderProfileLinks(u) {
   return '<div class="profile-links">' + links.join('') + '</div>';
 }
 
+// Member list for organization accounts. The `org_members` column was
+// originally the "same-org audience" allowlist on personal accounts;
+// on an `is_org` profile it doubles as the public roster the org
+// publishes. Empty + non-owner viewer → render nothing so we don't
+// pollute the layout with a blank section.
+function renderOrgMembers(u) {
+  if (!u.isOrg) return '';
+  const me = currentUser();
+  const isOwner = me && me.handle === u.handle;
+  const handles = Array.isArray(u.orgMembers) ? u.orgMembers : [];
+  if (!handles.length && !isOwner) return '';
+  if (!handles.length) {
+    return (
+      '<section class="profile-members" id="profile-members-' + u.handle + '">' +
+        '<h3 class="profile-members__title">' + t('profile.org_members.title') +
+          ' <span class="profile-members__count">0</span>' +
+        '</h3>' +
+        '<p class="profile-members__empty">' + t('profile.org_members.empty_owner') + '</p>' +
+      '</section>'
+    );
+  }
+  return (
+    '<section class="profile-members" id="profile-members-' + u.handle + '">' +
+      '<h3 class="profile-members__title">' + t('profile.org_members.title') +
+        ' <span class="profile-members__count">' + handles.length + '</span>' +
+      '</h3>' +
+      '<div class="profile-members__grid">' +
+        handles.map(h => {
+          const m = getUser(h) || { handle: h, name: h, avatar: (h[0] || '?').toUpperCase() };
+          return (
+            '<a class="profile-members__row" href="' + url('/' + h) + '">' +
+              renderAvatar(m, { size: 'md' }) +
+              '<span class="profile-members__text">' +
+                '<span class="profile-members__name">' + escAttr(m.name || h) + '</span>' +
+                '<span class="profile-members__handle">@' + escAttr(h) + '</span>' +
+              '</span>' +
+            '</a>'
+          );
+        }).join('') +
+      '</div>' +
+    '</section>'
+  );
+}
+
 // 53 weeks × 7 days of zeros — gives renderGrass() something to paint
 // while we wait for the real GitHub data to come back.
 function emptyGrid() {
@@ -171,6 +215,7 @@ export function renderProfile(handle) {
         '<a href="' + url('/' + u.handle + '/followers') + '"><b>' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +
         '<span><b id="profile-postcount">…</b> ' + t('profile.stat.posts') + '</span>' +
       '</div>' +
+      renderOrgMembers(u) +
       (u.github?.handle
         ? '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
             '<span class="profile-badges__loading">バッジを取得中…</span>' +
@@ -247,7 +292,32 @@ export async function hydrateProfile(handle) {
   if (app) app.innerHTML = renderProfile(handle);
   // renderProfile bumped renderVersion — capture the new value for the
   // body hydration below.
+  hydrateOrgMembers(handle).catch(() => {});
   await hydrateProfileBody(handle, renderVersion);
+}
+
+// For org accounts: members are listed by handle only; fetch the full
+// profile for any that aren't in the local cache so the row paints
+// the right avatar + display name instead of a handle-only stub.
+async function hydrateOrgMembers(handle) {
+  const u = getUser(handle);
+  if (!u || !u.isOrg) return;
+  const handles = Array.isArray(u.orgMembers) ? u.orgMembers : [];
+  if (!handles.length) return;
+  const missing = handles.filter(h => {
+    const m = getUser(h);
+    return !m || (!m.avatarImage && (!m.name || m.name === h));
+  });
+  if (!missing.length) return;
+  await Promise.allSettled(missing.map(h => fetchProfileByHandle(h)));
+  // Repaint just the members section so the rest of the profile
+  // isn't disturbed mid-tab-load.
+  const sec = document.getElementById('profile-members-' + u.handle);
+  if (!sec) return;
+  const fresh = getUser(handle);
+  if (!fresh) return;
+  const html = renderOrgMembers(fresh);
+  if (html) sec.outerHTML = html;
 }
 
 // Called from main.js when the user clicks one of the profile tabs.

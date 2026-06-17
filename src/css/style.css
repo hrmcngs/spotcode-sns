@@ -697,6 +697,86 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   background: color-mix(in srgb, var(--green, #2ea043) 22%, transparent);
   color: var(--green, #2ea043);
 }
+
+/* ---------- account switcher (settings → Accounts) ---------- */
+.accounts-list {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: .6rem;
+}
+.account-row {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .6rem .75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.account-row:last-child { border-bottom: 0; }
+.account-row.is-active { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.account-row .avatar { flex: 0 0 auto; }
+.account-row__id { flex: 1 1 auto; min-width: 0; }
+.account-row__name {
+  font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.account-row__badge {
+  display: inline-block; vertical-align: middle;
+  margin-left: .35rem;
+  font-size: .68rem; font-weight: 600;
+  padding: .05em .4em; border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.account-row__handle {
+  color: var(--muted); font-size: .82rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.account-row__actions { display: inline-flex; gap: .35rem; align-items: center; flex: 0 0 auto; }
+.account-row__forget {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; color: var(--muted);
+  font-size: 1.1rem; cursor: pointer; border-radius: 6px;
+}
+.account-row__forget:hover { background: var(--surface-2); color: var(--text); }
+
+/* ---------- profile: org members section ---------- */
+.profile-members { margin-top: .8rem; }
+.profile-members__title {
+  font-size: .9rem; font-weight: 600; color: var(--muted);
+  margin: 0 0 .5rem;
+  display: flex; align-items: center; gap: .4rem;
+}
+.profile-members__count {
+  font-size: .78rem; font-weight: 600;
+  color: var(--text);
+  padding: .05em .45em; border-radius: 999px;
+  background: var(--surface-2);
+}
+.profile-members__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: .4rem;
+}
+.profile-members__row {
+  display: flex; align-items: center; gap: .55rem;
+  padding: .45rem .55rem;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface);
+  color: inherit; text-decoration: none;
+}
+.profile-members__row:hover { background: var(--surface-2); }
+.profile-members__row .avatar { flex: 0 0 auto; }
+.profile-members__text { display: flex; flex-direction: column; min-width: 0; }
+.profile-members__name {
+  font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.profile-members__handle {
+  color: var(--muted); font-size: .8rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.profile-members__empty { color: var(--muted); font-size: .85rem; margin: 0; }
 .audience-editor__status:empty { display: none; }
 
 /* Audience hint badge on rendered posts (post head). Same silhouette

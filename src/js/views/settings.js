@@ -2,7 +2,8 @@ import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
-import { currentUser, updateProfile } from '../auth.js';
+import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount } from '../auth.js';
+import { openAuth } from './auth-modal.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
 import { getUser } from '../data.js';
@@ -149,8 +150,61 @@ function audienceChip(kind, handle) {
   );
 }
 
+// Twitter-style account switcher backed by saved-accounts.js. Each
+// row is a saved login on this device; clicking switches the active
+// session via refresh_token, and × forgets the entry without
+// touching the actual account. "Add another account" sign-outs the
+// current session so the auth modal lets you log in fresh.
+function accountsCard() {
+  const me = currentUser();
+  if (!me) return '';
+  const saved = listSavedAccounts();
+  const rows = saved.map(acc => {
+    const active = acc.id === me.id;
+    const u = { handle: acc.handle, name: acc.name, avatarImage: acc.avatarUrl,
+                avatarShape: acc.avatarShape, avatar: (acc.name[0] || '?').toUpperCase() };
+    return (
+      '<div class="account-row' + (active ? ' is-active' : '') + '" data-account-id="' + attr(acc.id) + '">' +
+        renderAvatar(u, { size: 'md' }) +
+        '<div class="account-row__id">' +
+          '<div class="account-row__name">' + attr(acc.name) +
+            (active ? ' <span class="account-row__badge">' + t('settings.accounts.current') + '</span>' : '') +
+          '</div>' +
+          '<div class="account-row__handle">@' + attr(acc.handle) +
+            (acc.email ? ' · ' + attr(acc.email) : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="account-row__actions">' +
+          (active
+            ? ''
+            : '<button type="button" class="btn btn--ghost btn--sm" data-account-switch="' + attr(acc.id) + '">' +
+                t('settings.accounts.switch') +
+              '</button>') +
+          '<button type="button" class="account-row__forget" data-account-forget="' + attr(acc.id) + '" ' +
+            'aria-label="' + attr(t('settings.accounts.forget')) + '" title="' + attr(t('settings.accounts.forget')) + '">×</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+  return (
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.accounts.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.accounts.hint') + '</p>' +
+      '<div class="accounts-list">' + rows + '</div>' +
+      '<div class="settings-form__actions">' +
+        '<button type="button" class="btn btn--ghost" id="account-add">' +
+          icon('plus', { size: 14, className: 'icon--inline' }) +
+          t('settings.accounts.add') +
+        '</button>' +
+      '</div>' +
+      '<p class="settings-status" id="accounts-status"></p>' +
+    '</section>'
+  );
+}
+
 function userCards() {
   return (
+    accountsCard() +
     privacyCard() +
     '<section class="settings-card">' +
       '<h2>' + t('settings.map.title') + '</h2>' +
@@ -339,6 +393,53 @@ export function bindSettings() {
       }
       privBtn.disabled = false;
     }
+  });
+
+  // Account switcher: per-row "Switch" + × handlers, plus the
+  // "Add another account" button that sign-outs the current session
+  // and pops the auth modal so the user can log into a different one.
+  const accountsStatus = document.getElementById('accounts-status');
+  function setAccountStatus(msg, cls) {
+    if (!accountsStatus) return;
+    accountsStatus.textContent = msg || '';
+    accountsStatus.className = 'settings-status' + (cls ? ' is-' + cls : '');
+  }
+  document.querySelectorAll('[data-account-switch]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-account-switch');
+      btn.disabled = true;
+      setAccountStatus(t('settings.accounts.switching'));
+      try {
+        await switchAccount(id);
+        setAccountStatus(t('settings.accounts.switched'), 'ok');
+        setTimeout(() => location.reload(), 400);
+      } catch (ex) {
+        setAccountStatus((ex.message || String(ex)), 'bad');
+        btn.disabled = false;
+      }
+    });
+  });
+  document.querySelectorAll('[data-account-forget]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-account-forget');
+      if (!confirm(t('settings.accounts.confirm_forget'))) return;
+      removeSavedAccount(id);
+      // Reload so the card re-renders cleanly. The active Supabase
+      // session is untouched — "Remove from list" only affects the
+      // switcher list, it doesn't log the user out.
+      location.reload();
+    });
+  });
+  document.getElementById('account-add')?.addEventListener('click', async () => {
+    // Sign out the current session so the auth modal lets you log in
+    // as someone else. The current account stays in the saved list
+    // (we don't call forgetAccount), so you can flip back later.
+    try {
+      const { getClient } = await import('../supa.js');
+      const supa = await getClient();
+      await supa.auth.signOut();
+    } catch {}
+    openAuth('login');
   });
 
   // Account-type toggle (個人 / 組織). Same pattern as the privacy
