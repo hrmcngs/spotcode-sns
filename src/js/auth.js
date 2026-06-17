@@ -13,7 +13,10 @@
 //   fetchGithubProfile(h) — same public GitHub API lookup as before
 
 import { getClient } from './supa.js';
-import { rememberAccount, forgetAccount, getRefreshToken } from './saved-accounts.js';
+import {
+  rememberAccount, forgetAccount, getRefreshToken,
+  setPendingSwitch, consumePendingSwitch,
+} from './saved-accounts.js';
 
 const subscribers = new Set();
 let cachedUser = null;
@@ -108,10 +111,36 @@ export async function initAuth() {
   try { supa = await getClient(); }
   catch { cachedUser = null; return; }
 
+  // Process a staged account switch BEFORE we attach the
+  // onAuthStateChange subscriber. supabase-js's auto-refresh timer
+  // hasn't started yet either — refreshSession runs on a fresh
+  // runtime, which is the only configuration we've found that
+  // reliably survives back-to-back switches.
+  const pendingId = consumePendingSwitch();
+  if (pendingId) {
+    const refreshToken = getRefreshToken(pendingId);
+    if (refreshToken) {
+      try {
+        const { data: rs, error } = await supa.auth.refreshSession({ refresh_token: refreshToken });
+        if (error || !rs?.session) {
+          // Saved token rejected — drop the entry so the row in
+          // /settings disappears instead of failing again on every
+          // boot. The session supabase-js loaded from storage stays
+          // (we never signed it out), so the user lands on whichever
+          // account was active before the staged switch.
+          forgetAccount(pendingId);
+        }
+      } catch {
+        forgetAccount(pendingId);
+      }
+    }
+  }
+
   const { data } = await supa.auth.getSession();
   if (data?.session) {
     const profile = await loadProfile(data.session.user.id);
     cachedUser = projectUser(data.session.user, profile);
+    if (cachedUser) rememberAccount({ user: cachedUser, session: data.session });
   }
 
   supa.auth.onAuthStateChange(async (_event, session) => {
@@ -228,31 +257,27 @@ export async function logout() {
   emit();
 }
 
-// Flip into a different saved account without going through the
-// login form. Re-mints a fresh session from the stored refresh token;
-// supabase-js fires onAuthStateChange which refreshes cachedUser and
-// updates the saved-accounts entry with the rotated tokens.
-export async function switchAccount(id) {
-  if (cachedUser && cachedUser.id === id) return cachedUser;
-  const refreshToken = getRefreshToken(id);
-  if (!refreshToken) throw new Error('保存済みアカウントが見つかりません');
-  const supa = await getClient();
-  // Refresh the target account's session FIRST and only swap on
-  // success — supabase-js replaces the active session atomically
-  // when refreshSession resolves with new tokens. A previous version
-  // signed the user out up-front and then tried to refresh, which
-  // stranded them in a fully-logged-out state any time the saved
-  // refresh token had expired (or any time the network blipped).
-  const { data, error } = await supa.auth.refreshSession({ refresh_token: refreshToken });
-  if (error || !data?.session) {
-    // Refresh token expired or revoked — drop it from the list so the
-    // row doesn't keep failing on every click, but leave the current
-    // session untouched so the user stays logged in.
-    forgetAccount(id);
-    throw new Error('保存されたセッションの有効期限が切れています。このアカウントを再度ログインしてください。');
+// Flip into a different saved account. We do the actual session swap
+// at the *next* page boot (initAuth processes the pending flag), not
+// in-page — back-to-back in-page refreshSession calls collided with
+// supabase-js's auto-refresh timer and stale onAuthStateChange
+// subscribers, which left both accounts looking logged out. Reloading
+// kills the runtime so the next initAuth runs against a clean slate.
+//
+// Returns a never-resolving Promise so the caller's `await` blocks
+// the UI until the reload takes over (no flash of post-switch state
+// against the still-current account). Synchronous throws for the
+// guard cases below short-circuit before scheduling the reload.
+export function switchAccount(id) {
+  if (cachedUser && cachedUser.id === id) return Promise.resolve(cachedUser);
+  if (!getRefreshToken(id)) {
+    return Promise.reject(new Error('保存済みアカウントが見つかりません'));
   }
-  await refreshFromSession();
-  return cachedUser;
+  setPendingSwitch(id);
+  // Defer the reload one tick so the caller's UI-disable code can
+  // paint a "切り替え中…" status before the page disappears.
+  setTimeout(() => location.reload(), 0);
+  return new Promise(() => {});
 }
 
 // Normalise a Twitter / Instagram handle: strip @, any URL prefix,
