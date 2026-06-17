@@ -2234,6 +2234,19 @@ a.mention:hover { text-decoration: underline; }
   background: color-mix(in srgb, var(--green) 15%, transparent);
   border-color: color-mix(in srgb, var(--green) 35%, transparent);
 }
+/* Role-tag tones in the role indicator. Admin uses the accent
+   colour, operator borrows the warn tone (it's a moderation duty,
+   not a flex), regular users get the muted default. */
+.settings-tag--role-admin {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.settings-tag--role-operator {
+  color: var(--warn, #d29922);
+  background: color-mix(in srgb, var(--warn, #d29922) 15%, transparent);
+  border-color: color-mix(in srgb, var(--warn, #d29922) 35%, transparent);
+}
 .settings-kv {
   display: grid;
   grid-template-columns: max-content 1fr;

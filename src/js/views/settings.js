@@ -1,6 +1,6 @@
 import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping } from '../supa.js';
-import { canBeDev, isDevMode, setDevMode } from '../dev-mode.js';
+import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
@@ -219,9 +219,33 @@ function accountsCard() {
   );
 }
 
+// Compact "Role" indicator so admins / operators see at a glance
+// what powers they have, and regular users have somewhere to land
+// when they wonder why a friend can delete posts and they can't.
+function roleCard() {
+  const me = currentUser();
+  if (!me) return '';
+  const role = currentRole();
+  const label = t('settings.role.' + role);
+  const desc  = t('settings.role.' + role + '_desc');
+  const ico   = role === 'admin' ? 'spark'
+              : role === 'operator' ? 'flag'
+              : 'user';
+  return (
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.role.title') +
+        ' <span class="settings-tag settings-tag--role-' + role + '">' +
+          icon(ico, { size: 12, className: 'icon--inline' }) + label +
+        '</span></h2>' +
+      '<p class="settings__hint">' + desc + '</p>' +
+    '</section>'
+  );
+}
+
 function userCards() {
   return (
     accountsCard() +
+    roleCard() +
     privacyCard() +
     '<section class="settings-card">' +
       '<h2>' + t('settings.map.title') + '</h2>' +
