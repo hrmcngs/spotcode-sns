@@ -47,6 +47,7 @@ function projectUser(authUser, profile) {
                      }
                    : null,
     isPrivate:   !!profile.is_private,
+    isOrg:       !!profile.is_org,
     website:     profile.website   || '',
     twitter:     profile.twitter   || '',
     instagram:   profile.instagram || '',
@@ -142,7 +143,7 @@ function translateAuthError(msg) {
   return msg;
 }
 
-export async function register({ email, password, handle, name, role, githubHandle }) {
+export async function register({ email, password, handle, name, role, githubHandle, kind }) {
   if (!emailLooksValid(email))           throw new Error('メールアドレスの形式が正しくありません');
   if (!password || password.length < 8)  throw new Error('パスワードは 8 文字以上にしてください');
   if (!handleLooksValid(handle))         throw new Error('ハンドルは半角英数_の 2〜20 文字');
@@ -173,9 +174,19 @@ export async function register({ email, password, handle, name, role, githubHand
   const patch = {};
   if (role) patch.role = role;
   if (githubHandle) patch.github_handle = githubHandle;
+  if (kind === 'org') patch.is_org = true;
   if (Object.keys(patch).length) {
-    const { error: upErr } = await supa.from('profiles').update(patch).eq('id', user.id);
-    if (upErr) console.warn('profile post-update failed', upErr);
+    // Same drop-on-missing-column retry as updateProfile so a not-yet-migrated
+    // DB (no Stage 20 is_org column) still completes sign-up — the new column
+    // just silently degrades to its default until the admin runs the SQL.
+    for (let i = 0; i < 5; i++) {
+      const { error: upErr } = await supa.from('profiles').update(patch).eq('id', user.id);
+      if (!upErr) break;
+      const col = parseMissingCol(upErr);
+      if (col && col === 'is_org' && 'is_org' in patch) { delete patch.is_org; continue; }
+      console.warn('profile post-update failed', upErr);
+      break;
+    }
   }
 
   await refreshFromSession();
@@ -239,6 +250,7 @@ export async function updateProfile(patch) {
   if (patch.avatarImage !== undefined) db.avatar_url   = patch.avatarImage || null;
   if (patch.avatarShape != null)       db.avatar_shape = patch.avatarShape;
   if (patch.isPrivate   !== undefined) db.is_private   = !!patch.isPrivate;
+  if (patch.isOrg       !== undefined) db.is_org       = !!patch.isOrg;
   if (patch.website   != null)         db.website      = String(patch.website).trim().slice(0, 200) || null;
   if (patch.twitter   != null)         db.twitter      = sanitizeHandle(patch.twitter);
   if (patch.instagram != null)         db.instagram    = sanitizeHandle(patch.instagram);
@@ -248,7 +260,7 @@ export async function updateProfile(patch) {
                                                             .map(h => String(h).trim()).filter(Boolean);
   if (patch.organization != null)      db.organization  = String(patch.organization).trim().slice(0, 80) || null;
 
-  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'org_members', 'organization']);
+  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'org_members', 'organization', 'is_org']);
   if (Object.keys(db).length) {
     // Retry loop: PostgREST returns one missing column per request.
     // For each error, identify the column and drop it ONLY if it's in

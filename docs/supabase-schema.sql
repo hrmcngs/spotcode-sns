@@ -890,3 +890,16 @@ create policy "posts visible to allowed viewers"
       )
     )
   );
+
+-- ===================================================================
+-- Stage 20 — organization accounts
+-- ===================================================================
+-- A plain boolean flag on profiles so an account can self-identify as
+-- an organization (company / school / community) instead of a person.
+-- It's surface-only: no RLS branches off this, all visibility logic
+-- still uses `org_members` and `close_friends`. The UI uses it to
+-- render an "Organization" badge and to seed the sign-up form's
+-- account-type radio.
+
+alter table public.profiles
+  add column if not exists is_org boolean default false;

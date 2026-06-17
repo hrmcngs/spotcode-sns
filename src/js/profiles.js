@@ -30,6 +30,7 @@ function shapeProfile(row) {
                      }
                    : null,
     isPrivate:   !!row.is_private,
+    isOrg:       !!row.is_org,
     website:     row.website   || '',
     twitter:     row.twitter   || '',
     instagram:   row.instagram || '',

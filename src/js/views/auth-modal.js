@@ -73,6 +73,14 @@ function template() {
           '</label>' +
 
           '<fieldset class="role-group">' +
+            '<legend>Account type</legend>' +
+            '<label class="role-opt"><input type="radio" name="kind" value="user" checked>' +
+              '<span><b>個人 / Personal</b><small>個人アカウント (通常)</small></span></label>' +
+            '<label class="role-opt"><input type="radio" name="kind" value="org">' +
+              '<span><b>組織 / Organization</b><small>会社・学校・コミュニティのアカウント</small></span></label>' +
+          '</fieldset>' +
+
+          '<fieldset class="role-group">' +
             '<legend>Role</legend>' +
             '<label class="role-opt"><input type="radio" name="role" value="programmer" checked>' +
               '<span><b>Programmer</b><small>GitHub 連携が必須</small></span></label>' +
@@ -179,6 +187,7 @@ function bindEvents() {
         handle: fd.get('handle'),
         name: fd.get('name'),
         role: fd.get('role'),
+        kind: fd.get('kind') || 'user',
         githubHandle: fd.get('githubHandle')?.trim() || null,
       });
       close();
