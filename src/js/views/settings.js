@@ -51,7 +51,8 @@ function privacyCard() {
       '<p class="settings-status" id="privacy-status"></p>' +
     '</section>' +
     accountTypeCard() +
-    audienceCard()
+    audienceCard() +
+    orgLabelCard()
   );
 }
 
@@ -100,8 +101,24 @@ function audienceCard() {
       '<p class="settings__hint">' + t('settings.audience.hint') + '</p>' +
       audienceEditor('closeFriends', t('settings.audience.friends')) +
       audienceEditor('orgMembers',   t('settings.audience.org_members')) +
+    '</section>'
+  );
+}
+
+// Free-text "organization" label, shown on the profile as a plain
+// string. Lives in its own card so the Save button isn't visually
+// inside the audience-list editor (where it confused users into
+// thinking it would save the lists too — the lists auto-save on
+// add/remove and have no Save button of their own).
+function orgLabelCard() {
+  const me = currentUser();
+  if (!me) return '';
+  return (
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.org_label.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.org_label.hint') + '</p>' +
       '<form class="settings-form" id="org-label-form">' +
-        '<label>' + t('settings.audience.org') +
+        '<label>' + t('settings.org_label.label') +
           '<input name="organization" type="text" autocomplete="off" maxlength="80" ' +
             'placeholder="' + attr(t('settings.audience.org_placeholder')) + '" value="' + attr(me.organization || '') + '">' +
         '</label>' +
