@@ -2,7 +2,7 @@ import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
-import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount } from '../auth.js';
+import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
@@ -430,15 +430,23 @@ export function bindSettings() {
       location.reload();
     });
   });
-  document.getElementById('account-add')?.addEventListener('click', async () => {
-    // Sign out the current session so the auth modal lets you log in
-    // as someone else. The current account stays in the saved list
-    // (we don't call forgetAccount), so you can flip back later.
-    try {
-      const { getClient } = await import('../supa.js');
-      const supa = await getClient();
-      await supa.auth.signOut();
-    } catch {}
+  document.getElementById('account-add')?.addEventListener('click', () => {
+    // Just open the auth modal — signInWithPassword / signUp on the
+    // form will replace the active session, and the previous account
+    // stays in the saved list because we never call forgetAccount.
+    // We don't pre-signOut: that fires onAuthStateChange with
+    // session=null mid-flight, which makes the topbar / page flip
+    // to a "logged out" state for a beat before the modal opens.
+    const meBefore = currentUser();
+    const off = onAuthChange((u) => {
+      // Reload only on transition to a DIFFERENT user — closing the
+      // modal without logging in fires no auth change, so this
+      // subscription stays dormant until the user actually switches.
+      if (u && (!meBefore || u.id !== meBefore.id)) {
+        off();
+        location.reload();
+      }
+    });
     openAuth('login');
   });
 
