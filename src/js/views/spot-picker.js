@@ -48,7 +48,7 @@ function template() {
         // on the map are ignored, so they don't waste time trying.
         '<div id="picker-locked-hint" class="picker-locked-hint" hidden>' +
           icon('pin', { size: 14, className: 'icon--inline' }) +
-          '<span>' + t('picker.locked_to_geo') + '</span>' +
+          '<span data-locked-text>' + t('picker.locked_to_geo') + '</span>' +
         '</div>' +
 
         '<div id="picker-map" class="picker-map"></div>' +
@@ -138,7 +138,12 @@ function setPick(lat, lng, { autoFillLabel = false } = {}) {
   if (markerInst) markerInst.setLatLng([lat, lng]);
   document.getElementById('picker-coords').textContent =
     'lat ' + lat.toFixed(6) + ', lng ' + lng.toFixed(6);
-  document.getElementById('picker-confirm').disabled = false;
+  // Non-dev gate: only enable Confirm when the pin is within the
+  // allowed radius of the geolocation anchor. The hint banner
+  // explains the rule, and updateOutOfBoundsWarning() paints a
+  // live "outside range" message if applicable.
+  document.getElementById('picker-confirm').disabled = !isPickInBounds();
+  updateOutOfBoundsWarning();
 
   pickedAddress = '';
   pickedAddressDetails = null;
@@ -150,6 +155,29 @@ function setPick(lat, lng, { autoFillLabel = false } = {}) {
     hint.className   = 'picker-address-hint is-loading';
   }
   doReverseGeocode(lat, lng, autoFillLabel);
+}
+
+// Dev mode is unbounded; otherwise the pin must be within
+// NON_DEV_RADIUS_M of geoAnchor. Returns true while the anchor is
+// still pending so the initial Tokyo seed in dev / the geolocation-
+// loading state in non-dev don't disable Confirm prematurely.
+function isPickInBounds() {
+  if (isDevMode()) return true;
+  if (!geoAnchor || !pickedPos || !window.L) return true;
+  const dist = window.L.latLng(geoAnchor.lat, geoAnchor.lng)
+                .distanceTo(window.L.latLng(pickedPos.lat, pickedPos.lng));
+  return dist <= NON_DEV_RADIUS_M;
+}
+
+function updateOutOfBoundsWarning() {
+  const banner = document.getElementById('picker-locked-hint');
+  if (!banner) return;
+  if (isDevMode()) { banner.hidden = true; return; }
+  banner.hidden = false;
+  const out = !isPickInBounds();
+  banner.classList.toggle('is-bad', out);
+  const slot = banner.querySelector('[data-locked-text]');
+  if (slot) slot.textContent = out ? t('picker.out_of_range') : t('picker.locked_to_geo');
 }
 
 async function doReverseGeocode(lat, lng, autoFillLabel) {
@@ -244,26 +272,6 @@ function drawRadius(lat, lng) {
   }).addTo(mapInst);
 }
 
-// Constrain a candidate position to within NON_DEV_RADIUS_M of the
-// geolocation anchor. If the candidate is inside the circle it's
-// returned unchanged; outside, we snap to the point on the circle
-// boundary along the same bearing. Returns the candidate verbatim
-// in dev mode (no anchor to measure against).
-function constrainToRadius(L, lat, lng) {
-  if (isDevMode() || !geoAnchor) return { lat, lng };
-  const anchor = L.latLng(geoAnchor.lat, geoAnchor.lng);
-  const target = L.latLng(lat, lng);
-  const dist = anchor.distanceTo(target);
-  if (dist <= NON_DEV_RADIUS_M) return { lat, lng };
-  // Snap to the boundary: interpolate along the line from anchor to
-  // target so the snapped point is the closest legal one.
-  const ratio = NON_DEV_RADIUS_M / dist;
-  return {
-    lat: anchor.lat + (target.lat - anchor.lat) * ratio,
-    lng: anchor.lng + (target.lng - anchor.lng) * ratio,
-  };
-}
-
 async function initMap() {
   showError('');
   let L;
@@ -292,26 +300,18 @@ async function initMap() {
 
   markerInst = L.marker([TOKYO.lat, TOKYO.lng], { draggable: true }).addTo(mapInst);
 
+  // Drag + tap are always free — no snap-back, no silent-ignore.
+  // Earlier code constrained the marker on dragend, which felt like
+  // "can't move" to users overshooting the (intentionally small)
+  // radius. setPick() does the gating now: out-of-range positions
+  // are accepted into the marker state but disable Confirm and flip
+  // the hint banner to a red warning.
   mapInst.on('click', (ev) => {
-    // Non-dev: ignore clicks outside the radius — snapping a click
-    // 500m away to the boundary is more confusing than helpful.
-    if (!dev && geoAnchor) {
-      const dist = L.latLng(geoAnchor.lat, geoAnchor.lng)
-                    .distanceTo(L.latLng(ev.latlng.lat, ev.latlng.lng));
-      if (dist > NON_DEV_RADIUS_M) return;
-    }
     setPick(ev.latlng.lat, ev.latlng.lng);
   });
   markerInst.on('dragend', () => {
     const ll = markerInst.getLatLng();
-    // Snap the marker back onto the circle if it left the bounds.
-    // Dragging is interactive so visualising the snap matters more
-    // than for clicks (which we silently ignore above).
-    const constrained = constrainToRadius(L, ll.lat, ll.lng);
-    if (constrained.lat !== ll.lat || constrained.lng !== ll.lng) {
-      markerInst.setLatLng([constrained.lat, constrained.lng]);
-    }
-    setPick(constrained.lat, constrained.lng);
+    setPick(ll.lat, ll.lng);
   });
 
   if (dev) {

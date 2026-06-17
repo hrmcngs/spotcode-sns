@@ -2288,6 +2288,13 @@ a.mention:hover { text-decoration: underline; }
   font-size: .85rem;
 }
 .picker-locked-hint .icon { stroke: currentColor; fill: none; flex: 0 0 auto; }
+/* Banner flips to a warning tone when the pin is dragged out of the
+   allowed radius. Same component, just hot-swapped CSS variables. */
+.picker-locked-hint.is-bad {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+  border-bottom-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
 .picker-map {
   width: 100%;
   height: min(52vh, 480px);
