@@ -181,7 +181,18 @@ function renderAuthArea() {
   if (!slot) return;
   const me = currentUser();
   if (me) {
-    slot.innerHTML = renderAvatar(me, { tag: 'a', href: url('/' + me.handle), size: 'me', title: me.name });
+    // Topbar avatar opens the account-switcher menu on click. The
+    // sidebar Profile nav already covers "go to my profile", so the
+    // avatar's job is the dropdown trigger (matches Twitter/X).
+    slot.innerHTML = renderAvatar(me, {
+      tag: 'a',
+      href: url('/' + me.handle),
+      size: 'me',
+      title: me.name,
+      extra: 'auth-area__avatar',
+    });
+    const a = slot.firstElementChild;
+    if (a) a.setAttribute('data-account-menu', '1');
   } else {
     slot.innerHTML =
       '<button class="btn btn--primary btn--sm" data-auth="login">' + t('nav.login') + '</button>';
@@ -253,7 +264,7 @@ function closeAccountMenu() {
   if (accountMenuRoot) accountMenuRoot.classList.remove('is-open');
   document.documentElement.classList.remove('account-menu-locked');
 }
-function openAccountMenu() {
+function openAccountMenu(anchorRect) {
   const me = currentUser();
   if (!me) return;
   const root = ensureAccountMenu();
@@ -290,6 +301,27 @@ function openAccountMenu() {
         escapeText(t('nav.logout')) +
       '</button>' +
     '</div>';
+  // Pin the card under the anchor (topbar avatar or sidebar
+  // me-card) on desktop. On narrow viewports we fall back to the
+  // centred-modal layout so the card never gets cut off by the
+  // screen edge.
+  const card = root.querySelector('.account-menu__card');
+  if (card && anchorRect && window.innerWidth >= 480) {
+    const W = 300;
+    let left = Math.min(window.innerWidth - W - 8, Math.max(8, anchorRect.right - W));
+    let top  = Math.min(window.innerHeight - 8, anchorRect.bottom + 6);
+    card.style.position = 'fixed';
+    card.style.left = left + 'px';
+    card.style.top  = top + 'px';
+    card.style.maxWidth = W + 'px';
+    root.classList.add('is-anchored');
+  } else if (card) {
+    card.style.position = '';
+    card.style.left = '';
+    card.style.top  = '';
+    card.style.maxWidth = '';
+    root.classList.remove('is-anchored');
+  }
   root.classList.add('is-open');
   document.documentElement.classList.add('account-menu-locked');
 
@@ -328,12 +360,20 @@ function escapeText(s) {
   }[c]));
 }
 
-document.addEventListener('contextmenu', (e) => {
+// Open on plain click — mobile has no contextmenu, and a left-click
+// trigger matches Twitter/X's avatar dropdown UX. Bound via capture
+// so we run before the router's link-interception handler swallows
+// it as a navigation. We still keep the contextmenu binding as a
+// secondary trigger so muscle memory works.
+function triggerAccountMenu(e) {
   const anchor = e.target.closest('[data-account-menu]');
   if (!anchor) return;
   e.preventDefault();
-  openAccountMenu();
-});
+  e.stopPropagation();
+  openAccountMenu(anchor.getBoundingClientRect());
+}
+document.addEventListener('click',      triggerAccountMenu, true);
+document.addEventListener('contextmenu', triggerAccountMenu, true);
 
 // Spot picked in the composer for the current home view, kept in memory
 // so the timeline can re-render without losing the chosen pin.
