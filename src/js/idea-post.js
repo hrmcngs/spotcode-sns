@@ -8,8 +8,6 @@
 import { icon } from './icons.js';
 import { renderAvatar } from './avatar.js';
 import { t } from './i18n.js';
-import { isAdmin, isOperator } from './dev-mode.js';
-import { cachedOfficialAccount } from './official-account.js';
 
 export function renderIdeaForm({ user = null } = {}) {
   if (!user) {
@@ -49,17 +47,6 @@ export function renderIdeaForm({ user = null } = {}) {
             icon('spark', { size: 12, className: 'icon--inline' }) +
             '<span class="compose-kind-toggle__label">' + t('kind.idea') + '</span>' +
           '</button>' +
-          // "Post as @spotcode_official" toggle — admins + operators only.
-          // RLS gates the swap server-side too (Stage 23), so a tampered
-          // client can't post as the official account.
-          ((isAdmin() || isOperator()) && cachedOfficialAccount()
-            ? '<button type="button" class="compose-official-toggle" id="compose-official-toggle" ' +
-                'aria-pressed="false" data-official="off" ' +
-                'title="' + t('compose.official.hint').replace('{handle}', cachedOfficialAccount().handle) + '">' +
-                icon('building', { size: 12, className: 'icon--inline' }) +
-                '<span class="compose-official-toggle__label">@' + cachedOfficialAccount().handle + '</span>' +
-              '</button>'
-            : '') +
           // Audience picker — 5 options, RLS enforced server-side.
           // Native <select> overlay for the OS picker; visible display
           // shows only the icon + current selection (no "Audience" /

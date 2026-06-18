@@ -1022,3 +1022,40 @@ create policy "authors or staff can delete posts"
 --    email). Marks that profile as the unique official account.
 --
 -- update public.profiles set is_official = true where handle = 'spotcode_official';
+
+-- ===================================================================
+-- Stage 24 — revert Stage 23 (official-account flag + post-as plumbing)
+-- ===================================================================
+-- Stage 23 added an `is_official` flag + a Composer "Post as
+-- @spotcode_official" toggle so admins/operators could publish under
+-- the brand account without sharing credentials. We've dropped the
+-- toggle UI: the brand account is now just a normal Supabase user
+-- (with shared password) that staff log into via the existing
+-- account-switcher. None of the schema plumbing is needed any more.
+--
+-- This stage restores the simple "author = auth.uid()" posts policies
+-- and drops the columns + partial unique index added by Stage 23.
+-- Safe to run on a DB where Stage 23 was never applied (the DROP …
+-- IF EXISTS calls are idempotent).
+
+drop policy if exists "authors or staff-as-official can insert posts" on public.posts;
+drop policy if exists "authors or staff can insert posts"             on public.posts;
+drop policy if exists "authors can insert their posts"                on public.posts;
+create policy "authors can insert their posts"
+  on public.posts for insert with check (auth.uid() = author_id);
+
+drop policy if exists "authors or staff can update posts" on public.posts;
+drop policy if exists "authors can update their posts"   on public.posts;
+create policy "authors can update their posts"
+  on public.posts for update using (auth.uid() = author_id);
+
+drop policy if exists "authors or staff can delete posts" on public.posts;
+drop policy if exists "authors can delete their posts"   on public.posts;
+create policy "authors can delete their posts"
+  on public.posts for delete using (auth.uid() = author_id);
+-- (Stage 15's "admins can delete any post" stays — moderators still
+-- need the global delete hammer for spam / harassment cleanup.)
+
+drop index if exists profiles_one_official_uniq;
+alter table public.profiles drop column if exists is_official;
+alter table public.profiles drop column if exists is_operator;
