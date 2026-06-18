@@ -208,12 +208,27 @@ function mount() {
   bindEvents();
 }
 
-export function openAuth(tab = 'login') {
+export function openAuth(tab = 'login', opts = {}) {
   mount();
   showTab(tab);
   rootEl.hidden = false;
   lockBodyScroll();
-  setTimeout(() => rootEl.querySelector('[data-pane="' + tab + '"] input')?.focus(), 30);
+  // Pre-fill the email field when the caller knows which account is
+  // about to be entered — used by the account-menu's "log in to the
+  // official account" row so staff don't have to retype the alias.
+  if (opts.email) {
+    const emailInput = rootEl.querySelector('[data-pane="' + tab + '"] input[type="email"]');
+    if (emailInput) emailInput.value = opts.email;
+  }
+  setTimeout(() => {
+    // When the email was pre-filled, focus the password field so the
+    // user can type straight into it; otherwise focus the first input
+    // as before.
+    const sel = opts.email
+      ? '[data-pane="' + tab + '"] input[type="password"]'
+      : '[data-pane="' + tab + '"] input';
+    rootEl.querySelector(sel)?.focus();
+  }, 30);
 }
 
 export function close() {

@@ -2809,3 +2809,11 @@ html.account-menu-locked { overflow: hidden; }
 }
 .account-menu__row--bad { color: var(--danger); }
 .account-menu__row--bad:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+
+/* Brand-account row in the switcher — only rendered for admin /
+   operator viewers. The "公式" tag uses a warmer hue than the
+   "現在" badge so the two are visually distinct at a glance. */
+.account-menu__row-badge--official {
+  background: color-mix(in srgb, #febc2e 22%, transparent);
+  color: #febc2e;
+}
