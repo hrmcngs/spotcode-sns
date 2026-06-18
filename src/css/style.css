@@ -2585,29 +2585,23 @@ html[data-theme='light'] .badge-medal__disc {
    swatches; no text label like "ゴールド" appears, the ring colour
    carries the meaning. Bronze is intentionally subtler than gold/
    silver/platinum so the medals visually escalate. */
-.badge-medal--rank-bronze   .badge-medal__disc { box-shadow:
+.badge-medal--rank-bronze .badge-medal__disc { box-shadow:
   0 0 0 3px #cd7f32,
   0 0 0 4px rgba(0,0,0,.35),
   0 3px 6px rgba(0,0,0,.32); }
-.badge-medal--rank-silver   .badge-medal__disc { box-shadow:
+.badge-medal--rank-silver .badge-medal__disc { box-shadow:
   0 0 0 3px #c0c0c0,
   0 0 0 4px rgba(0,0,0,.30),
   0 3px 6px rgba(0,0,0,.32),
   0 0 8px rgba(192,192,192,.5); }
-.badge-medal--rank-gold     .badge-medal__disc { box-shadow:
+.badge-medal--rank-gold   .badge-medal__disc { box-shadow:
   0 0 0 3px #f6c200,
   0 0 0 4px rgba(0,0,0,.30),
   0 3px 8px rgba(0,0,0,.35),
   0 0 12px rgba(246,194,0,.55); }
-.badge-medal--rank-platinum .badge-medal__disc { box-shadow:
-  0 0 0 3px #b9d4dc,
-  0 0 0 4px rgba(0,0,0,.30),
-  0 3px 10px rgba(0,0,0,.4),
-  0 0 16px rgba(185,212,220,.7); }
 html[data-theme='light'] .badge-medal--rank-bronze .badge-medal__disc,
 html[data-theme='light'] .badge-medal--rank-silver .badge-medal__disc,
-html[data-theme='light'] .badge-medal--rank-gold .badge-medal__disc,
-html[data-theme='light'] .badge-medal--rank-platinum .badge-medal__disc {
+html[data-theme='light'] .badge-medal--rank-gold .badge-medal__disc {
   /* Same rings, lighter contact shadow for the light theme. */
   filter: drop-shadow(0 1px 2px rgba(0,0,0,.18));
 }
@@ -2923,4 +2917,32 @@ html[data-theme='light'] .badge-medal--rank-platinum .badge-medal__disc {
 }
 .skill-rank input:focus-visible + .skill-rank__dot {
   outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+/* ---------- /settings tab strip ---------- */
+.settings-nav {
+  display: flex; gap: .15rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  margin: .8rem 0 1rem;
+  scroll-snap-type: x proximity;
+}
+.settings-nav__tab {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .55rem .85rem;
+  color: var(--muted);
+  font-size: .88rem; font-weight: 600;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  scroll-snap-align: start;
+  transition: color .12s ease, border-color .12s ease;
+}
+.settings-nav__tab:hover { color: var(--text); }
+.settings-nav__tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.settings__content {
+  display: flex; flex-direction: column;
 }

@@ -72,11 +72,14 @@ export function getBadgeById(id) {
 //   id     — slug stored in profiles.skills after the colon
 //   colour — the swatch + ring colour
 //   order  — for sorting medals by rank if we ever want that
+// Three ranks only — platinum was dropped because its pale
+// blue-grey (#b9d4dc) sat too close to silver (#c0c0c0) for
+// colour-only identification to work. Bronze (warm) / silver
+// (cool) / gold (yellow) are unambiguously different.
 export const RANKS = [
-  { id: 'bronze',   colour: '#cd7f32', order: 1 },
-  { id: 'silver',   colour: '#c0c0c0', order: 2 },
-  { id: 'gold',     colour: '#f6c200', order: 3 },
-  { id: 'platinum', colour: '#b9d4dc', order: 4 },
+  { id: 'bronze', colour: '#cd7f32', order: 1 },
+  { id: 'silver', colour: '#c0c0c0', order: 2 },
+  { id: 'gold',   colour: '#f6c200', order: 3 },
 ];
 const RANK_IDS = new Set(RANKS.map(r => r.id));
 
