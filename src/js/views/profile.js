@@ -462,18 +462,19 @@ export async function hydrateProfileBadges(handle) {
   }
 }
 
-// GitHub-achievement-style medal: a coloured circle with a 2-char
-// abbreviation, the full name visible underneath, and the tooltip
-// via `title` for the long explanation. Defaults guard against
-// older cached badge objects that lack the new `abbr` / `colour`
-// fields — they get a muted neutral medal until the next refetch.
+// GitHub-achievement-style medal: a pastel-gradient disc with a
+// thick white ring, the language abbreviation in the centre, and a
+// soft drop shadow so it reads as a sticker / pin rather than a
+// flat colour patch. The language colour is passed in through a
+// CSS custom property so the gradient + ring + shadow declarations
+// stay in the stylesheet.
 function renderBadgeMedal(b) {
   const abbr   = escAttr(b.abbr || (b.name || '?').slice(0, 2));
   const colour = b.colour || '#666';
   const title  = (b.name + ' — ' + (b.tooltip || '')).replace(/"/g, '&quot;');
   return (
     '<span class="badge-medal" title="' + title + '" aria-label="' + escAttr(b.name) + '">' +
-      '<span class="badge-medal__disc" style="background:' + colour + '">' +
+      '<span class="badge-medal__disc" style="--badge-color:' + colour + '">' +
         '<span class="badge-medal__abbr">' + abbr + '</span>' +
       '</span>' +
       '<span class="badge-medal__name">' + escAttr(b.name) + '</span>' +

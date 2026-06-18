@@ -2485,66 +2485,53 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 .profile-badges__loading { color: var(--muted); font-size: .78rem; }
 .badge-medal {
   display: inline-flex; flex-direction: column; align-items: center;
-  gap: .3rem;
-  width: 64px;
+  gap: .35rem;
+  width: 70px;
   cursor: default;
 }
 .badge-medal__disc {
-  /* Circular medal disc — radial-gradient face for a spherical "coin"
-     read, a darker rim ring, and a heavy bottom shadow so the disc
-     visibly sits *on* the page instead of being a flat colour patch.
-     The disc's solid language colour is set inline via `background`
-     by renderBadgeMedal; the gradient + shadows here are layered on
-     top using a pseudo-element so the inline background isn't
-     clobbered. */
+  /* GitHub-achievement-style sticker disc: pastel gradient face
+     (language colour, lightened to ~70%), thick white ring around
+     the perimeter, and a soft drop shadow so it lifts off the page.
+     The renderBadgeMedal helper passes --badge-color in via inline
+     style so all the layered backgrounds + shadows below can derive
+     from it. */
   position: relative;
-  width: 52px; height: 52px;
+  width: 58px; height: 58px;
   border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
-  color: #fff;
-  font-weight: 800; font-size: 1.05rem;
-  letter-spacing: .02em;
-  text-shadow: 0 1px 1px rgba(0,0,0,.45), 0 0 2px rgba(0,0,0,.3);
-  box-shadow:
-    /* outer dark rim — gives the disc a defined edge against the page */
-    0 0 0 2px rgba(0,0,0,.35),
-    /* tight highlight ring just inside the rim */
-    inset 0 0 0 1px rgba(255,255,255,.18),
-    /* drop shadow so it lifts off the page */
-    0 3px 6px rgba(0,0,0,.35),
-    0 1px 2px rgba(0,0,0,.45);
-  isolation: isolate; /* contain the ::before sheen */
-}
-/* Spherical sheen: a soft radial highlight in the top-left quadrant
-   plus a darker lower-right shadow. Painted on top of the inline
-   `background` colour at 100% opacity but mixed with the colour
-   below via mix-blend so it reads as bevelling, not a separate
-   white blob. */
-.badge-medal__disc::before {
-  content: '';
-  position: absolute; inset: 0;
-  border-radius: inherit;
+  /* Thick white ring uses border so the gradient/disc dimensions
+     stay independent of theme. The colour layer sits inside. */
+  border: 3px solid #fff;
   background:
-    radial-gradient(circle at 32% 28%,
+    /* Top-left highlight makes the disc read as a curved sticker
+       rather than a flat circle. Sits on top so it survives the
+       colour layers below. */
+    radial-gradient(circle at 30% 25%,
       rgba(255,255,255,.55) 0%,
-      rgba(255,255,255,.18) 22%,
-      rgba(255,255,255,0)   50%),
-    radial-gradient(circle at 70% 78%,
-      rgba(0,0,0,.42) 0%,
-      rgba(0,0,0,.16) 30%,
-      rgba(0,0,0,0)   55%);
-  pointer-events: none;
-  z-index: 0;
-}
-.badge-medal__disc > .badge-medal__abbr {
-  position: relative; z-index: 1; /* sit on top of the ::before sheen */
+      rgba(255,255,255,0)   55%),
+    /* Pastel gradient: lighter at the top-left, deeper at the
+       bottom-right. color-mix lightens the language colour with
+       white so the result reads as "soft pastel" instead of the
+       saturated GitHub-language palette. */
+    radial-gradient(circle at 35% 25%,
+      color-mix(in srgb, var(--badge-color, #666) 55%, #fff)  0%,
+      color-mix(in srgb, var(--badge-color, #666) 85%, #000) 100%);
+  color: #fff;
+  font-weight: 800; font-size: 1.1rem;
+  letter-spacing: .02em;
+  text-shadow: 0 1px 1px rgba(0,0,0,.5), 0 0 3px rgba(0,0,0,.35);
+  box-shadow:
+    /* Drop shadow — soft + offset so the sticker visibly sits on
+       the page. Two layers: a tight one for contact, a soft wide
+       one for the airy halo. */
+    0 2px 3px rgba(0,0,0,.25),
+    0 6px 14px rgba(0,0,0,.32);
 }
 html[data-theme='light'] .badge-medal__disc {
   box-shadow:
-    0 0 0 2px rgba(0,0,0,.25),
-    inset 0 0 0 1px rgba(255,255,255,.35),
-    0 3px 6px rgba(0,0,0,.22),
-    0 1px 2px rgba(0,0,0,.28);
+    0 2px 3px rgba(0,0,0,.15),
+    0 6px 14px rgba(0,0,0,.20);
 }
 .badge-medal__abbr {
   font-family: var(--mono);
@@ -2558,8 +2545,8 @@ html[data-theme='light'] .badge-medal__disc {
   color: var(--muted);
   text-align: center;
   line-height: 1.15;
-  max-width: 70px;
-  /* The long "始めたて X" prefix wraps cleanly under a 60px medal —
+  max-width: 78px;
+  /* The long "始めたて X" prefix wraps cleanly under the medal —
      don't ellipsis-truncate it, the badge is more recognisable when
      the full name is visible. */
   word-break: keep-all;
