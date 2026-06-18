@@ -189,9 +189,10 @@ export function renderProfile(handle) {
       '<div class="profile-top">' +
         renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
+          // Logout moved off the profile page — it now lives in the
+          // right-click menu on the sidebar account card.
           (isMe
-            ? '<button class="btn btn--ghost" id="logout-btn">' + t('nav.logout') + '</button>' +
-              '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
+            ? '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
             : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
               '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
                 followBtnLabel +

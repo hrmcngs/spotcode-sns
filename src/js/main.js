@@ -20,7 +20,7 @@ import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
 import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema } from './data.js';
-import { currentUser, logout, onAuthChange, initAuth } from './auth.js';
+import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
@@ -194,7 +194,7 @@ function renderSideMe() {
   const me = currentUser();
   if (me) {
     slot.innerHTML =
-      '<a class="me-card" href="' + url('/' + me.handle) + '">' +
+      '<a class="me-card" href="' + url('/' + me.handle) + '" data-account-menu="1">' +
         renderAvatar(me, { size: 'lg' }) +
         '<div class="me-card__text">' +
           '<div class="me-card__name">' + me.name + '</div>' +
@@ -220,6 +220,101 @@ function renderSideMe() {
     }
   }
 }
+
+// Right-click on the sidebar me-card opens a small popover with the
+// saved-accounts list (each row clickable to switch) and a "Log out"
+// footer. The profile page's stand-alone logout button was removed
+// once this existed — the right-click menu is the only entry point.
+let accountMenuEl = null;
+function ensureAccountMenu() {
+  if (accountMenuEl) return accountMenuEl;
+  accountMenuEl = document.createElement('div');
+  accountMenuEl.className = 'account-menu';
+  accountMenuEl.setAttribute('role', 'menu');
+  accountMenuEl.hidden = true;
+  document.body.appendChild(accountMenuEl);
+  document.addEventListener('click', (e) => {
+    if (!accountMenuEl || accountMenuEl.hidden) return;
+    if (accountMenuEl.contains(e.target)) return;
+    closeAccountMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && accountMenuEl && !accountMenuEl.hidden) closeAccountMenu();
+  });
+  return accountMenuEl;
+}
+function closeAccountMenu() {
+  if (accountMenuEl) accountMenuEl.hidden = true;
+}
+function openAccountMenu(anchorRect) {
+  const me = currentUser();
+  if (!me) return;
+  const menu = ensureAccountMenu();
+  const saved = listSavedAccounts();
+  const rows = saved.map(acc => {
+    const active = acc.id === me.id;
+    const u = { handle: acc.handle, name: acc.name, avatarImage: acc.avatarUrl,
+                avatarShape: acc.avatarShape, avatar: (acc.name[0] || '?').toUpperCase() };
+    return (
+      '<button type="button" class="account-menu__row' + (active ? ' is-active' : '') + '" ' +
+        'data-account-switch-to="' + acc.id + '"' + (active ? ' disabled' : '') + '>' +
+        renderAvatar(u, { size: 'sm' }) +
+        '<span class="account-menu__row-text">' +
+          '<span class="account-menu__row-name">' + escapeText(acc.name) +
+            (active ? ' <span class="account-menu__row-badge">' + escapeText(t('settings.accounts.current')) + '</span>' : '') +
+          '</span>' +
+          '<span class="account-menu__row-handle">@' + escapeText(acc.handle) + '</span>' +
+        '</span>' +
+      '</button>'
+    );
+  }).join('');
+  menu.innerHTML =
+    '<div class="account-menu__list">' + rows + '</div>' +
+    '<div class="account-menu__sep"></div>' +
+    '<button type="button" class="account-menu__row account-menu__row--bad" data-account-menu-logout>' +
+      icon('arrow_right', { size: 14, className: 'icon--inline' }) +
+      escapeText(t('nav.logout')) +
+    '</button>';
+  // Position next to the anchor — to the right of the side rail.
+  // Clamp into viewport.
+  const W = 240, H = 48 * (saved.length + 1) + 16;
+  let left = (anchorRect.right + 8);
+  let top  = anchorRect.top;
+  if (left + W > window.innerWidth - 8) left = Math.max(8, anchorRect.left - W - 8);
+  if (top + H > window.innerHeight - 8) top  = Math.max(8, window.innerHeight - H - 8);
+  menu.style.position = 'fixed';
+  menu.style.left = left + 'px';
+  menu.style.top  = top + 'px';
+  menu.hidden = false;
+  menu.onclick = async (e) => {
+    const switchBtn = e.target.closest('[data-account-switch-to]');
+    if (switchBtn) {
+      const id = switchBtn.getAttribute('data-account-switch-to');
+      closeAccountMenu();
+      try { await switchAccount(id); }
+      catch (ex) { alert(ex.message || String(ex)); }
+      return;
+    }
+    if (e.target.closest('[data-account-menu-logout]')) {
+      closeAccountMenu();
+      if (!confirm(t('settings.accounts.confirm_logout') || 'ログアウトしますか？')) return;
+      logout().finally(() => navigate('/'));
+      return;
+    }
+  };
+}
+function escapeText(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+document.addEventListener('contextmenu', (e) => {
+  const anchor = e.target.closest('[data-account-menu]');
+  if (!anchor) return;
+  e.preventDefault();
+  openAccountMenu(anchor.getBoundingClientRect());
+});
 
 // Spot picked in the composer for the current home view, kept in memory
 // so the timeline can re-render without losing the chosen pin.
@@ -815,12 +910,9 @@ document.addEventListener('click', (e) => {
     );
     return;
   }
-  if (e.target.closest('#logout-btn')) {
-    e.preventDefault();
-    if (!confirm('ログアウトしますか？')) return;
-    logout().finally(() => navigate('/'));
-    return;
-  }
+  // (Removed #logout-btn click handler — logout now lives in the
+  // right-click menu on the sidebar account card. See
+  // openAccountMenu above.)
 
   // Per-comment delete button on the post detail page.
   const cdel = e.target.closest('[data-comment-delete]');
