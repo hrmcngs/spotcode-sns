@@ -56,6 +56,7 @@ const SHELL = [
   './js/geo-gate.js',
   './js/grass.js',
   './js/language-stats.js',
+  './js/official-account.js',
   './js/file-size-viz.js',
   './js/status-badges.js',
   './js/gh-link.js',

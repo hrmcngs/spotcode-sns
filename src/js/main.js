@@ -21,6 +21,7 @@ import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
 import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
+import { getOfficialAccount } from './official-account.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
@@ -406,6 +407,9 @@ let pendingPoll = null;
 // `idea` tag toggle. Mirrors the .compose-kind-toggle button state and
 // rides on addPost / updatePost.
 let pendingKind = null; // null | 'idea'
+// "Post as @spotcode_official" toggle — admin/op only, enforced again
+// by Stage 23 RLS on the server. null = post as self.
+let pendingPostAs = null; // null | 'official'
 // One of: 'public' | 'mutuals' | 'following' | 'friends' | 'org'.
 // The actual gating happens server-side via Stage 18 RLS — this
 // value just rides on the addPost payload.
@@ -668,6 +672,8 @@ function clearComposerUI() {
   renderPollChip();
   pendingKind = null;
   syncKindToggle();
+  pendingPostAs = null;
+  syncOfficialToggle();
   pendingVisibility = 'public';
   syncVisToggle();
   hideDraftBanner();
@@ -682,6 +688,17 @@ function syncKindToggle() {
   const on = pendingKind === 'idea';
   btn.setAttribute('aria-pressed', String(on));
   btn.dataset.kind = on ? 'idea' : 'off';
+}
+
+// Same idea for the "Post as @spotcode_official" toggle. Only present
+// in the DOM for admins/operators when the official profile has been
+// fetched, so a missing button means "nothing to sync".
+function syncOfficialToggle() {
+  const btn = document.getElementById('compose-official-toggle');
+  if (!btn) return;
+  const on = pendingPostAs === 'official';
+  btn.setAttribute('aria-pressed', String(on));
+  btn.dataset.official = on ? 'on' : 'off';
 }
 
 // Push the pendingVisibility back onto the <select> so a draft restore
@@ -870,6 +887,14 @@ initThemeToggle(document.getElementById('theme-toggle'));
 // (Supabase down, no network) leave cachedUser null — the app still works
 // as a logged-out static site.
 try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
+// Best-effort fetch of the shared "official" profile (Stage 23). The
+// composer toggle for admins/operators reads cachedOfficialAccount()
+// synchronously, so we kick this off here and re-render once it
+// resolves. Failure (column missing → schema not migrated) caches a
+// null and the toggle simply stays hidden.
+getOfficialAccount().then((acct) => {
+  if (acct) { try { refresh(); } catch {} }
+}).catch(() => {});
 // Once logged in, pre-load the set of handles I follow so isFollowing()
 // can answer synchronously from the render path.
 hydrateMyFollows();
@@ -1341,6 +1366,16 @@ document.addEventListener('click', (e) => {
     autosaveComposerDraft();
     return;
   }
+  // "Post as official" toggle (admin/op only). Same pattern as the
+  // kind toggle: flip the pending flag, sync the button's pressed
+  // state. Stage 23 RLS gates the swap server-side too.
+  const officialBtn = e.target.closest('#compose-official-toggle');
+  if (officialBtn) {
+    e.preventDefault();
+    pendingPostAs = pendingPostAs === 'official' ? null : 'official';
+    syncOfficialToggle();
+    return;
+  }
   // (Visibility is now a <select> handled via the document 'change'
   // listener below — no click toggle.)
 
@@ -1557,7 +1592,8 @@ document.addEventListener('submit', (e) => {
 
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;
-  addPost(post)
+  const submitOpts = pendingPostAs === 'official' ? { postAs: 'official' } : {};
+  addPost(post, submitOpts)
     .then(() => {
       clearDraft(draftHandle());
       clearComposerUI();
