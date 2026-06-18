@@ -273,9 +273,16 @@ function openAccountMenu(anchorRect) {
     const active = acc.id === me.id;
     const u = { handle: acc.handle, name: acc.name, avatarImage: acc.avatarUrl,
                 avatarShape: acc.avatarShape, avatar: (acc.name[0] || '?').toUpperCase() };
+    // Active row: click navigates to the active account's profile
+    // (so the avatar / row stays useful and the user doesn't lose
+    // the only entry point to their own profile). Inactive rows
+    // switch sessions as before.
+    const dataAttr = active
+      ? 'data-account-profile="' + escapeText(acc.handle) + '"'
+      : 'data-account-switch-to="' + acc.id + '"';
     return (
       '<button type="button" class="account-menu__row' + (active ? ' is-active' : '') + '" ' +
-        'data-account-switch-to="' + acc.id + '"' + (active ? ' disabled' : '') + '>' +
+        dataAttr + '>' +
         renderAvatar(u, { size: 'sm' }) +
         '<span class="account-menu__row-text">' +
           '<span class="account-menu__row-name">' + escapeText(acc.name) +
@@ -331,6 +338,14 @@ function openAccountMenu(anchorRect) {
     // the card.
     if (e.target.closest('[data-account-menu-close]')) {
       closeAccountMenu();
+      return;
+    }
+    // Click on the currently-active row → jump to that profile.
+    const profileBtn = e.target.closest('[data-account-profile]');
+    if (profileBtn) {
+      const handle = profileBtn.getAttribute('data-account-profile');
+      closeAccountMenu();
+      navigate('/' + handle);
       return;
     }
     const switchBtn = e.target.closest('[data-account-switch-to]');
