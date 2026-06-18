@@ -192,12 +192,17 @@ async function gatherRepos(handle) {
   return Array.from(out.values()).slice(0, MAX_REPOS_TO_SCAN);
 }
 
-// Public entry. Returns { langs: [['TypeScript', 12345], …], total }.
+// Public entry. Returns
+//   { langs: [['TypeScript', 12345], …],
+//     total, repoCounts: { TypeScript: 8, … } }
+// repoCounts is the number of scanned repos that contain the
+// language — used by the profile medals to render the GitHub-
+// Achievements-style ×N stack indicator.
 export async function getLanguageStats(handle) {
-  if (!handle) return { langs: [], total: 0 };
+  if (!handle) return { langs: [], total: 0, repoCounts: {} };
   const cached = cacheFor(handle);
   if (cached) return cached;
-  if (Date.now() < rateLimitedUntil) return cached || { langs: [], total: 0 };
+  if (Date.now() < rateLimitedUntil) return cached || { langs: [], total: 0, repoCounts: {} };
 
   // Skip org accounts — the personal language stats only make sense
   // for individual users. type=Organization comes back from /users/X.
@@ -205,30 +210,33 @@ export async function getLanguageStats(handle) {
   try { meta = await fetchJson('https://api.github.com/users/' + encodeURIComponent(handle)); }
   catch { meta = null; }
   if (meta?.type === 'Organization') {
-    const empty = { langs: [], total: 0 };
+    const empty = { langs: [], total: 0, repoCounts: {} };
     storeCache(handle, empty);
     return empty;
   }
-  if (Date.now() < rateLimitedUntil) return { langs: [], total: 0 };
+  if (Date.now() < rateLimitedUntil) return { langs: [], total: 0, repoCounts: {} };
 
   const repos = await gatherRepos(handle);
 
   // Per-repo /languages calls in parallel (the same set GitHub
-  // computes for the repo's own language bar).
-  const langBytes = Object.create(null);
+  // computes for the repo's own language bar). Track both the total
+  // byte sum and the repo-occurrence count per language.
+  const langBytes  = Object.create(null);
+  const repoCounts = Object.create(null);
   await Promise.all(repos.map(async (r) => {
     let langs;
     try {
       langs = await fetchJson('https://api.github.com/repos/' + r.fullName + '/languages');
     } catch { return; }
     for (const [name, bytes] of Object.entries(langs || {})) {
-      langBytes[name] = (langBytes[name] || 0) + (Number(bytes) || 0);
+      langBytes[name]  = (langBytes[name]  || 0) + (Number(bytes) || 0);
+      repoCounts[name] = (repoCounts[name] || 0) + 1;
     }
   }));
 
   const sorted = Object.entries(langBytes).sort((a, b) => b[1] - a[1]);
   const total = sorted.reduce((a, [, b]) => a + b, 0);
-  const value = { langs: sorted, total };
+  const value = { langs: sorted, total, repoCounts };
 
   // Don't poison the cache with an empty result that came from a
   // mid-flight rate-limit; let the next visit retry instead.

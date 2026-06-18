@@ -121,28 +121,41 @@ function renderOrgMembers(u) {
 }
 
 // Round GitHub-Achievements-style medal for one language. Background
-// is the Linguist colour, abbreviation in YIQ-picked contrast.
-function renderLangMedal(name, pct) {
+// is the Linguist colour, abbreviation in YIQ-picked contrast. If
+// `repoCount` is given (>= 2), render a small ×N stack indicator in
+// the corner — same idea as GitHub's "earned ×3" overlay on medals.
+function renderLangMedal(name, pct, repoCount) {
   const c = langColor(name);
   const tc = langTextColor(c);
-  const title = name + (pct != null ? ' · ' + pct + '%' : '');
+  const titleParts = [name];
+  if (pct != null)        titleParts.push(pct + '%');
+  if (repoCount != null)  titleParts.push(repoCount + ' repo' + (repoCount === 1 ? '' : 's'));
+  const title = titleParts.join(' · ');
+  const stack = (typeof repoCount === 'number' && repoCount >= 2)
+    ? '<span class="lang-medal__count" aria-hidden="true">×' + repoCount + '</span>'
+    : '';
   return (
-    '<span class="lang-medal" style="--lm-bg:' + c + ';--lm-fg:' + tc + ';" ' +
+    '<span class="lang-medal' + (stack ? ' lang-medal--stacked' : '') + '" ' +
+      'style="--lm-bg:' + c + ';--lm-fg:' + tc + ';" ' +
       'title="' + escAttr(title) + '" aria-label="' + escAttr(title) + '">' +
       '<span class="lang-medal__abbr">' + escAttr(langAbbr(name)) + '</span>' +
+      stack +
     '</span>'
   );
 }
 
 // Top-N round medals to sit next to the `{}` programmer badge in the
 // profile-name row. Returns '' when there's no data — the slot stays
-// empty until hydrateProfileLanguages fills it in.
-function renderLangMedalStrip(langs, n = 4) {
+// empty until hydrateProfileLanguages fills it in. `repoCounts` is the
+// optional `{ [lang]: count }` map from language-stats; passing it
+// turns on the ×N stack indicator.
+function renderLangMedalStrip(langs, repoCounts, n = 4) {
   if (!Array.isArray(langs) || !langs.length) return '';
   const total = langs.reduce((a, [, b]) => a + (b || 0), 0) || 1;
   return langs.slice(0, n).map(([name, bytes]) => {
     const pct = Math.round((bytes / total) * 100);
-    return renderLangMedal(name, pct);
+    const count = repoCounts ? repoCounts[name] : undefined;
+    return renderLangMedal(name, pct, count);
   }).join('');
 }
 
@@ -242,7 +255,7 @@ export function renderProfile(handle) {
             ? ' <span class="profile-lang-medals" id="profile-lang-medals-' + u.handle + '" data-gh="' + u.github.handle + '">' +
                 (() => {
                   const c = cachedLanguageStats(u.github.handle);
-                  return c ? renderLangMedalStrip(c.langs) : '';
+                  return c ? renderLangMedalStrip(c.langs, c.repoCounts) : '';
                 })() +
               '</span>'
             : '') +
@@ -600,7 +613,7 @@ export async function hydrateProfileLanguages(handle) {
   try {
     const stats = await getLanguageStats(gh);
     if (!medals.isConnected) return;
-    medals.innerHTML = stats ? renderLangMedalStrip(stats.langs) : '';
+    medals.innerHTML = stats ? renderLangMedalStrip(stats.langs, stats.repoCounts) : '';
   } finally {
     if (medals.isConnected) delete medals.dataset.hydrating;
   }
