@@ -37,6 +37,7 @@ function shapeProfile(row) {
     closeFriends: Array.isArray(row.close_friends) ? row.close_friends : [],
     orgMembers:   Array.isArray(row.org_members)   ? row.org_members   : [],
     organization: row.organization || '',
+    skills:       Array.isArray(row.skills) ? row.skills : [],
     joined:      row.created_at ? String(row.created_at).slice(0, 7) : '',
     _fetched:    Date.now(),
   };

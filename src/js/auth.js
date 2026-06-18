@@ -68,6 +68,9 @@ function projectUser(authUser, profile) {
     closeFriends: Array.isArray(profile.close_friends) ? profile.close_friends : [],
     orgMembers:   Array.isArray(profile.org_members)   ? profile.org_members   : [],
     organization: profile.organization || '',
+    // Self-selected language badge ids. Empty array on profiles
+    // that haven't run Stage 22 yet — the UI just shows no badges.
+    skills:       Array.isArray(profile.skills)        ? profile.skills        : [],
     joined:      profile.created_at ? String(profile.created_at).slice(0, 7) : '',
   };
 }
@@ -329,8 +332,10 @@ export async function updateProfile(patch) {
   if (patch.orgMembers   != null)      db.org_members   = (Array.isArray(patch.orgMembers) ? patch.orgMembers : [])
                                                             .map(h => String(h).trim()).filter(Boolean);
   if (patch.organization != null)      db.organization  = String(patch.organization).trim().slice(0, 80) || null;
+  if (patch.skills       != null)      db.skills        = (Array.isArray(patch.skills) ? patch.skills : [])
+                                                            .map(s => String(s).trim()).filter(Boolean);
 
-  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'org_members', 'organization', 'is_org']);
+  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'org_members', 'organization', 'is_org', 'skills']);
   // Track which columns we had to drop so we can surface a real error
   // when the patch was *entirely* dropped — previously the function
   // returned "success" silently, leaving the user with a green

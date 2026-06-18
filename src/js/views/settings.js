@@ -4,6 +4,7 @@ import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
+import { BADGES } from '../badges.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
 import { getUser } from '../data.js';
@@ -51,6 +52,7 @@ function privacyCard() {
       '<p class="settings-status" id="privacy-status"></p>' +
     '</section>' +
     accountTypeCard() +
+    skillsCard() +
     audienceCard() +
     orgLabelCard()
   );
@@ -127,6 +129,42 @@ function orgLabelCard() {
         '</div>' +
         '<p class="settings-status" id="org-label-status"></p>' +
       '</form>' +
+    '</section>'
+  );
+}
+
+// Self-selected language badges. The user picks which BADGES they
+// want to show on their profile; choices persist to profiles.skills
+// (Stage 22). Replaces the previous GitHub-API auto-detection,
+// which kept hitting the unauth 60/h rate limit.
+function skillsCard() {
+  const me = currentUser();
+  if (!me) return '';
+  const have = new Set(Array.isArray(me.skills) ? me.skills : []);
+  const rows = BADGES.map(b => {
+    const checked = have.has(b.id) ? ' checked' : '';
+    const colour  = b.colour || '#666';
+    const slug    = b.iconSlug;
+    const abbr    = attr(b.abbr || (b.name || '?').slice(0, 2));
+    const iconHtml = slug
+      ? '<img class="skill-row__icon" alt="" loading="lazy" decoding="async" ' +
+          'src="https://cdn.simpleicons.org/' + attr(slug) + '/white" ' +
+          'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'skill-row__abbr\',textContent:\'' + abbr + '\'}))">'
+      : '<span class="skill-row__abbr">' + abbr + '</span>';
+    return (
+      '<label class="skill-row">' +
+        '<input type="checkbox" data-skill="' + attr(b.id) + '"' + checked + '>' +
+        '<span class="skill-row__disc" style="--badge-color:' + colour + '">' + iconHtml + '</span>' +
+        '<span class="skill-row__name">' + attr(b.name) + '</span>' +
+      '</label>'
+    );
+  }).join('');
+  return (
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.skills.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.skills.hint') + '</p>' +
+      '<div class="skills-grid">' + rows + '</div>' +
+      '<p class="settings-status" id="skills-status"></p>' +
     '</section>'
   );
 }
@@ -500,6 +538,40 @@ export function bindSettings() {
       }
     });
     openAuth('login');
+  });
+
+  // Skill-badge checkboxes — every toggle persists the full set
+  // (not just the delta) so the user can't end up in a partial
+  // state if a previous save errored. Debounced so a fast burst of
+  // clicks coalesces into one update.
+  let skillsTimer = 0;
+  document.querySelectorAll('[data-skill]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      clearTimeout(skillsTimer);
+      skillsTimer = setTimeout(async () => {
+        const me = currentUser();
+        if (!me) return;
+        const picked = Array.from(document.querySelectorAll('[data-skill]:checked'))
+          .map(el => el.getAttribute('data-skill'));
+        const status = document.getElementById('skills-status');
+        if (status) {
+          status.textContent = t('settings.skills.saving');
+          status.className = 'settings-status';
+        }
+        try {
+          await updateProfile({ skills: picked });
+          if (status) {
+            status.textContent = t('settings.skills.saved');
+            status.className = 'settings-status is-ok';
+          }
+        } catch (ex) {
+          if (status) {
+            status.textContent = t('settings.skills.failed') + ': ' + (ex.message || ex);
+            status.className = 'settings-status is-bad';
+          }
+        }
+      }, 250);
+    });
   });
 
   // Account-type toggle (個人 / 組織). Same pattern as the privacy

@@ -9,7 +9,7 @@ import { isFollowing, isRequested, followerCount, followingCount,
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
-import { getBadges, cachedBadges, isRateLimited } from '../badges.js';
+import { BADGES, getBadgeById } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
@@ -235,20 +235,18 @@ export function renderProfile(handle) {
       // authors — so skip them on `is_org` accounts. badges.js also
       // defends in depth by short-circuiting when the linked GitHub
       // handle resolves to type=Organization.
-      // Paint badges + grass from cache up-front when we have one.
-      // Without this, an onAuthChange-triggered re-render would
-      // blow away the hydrated content and flash the loading
-      // placeholder before hydration could refill it — visible as
-      // the "草が点滅する" flicker.
-      (u.github?.handle && !u.isOrg
-        ? (() => {
-            const cached = cachedBadges(u.github.handle);
-            const inner = (cached && cached.length)
-              ? cached.map(renderBadgeMedal).join('')
-              : '<span class="profile-badges__loading">バッジを取得中…</span>';
-            return '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
-              inner + '</div>';
-          })()
+      // Skill badges, rendered straight from profiles.skills with
+      // no async fetch — the auto-detection-via-GitHub-API path was
+      // removed because the unauth 60/h rate limit made it
+      // unreliable. Users now pick badges manually in /settings.
+      (!u.isOrg && Array.isArray(u.skills) && u.skills.length
+        ? '<div class="profile-badges" id="profile-badges-' + u.handle + '">' +
+            u.skills
+              .map(getBadgeById)
+              .filter(Boolean)
+              .map(renderBadgeMedal)
+              .join('') +
+          '</div>'
         : '') +
       (u.github?.handle
         ? '<div class="profile-activity" id="profile-activity-' + u.handle + '" data-gh="' + u.github.handle + '">' +
@@ -449,44 +447,11 @@ async function hydrateProfileBody(handle, myVersion) {
 // want for both the navigation case and the onAuthChange re-render
 // case (same DOM = same dedupe; new DOM = re-run).
 
-// Resolves badges asynchronously after the profile is rendered, so the
-// page paints immediately and we don't block on GitHub API.
-export async function hydrateProfileBadges(handle) {
-  const u = getUser(handle);
-  if (!u || !u.github?.handle) return;
-  const slot = document.getElementById('profile-badges-' + u.handle);
-  if (!slot) return;
-  // Already populated with medals → no need to re-fetch.
-  if (slot.querySelector('.badge-medal')) return;
-  // Another hydration call is in flight against this exact slot.
-  if (slot.dataset.hydrating === '1') return;
-  slot.dataset.hydrating = '1';
-  try {
-    const badges = await getBadges(u.github.handle);
-    if (!badges.length) {
-      // Empty for a known-good reason vs empty because GitHub is
-      // throttling us — the user needs different copy for each.
-      // Rate-limited: keep the slot and explain. Otherwise hide.
-      if (isRateLimited()) {
-        slot.innerHTML =
-          '<span class="profile-badges__loading is-bad" ' +
-          'title="GitHub の未認証 API レート制限 (60 req/h) に達しました。約 1 時間後に自動で再試行されます。">' +
-          'GitHub API 制限中 — しばらく待って再読み込みしてください</span>';
-      } else {
-        slot.remove();
-      }
-      return;
-    }
-    slot.innerHTML = badges.map(renderBadgeMedal).join('');
-  } catch {
-    slot.remove();
-  } finally {
-    // Note: if .remove() ran above, the dataset is gone with the
-    // node; the delete here just cleans up the success path so a
-    // subsequent successful render's re-paint isn't blocked.
-    if (slot.isConnected) delete slot.dataset.hydrating;
-  }
-}
+// No-op kept for the existing import call site in main.js. Badges
+// are now rendered straight from profiles.skills inside renderProfile
+// with no async fetch, so there's nothing to hydrate after first
+// paint. Safe to delete the call entirely in a follow-up cleanup.
+export async function hydrateProfileBadges(_handle) { /* intentionally empty */ }
 
 // GitHub-achievement-style medal: a pastel-gradient disc with a
 // thick white ring, the language abbreviation in the centre, and a
@@ -508,29 +473,19 @@ function renderBadgeMedal(b) {
         'src="https://cdn.simpleicons.org/' + encodeURIComponent(slug) + '/white" ' +
         'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'badge-medal__abbr\',textContent:\'' + abbr + '\'}))">'
     : '<span class="badge-medal__abbr">' + abbr + '</span>';
-  // Tier chip — small bubble hanging off the bottom-right of the
-  // medal showing the qualifying-file count, GitHub-achievement
-  // style ("x4"). Hidden if we don't have a count (old cache).
-  const count = Number(b.count) || 0;
-  const tierClass = b.tier ? ' badge-medal__count--' + b.tier : '';
-  const countChip = count > 0
-    ? '<span class="badge-medal__count' + tierClass + '">x' + count + '</span>'
-    : '';
+  // No more tier-count chip — badges are now user-selected, not
+  // derived from a file count, so the "x4" indicator no longer
+  // carries useful information.
+  //
   // The whole medal is a <button> so it's keyboard-accessible and the
   // pointer cursor signals it can be opened for details. The dataset
   // carries the badge id so the delegated click handler in main.js
-  // can look it up in the cache by handle.
-  //
-  // The full name (「始めたて X」) is intentionally NOT printed under
-  // the disc — it's available via the title tooltip (hover) and the
-  // click-opened detail modal. Showing it inline ate vertical
-  // space and made the row look cluttered.
+  // can look it up in the catalogue.
   return (
     '<button type="button" class="badge-medal" data-badge-id="' + escAttr(b.id) + '" ' +
       'title="' + title + '" aria-label="' + escAttr(b.name) + '">' +
       '<span class="badge-medal__disc" style="--badge-color:' + colour + '">' +
         inner +
-        countChip +
       '</span>' +
     '</button>'
   );
@@ -566,20 +521,15 @@ function closeBadgeModal() {
   if (!badgeModalEl) return;
   badgeModalEl.hidden = true;
 }
-export async function openBadgeDetail(profileHandle, badgeId) {
-  const u = getUser(profileHandle);
-  if (!u || !u.github?.handle) return;
-  const list = cachedBadges(u.github.handle) || await getBadges(u.github.handle);
-  const b = (list || []).find(x => x.id === badgeId);
+export function openBadgeDetail(_profileHandle, badgeId) {
+  // Self-selected badges are static, so we look the badge up from
+  // the catalogue directly — no per-user count/tier to fetch.
+  const b = getBadgeById(badgeId);
   if (!b) return;
   const modal = ensureBadgeModal();
   const body = modal.querySelector('.badge-modal__body');
   const colour = b.colour || '#666';
   const abbr   = escAttr(b.abbr || (b.name || '?').slice(0, 2));
-  const tier   = b.tier || 'bronze';
-  const tierName = b.tierName || 'Bronze';
-  const count  = Number(b.count) || 0;
-  const exts   = Array.isArray(b.exts) ? b.exts.map(e => '.' + e).join(' / ') : '';
   const iconHtml = b.iconSlug
     ? '<img class="badge-modal__icon" alt="" loading="lazy" decoding="async" ' +
         'src="https://cdn.simpleicons.org/' + encodeURIComponent(b.iconSlug) + '/white" ' +
@@ -590,16 +540,7 @@ export async function openBadgeDetail(profileHandle, badgeId) {
       iconHtml +
     '</div>' +
     '<h2 class="badge-modal__name">' + escAttr(b.name) + '</h2>' +
-    '<div class="badge-modal__tierline">' +
-      '<span class="badge-modal__tier badge-modal__tier--' + tier + '">' + escAttr(tierName) + '</span>' +
-      (count ? '<span class="badge-modal__count">x' + count + '</span>' : '') +
-    '</div>' +
-    (exts ? '<div class="badge-modal__meta">対象拡張子: <code>' + escAttr(exts) + '</code></div>' : '') +
-    (b.tooltip ? '<p class="badge-modal__desc">' + escAttr(b.tooltip) + '</p>' : '') +
-    '<p class="badge-modal__ladder">' +
-      '次の段階: ' +
-      'ブロンズ (2+) → シルバー (6+) → ゴールド (16+) → プラチナ (50+)' +
-    '</p>';
+    (b.tooltip ? '<p class="badge-modal__desc">' + escAttr(b.tooltip) + '</p>' : '');
   modal.hidden = false;
 }
 
