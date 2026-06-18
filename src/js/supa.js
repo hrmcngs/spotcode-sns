@@ -13,7 +13,17 @@
 import { KEYS, read, write, remove } from './storage.js';
 import { SUPA_URL as DEFAULT_URL, SUPA_ANON as DEFAULT_ANON } from './supa-config.js';
 
-const SDK_URL = 'https://esm.sh/@supabase/supabase-js@2';
+// Pin a known-good supabase-js version rather than tracking the @2
+// floating tag. esm.sh's @2 resolver started serving 2.108.x, whose
+// dependency chain occasionally fails to load end-to-end ("Failed
+// to fetch dynamically imported module") — pinning gives a stable
+// surface, and the jsdelivr fallback below handles the case where
+// esm.sh itself is briefly unreachable from the user's network.
+const SDK_VERSION = '2.39.7';
+const SDK_URLS = [
+  'https://esm.sh/@supabase/supabase-js@' + SDK_VERSION,
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@' + SDK_VERSION + '/+esm',
+];
 
 let sdkPromise = null;
 let cachedClient = null;
@@ -66,7 +76,23 @@ function resetClient() {
 }
 
 export async function loadSdk() {
-  if (!sdkPromise) sdkPromise = import(/* @vite-ignore */ SDK_URL);
+  if (sdkPromise) return sdkPromise;
+  sdkPromise = (async () => {
+    let lastErr;
+    for (const u of SDK_URLS) {
+      try {
+        return await import(/* @vite-ignore */ u);
+      } catch (err) {
+        lastErr = err;
+        // Try the next CDN. If all of them fail, surface the last
+        // error so /settings → 接続テスト can show something useful.
+      }
+    }
+    // Reset so the next call retries (e.g. transient network blip
+    // resolves and the user clicks login again).
+    sdkPromise = null;
+    throw lastErr || new Error('Failed to load supabase-js from any CDN');
+  })();
   return sdkPromise;
 }
 
