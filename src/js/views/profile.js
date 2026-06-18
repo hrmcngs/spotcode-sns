@@ -201,15 +201,12 @@ export function renderProfile(handle) {
       '</div>' +
       '<div class="profile-id">' +
         '<div class="profile-name">' + u.name +
-          // {} badge for anyone with a linked GitHub handle, not
-          // just users whose role column is explicitly 'programmer'
-          // — older accounts (or anyone who picked 'general' at
-          // sign-up but still linked their GitHub) were never
-          // getting it, which made the badge look broken on most
-          // active profiles.
-          ((u.role === 'programmer' || u.github?.handle)
-            ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>'
-            : '') +
+          // Unconditional {} for non-org users — the previous
+          // role / github-handle gating was hiding it for too many
+          // accounts whose DB fields weren't populated as expected.
+          // Org accounts are different (they get the Organization
+          // subtitle below the name instead).
+          (!u.isOrg ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
         '</div>' +
         (u.isOrg
           ? '<div class="profile-org-subtitle">' +
