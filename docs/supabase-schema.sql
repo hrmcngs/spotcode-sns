@@ -917,3 +917,20 @@ alter table public.profiles
 alter table public.profiles
   add constraint profiles_handle_check
   check (handle ~ '^[A-Za-z0-9_][A-Za-z0-9_-]{1,19}$');
+
+-- ===================================================================
+-- Stage 22 — self-selected skill badges
+-- ===================================================================
+-- Replaces the GitHub-API-derived badge auto-detection. The previous
+-- approach burned the unauth 60/h rate limit too fast and left users
+-- with empty caches that took 24h to recover; we now let the user
+-- pick which language badges they want to display.
+--
+-- text[] of badge ids matching the BADGES catalog in
+-- src/js/badges.js (e.g. ['typescripter', 'pythoneer', ...]).
+-- The existing "owner can update own profile" RLS policy on
+-- public.profiles already covers writes, so no separate policy is
+-- needed here.
+
+alter table public.profiles
+  add column if not exists skills text[] default '{}';

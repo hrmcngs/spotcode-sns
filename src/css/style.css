@@ -2477,42 +2477,6 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   margin-left: auto; align-self: center;
 }
 
-/* ---------- profile badges ---------- */
-.profile-badges {
-  display: flex; flex-wrap: wrap; gap: .35rem;
-  padding: .6rem 1rem 0;
-}
-.profile-badges__loading { color: var(--muted); font-size: .78rem; }
-
-/* GitHub contributions heatmap inline on the profile header. */
-.profile-activity {
-  padding: .8rem 1rem 0;
-}
-.profile-activity__head {
-  font-size: .82rem; color: var(--muted); font-weight: 600;
-  margin-bottom: .4rem;
-}
-.profile-activity__hint { font-weight: 400; color: var(--muted); }
-.profile-activity__graph { overflow-x: auto; max-width: 100%; }
-/* The grass SVG has a fixed 688×91 pixel size which exceeds an iPhone
-   viewport. Shrink it to whatever the column allows, preserving the
-   aspect ratio via height: auto + the SVG's intrinsic viewBox. */
-.profile-activity__graph svg,
-.card svg { max-width: 100%; height: auto; display: block; }
-.badge-chip {
-  display: inline-flex; align-items: center;
-  padding: .25em .7em; border-radius: 999px;
-  font-size: .75rem; font-weight: 700; letter-spacing: .02em;
-  border: 1px solid transparent;
-  cursor: default;
-}
-.badge-chip--accent { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
-.badge-chip--green  { background: color-mix(in srgb, var(--green)  16%, transparent); color: var(--green);  border-color: color-mix(in srgb, var(--green)  35%, transparent); }
-.badge-chip--warn   { background: color-mix(in srgb, var(--warn)   16%, transparent); color: var(--warn);   border-color: color-mix(in srgb, var(--warn)   35%, transparent); }
-.badge-chip--danger { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
-.badge-chip--boost  { background: color-mix(in srgb, var(--boost)  16%, transparent); color: var(--boost);  border-color: color-mix(in srgb, var(--boost)  35%, transparent); }
-.badge-chip--like   { background: color-mix(in srgb, var(--like)   16%, transparent); color: var(--like);   border-color: color-mix(in srgb, var(--like)   35%, transparent); }
-
 /* ---------- post address line ---------- */
 .post__addr {
   margin-top: .4rem;
@@ -2643,3 +2607,125 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 .profile-toast.is-show {
   opacity: 1; transform: translate(-50%, 0);
 }
+
+
+/* ---------- /settings tab strip ---------- */
+.settings-nav {
+  display: flex; gap: .15rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  margin: .8rem 0 1rem;
+  scroll-snap-type: x proximity;
+}
+.settings-nav__tab {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .55rem .85rem;
+  color: var(--muted);
+  font-size: .88rem; font-weight: 600;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  scroll-snap-align: start;
+  transition: color .12s ease, border-color .12s ease;
+}
+.settings-nav__tab:hover { color: var(--text); }
+.settings-nav__tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.settings__content {
+  display: flex; flex-direction: column;
+}
+
+/* ---------- "hide decorative badges" display pref ----------
+   Toggled from /settings → 表示 → 装飾バッジの表示. Hides every
+   small status / role / kind / visibility chip in one shot via a
+   `data-hide-badges="1"` flag on <html> (set by display-prefs.js).
+   The lock icon next to a private handle stays — that's signaling
+   privacy state, not a decoration. */
+html[data-hide-badges] .role-badge,
+html[data-hide-badges] .post__kind,
+html[data-hide-badges] .post__vis,
+html[data-hide-badges] .status-badge,
+html[data-hide-badges] .file-badge {
+  display: none !important;
+}
+
+/* ---------- account-switch modal (Twitter-style) ----------
+   Single overlay element holding both the dim backdrop and the
+   centred card. Uses `.is-open` for show/hide rather than the
+   [hidden] attribute so no other CSS can accidentally suppress
+   it. Backdrop click + X button + Escape all close. */
+.account-menu-overlay {
+  position: fixed; inset: 0;
+  z-index: 1600;
+  background: rgba(0,0,0,.55);
+  display: none;
+  align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.account-menu-overlay.is-open { display: flex; }
+.account-menu__card {
+  width: 100%; max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.55);
+  padding: .4rem;
+  display: flex; flex-direction: column; gap: .15rem;
+  max-height: 80vh; overflow-y: auto;
+}
+html.account-menu-locked { overflow: hidden; }
+.account-menu__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .35rem .35rem .35rem .55rem;
+}
+.account-menu__title {
+  font-size: .82rem; font-weight: 700; color: var(--muted); letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.account-menu__close {
+  background: transparent; border: 0; color: var(--muted); cursor: pointer;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+}
+.account-menu__close:hover { background: var(--surface-2); color: var(--text); }
+.account-menu__list { display: flex; flex-direction: column; gap: .1rem; }
+.account-menu__row {
+  display: flex; align-items: center; gap: .55rem;
+  background: transparent; border: 0; color: var(--text);
+  padding: .55rem .7rem; border-radius: 7px;
+  font: inherit; text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.account-menu__row:hover:not(:disabled) { background: var(--surface-2); }
+.account-menu__row:disabled { opacity: .9; cursor: default; }
+.account-menu__row.is-active {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.account-menu__row-text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.account-menu__row-name {
+  font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.account-menu__row-badge {
+  display: inline-block;
+  margin-left: .35rem;
+  font-size: .65rem; font-weight: 700; letter-spacing: .02em;
+  padding: .05em .4em; border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  vertical-align: middle;
+}
+.account-menu__row-handle {
+  color: var(--muted); font-size: .8rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.account-menu__sep {
+  height: 1px; background: var(--border);
+  margin: .25rem -0.3rem;
+}
+.account-menu__row--bad { color: var(--danger); }
+.account-menu__row--bad:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }

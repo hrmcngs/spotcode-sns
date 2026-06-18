@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
-import { renderProfile, hydrateProfileBadges, hydrateProfileActivity, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
+import { renderProfile, hydrateProfileActivity, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
@@ -20,7 +20,7 @@ import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
 import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema } from './data.js';
-import { currentUser, logout, onAuthChange, initAuth } from './auth.js';
+import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
@@ -28,6 +28,7 @@ import { toggleLike, isLiked, likeCount,
          hydrateMyFollows, clearInteractionsCache } from './interactions.js';
 import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
+import { applyDisplayPrefs } from './display-prefs.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
@@ -193,7 +194,7 @@ function renderSideMe() {
   const me = currentUser();
   if (me) {
     slot.innerHTML =
-      '<a class="me-card" href="' + url('/' + me.handle) + '">' +
+      '<a class="me-card" href="' + url('/' + me.handle) + '" data-account-menu="1">' +
         renderAvatar(me, { size: 'lg' }) +
         '<div class="me-card__text">' +
           '<div class="me-card__name">' + me.name + '</div>' +
@@ -219,6 +220,120 @@ function renderSideMe() {
     }
   }
 }
+
+// Right-click on the sidebar me-card opens a small popover with the
+// saved-accounts list (each row clickable to switch) and a "Log out"
+// footer. The profile page's stand-alone logout button was removed
+// once this existed — the right-click menu is the only entry point.
+// Twitter-style modal. A single overlay element holds both the dim
+// backdrop and the centred card; clicking the backdrop (or the X
+// button, or pressing Escape) closes it. Uses an `is-open` class
+// for show/hide so no [hidden] CSS override can break it.
+let accountMenuRoot = null;
+function ensureAccountMenu() {
+  if (accountMenuRoot) return accountMenuRoot;
+  accountMenuRoot = document.createElement('div');
+  accountMenuRoot.className = 'account-menu-overlay';
+  accountMenuRoot.setAttribute('role', 'dialog');
+  accountMenuRoot.setAttribute('aria-modal', 'true');
+  document.body.appendChild(accountMenuRoot);
+  // Backdrop click → close. The card stops propagation so clicks
+  // inside don't bubble to the backdrop's handler.
+  accountMenuRoot.addEventListener('click', (e) => {
+    if (e.target === accountMenuRoot) closeAccountMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && accountMenuRoot.classList.contains('is-open')) {
+      closeAccountMenu();
+    }
+  });
+  return accountMenuRoot;
+}
+function closeAccountMenu() {
+  if (accountMenuRoot) accountMenuRoot.classList.remove('is-open');
+  document.documentElement.classList.remove('account-menu-locked');
+}
+function openAccountMenu() {
+  const me = currentUser();
+  if (!me) return;
+  const root = ensureAccountMenu();
+  const saved = listSavedAccounts();
+  const rows = saved.map(acc => {
+    const active = acc.id === me.id;
+    const u = { handle: acc.handle, name: acc.name, avatarImage: acc.avatarUrl,
+                avatarShape: acc.avatarShape, avatar: (acc.name[0] || '?').toUpperCase() };
+    return (
+      '<button type="button" class="account-menu__row' + (active ? ' is-active' : '') + '" ' +
+        'data-account-switch-to="' + acc.id + '"' + (active ? ' disabled' : '') + '>' +
+        renderAvatar(u, { size: 'sm' }) +
+        '<span class="account-menu__row-text">' +
+          '<span class="account-menu__row-name">' + escapeText(acc.name) +
+            (active ? ' <span class="account-menu__row-badge">' + escapeText(t('settings.accounts.current')) + '</span>' : '') +
+          '</span>' +
+          '<span class="account-menu__row-handle">@' + escapeText(acc.handle) + '</span>' +
+        '</span>' +
+      '</button>'
+    );
+  }).join('');
+  root.innerHTML =
+    '<div class="account-menu__card" role="document">' +
+      '<header class="account-menu__head">' +
+        '<span class="account-menu__title">' + escapeText(t('account_menu.title')) + '</span>' +
+        '<button type="button" class="account-menu__close" data-account-menu-close aria-label="Close">' +
+          icon('close', { size: 18 }) +
+        '</button>' +
+      '</header>' +
+      '<div class="account-menu__list">' + rows + '</div>' +
+      '<div class="account-menu__sep"></div>' +
+      '<button type="button" class="account-menu__row account-menu__row--bad" data-account-menu-logout>' +
+        icon('arrow_right', { size: 14, className: 'icon--inline' }) +
+        escapeText(t('nav.logout')) +
+      '</button>' +
+    '</div>';
+  root.classList.add('is-open');
+  document.documentElement.classList.add('account-menu-locked');
+
+  root.onclick = async (e) => {
+    // Backdrop click (target === root) is caught by the listener
+    // in ensureAccountMenu — here we only handle clicks inside
+    // the card.
+    if (e.target.closest('[data-account-menu-close]')) {
+      closeAccountMenu();
+      return;
+    }
+    const switchBtn = e.target.closest('[data-account-switch-to]');
+    if (switchBtn) {
+      const id = switchBtn.getAttribute('data-account-switch-to');
+      closeAccountMenu();
+      try { await switchAccount(id); }
+      catch (ex) { alert(ex.message || String(ex)); }
+      return;
+    }
+    if (e.target.closest('[data-account-menu-logout]')) {
+      closeAccountMenu();
+      if (!confirm(t('settings.accounts.confirm_logout') || 'ログアウトしますか？')) return;
+      logout().finally(() => navigate('/'));
+      return;
+    }
+    // Re-attach the root-as-backdrop close behaviour (innerHTML
+    // doesn't replace listeners on root itself, just descendants).
+    if (e.target.classList && e.target.classList.contains('account-menu-overlay')) {
+      closeAccountMenu();
+    }
+  };
+}
+function escapeText(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+document.addEventListener('contextmenu', (e) => {
+  const anchor = e.target.closest('[data-account-menu]');
+  if (!anchor) return;
+  e.preventDefault();
+  openAccountMenu();
+});
 
 // Spot picked in the composer for the current home view, kept in memory
 // so the timeline can re-render without losing the chosen pin.
@@ -338,10 +453,10 @@ function dispatch(path) {
     const handle = userMatch[1];
     document.title = '@' + handle + ' / spotcode-sns';
     app.innerHTML = renderProfile(handle);
-    // Fetch from Supabase if we don't have the user locally, then hit
-    // GitHub for badges once we know the github_handle on the profile.
+    // Fetch from Supabase if we don't have the user locally, then
+    // pull the GitHub contribution graph once we know the
+    // github_handle on the profile.
     hydrateProfile(handle).then(() => {
-      hydrateProfileBadges(handle);
       hydrateProfileActivity(handle);
     });
   } else {
@@ -705,6 +820,9 @@ hydrateMyFollows();
 // Apply the dev-mode html[data-dev] flag so dev-only CSS can scope its
 // chrome (e.g. the dev-mode topbar indicator) without flashing.
 initDevMode();
+// Apply user display prefs (currently: hide-badges toggle) so the
+// CSS gating is in place before the first paint.
+applyDisplayPrefs();
 initI18n();
 // One-shot schema probe so the first real query already knows which
 // optional columns are missing, instead of discovering them one
@@ -811,12 +929,9 @@ document.addEventListener('click', (e) => {
     );
     return;
   }
-  if (e.target.closest('#logout-btn')) {
-    e.preventDefault();
-    if (!confirm('ログアウトしますか？')) return;
-    logout().finally(() => navigate('/'));
-    return;
-  }
+  // (Removed #logout-btn click handler — logout now lives in the
+  // right-click menu on the sidebar account card. See
+  // openAccountMenu above.)
 
   // Per-comment delete button on the post detail page.
   const cdel = e.target.closest('[data-comment-delete]');

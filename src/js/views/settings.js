@@ -4,6 +4,7 @@ import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
+import { badgesHidden, setBadgesHidden } from '../display-prefs.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
 import { getUser } from '../data.js';
@@ -49,10 +50,7 @@ function privacyCard() {
         '</button>' +
       '</div>' +
       '<p class="settings-status" id="privacy-status"></p>' +
-    '</section>' +
-    accountTypeCard() +
-    audienceCard() +
-    orgLabelCard()
+    '</section>'
   );
 }
 
@@ -130,6 +128,8 @@ function orgLabelCard() {
     '</section>'
   );
 }
+
+// (Removed skillsCard — the whole skill-badges feature was dropped.)
 
 // One list-editor block. `kind` keys into audienceState and tags the
 // input / chip-row / results-row via data-* attrs so the document-
@@ -242,11 +242,52 @@ function roleCard() {
   );
 }
 
-function userCards() {
+// Twitter / Instagram-style settings sections. The /settings page
+// is now grouped into tabs (account / profile / privacy / display
+// / + dev for admins) and only the active tab's cards render at a
+// time, so the page stops being one long scroll.
+//
+// Per-tab card composition lives here. The active tab id comes from
+// the URL hash (#account / #profile / …) for shareable links + the
+// browser back button.
+
+function accountSection() {
+  // orgLabelCard moved in here after the "profile" tab was retired —
+  // the free-text affiliation is a small enough card to ride with
+  // the account-identity group.
+  return accountsCard() + roleCard() + accountTypeCard() + orgLabelCard();
+}
+function privacySection() {
+  return privacyCard() + audienceCard();
+}
+function displaySection() {
+  const lang = getLang();
+  const hidden = badgesHidden();
   return (
-    accountsCard() +
-    roleCard() +
-    privacyCard() +
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.lang.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.lang.hint') + '</p>' +
+      '<div class="settings-form__actions">' +
+        '<button type="button" class="btn btn--' + (lang === 'ja' ? 'primary' : 'ghost') + '" data-lang="ja">' + t('settings.lang.ja') + '</button>' +
+        '<button type="button" class="btn btn--' + (lang === 'en' ? 'primary' : 'ghost') + '" data-lang="en">' + t('settings.lang.en') + '</button>' +
+      '</div>' +
+    '</section>' +
+    // Single toggle that hides every decorative badge in the app —
+    // the {} Programmer pill, the 「組織」 chip on org profiles,
+    // the 「アイデア」 / WIP / status badges on posts, the visibility
+    // hint. Implemented via a html[data-hide-badges="1"] attribute
+    // + the matching CSS rules at the bottom of style.css.
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.display.badges.title') +
+        ' <span class="settings-tag">' + (hidden ? t('settings.display.badges.off') : t('settings.display.badges.on')) + '</span>' +
+      '</h2>' +
+      '<p class="settings__hint">' + t('settings.display.badges.hint') + '</p>' +
+      '<div class="settings-form__actions">' +
+        '<button type="button" class="btn btn--' + (hidden ? 'primary' : 'ghost') + '" id="badges-toggle">' +
+          (hidden ? t('settings.display.badges.show') : t('settings.display.badges.hide')) +
+        '</button>' +
+      '</div>' +
+    '</section>' +
     '<section class="settings-card">' +
       '<h2>' + t('settings.map.title') + '</h2>' +
       '<p class="settings__hint">' + t('settings.map.hint') + '</p>' +
@@ -255,11 +296,44 @@ function userCards() {
       '</div>' +
       '<p class="settings-status" id="map-status">' + t('settings.status.unverified') + '</p>' +
     '</section>' +
-
     '<section class="settings-card">' +
       '<h2>' + t('settings.about.title') + '</h2>' +
       '<p class="settings__hint">' + t('settings.about.body') + '</p>' +
     '</section>'
+  );
+}
+
+// Section catalogue. The dev tab is appended at render time only
+// for admins so non-admins don't see a hidden tab they can't enter.
+const SETTINGS_SECTIONS = [
+  { id: 'account', icon: 'user',   render: accountSection },
+  { id: 'privacy', icon: 'lock',   render: privacySection },
+  { id: 'display', icon: 'gear',   render: displaySection },
+];
+
+function visibleSections() {
+  if (!canBeDev()) return SETTINGS_SECTIONS;
+  return SETTINGS_SECTIONS.concat({ id: 'dev', icon: 'spark', render: null });
+}
+
+function currentSettingsTab() {
+  const hash = (location.hash || '').replace(/^#/, '');
+  if (visibleSections().some(s => s.id === hash)) return hash;
+  return 'account';
+}
+
+function settingsNav(activeId) {
+  return (
+    '<nav class="settings-nav" role="tablist">' +
+      visibleSections().map(s => (
+        '<a class="settings-nav__tab' + (s.id === activeId ? ' is-active' : '') + '" ' +
+          'role="tab" aria-selected="' + (s.id === activeId ? 'true' : 'false') + '" ' +
+          'href="#' + s.id + '" data-settings-tab="' + s.id + '">' +
+          icon(s.icon, { size: 14, className: 'icon--inline' }) +
+          t('settings.tab.' + s.id) +
+        '</a>'
+      )).join('') +
+    '</nav>'
   );
 }
 
@@ -328,28 +402,65 @@ export function renderSettings() {
   const cfg = getConfig();
   const override = getOverride();
   const usingOverride = isUsingOverride();
-
-  const lang = getLang();
+  const tab = currentSettingsTab();
+  const section = visibleSections().find(s => s.id === tab);
+  // 'dev' is the only section without a `render` — its content
+  // comes from the existing devCards() so admins keep their
+  // Supabase override / dev toggle UI on a dedicated tab.
+  const body = (tab === 'dev')
+    ? devCards({ cfg, override, usingOverride })
+    : (section && section.render ? section.render() : '');
   return (
-    '<div class="settings">' +
+    '<div class="settings" data-active-settings-tab="' + tab + '">' +
       '<h1 class="settings__title">' + t('settings.title') + '</h1>' +
-
-      '<section class="settings-card">' +
-        '<h2>' + t('settings.lang.title') + '</h2>' +
-        '<p class="settings__hint">' + t('settings.lang.hint') + '</p>' +
-        '<div class="settings-form__actions">' +
-          '<button type="button" class="btn btn--' + (lang === 'ja' ? 'primary' : 'ghost') + '" data-lang="ja">' + t('settings.lang.ja') + '</button>' +
-          '<button type="button" class="btn btn--' + (lang === 'en' ? 'primary' : 'ghost') + '" data-lang="en">' + t('settings.lang.en') + '</button>' +
-        '</div>' +
-      '</section>' +
-
-      userCards() +
-      (canBeDev() ? devCards({ cfg, override, usingOverride }) : '') +
+      settingsNav(tab) +
+      '<div class="settings__content">' + body + '</div>' +
     '</div>'
   );
 }
 
 export function bindSettings() {
+  // Tab strip — anchor hrefs are `#account` etc. so the browser's
+  // back button works. We re-render the panel ourselves on every
+  // tab click so the active state + content swap without a full
+  // page reload (which would lose the audience editor's in-memory
+  // chip state). Bound to the rendered nav links and to hashchange
+  // so external nav (bookmark, address bar edit) also works.
+  function rerenderForTab() {
+    const app = document.getElementById('app');
+    if (app) {
+      app.innerHTML = renderSettings();
+      bindSettings();
+    }
+  }
+  // Selector scoped to the nav anchors specifically — earlier
+  // `[data-settings-tab]` also matched the wrapper <div> (which
+  // used the same attribute as an "active tab" marker), so a tab
+  // click bubbled into the wrapper's handler and immediately
+  // pushed the old tab back into the URL.
+  document.querySelectorAll('.settings-nav__tab[data-settings-tab]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = el.getAttribute('data-settings-tab');
+      if (location.hash.replace(/^#/, '') === id) return;
+      // pushState rather than direct hash assignment so we don't
+      // trigger the hashchange handler twice (once for assignment,
+      // once for our own rerender).
+      history.pushState(null, '', '#' + id);
+      rerenderForTab();
+    });
+  });
+  if (!bindSettings._hashWired) {
+    bindSettings._hashWired = true;
+    window.addEventListener('hashchange', () => {
+      // Only re-render if we're still on /settings — other routes
+      // own their own hash semantics.
+      if (location.pathname.endsWith('/settings') || location.pathname === '/settings') {
+        rerenderForTab();
+      }
+    });
+  }
+
   // Map test
   const mapStatus = document.getElementById('map-status');
   const mapBtn    = document.getElementById('map-test');
@@ -407,6 +518,16 @@ export function bindSettings() {
   // language without us having to track listeners.
   document.querySelectorAll('[data-lang]').forEach(btn => {
     btn.addEventListener('click', () => setLang(btn.getAttribute('data-lang')));
+  });
+
+  // Badges-visibility toggle — flips the html[data-hide-badges]
+  // attribute via display-prefs, then re-renders this card so the
+  // button label + state tag update without a full reload.
+  document.getElementById('badges-toggle')?.addEventListener('click', () => {
+    setBadgesHidden(!badgesHidden());
+    // Re-render the Display tab in place so the new state is reflected.
+    const app = document.getElementById('app');
+    if (app) { app.innerHTML = renderSettings(); bindSettings(); }
   });
 
   // Privacy toggle — flip is_private on the profile and reload so every
@@ -501,6 +622,8 @@ export function bindSettings() {
     });
     openAuth('login');
   });
+
+  // (Removed skill-badge rank picker handler.)
 
   // Account-type toggle (個人 / 組織). Same pattern as the privacy
   // toggle — flip is_org and reload so every cached view picks up

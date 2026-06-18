@@ -9,7 +9,6 @@ import { isFollowing, isRequested, followerCount, followingCount,
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
-import { getBadges, cachedBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
@@ -190,9 +189,10 @@ export function renderProfile(handle) {
       '<div class="profile-top">' +
         renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
+          // Logout moved off the profile page — it now lives in the
+          // right-click menu on the sidebar account card.
           (isMe
-            ? '<button class="btn btn--ghost" id="logout-btn">' + t('nav.logout') + '</button>' +
-              '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
+            ? '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
             : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
               '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
                 followBtnLabel +
@@ -201,7 +201,12 @@ export function renderProfile(handle) {
       '</div>' +
       '<div class="profile-id">' +
         '<div class="profile-name">' + u.name +
-          (u.role === 'programmer' ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
+          // Unconditional {} for non-org users — the previous
+          // role / github-handle gating was hiding it for too many
+          // accounts whose DB fields weren't populated as expected.
+          // Org accounts are different (they get the Organization
+          // subtitle below the name instead).
+          (!u.isOrg ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
         '</div>' +
         (u.isOrg
           ? '<div class="profile-org-subtitle">' +
@@ -230,29 +235,6 @@ export function renderProfile(handle) {
         '<span><b id="profile-postcount">…</b> ' + t('profile.stat.posts') + '</span>' +
       '</div>' +
       renderOrgMembers(u) +
-      // Personal-skill badges (始めたて Lisper など) belong to the
-      // individual who wrote the code — orgs are containers, not
-      // authors — so skip them on `is_org` accounts. badges.js also
-      // defends in depth by short-circuiting when the linked GitHub
-      // handle resolves to type=Organization.
-      // Paint badges + grass from cache up-front when we have one.
-      // Without this, an onAuthChange-triggered re-render would
-      // blow away the hydrated content and flash the loading
-      // placeholder before hydration could refill it — visible as
-      // the "草が点滅する" flicker.
-      (u.github?.handle && !u.isOrg
-        ? (() => {
-            const cached = cachedBadges(u.github.handle);
-            const inner = (cached && cached.length)
-              ? cached.map(b => (
-                  '<span class="badge-chip badge-chip--' + b.tone + '" title="' + b.tooltip.replace(/"/g, '&quot;') + '">' +
-                    b.name + '</span>'
-                )).join('')
-              : '<span class="profile-badges__loading">バッジを取得中…</span>';
-            return '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
-              inner + '</div>';
-          })()
-        : '') +
       (u.github?.handle
         ? '<div class="profile-activity" id="profile-activity-' + u.handle + '" data-gh="' + u.github.handle + '">' +
             '<div class="profile-activity__head">' +
@@ -442,43 +424,23 @@ async function hydrateProfileBody(handle, myVersion) {
 // on the first run and stayed gone (because the new render shell
 // didn't include the section once it had been hidden by an earlier
 // "no badges" outcome). Caching keeps the DOM stable.
-const hydratedBadges   = new Map(); // handle → 'pending' | 'done'
-const hydratedActivity = new Map();
+// Dedupe lives on the DOM slot via `data-hydrating` rather than on a
+// module-scoped Map keyed by handle. The Map version persisted
+// across SPA navigations, so visiting /aya → /hrmcngs → /aya the
+// second time saw `hydratedBadges.has('aya') === 'done'` and skipped
+// hydration entirely, leaving the freshly-rendered placeholder
+// stuck on "バッジを取得中…" forever. Per-slot state automatically
+// resets when renderProfile blows away the DOM, which is what we
+// want for both the navigation case and the onAuthChange re-render
+// case (same DOM = same dedupe; new DOM = re-run).
 
-// Resolves badges asynchronously after the profile is rendered, so the
-// page paints immediately and we don't block on GitHub API.
-export async function hydrateProfileBadges(handle) {
-  const u = getUser(handle);
-  if (!u || !u.github?.handle) return;
-  if (hydratedBadges.has(handle)) return;
-  hydratedBadges.set(handle, 'pending');
-  const slot = document.getElementById('profile-badges-' + u.handle);
-  if (!slot) { hydratedBadges.delete(handle); return; }
-  try {
-    const badges = await getBadges(u.github.handle);
-    if (!badges.length) { slot.remove(); hydratedBadges.set(handle, 'done'); return; }
-    slot.innerHTML = badges.map(b => (
-      '<span class="badge-chip badge-chip--' + b.tone + '" title="' + b.tooltip.replace(/"/g, '&quot;') + '">' +
-        b.name + '</span>'
-    )).join('');
-    hydratedBadges.set(handle, 'done');
-  } catch {
-    slot.remove();
-    hydratedBadges.set(handle, 'done');
-  }
-}
+// (Removed — the skill-badges feature was dropped wholesale.
+// hydrateProfileBadges + renderBadgeMedal + the click-opened
+// detail modal all lived here.)
 
-// Reset both dedupe maps so a fresh navigation to the same handle
-// can re-fetch (e.g. after the user pulled to refresh).
-export function resetProfileHydrationCache(handle) {
-  if (handle) {
-    hydratedBadges.delete(handle);
-    hydratedActivity.delete(handle);
-  } else {
-    hydratedBadges.clear();
-    hydratedActivity.clear();
-  }
-}
+// (Removed resetProfileHydrationCache — dedupe now lives on the DOM
+// slot's dataset, which resets automatically on each renderProfile
+// re-render. No module-level map left to clear.)
 
 // "More" popover handler. Wired from main.js's delegated click
 // listener (`#profile-more-btn`). Mounts a singleton menu the first
@@ -591,16 +553,22 @@ export async function hydrateProfileActivity(handle) {
   const u = getUser(handle);
   const gh = u?.github?.handle;
   if (!gh) return;
-  if (hydratedActivity.has(handle)) return;
-  hydratedActivity.set(handle, 'pending');
-  const cached = cachedContributions(gh);
-  if (!cached) {
-    const counts = await fetchContributions(gh);
-    if (!counts) { hydratedActivity.delete(handle); return; }
-  }
   const slot = document.querySelector('#profile-activity-' + u.handle + ' .profile-activity__graph');
-  if (!slot) { hydratedActivity.delete(handle); return; }
-  const counts = cachedContributions(gh);
-  if (counts) slot.innerHTML = renderGrass(counts);
-  hydratedActivity.set(handle, 'done');
+  if (!slot) return;
+  // Same per-slot dedupe pattern as hydrateProfileBadges — survives
+  // re-renders correctly because the dataset attaches to the DOM
+  // element, not to the handle.
+  if (slot.dataset.hydrating === '1') return;
+  slot.dataset.hydrating = '1';
+  try {
+    const cached = cachedContributions(gh);
+    if (!cached) {
+      const counts = await fetchContributions(gh);
+      if (!counts) return;
+    }
+    const counts = cachedContributions(gh);
+    if (counts) slot.innerHTML = renderGrass(counts);
+  } finally {
+    if (slot.isConnected) delete slot.dataset.hydrating;
+  }
 }
