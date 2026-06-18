@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
-import { renderProfile, hydrateProfileBadges, hydrateProfileActivity, hydrateProfile, setProfileTab, openProfileMore, openBadgeDetail } from './views/profile.js';
+import { renderProfile, hydrateProfileActivity, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
@@ -338,10 +338,10 @@ function dispatch(path) {
     const handle = userMatch[1];
     document.title = '@' + handle + ' / spotcode-sns';
     app.innerHTML = renderProfile(handle);
-    // Fetch from Supabase if we don't have the user locally, then hit
-    // GitHub for badges once we know the github_handle on the profile.
+    // Fetch from Supabase if we don't have the user locally, then
+    // pull the GitHub contribution graph once we know the
+    // github_handle on the profile.
     hydrateProfile(handle).then(() => {
-      hydrateProfileBadges(handle);
       hydrateProfileActivity(handle);
     });
   } else {
@@ -840,18 +840,6 @@ document.addEventListener('click', (e) => {
   if (moreBtn) {
     e.preventDefault();
     openProfileMore(moreBtn.getAttribute('data-profile-more'), moreBtn);
-    return;
-  }
-
-  // Badge medal click → open detail modal with tier + count + tooltip.
-  // The handle comes from the parent .profile-badges container's id
-  // (profile-badges-<handle>) so the badge id is enough on the button.
-  const medalBtn = e.target.closest('[data-badge-id]');
-  if (medalBtn) {
-    e.preventDefault();
-    const container = medalBtn.closest('.profile-badges');
-    const profileHandle = container ? (container.id || '').replace(/^profile-badges-/, '') : '';
-    openBadgeDetail(profileHandle, medalBtn.getAttribute('data-badge-id'));
     return;
   }
 

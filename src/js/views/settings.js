@@ -4,7 +4,6 @@ import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
-import { BADGES, RANKS, parseSkill, serializeSkill } from '../badges.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
 import { getUser } from '../data.js';
@@ -129,64 +128,7 @@ function orgLabelCard() {
   );
 }
 
-// Self-selected language badges. The user picks which BADGES they
-// want to show on their profile; choices persist to profiles.skills
-// (Stage 22). Replaces the previous GitHub-API auto-detection,
-// which kept hitting the unauth 60/h rate limit.
-function skillsCard() {
-  const me = currentUser();
-  if (!me) return '';
-  // Map badge id → currently-picked rank ('off' | bronze | silver | gold | platinum).
-  const have = new Map();
-  for (const entry of (Array.isArray(me.skills) ? me.skills : [])) {
-    const p = parseSkill(entry);
-    if (p) have.set(p.id, p.rank);
-  }
-  const rows = BADGES.map(b => {
-    const colour = b.colour || '#666';
-    const slug   = b.iconSlug;
-    const abbr   = attr(b.abbr || (b.name || '?').slice(0, 2));
-    const cur    = have.get(b.id) || 'off';
-    const iconHtml = slug
-      ? '<img class="skill-row__icon" alt="" loading="lazy" decoding="async" ' +
-          'src="https://cdn.simpleicons.org/' + attr(slug) + '/white" ' +
-          'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'skill-row__abbr\',textContent:\'' + abbr + '\'}))">'
-      : '<span class="skill-row__abbr">' + abbr + '</span>';
-    // Rank swatch picker — 5 radio buttons (off + 4 rank colours).
-    // Each radio is visually a small coloured circle (or empty
-    // outline for "off"); no text labels, the colour is the
-    // meaning. Same `name` per row so they form a radio group.
-    const groupName = 'skill-' + b.id;
-    const swatches =
-      '<label class="skill-rank skill-rank--off" title="' + attr(t('settings.skills.rank.off')) + '">' +
-        '<input type="radio" name="' + attr(groupName) + '" value="off" data-skill-id="' + attr(b.id) + '"' +
-          (cur === 'off' ? ' checked' : '') + '>' +
-        '<span class="skill-rank__dot"></span>' +
-      '</label>' +
-      RANKS.map(r => (
-        '<label class="skill-rank skill-rank--' + r.id + '" title="' + attr(t('settings.skills.rank.' + r.id)) + '">' +
-          '<input type="radio" name="' + attr(groupName) + '" value="' + r.id + '" data-skill-id="' + attr(b.id) + '"' +
-            (cur === r.id ? ' checked' : '') + '>' +
-          '<span class="skill-rank__dot" style="--rank-color:' + r.colour + '"></span>' +
-        '</label>'
-      )).join('');
-    return (
-      '<div class="skill-row">' +
-        '<span class="skill-row__disc" style="--badge-color:' + colour + '">' + iconHtml + '</span>' +
-        '<span class="skill-row__name">' + attr(b.name) + '</span>' +
-        '<span class="skill-row__ranks">' + swatches + '</span>' +
-      '</div>'
-    );
-  }).join('');
-  return (
-    '<section class="settings-card">' +
-      '<h2>' + t('settings.skills.title') + '</h2>' +
-      '<p class="settings__hint">' + t('settings.skills.hint') + '</p>' +
-      '<div class="skills-grid">' + rows + '</div>' +
-      '<p class="settings-status" id="skills-status"></p>' +
-    '</section>'
-  );
-}
+// (Removed skillsCard — the whole skill-badges feature was dropped.)
 
 // One list-editor block. `kind` keys into audienceState and tags the
 // input / chip-row / results-row via data-* attrs so the document-
@@ -309,10 +251,10 @@ function roleCard() {
 // browser back button.
 
 function accountSection() {
-  return accountsCard() + roleCard() + accountTypeCard();
-}
-function profileSection() {
-  return skillsCard() + orgLabelCard();
+  // orgLabelCard moved in here after the "profile" tab was retired —
+  // the free-text affiliation is a small enough card to ride with
+  // the account-identity group.
+  return accountsCard() + roleCard() + accountTypeCard() + orgLabelCard();
 }
 function privacySection() {
   return privacyCard() + audienceCard();
@@ -347,7 +289,6 @@ function displaySection() {
 // for admins so non-admins don't see a hidden tab they can't enter.
 const SETTINGS_SECTIONS = [
   { id: 'account', icon: 'user',   render: accountSection },
-  { id: 'profile', icon: 'pencil', render: profileSection },
   { id: 'privacy', icon: 'lock',   render: privacySection },
   { id: 'display', icon: 'gear',   render: displaySection },
 ];
@@ -654,48 +595,7 @@ export function bindSettings() {
     openAuth('login');
   });
 
-  // Skill-badge rank picker. Each badge row has 5 radio swatches
-  // (off + 4 ranks). On any change we re-collect the full picked
-  // set and persist it — never a delta, so a previous failed save
-  // can't leave us in a partial state. Debounced to coalesce a
-  // burst of clicks (e.g. cycling through ranks).
-  let skillsTimer = 0;
-  document.querySelectorAll('[data-skill-id]').forEach(input => {
-    input.addEventListener('change', () => {
-      clearTimeout(skillsTimer);
-      skillsTimer = setTimeout(async () => {
-        const me = currentUser();
-        if (!me) return;
-        // Build serialized entries from each row's selected radio,
-        // skipping the "off" rows entirely.
-        const picked = [];
-        const ids = new Set();
-        document.querySelectorAll('[data-skill-id]').forEach(el => ids.add(el.getAttribute('data-skill-id')));
-        for (const id of ids) {
-          const sel = document.querySelector('[data-skill-id="' + id + '"]:checked');
-          const rank = sel ? sel.value : 'off';
-          if (rank && rank !== 'off') picked.push(serializeSkill(id, rank));
-        }
-        const status = document.getElementById('skills-status');
-        if (status) {
-          status.textContent = t('settings.skills.saving');
-          status.className = 'settings-status';
-        }
-        try {
-          await updateProfile({ skills: picked });
-          if (status) {
-            status.textContent = t('settings.skills.saved');
-            status.className = 'settings-status is-ok';
-          }
-        } catch (ex) {
-          if (status) {
-            status.textContent = t('settings.skills.failed') + ': ' + (ex.message || ex);
-            status.className = 'settings-status is-bad';
-          }
-        }
-      }, 250);
-    });
-  });
+  // (Removed skill-badge rank picker handler.)
 
   // Account-type toggle (個人 / 組織). Same pattern as the privacy
   // toggle — flip is_org and reload so every cached view picks up

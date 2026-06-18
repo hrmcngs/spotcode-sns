@@ -9,7 +9,6 @@ import { isFollowing, isRequested, followerCount, followingCount,
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
-import { BADGES, getBadgeById, parseSkill } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
@@ -230,26 +229,6 @@ export function renderProfile(handle) {
         '<span><b id="profile-postcount">…</b> ' + t('profile.stat.posts') + '</span>' +
       '</div>' +
       renderOrgMembers(u) +
-      // Personal-skill badges (始めたて Lisper など) belong to the
-      // individual who wrote the code — orgs are containers, not
-      // authors — so skip them on `is_org` accounts. badges.js also
-      // defends in depth by short-circuiting when the linked GitHub
-      // handle resolves to type=Organization.
-      // Skill badges, rendered straight from profiles.skills with
-      // no async fetch — the auto-detection-via-GitHub-API path was
-      // removed because the unauth 60/h rate limit made it
-      // unreliable. Users now pick badges (and per-badge ranks)
-      // manually in /settings; the rank shows on the medal as a
-      // coloured outer ring, no text label.
-      (!u.isOrg && Array.isArray(u.skills) && u.skills.length
-        ? '<div class="profile-badges" id="profile-badges-' + u.handle + '">' +
-            u.skills
-              .map(parseSkill)
-              .filter(p => p && getBadgeById(p.id))
-              .map(p => renderBadgeMedal(getBadgeById(p.id), p.rank))
-              .join('') +
-          '</div>'
-        : '') +
       (u.github?.handle
         ? '<div class="profile-activity" id="profile-activity-' + u.handle + '" data-gh="' + u.github.handle + '">' +
             '<div class="profile-activity__head">' +
@@ -449,103 +428,9 @@ async function hydrateProfileBody(handle, myVersion) {
 // want for both the navigation case and the onAuthChange re-render
 // case (same DOM = same dedupe; new DOM = re-run).
 
-// No-op kept for the existing import call site in main.js. Badges
-// are now rendered straight from profiles.skills inside renderProfile
-// with no async fetch, so there's nothing to hydrate after first
-// paint. Safe to delete the call entirely in a follow-up cleanup.
-export async function hydrateProfileBadges(_handle) { /* intentionally empty */ }
-
-// GitHub-achievement-style medal: a pastel-gradient disc with a
-// thick white ring, the language abbreviation in the centre, and a
-// soft drop shadow so it reads as a sticker / pin rather than a
-// flat colour patch. The language colour is passed in through a
-// CSS custom property so the gradient + ring + shadow declarations
-// stay in the stylesheet.
-function renderBadgeMedal(b, rank) {
-  const abbr   = escAttr(b.abbr || (b.name || '?').slice(0, 2));
-  const colour = b.colour || '#666';
-  const safeRank = rank || 'bronze';
-  const title  = (b.name + ' — ' + (b.tooltip || '')).replace(/"/g, '&quot;');
-  // Render the language logo via Simple Icons CDN (CC0). The icon
-  // arrives as a white-filled SVG and sits on top of the pastel
-  // gradient. onerror falls back to the abbreviation glyph in case
-  // the CDN fetch fails (offline, blocked, slug not in Simple Icons).
-  const slug = b.iconSlug;
-  const inner = slug
-    ? '<img class="badge-medal__icon" alt="" loading="lazy" decoding="async" ' +
-        'src="https://cdn.simpleicons.org/' + encodeURIComponent(slug) + '/white" ' +
-        'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'badge-medal__abbr\',textContent:\'' + abbr + '\'}))">'
-    : '<span class="badge-medal__abbr">' + abbr + '</span>';
-  // No more tier-count chip — badges are now user-selected, not
-  // derived from a file count, so the "x4" indicator no longer
-  // carries useful information.
-  //
-  // The whole medal is a <button> so it's keyboard-accessible and the
-  // pointer cursor signals it can be opened for details. The dataset
-  // carries the badge id so the delegated click handler in main.js
-  // can look it up in the catalogue.
-  return (
-    '<button type="button" class="badge-medal badge-medal--rank-' + escAttr(safeRank) + '" data-badge-id="' + escAttr(b.id) + '" ' +
-      'title="' + title + '" aria-label="' + escAttr(b.name) + '">' +
-      '<span class="badge-medal__disc" style="--badge-color:' + colour + '">' +
-        inner +
-      '</span>' +
-    '</button>'
-  );
-}
-
-// Detail popover for a badge — opened on medal click. Singleton DOM
-// element mounted on first use, dismissed on backdrop / Escape /
-// close button. Shows: language logo (full size), name, tier
-// medal, qualifying file count, file extensions scanned, and the
-// human-readable threshold from the tooltip field.
-let badgeModalEl = null;
-function ensureBadgeModal() {
-  if (badgeModalEl) return badgeModalEl;
-  badgeModalEl = document.createElement('div');
-  badgeModalEl.className = 'modal badge-modal';
-  badgeModalEl.hidden = true;
-  badgeModalEl.innerHTML =
-    '<div class="modal__backdrop" data-badge-close></div>' +
-    '<div class="modal__card badge-modal__card" role="dialog">' +
-      '<button class="modal__close" data-badge-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
-      '<div class="badge-modal__body"></div>' +
-    '</div>';
-  document.body.appendChild(badgeModalEl);
-  badgeModalEl.addEventListener('click', (e) => {
-    if (e.target.closest('[data-badge-close]')) closeBadgeModal();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && badgeModalEl && !badgeModalEl.hidden) closeBadgeModal();
-  });
-  return badgeModalEl;
-}
-function closeBadgeModal() {
-  if (!badgeModalEl) return;
-  badgeModalEl.hidden = true;
-}
-export function openBadgeDetail(_profileHandle, badgeId) {
-  // Self-selected badges are static, so we look the badge up from
-  // the catalogue directly — no per-user count/tier to fetch.
-  const b = getBadgeById(badgeId);
-  if (!b) return;
-  const modal = ensureBadgeModal();
-  const body = modal.querySelector('.badge-modal__body');
-  const colour = b.colour || '#666';
-  const abbr   = escAttr(b.abbr || (b.name || '?').slice(0, 2));
-  const iconHtml = b.iconSlug
-    ? '<img class="badge-modal__icon" alt="" loading="lazy" decoding="async" ' +
-        'src="https://cdn.simpleicons.org/' + encodeURIComponent(b.iconSlug) + '/white" ' +
-        'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'badge-modal__abbr\',textContent:\'' + abbr + '\'}))">'
-    : '<span class="badge-modal__abbr">' + abbr + '</span>';
-  body.innerHTML =
-    '<div class="badge-modal__hero" style="--badge-color:' + colour + '">' +
-      iconHtml +
-    '</div>' +
-    '<h2 class="badge-modal__name">' + escAttr(b.name) + '</h2>' +
-    (b.tooltip ? '<p class="badge-modal__desc">' + escAttr(b.tooltip) + '</p>' : '');
-  modal.hidden = false;
-}
+// (Removed — the skill-badges feature was dropped wholesale.
+// hydrateProfileBadges + renderBadgeMedal + the click-opened
+// detail modal all lived here.)
 
 // (Removed resetProfileHydrationCache — dedupe now lives on the DOM
 // slot's dataset, which resets automatically on each renderProfile
