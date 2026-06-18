@@ -8,7 +8,7 @@ import { isLiked, likeCount, isReposted, isBookmarked } from './interactions.js'
 import { currentUser }      from './auth.js';
 import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
-import { isDevMode }        from './dev-mode.js';
+import { isDevMode, isOperator } from './dev-mode.js';
 import { t }                from './i18n.js';
 import { safeLinkUrl }      from './safe-url.js';
 
@@ -190,7 +190,9 @@ function analyticsLink(postId) {
 function isLockedBySpot(p, me) {
   if (!p.spot || p.spot.lat == null || p.spot.lng == null) return false;
   if (me && p.authorHandle === me.handle) return false;
-  if (isDevMode()) return false;
+  // Operators (and admins) can read any post regardless of distance
+  // — they need to be able to evaluate reports without travelling.
+  if (isOperator()) return false;
   return isNearSpotSync(p.spot.lat, p.spot.lng) !== true;
 }
 
@@ -229,11 +231,12 @@ export function renderPost(p) {
   const bookmarked = me && isBookmarked(p.id);
   const likes = likeCount(p.id);
   const isOwn  = me && p.authorHandle === me.handle;
-  // Dev mode acts as a moderator: show the delete (trash) button on
-  // anyone's post. The backend still enforces RLS — if the dev account
-  // doesn't have admin permission server-side, the call will fail with
-  // the existing "削除権限がありません" alert instead of silently no-op.
-  const canDelete = isOwn || isDevMode();
+  // Operators (and the admin) can delete anyone's post — moderation
+  // duty. The backend still enforces RLS via the is_admin policy on
+  // posts; if the operator account doesn't have the matching
+  // server-side flag, the call surfaces the existing "削除権限が
+  // ありません" alert instead of silently no-op.
+  const canDelete = isOwn || isOperator();
   // Editing is author-only — dev mode acts as a moderator and gets the
   // delete (destructive, irreversible) hammer, but rewriting someone
   // else's words is a different threat model so we don't expose it.
