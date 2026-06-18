@@ -10,7 +10,7 @@ import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
 import { isDevMode, isOperator } from './dev-mode.js';
 import { t }                from './i18n.js';
-import { safeLinkUrl }      from './safe-url.js';
+import { safeLinkUrl, safeImageUrl } from './safe-url.js';
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -35,10 +35,11 @@ function files(list) {
 function photos(list) {
   if (!list || !list.length) return '';
   // Validate every src against the image allowlist (data:image/* or
-  // http(s)). Anything else — e.g. a junk DB row with `javascript:`
-  // injected — gets dropped instead of rendered.
-  const safe = list.map(safeLinkUrl).filter(Boolean)
-    .filter((s) => /^(?:https?:\/\/|data:image\/)/i.test(s));
+  // http(s)). The earlier version used safeLinkUrl which doesn't
+  // accept data: URLs, so every photo captured via the camera came
+  // back from the DB as a `data:image/jpeg;base64,…` string and got
+  // silently dropped — the preview showed it but the feed never did.
+  const safe = list.map(safeImageUrl).filter(Boolean);
   if (!safe.length) return '';
   const cls = 'post__photos post__photos--' + Math.min(4, safe.length);
   return '<div class="' + cls + '">' + safe.map((src) => (
