@@ -1507,10 +1507,57 @@ html[data-theme='light'] .profile-header--org .profile-cover {
   border-color: color-mix(in srgb, var(--muted) 30%, transparent);
 }
 .role-badge--org .icon { stroke: currentColor; fill: none; }
+
+/* Round language medals next to the {} programmer badge — GitHub
+   Achievement-style coin: per-language Linguist colour fill, 1-2
+   letter abbreviation in YIQ-picked contrast text, slight glow ring
+   so they read on dark + light backgrounds. */
+.profile-lang-medals {
+  display: inline-flex; vertical-align: middle; gap: .25rem;
+  margin-left: .35rem;
+}
+.profile-lang-medals:empty { display: none; }
+.lang-medal {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--lm-bg, #8b949e); color: var(--lm-fg, #fff);
+  font-family: var(--mono); font-size: .58rem; font-weight: 800;
+  letter-spacing: -.02em;
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--lm-bg, #8b949e) 60%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.18);
+  cursor: default;
+  transition: transform .12s ease;
+}
+.lang-medal:hover { transform: translateY(-1px) scale(1.06); }
+.lang-medal__abbr { line-height: 1; pointer-events: none; }
+
 .profile-gh {
   color: var(--accent);
 }
 .profile-gh:hover { text-decoration: underline; }
+
+/* Languages bar — GitHub-Linguist-style horizontal chart hydrated by
+   src/js/language-stats.js. Sits directly under the activity grass. */
+.profile-langs { padding: .8rem 1rem 0; }
+.profile-langs__head {
+  display: flex; align-items: center; gap: .4rem;
+  font-size: .82rem; color: var(--muted); margin-bottom: .4rem;
+}
+.profile-langs__head .icon { stroke: currentColor; fill: none; }
+.profile-langs__hint { margin-left: .4rem; opacity: .8; }
+.profile-langs__chart {
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: .5rem .25rem;
+  background: var(--surface-2);
+}
+.profile-langs__chart svg { display: block; width: 100%; height: auto; }
+.profile-langs__placeholder {
+  padding: .8rem .4rem; text-align: center;
+  color: var(--muted); font-size: .85rem;
+}
 .post__link {
   font-family: var(--mono); font-size: .82rem;
   color: var(--accent); word-break: break-all;
