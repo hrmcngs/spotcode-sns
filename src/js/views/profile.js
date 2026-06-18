@@ -14,6 +14,7 @@ import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
 import { renderGrass } from '../grass.js';
 import { fetchContributions, cachedContributions } from '../github-activity.js';
+import { getLanguageStats, cachedLanguageStats, langColor } from '../language-stats.js';
 
 // Monotonic version so async hydrations can detect a newer renderProfile
 // has superseded them and bail out before clobbering the DOM.
@@ -117,6 +118,51 @@ function renderOrgMembers(u) {
       '</div>' +
     '</section>'
   );
+}
+
+// Horizontal-bar SVG for the language stats — port of GHSCharts.hbar
+// from github-stats-charts, slimmed to drop the dark-card background
+// (the surrounding `.profile-langs` block already provides one) so it
+// inherits the site's light/dark theme via currentColor / CSS vars.
+function renderLangBar(items) {
+  if (!items || !items.length) return '';
+  const total = items.reduce((a, d) => a + (d.value || 0), 0) || 1;
+  const W = 460, rowH = 26, padY = 8, labelW = 124, valW = 64;
+  const H = padY * 2 + items.length * rowH;
+  const trackX = labelW, trackW = W - labelW - valW;
+  const max = items.reduce((m, d) => Math.max(m, d.value || 0), 1);
+  let body = '';
+  items.forEach((d, i) => {
+    const cy = padY + i * rowH + rowH / 2;
+    const w = Math.max(((d.value || 0) / max) * trackW, 3);
+    const pct = Math.round(((d.value || 0) / total) * 100);
+    const display = pct >= 1 ? pct + '%' : '<1%';
+    const title = escAttr(d.label) + ': ' + display;
+    body +=
+      '<text x="' + (labelW - 12) + '" y="' + (cy + 4) + '" text-anchor="end" font-size="12" fill="currentColor">' + escAttr(d.label) + '</text>' +
+      '<rect x="' + trackX + '" y="' + (cy - 6) + '" width="' + trackW + '" height="12" rx="6" fill="rgba(127,127,127,0.18)"/>' +
+      '<rect x="' + trackX + '" y="' + (cy - 6) + '" width="' + w.toFixed(1) + '" height="12" rx="6" fill="' + d.color + '"><title>' + title + '</title></rect>' +
+      '<text x="' + (W - valW + 10) + '" y="' + (cy + 4) + '" font-size="11" font-family="ui-monospace,Menlo,monospace" fill="currentColor" opacity=".7">' + display + '</text>';
+  });
+  return (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" ' +
+      'width="100%" height="' + H + '" preserveAspectRatio="xMidYMid meet" ' +
+      'role="img" aria-label="Language usage bar chart">' +
+      body +
+    '</svg>'
+  );
+}
+
+// Take the raw `[ [name, bytes], … ]` from language-stats and reduce
+// it to the top N for the chart, lumping the long tail into "Other".
+function topLangItems(langs, n = 8) {
+  if (!Array.isArray(langs) || !langs.length) return [];
+  const top = langs.slice(0, n).map(([name, bytes]) => ({
+    label: name, value: bytes, color: langColor(name),
+  }));
+  const restBytes = langs.slice(n).reduce((a, [, b]) => a + b, 0);
+  if (restBytes > 0) top.push({ label: 'Other', value: restBytes, color: '#8b949e' });
+  return top;
 }
 
 // 53 weeks × 7 days of zeros — gives renderGrass() something to paint
@@ -246,6 +292,26 @@ export function renderProfile(handle) {
               renderGrass(cachedContributions(u.github.handle) || emptyGrid()) +
             '</div>' +
           '</div>'
+        : '') +
+      (u.github?.handle && !u.isOrg
+        ? (() => {
+            const cached = cachedLanguageStats(u.github.handle);
+            const items = cached ? topLangItems(cached.langs) : [];
+            return (
+              '<div class="profile-langs" id="profile-langs-' + u.handle + '" data-gh="' + u.github.handle + '">' +
+                '<div class="profile-langs__head">' +
+                  icon('code', { size: 12, className: 'icon--inline' }) +
+                  ' ' + t('profile.langs.title') +
+                  '<span class="profile-langs__hint">' + t('profile.langs.hint') + '</span>' +
+                '</div>' +
+                '<div class="profile-langs__chart">' +
+                  (items.length
+                    ? renderLangBar(items)
+                    : '<div class="profile-langs__placeholder">' + t('profile.langs.loading') + '</div>') +
+                '</div>' +
+              '</div>'
+            );
+          })()
         : '') +
     '</header>'
   );
@@ -544,6 +610,32 @@ function toast(text) {
   toastEl.classList.add('is-show');
   clearTimeout(toast._t);
   toast._t = setTimeout(() => toastEl.classList.remove('is-show'), 2000);
+}
+
+// Per-repo `/languages` aggregation: fetch once on first paint, then
+// swap the inline placeholder for the SVG bar chart. Same per-slot
+// `data-hydrating` dedupe as hydrateProfileActivity so onAuthChange
+// re-renders don't re-trigger the fetch.
+export async function hydrateProfileLanguages(handle) {
+  const u = getUser(handle);
+  const gh = u?.github?.handle;
+  if (!gh || u.isOrg) return;
+  const slot = document.querySelector('#profile-langs-' + u.handle + ' .profile-langs__chart');
+  if (!slot) return;
+  if (slot.dataset.hydrating === '1') return;
+  slot.dataset.hydrating = '1';
+  try {
+    const stats = await getLanguageStats(gh);
+    const items = stats ? topLangItems(stats.langs) : [];
+    if (!slot.isConnected) return;
+    if (!items.length) {
+      slot.innerHTML = '<div class="profile-langs__placeholder">' + t('profile.langs.empty') + '</div>';
+      return;
+    }
+    slot.innerHTML = renderLangBar(items);
+  } finally {
+    if (slot.isConnected) delete slot.dataset.hydrating;
+  }
 }
 
 // Same idea for the GitHub contributions heatmap: render the empty grid

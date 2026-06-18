@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
-import { renderProfile, hydrateProfileActivity, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
+import { renderProfile, hydrateProfileActivity, hydrateProfileLanguages, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
@@ -513,6 +513,7 @@ function dispatch(path) {
     // github_handle on the profile.
     hydrateProfile(handle).then(() => {
       hydrateProfileActivity(handle);
+      hydrateProfileLanguages(handle);
     });
   } else {
     document.title = 'Not found / spotcode-sns';
