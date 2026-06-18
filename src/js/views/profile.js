@@ -439,26 +439,39 @@ async function hydrateProfileBody(handle, myVersion) {
 // on the first run and stayed gone (because the new render shell
 // didn't include the section once it had been hidden by an earlier
 // "no badges" outcome). Caching keeps the DOM stable.
-const hydratedBadges   = new Map(); // handle → 'pending' | 'done'
-const hydratedActivity = new Map();
+// Dedupe lives on the DOM slot via `data-hydrating` rather than on a
+// module-scoped Map keyed by handle. The Map version persisted
+// across SPA navigations, so visiting /aya → /hrmcngs → /aya the
+// second time saw `hydratedBadges.has('aya') === 'done'` and skipped
+// hydration entirely, leaving the freshly-rendered placeholder
+// stuck on "バッジを取得中…" forever. Per-slot state automatically
+// resets when renderProfile blows away the DOM, which is what we
+// want for both the navigation case and the onAuthChange re-render
+// case (same DOM = same dedupe; new DOM = re-run).
 
 // Resolves badges asynchronously after the profile is rendered, so the
 // page paints immediately and we don't block on GitHub API.
 export async function hydrateProfileBadges(handle) {
   const u = getUser(handle);
   if (!u || !u.github?.handle) return;
-  if (hydratedBadges.has(handle)) return;
-  hydratedBadges.set(handle, 'pending');
   const slot = document.getElementById('profile-badges-' + u.handle);
-  if (!slot) { hydratedBadges.delete(handle); return; }
+  if (!slot) return;
+  // Already populated with medals → no need to re-fetch.
+  if (slot.querySelector('.badge-medal')) return;
+  // Another hydration call is in flight against this exact slot.
+  if (slot.dataset.hydrating === '1') return;
+  slot.dataset.hydrating = '1';
   try {
     const badges = await getBadges(u.github.handle);
-    if (!badges.length) { slot.remove(); hydratedBadges.set(handle, 'done'); return; }
+    if (!badges.length) { slot.remove(); return; }
     slot.innerHTML = badges.map(renderBadgeMedal).join('');
-    hydratedBadges.set(handle, 'done');
   } catch {
     slot.remove();
-    hydratedBadges.set(handle, 'done');
+  } finally {
+    // Note: if .remove() ran above, the dataset is gone with the
+    // node; the delete here just cleans up the success path so a
+    // subsequent successful render's re-paint isn't blocked.
+    if (slot.isConnected) delete slot.dataset.hydrating;
   }
 }
 
@@ -577,17 +590,9 @@ export async function openBadgeDetail(profileHandle, badgeId) {
   modal.hidden = false;
 }
 
-// Reset both dedupe maps so a fresh navigation to the same handle
-// can re-fetch (e.g. after the user pulled to refresh).
-export function resetProfileHydrationCache(handle) {
-  if (handle) {
-    hydratedBadges.delete(handle);
-    hydratedActivity.delete(handle);
-  } else {
-    hydratedBadges.clear();
-    hydratedActivity.clear();
-  }
-}
+// (Removed resetProfileHydrationCache — dedupe now lives on the DOM
+// slot's dataset, which resets automatically on each renderProfile
+// re-render. No module-level map left to clear.)
 
 // "More" popover handler. Wired from main.js's delegated click
 // listener (`#profile-more-btn`). Mounts a singleton menu the first
@@ -700,16 +705,22 @@ export async function hydrateProfileActivity(handle) {
   const u = getUser(handle);
   const gh = u?.github?.handle;
   if (!gh) return;
-  if (hydratedActivity.has(handle)) return;
-  hydratedActivity.set(handle, 'pending');
-  const cached = cachedContributions(gh);
-  if (!cached) {
-    const counts = await fetchContributions(gh);
-    if (!counts) { hydratedActivity.delete(handle); return; }
-  }
   const slot = document.querySelector('#profile-activity-' + u.handle + ' .profile-activity__graph');
-  if (!slot) { hydratedActivity.delete(handle); return; }
-  const counts = cachedContributions(gh);
-  if (counts) slot.innerHTML = renderGrass(counts);
-  hydratedActivity.set(handle, 'done');
+  if (!slot) return;
+  // Same per-slot dedupe pattern as hydrateProfileBadges — survives
+  // re-renders correctly because the dataset attaches to the DOM
+  // element, not to the handle.
+  if (slot.dataset.hydrating === '1') return;
+  slot.dataset.hydrating = '1';
+  try {
+    const cached = cachedContributions(gh);
+    if (!cached) {
+      const counts = await fetchContributions(gh);
+      if (!counts) return;
+    }
+    const counts = cachedContributions(gh);
+    if (counts) slot.innerHTML = renderGrass(counts);
+  } finally {
+    if (slot.isConnected) delete slot.dataset.hydrating;
+  }
 }
