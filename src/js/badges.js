@@ -26,10 +26,11 @@ import { read, write } from './storage.js';
 // GitHub-achievement-style medal render; dropped the chip `tone`
 // field), so v3/v4 cached arrays don't carry the fields the new
 // renderer needs and would paint as colour-less circles.
-// v6: badge object shape adds iconSlug / count / tier / tierName /
-// exts. v5 entries lack these and would render as colour-less /
-// tier-less medals.
-const CACHE_KEY = 'spotcode:badges_cache:v6';
+// v7: org-repo source now also infers candidate orgs from the
+// owners of event-feed repos, so users whose org memberships are
+// private (the GitHub default) finally pick up the languages of
+// those orgs. v6 caches were missing those repos.
+const CACHE_KEY = 'spotcode:badges_cache:v7';
 const TTL_MS    = 24 * 60 * 60 * 1000;
 const MAX_REPOS_TO_SCAN = 12;
 
@@ -139,27 +140,34 @@ async function fetchJson(url) {
   return r.json();
 }
 
-// Pull repos the user has actually pushed to recently. The events
-// feed only covers ~90 days, but it's the only public signal of
-// "this person authored commits here" — owned-repo lists alone
-// would miss every contribution to an org repo.
+// Pull repos the user has actually pushed to recently AND the set
+// of owner accounts those repos belong to. The events feed only
+// covers ~90 days, but it's the only public signal of "this person
+// authored commits here" — owned-repo lists alone would miss every
+// contribution to an org repo.
+//
+// The owners set feeds reposFromOrgs below, which catches org repos
+// even when the user has their membership set to private (the
+// GitHub default for new orgs).
 async function reposFromPushEvents(handle) {
-  const out = new Map();
+  const repos  = new Map();
+  const owners = new Set();
   let events;
   try {
     events = await fetchJson(
       'https://api.github.com/users/' + encodeURIComponent(handle) + '/events/public?per_page=100'
     );
-  } catch { return out; }
+  } catch { return { repos, owners }; }
   for (const ev of events || []) {
     if (ev.type !== 'PushEvent' || !ev.repo?.name) continue;
     const slash = ev.repo.name.indexOf('/');
     if (slash < 1) continue;
     const owner = ev.repo.name.slice(0, slash);
     const name  = ev.repo.name.slice(slash + 1);
-    if (!out.has(ev.repo.name)) out.set(ev.repo.name, { owner, name, defaultBranch: null });
+    if (!repos.has(ev.repo.name)) repos.set(ev.repo.name, { owner, name, defaultBranch: null });
+    owners.add(owner);
   }
-  return out;
+  return { repos, owners };
 }
 
 // Owned non-fork repos backfill the events list for users whose
@@ -179,6 +187,67 @@ async function reposOwned(handle) {
     const key = r.owner.login + '/' + r.name;
     if (!out.has(key)) {
       out.set(key, { owner: r.owner.login, name: r.name, defaultBranch: r.default_branch || null });
+    }
+  }
+  return out;
+}
+
+// Public repos belonging to orgs the user is affiliated with.
+//
+// Two source paths, deduped into one candidate set:
+//
+//   1. /users/{handle}/orgs — authoritative for *public* memberships.
+//      Most GitHub users keep their org memberships private (the
+//      default for new joins), so this often returns []. That's why
+//      we fall through to (2).
+//   2. Owners of repos the user has pushed to in the events feed —
+//      catches orgs where the user is a private member or a non-
+//      member contributor.
+//
+// Candidates that turn out to be user accounts (not orgs) make
+// /orgs/{name}/repos return 404; we silently skip them.
+//
+// Rate-limit caution: capped at MAX_ORGS_TO_SCAN candidates, each
+// pulling MAX_REPOS_PER_ORG public non-forks. Net cost: 1 (orgs) +
+// up to MAX_ORGS_TO_SCAN (per-org repos) = ≤4 extra API calls
+// with the defaults below.
+const MAX_ORGS_TO_SCAN  = 3;
+const MAX_REPOS_PER_ORG = 6;
+async function reposFromOrgs(handle, eventOwners) {
+  const out = new Map();
+  const candidates = new Set();
+
+  // (1) Public memberships — authoritative when available.
+  try {
+    const orgs = await fetchJson(
+      'https://api.github.com/users/' + encodeURIComponent(handle) + '/orgs?per_page=' + MAX_ORGS_TO_SCAN
+    );
+    for (const o of (orgs || [])) if (o && o.login) candidates.add(o.login);
+  } catch {}
+
+  // (2) Inferred from event-feed owners. Some are users (not orgs);
+  //     /orgs/.../repos returns 404 for those and we skip below.
+  const handleLc = String(handle || '').toLowerCase();
+  for (const owner of (eventOwners || [])) {
+    if (owner && owner.toLowerCase() !== handleLc) candidates.add(owner);
+  }
+
+  const list = Array.from(candidates).slice(0, MAX_ORGS_TO_SCAN);
+  // Sequential to keep the rate-limit budget predictable.
+  for (const org of list) {
+    let repos;
+    try {
+      repos = await fetchJson(
+        'https://api.github.com/orgs/' + encodeURIComponent(org) +
+        '/repos?per_page=' + MAX_REPOS_PER_ORG + '&sort=pushed&type=public'
+      );
+    } catch { continue; } // 404 = candidate is a user account, not an org
+    for (const r of (repos || [])) {
+      if (r.fork) continue;
+      const key = r.owner.login + '/' + r.name;
+      if (!out.has(key)) {
+        out.set(key, { owner: r.owner.login, name: r.name, defaultBranch: r.default_branch || null });
+      }
     }
   }
   return out;
@@ -224,12 +293,19 @@ export async function getBadges(githubHandle) {
     return [];
   }
 
-  const eventsRepos = await reposFromPushEvents(githubHandle);
-  const ownedRepos  = await reposOwned(githubHandle);
-  // Events first (most recent activity), then owned to backfill.
-  // Slice after union so we keep the freshest signal under the cap.
+  const { repos: eventsRepos, owners: eventOwners } = await reposFromPushEvents(githubHandle);
+  const ownedRepos = await reposOwned(githubHandle);
+  // reposFromOrgs(handle, eventOwners) catches org repos even when
+  // the user's membership is private (the GitHub default) by
+  // inferring candidate org names from owners of repos the user
+  // pushed to.
+  const orgRepos = await reposFromOrgs(githubHandle, eventOwners);
+  // Priority: events (strongest) → owned → orgs (weakest). Slice
+  // after union so the strongest signals are guaranteed to land in
+  // the probe set under the MAX_REPOS_TO_SCAN cap.
   const combined = new Map(eventsRepos);
   for (const [k, v] of ownedRepos) if (!combined.has(k)) combined.set(k, v);
+  for (const [k, v] of orgRepos)   if (!combined.has(k)) combined.set(k, v);
   const probe = Array.from(combined.values()).slice(0, MAX_REPOS_TO_SCAN);
 
   const counts = Object.create(null);
