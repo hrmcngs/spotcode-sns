@@ -2638,12 +2638,13 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 }
 
 /* ---------- "hide decorative badges" display pref ----------
-   Toggled from /settings → 表示 → 装飾バッジの表示. Hides every
-   small status / role / kind / visibility chip in one shot via a
-   `data-hide-badges="1"` flag on <html> (set by display-prefs.js).
-   The lock icon next to a private handle stays — that's signaling
-   privacy state, not a decoration. */
-html[data-hide-badges] .role-badge,
+   Toggled from /settings → 表示 → 装飾バッジの表示. Hides the
+   small status / kind / visibility chips on posts in one shot via
+   a `data-hide-badges="1"` flag on <html> (set by display-prefs.js).
+   The .role-badge ({} Programmer, "組織") is excluded — it's an
+   identity marker, not decoration, and users reported the toggle
+   accidentally suppressing it. The privacy lock icon next to a
+   handle stays for the same reason. */
 html[data-hide-badges] .post__kind,
 html[data-hide-badges] .post__vis,
 html[data-hide-badges] .status-badge,
@@ -2665,6 +2666,14 @@ html[data-hide-badges] .file-badge {
   padding: 1rem;
 }
 .account-menu-overlay.is-open { display: flex; }
+/* Anchored variant — overlay backdrop is more subtle since the
+   card is positioned next to the trigger as a dropdown, not as a
+   centred modal. */
+.account-menu-overlay.is-anchored {
+  background: rgba(0,0,0,.18);
+  align-items: flex-start; justify-content: flex-start;
+  padding: 0;
+}
 .account-menu__card {
   width: 100%; max-width: 360px;
   background: var(--surface);
