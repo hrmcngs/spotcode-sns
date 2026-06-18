@@ -2636,3 +2636,17 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 .settings__content {
   display: flex; flex-direction: column;
 }
+
+/* ---------- "hide decorative badges" display pref ----------
+   Toggled from /settings → 表示 → 装飾バッジの表示. Hides every
+   small status / role / kind / visibility chip in one shot via a
+   `data-hide-badges="1"` flag on <html> (set by display-prefs.js).
+   The lock icon next to a private handle stays — that's signaling
+   privacy state, not a decoration. */
+html[data-hide-badges] .role-badge,
+html[data-hide-badges] .post__kind,
+html[data-hide-badges] .post__vis,
+html[data-hide-badges] .status-badge,
+html[data-hide-badges] .file-badge {
+  display: none !important;
+}

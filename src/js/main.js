@@ -28,6 +28,7 @@ import { toggleLike, isLiked, likeCount,
          hydrateMyFollows, clearInteractionsCache } from './interactions.js';
 import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
+import { applyDisplayPrefs } from './display-prefs.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
@@ -705,6 +706,9 @@ hydrateMyFollows();
 // Apply the dev-mode html[data-dev] flag so dev-only CSS can scope its
 // chrome (e.g. the dev-mode topbar indicator) without flashing.
 initDevMode();
+// Apply user display prefs (currently: hide-badges toggle) so the
+// CSS gating is in place before the first paint.
+applyDisplayPrefs();
 initI18n();
 // One-shot schema probe so the first real query already knows which
 // optional columns are missing, instead of discovering them one
