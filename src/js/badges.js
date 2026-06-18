@@ -22,7 +22,11 @@ import { read, write } from './storage.js';
 // v3: expanded the BADGES table beyond just lisp, so the cached empty
 // arrays from v2 (where most users earned nothing and the row was
 // hidden entirely) need to re-resolve against the new badge set.
-const CACHE_KEY = 'spotcode:badges_cache:v3';
+// v5: badge object shape changed (added abbr + colour for the
+// GitHub-achievement-style medal render; dropped the chip `tone`
+// field), so v3/v4 cached arrays don't carry the fields the new
+// renderer needs and would paint as colour-less circles.
+const CACHE_KEY = 'spotcode:badges_cache:v5';
 const TTL_MS    = 24 * 60 * 60 * 1000;
 const MAX_REPOS_TO_SCAN = 12;
 
@@ -30,38 +34,54 @@ const MAX_REPOS_TO_SCAN = 12;
 //   id        — unique slug
 //   name      — displayed text
 //   tooltip   — explanation
+//   abbr      — 2-char glyph rendered inside the achievement medal
+//               (mirrors GitHub achievement style — circular badge
+//               with a short symbol, name + tooltip on hover)
+//   colour    — solid hex used for the medal background
 //   exts      — file extensions to look for (lowercase, no dot)
 //   minFiles  — how many qualifying files needed
 //   minBytes  — minimum file size in bytes to qualify
-//   tone      — chip color (accent / green / warn / danger / boost / like)
 // Threshold is intentionally low (2 files of 100 bytes each) — these
 // are "you've started" badges, not "you're a senior". A new sign-up
 // who's been pushing to *anything* should pick up at least one within
 // their first few sessions, otherwise the badges row vanishes and
-// looks broken. Names use the existing 「始めたて X」 motif.
+// looks broken. Names use the existing 「始めたて X」 motif. Colours
+// match the conventional language palette where one exists so the
+// medal is recognisable at a glance.
 const BADGES = [
-  { id: 'lisper',     name: '始めたて Lisper',     tooltip: '.lisp / .cl ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['lisp','cl'],                          minFiles: 2, minBytes: 100, tone: 'warn' },
-  { id: 'typescripter', name: '始めたて TypeScripter', tooltip: '.ts / .tsx ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['ts','tsx'],                           minFiles: 2, minBytes: 100, tone: 'accent' },
-  { id: 'jser',       name: '始めたて JavaScripter', tooltip: '.js / .jsx / .mjs ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['js','jsx','mjs'],                     minFiles: 2, minBytes: 100, tone: 'boost' },
-  { id: 'pythoneer',  name: '始めたて Pythoneer',  tooltip: '.py ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['py'],                                 minFiles: 2, minBytes: 100, tone: 'green' },
-  { id: 'rustacean',  name: '始めたて Rustacean',  tooltip: '.rs ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['rs'],                                 minFiles: 2, minBytes: 100, tone: 'danger' },
-  { id: 'gopher',     name: '始めたて Gopher',     tooltip: '.go ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['go'],                                 minFiles: 2, minBytes: 100, tone: 'accent' },
-  { id: 'javaer',     name: '始めたて Java/Kotlin', tooltip: '.java / .kt ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['java','kt'],                          minFiles: 2, minBytes: 100, tone: 'warn' },
-  { id: 'cppr',       name: '始めたて C/C++',      tooltip: '.c / .cc / .cpp / .h / .hpp ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['c','cc','cpp','h','hpp'],             minFiles: 2, minBytes: 100, tone: 'boost' },
-  { id: 'webmaker',   name: '始めたて Web Maker',  tooltip: '.html / .css / .scss ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['html','htm','css','scss'],            minFiles: 2, minBytes: 100, tone: 'like' },
-  { id: 'gamedev',    name: '始めたて Game Dev',   tooltip: '.gd / .lua / .cs / .pde ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['gd','lua','cs','pde'],                minFiles: 2, minBytes: 100, tone: 'like' },
-  { id: 'shellr',     name: '始めたて Shell Hacker', tooltip: '.sh / .bash / .zsh ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['sh','bash','zsh'],                    minFiles: 2, minBytes: 100, tone: 'green' },
+  { id: 'lisper',       name: '始めたて Lisper',        abbr: 'Lp', colour: '#8a4cc4',
+    tooltip: '.lisp / .cl ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['lisp','cl'],                                minFiles: 2, minBytes: 100 },
+  { id: 'typescripter', name: '始めたて TypeScripter',  abbr: 'Ts', colour: '#3178c6',
+    tooltip: '.ts / .tsx ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['ts','tsx'],                                 minFiles: 2, minBytes: 100 },
+  { id: 'jser',         name: '始めたて JavaScripter',  abbr: 'Js', colour: '#f1e05a',
+    tooltip: '.js / .jsx / .mjs ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['js','jsx','mjs'],                           minFiles: 2, minBytes: 100 },
+  { id: 'pythoneer',    name: '始めたて Pythoneer',     abbr: 'Py', colour: '#3776ab',
+    tooltip: '.py ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['py'],                                       minFiles: 2, minBytes: 100 },
+  { id: 'rustacean',    name: '始めたて Rustacean',     abbr: 'Rs', colour: '#dea584',
+    tooltip: '.rs ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['rs'],                                       minFiles: 2, minBytes: 100 },
+  { id: 'gopher',       name: '始めたて Gopher',        abbr: 'Go', colour: '#00add8',
+    tooltip: '.go ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['go'],                                       minFiles: 2, minBytes: 100 },
+  { id: 'javaer',       name: '始めたて Java/Kotlin',   abbr: 'Jv', colour: '#b07219',
+    tooltip: '.java / .kt ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['java','kt'],                                minFiles: 2, minBytes: 100 },
+  { id: 'cppr',         name: '始めたて C/C++',         abbr: 'C+', colour: '#5e6cb0',
+    tooltip: '.c / .cc / .cpp / .h / .hpp ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['c','cc','cpp','h','hpp'],                   minFiles: 2, minBytes: 100 },
+  { id: 'webmaker',     name: '始めたて Web Maker',     abbr: 'Wb', colour: '#e34c26',
+    tooltip: '.html / .css / .scss ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['html','htm','css','scss'],                  minFiles: 2, minBytes: 100 },
+  { id: 'gamedev',      name: '始めたて Game Dev',      abbr: 'Gd', colour: '#c84d96',
+    tooltip: '.gd / .lua / .cs / .pde ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['gd','lua','cs','pde'],                      minFiles: 2, minBytes: 100 },
+  { id: 'shellr',       name: '始めたて Shell Hacker',  abbr: 'Sh', colour: '#4eaa25',
+    tooltip: '.sh / .bash / .zsh ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['sh','bash','zsh'],                          minFiles: 2, minBytes: 100 },
 ];
 
 function readCache() { return read(CACHE_KEY, {}); }
@@ -204,7 +224,7 @@ export async function getBadges(githubHandle) {
       for (const sz of bucket.sizes) if (sz >= b.minBytes) qualifying++;
     }
     if (qualifying >= b.minFiles) {
-      earned.push({ id: b.id, name: b.name, tooltip: b.tooltip, tone: b.tone });
+      earned.push({ id: b.id, name: b.name, tooltip: b.tooltip, abbr: b.abbr, colour: b.colour });
     }
   }
 

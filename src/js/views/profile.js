@@ -244,10 +244,7 @@ export function renderProfile(handle) {
         ? (() => {
             const cached = cachedBadges(u.github.handle);
             const inner = (cached && cached.length)
-              ? cached.map(b => (
-                  '<span class="badge-chip badge-chip--' + b.tone + '" title="' + b.tooltip.replace(/"/g, '&quot;') + '">' +
-                    b.name + '</span>'
-                )).join('')
+              ? cached.map(renderBadgeMedal).join('')
               : '<span class="profile-badges__loading">バッジを取得中…</span>';
             return '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
               inner + '</div>';
@@ -457,15 +454,31 @@ export async function hydrateProfileBadges(handle) {
   try {
     const badges = await getBadges(u.github.handle);
     if (!badges.length) { slot.remove(); hydratedBadges.set(handle, 'done'); return; }
-    slot.innerHTML = badges.map(b => (
-      '<span class="badge-chip badge-chip--' + b.tone + '" title="' + b.tooltip.replace(/"/g, '&quot;') + '">' +
-        b.name + '</span>'
-    )).join('');
+    slot.innerHTML = badges.map(renderBadgeMedal).join('');
     hydratedBadges.set(handle, 'done');
   } catch {
     slot.remove();
     hydratedBadges.set(handle, 'done');
   }
+}
+
+// GitHub-achievement-style medal: a coloured circle with a 2-char
+// abbreviation, the full name visible underneath, and the tooltip
+// via `title` for the long explanation. Defaults guard against
+// older cached badge objects that lack the new `abbr` / `colour`
+// fields — they get a muted neutral medal until the next refetch.
+function renderBadgeMedal(b) {
+  const abbr   = escAttr(b.abbr || (b.name || '?').slice(0, 2));
+  const colour = b.colour || '#666';
+  const title  = (b.name + ' — ' + (b.tooltip || '')).replace(/"/g, '&quot;');
+  return (
+    '<span class="badge-medal" title="' + title + '" aria-label="' + escAttr(b.name) + '">' +
+      '<span class="badge-medal__disc" style="background:' + colour + '">' +
+        '<span class="badge-medal__abbr">' + abbr + '</span>' +
+      '</span>' +
+      '<span class="badge-medal__name">' + escAttr(b.name) + '</span>' +
+    '</span>'
+  );
 }
 
 // Reset both dedupe maps so a fresh navigation to the same handle

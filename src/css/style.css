@@ -2477,12 +2477,61 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   margin-left: auto; align-self: center;
 }
 
-/* ---------- profile badges ---------- */
+/* ---------- profile badges (GitHub-achievement-style medals) ---------- */
 .profile-badges {
-  display: flex; flex-wrap: wrap; gap: .35rem;
-  padding: .6rem 1rem 0;
+  display: flex; flex-wrap: wrap; gap: .85rem .55rem;
+  padding: .8rem 1rem 0;
 }
 .profile-badges__loading { color: var(--muted); font-size: .78rem; }
+.badge-medal {
+  display: inline-flex; flex-direction: column; align-items: center;
+  gap: .25rem;
+  width: 60px;
+  cursor: default;
+}
+.badge-medal__disc {
+  /* Circular medal disc — solid language colour with a subtle inset
+     highlight + outer ring so it reads as a 3-D coin instead of a
+     flat circle. Inspired by GitHub's achievement medals. */
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-weight: 800; font-size: 1rem;
+  letter-spacing: .02em;
+  text-shadow: 0 1px 0 rgba(0,0,0,.25);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.35),
+    inset 0 -3px 6px rgba(0,0,0,.18),
+    0 0 0 2px rgba(255,255,255,.06),
+    0 2px 4px rgba(0,0,0,.25);
+}
+html[data-theme='light'] .badge-medal__disc {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.45),
+    inset 0 -3px 6px rgba(0,0,0,.14),
+    0 0 0 2px rgba(0,0,0,.04),
+    0 2px 4px rgba(0,0,0,.15);
+}
+.badge-medal__abbr {
+  font-family: var(--mono);
+  /* The yellow JS badge fades into the page on white text — punch up
+     the contrast with a heavier shadow only when the disc is bright.
+     Cheap to do globally rather than per-language. */
+  text-shadow: 0 1px 1px rgba(0,0,0,.45);
+}
+.badge-medal__name {
+  font-size: .68rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.15;
+  max-width: 70px;
+  /* The long "始めたて X" prefix wraps cleanly under a 60px medal —
+     don't ellipsis-truncate it, the badge is more recognisable when
+     the full name is visible. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
 
 /* GitHub contributions heatmap inline on the profile header. */
 .profile-activity {
@@ -2499,20 +2548,6 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
    aspect ratio via height: auto + the SVG's intrinsic viewBox. */
 .profile-activity__graph svg,
 .card svg { max-width: 100%; height: auto; display: block; }
-.badge-chip {
-  display: inline-flex; align-items: center;
-  padding: .25em .7em; border-radius: 999px;
-  font-size: .75rem; font-weight: 700; letter-spacing: .02em;
-  border: 1px solid transparent;
-  cursor: default;
-}
-.badge-chip--accent { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
-.badge-chip--green  { background: color-mix(in srgb, var(--green)  16%, transparent); color: var(--green);  border-color: color-mix(in srgb, var(--green)  35%, transparent); }
-.badge-chip--warn   { background: color-mix(in srgb, var(--warn)   16%, transparent); color: var(--warn);   border-color: color-mix(in srgb, var(--warn)   35%, transparent); }
-.badge-chip--danger { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
-.badge-chip--boost  { background: color-mix(in srgb, var(--boost)  16%, transparent); color: var(--boost);  border-color: color-mix(in srgb, var(--boost)  35%, transparent); }
-.badge-chip--like   { background: color-mix(in srgb, var(--like)   16%, transparent); color: var(--like);   border-color: color-mix(in srgb, var(--like)   35%, transparent); }
-
 /* ---------- post address line ---------- */
 .post__addr {
   margin-top: .4rem;
