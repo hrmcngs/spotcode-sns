@@ -452,7 +452,7 @@ export function renderSettings() {
     ? devCards({ cfg, override, usingOverride })
     : (section && section.render ? section.render() : '');
   return (
-    '<div class="settings" data-settings-tab="' + tab + '">' +
+    '<div class="settings" data-active-settings-tab="' + tab + '">' +
       '<h1 class="settings__title">' + t('settings.title') + '</h1>' +
       settingsNav(tab) +
       '<div class="settings__content">' + body + '</div>' +
@@ -474,7 +474,12 @@ export function bindSettings() {
       bindSettings();
     }
   }
-  document.querySelectorAll('[data-settings-tab]').forEach(el => {
+  // Selector scoped to the nav anchors specifically — earlier
+  // `[data-settings-tab]` also matched the wrapper <div> (which
+  // used the same attribute as an "active tab" marker), so a tab
+  // click bubbled into the wrapper's handler and immediately
+  // pushed the old tab back into the URL.
+  document.querySelectorAll('.settings-nav__tab[data-settings-tab]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.preventDefault();
       const id = el.getAttribute('data-settings-tab');
