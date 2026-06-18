@@ -9,7 +9,7 @@ import { isFollowing, isRequested, followerCount, followingCount,
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
-import { getBadges } from '../badges.js';
+import { getBadges, cachedBadges } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
@@ -235,10 +235,23 @@ export function renderProfile(handle) {
       // authors — so skip them on `is_org` accounts. badges.js also
       // defends in depth by short-circuiting when the linked GitHub
       // handle resolves to type=Organization.
+      // Paint badges + grass from cache up-front when we have one.
+      // Without this, an onAuthChange-triggered re-render would
+      // blow away the hydrated content and flash the loading
+      // placeholder before hydration could refill it — visible as
+      // the "草が点滅する" flicker.
       (u.github?.handle && !u.isOrg
-        ? '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
-            '<span class="profile-badges__loading">バッジを取得中…</span>' +
-          '</div>'
+        ? (() => {
+            const cached = cachedBadges(u.github.handle);
+            const inner = (cached && cached.length)
+              ? cached.map(b => (
+                  '<span class="badge-chip badge-chip--' + b.tone + '" title="' + b.tooltip.replace(/"/g, '&quot;') + '">' +
+                    b.name + '</span>'
+                )).join('')
+              : '<span class="profile-badges__loading">バッジを取得中…</span>';
+            return '<div class="profile-badges" id="profile-badges-' + u.handle + '" data-gh="' + u.github.handle + '">' +
+              inner + '</div>';
+          })()
         : '') +
       (u.github?.handle
         ? '<div class="profile-activity" id="profile-activity-' + u.handle + '" data-gh="' + u.github.handle + '">' +
@@ -247,9 +260,9 @@ export function renderProfile(handle) {
               ' GitHub activity ' +
               '<span class="profile-activity__hint">last 12 months</span>' +
             '</div>' +
-            // Filled by hydrateProfileActivity (or just stays as the
-            // placeholder if the fetch fails / GitHub handle is bogus).
-            '<div class="profile-activity__graph">' + renderGrass(emptyGrid()) + '</div>' +
+            '<div class="profile-activity__graph">' +
+              renderGrass(cachedContributions(u.github.handle) || emptyGrid()) +
+            '</div>' +
           '</div>'
         : '') +
     '</header>'
@@ -420,22 +433,50 @@ async function hydrateProfileBody(handle, myVersion) {
   hydratePolls(posts).catch(() => {});
 }
 
+// Per-handle dedupe for both badge and activity hydration. main.js's
+// `onAuthChange → refresh()` re-runs dispatch() on every auth-state
+// event (INITIAL_SESSION + SIGNED_IN can both fire on a single boot),
+// which re-rendered the profile and re-triggered hydration each
+// time. The activity grass replaced `slot.innerHTML` on each call →
+// visible flicker. Badges meanwhile got removed via `slot.remove()`
+// on the first run and stayed gone (because the new render shell
+// didn't include the section once it had been hidden by an earlier
+// "no badges" outcome). Caching keeps the DOM stable.
+const hydratedBadges   = new Map(); // handle → 'pending' | 'done'
+const hydratedActivity = new Map();
+
 // Resolves badges asynchronously after the profile is rendered, so the
 // page paints immediately and we don't block on GitHub API.
 export async function hydrateProfileBadges(handle) {
   const u = getUser(handle);
   if (!u || !u.github?.handle) return;
+  if (hydratedBadges.has(handle)) return;
+  hydratedBadges.set(handle, 'pending');
   const slot = document.getElementById('profile-badges-' + u.handle);
-  if (!slot) return;
+  if (!slot) { hydratedBadges.delete(handle); return; }
   try {
     const badges = await getBadges(u.github.handle);
-    if (!badges.length) { slot.remove(); return; }
+    if (!badges.length) { slot.remove(); hydratedBadges.set(handle, 'done'); return; }
     slot.innerHTML = badges.map(b => (
       '<span class="badge-chip badge-chip--' + b.tone + '" title="' + b.tooltip.replace(/"/g, '&quot;') + '">' +
         b.name + '</span>'
     )).join('');
+    hydratedBadges.set(handle, 'done');
   } catch {
     slot.remove();
+    hydratedBadges.set(handle, 'done');
+  }
+}
+
+// Reset both dedupe maps so a fresh navigation to the same handle
+// can re-fetch (e.g. after the user pulled to refresh).
+export function resetProfileHydrationCache(handle) {
+  if (handle) {
+    hydratedBadges.delete(handle);
+    hydratedActivity.delete(handle);
+  } else {
+    hydratedBadges.clear();
+    hydratedActivity.clear();
   }
 }
 
@@ -446,14 +487,16 @@ export async function hydrateProfileActivity(handle) {
   const u = getUser(handle);
   const gh = u?.github?.handle;
   if (!gh) return;
+  if (hydratedActivity.has(handle)) return;
+  hydratedActivity.set(handle, 'pending');
   const cached = cachedContributions(gh);
   if (!cached) {
     const counts = await fetchContributions(gh);
-    if (!counts) return;
+    if (!counts) { hydratedActivity.delete(handle); return; }
   }
-  // Re-render the graph with whatever the cache holds now.
   const slot = document.querySelector('#profile-activity-' + u.handle + ' .profile-activity__graph');
-  if (!slot) return;
+  if (!slot) { hydratedActivity.delete(handle); return; }
   const counts = cachedContributions(gh);
   if (counts) slot.innerHTML = renderGrass(counts);
+  hydratedActivity.set(handle, 'done');
 }
