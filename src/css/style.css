@@ -1507,6 +1507,31 @@ html[data-theme='light'] .profile-header--org .profile-cover {
   border-color: color-mix(in srgb, var(--muted) 30%, transparent);
 }
 .role-badge--org .icon { stroke: currentColor; fill: none; }
+
+/* Round language medals next to the {} programmer badge — GitHub
+   Achievement-style coin: per-language Linguist colour fill, 1-2
+   letter abbreviation in YIQ-picked contrast text, slight glow ring
+   so they read on dark + light backgrounds. */
+.profile-lang-medals {
+  display: inline-flex; vertical-align: middle; gap: .25rem;
+  margin-left: .35rem;
+}
+.profile-lang-medals:empty { display: none; }
+.lang-medal {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--lm-bg, #8b949e); color: var(--lm-fg, #fff);
+  font-family: var(--mono); font-size: .58rem; font-weight: 800;
+  letter-spacing: -.02em;
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--lm-bg, #8b949e) 60%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.18);
+  cursor: default;
+  transition: transform .12s ease;
+}
+.lang-medal:hover { transform: translateY(-1px) scale(1.06); }
+.lang-medal__abbr { line-height: 1; pointer-events: none; }
+
 .profile-gh {
   color: var(--accent);
 }

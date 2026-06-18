@@ -54,6 +54,38 @@ export function langColor(name) {
   return LANG_COLORS[name] || '#8b949e';
 }
 
+// 1-2 letter abbreviation for the round language medal. Hand-mapped
+// for the cases where the auto-from-first-letters version would lose
+// information ("J" alone collides with both Java and JavaScript;
+// "C" collides with C / C++ / C#).
+const LANG_ABBR = {
+  JavaScript: 'JS', TypeScript: 'TS', HTML: 'HT', CSS: 'CS',
+  Java: 'Jv', Python: 'Py', C: 'C', 'C++': 'C+', 'C#': 'C#',
+  Shell: 'Sh', Ruby: 'Rb', Go: 'Go', Rust: 'Rs', PHP: 'PH',
+  Kotlin: 'Kt', Swift: 'Sw', Dart: 'Dt', Vue: 'Vu', Lua: 'Lu',
+  GLSL: 'GL', Batchfile: 'Bt', Makefile: 'Mk', Dockerfile: 'Dk',
+  'Jupyter Notebook': 'Jp', SCSS: 'Sc', MDX: 'Mx', Markdown: 'Md',
+  mcfunction: 'mc', 'Common Lisp': 'CL', NewLisp: 'NL', Lisp: 'Ls',
+  YAML: 'YL', JSON: 'JN', TOML: 'TM',
+};
+export function langAbbr(name) {
+  if (LANG_ABBR[name]) return LANG_ABBR[name];
+  const cleaned = String(name || '').replace(/[^A-Za-z0-9]/g, '');
+  return cleaned.slice(0, 2) || '?';
+}
+
+// Pick black/white text for a given hex background using YIQ — keeps
+// the abbreviation readable on bright colours (yellow JS, etc.).
+export function langTextColor(hex) {
+  let h = String(hex || '').replace('#', '');
+  if (h.length === 3) h = h.split('').map((x) => x + x).join('');
+  const r = parseInt(h.slice(0, 2), 16) || 0;
+  const g = parseInt(h.slice(2, 4), 16) || 0;
+  const b = parseInt(h.slice(4, 6), 16) || 0;
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 150 ? '#1a1a1a' : '#ffffff';
+}
+
 function readCache()  { return read(CACHE_KEY, {}); }
 function writeCache(o){ write(CACHE_KEY, o); }
 function cacheFor(handle) {

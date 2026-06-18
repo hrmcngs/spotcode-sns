@@ -14,7 +14,7 @@ import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
 import { renderGrass } from '../grass.js';
 import { fetchContributions, cachedContributions } from '../github-activity.js';
-import { getLanguageStats, cachedLanguageStats, langColor } from '../language-stats.js';
+import { getLanguageStats, cachedLanguageStats, langColor, langAbbr, langTextColor } from '../language-stats.js';
 
 // Monotonic version so async hydrations can detect a newer renderProfile
 // has superseded them and bail out before clobbering the DOM.
@@ -153,6 +153,32 @@ function renderLangBar(items) {
   );
 }
 
+// Round GitHub-Achievements-style medal for one language. Background
+// is the Linguist colour, abbreviation in YIQ-picked contrast.
+function renderLangMedal(name, pct) {
+  const c = langColor(name);
+  const tc = langTextColor(c);
+  const title = name + (pct != null ? ' · ' + pct + '%' : '');
+  return (
+    '<span class="lang-medal" style="--lm-bg:' + c + ';--lm-fg:' + tc + ';" ' +
+      'title="' + escAttr(title) + '" aria-label="' + escAttr(title) + '">' +
+      '<span class="lang-medal__abbr">' + escAttr(langAbbr(name)) + '</span>' +
+    '</span>'
+  );
+}
+
+// Top-N round medals to sit next to the `{}` programmer badge in the
+// profile-name row. Returns '' when there's no data — the slot stays
+// empty until hydrateProfileLanguages fills it in.
+function renderLangMedalStrip(langs, n = 4) {
+  if (!Array.isArray(langs) || !langs.length) return '';
+  const total = langs.reduce((a, [, b]) => a + (b || 0), 0) || 1;
+  return langs.slice(0, n).map(([name, bytes]) => {
+    const pct = Math.round((bytes / total) * 100);
+    return renderLangMedal(name, pct);
+  }).join('');
+}
+
 // Take the raw `[ [name, bytes], … ]` from language-stats and reduce
 // it to the top N for the chart, lumping the long tail into "Other".
 function topLangItems(langs, n = 8) {
@@ -253,6 +279,18 @@ export function renderProfile(handle) {
           // Org accounts are different (they get the Organization
           // subtitle below the name instead).
           (!u.isOrg ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
+          // Round language medals next to the {} badge, cache-painted
+          // here and re-populated by hydrateProfileLanguages. Empty
+          // until first fetch resolves so we don't show a placeholder
+          // sitting awkwardly next to the name.
+          (u.github?.handle && !u.isOrg
+            ? ' <span class="profile-lang-medals" id="profile-lang-medals-' + u.handle + '" data-gh="' + u.github.handle + '">' +
+                (() => {
+                  const c = cachedLanguageStats(u.github.handle);
+                  return c ? renderLangMedalStrip(c.langs) : '';
+                })() +
+              '</span>'
+            : '') +
         '</div>' +
         (u.isOrg
           ? '<div class="profile-org-subtitle">' +
@@ -621,20 +659,23 @@ export async function hydrateProfileLanguages(handle) {
   const gh = u?.github?.handle;
   if (!gh || u.isOrg) return;
   const slot = document.querySelector('#profile-langs-' + u.handle + ' .profile-langs__chart');
-  if (!slot) return;
-  if (slot.dataset.hydrating === '1') return;
-  slot.dataset.hydrating = '1';
+  const medals = document.getElementById('profile-lang-medals-' + u.handle);
+  if (!slot && !medals) return;
+  if (slot && slot.dataset.hydrating === '1') return;
+  if (slot) slot.dataset.hydrating = '1';
   try {
     const stats = await getLanguageStats(gh);
     const items = stats ? topLangItems(stats.langs) : [];
-    if (!slot.isConnected) return;
-    if (!items.length) {
-      slot.innerHTML = '<div class="profile-langs__placeholder">' + t('profile.langs.empty') + '</div>';
-      return;
+    if (slot && slot.isConnected) {
+      slot.innerHTML = items.length
+        ? renderLangBar(items)
+        : '<div class="profile-langs__placeholder">' + t('profile.langs.empty') + '</div>';
     }
-    slot.innerHTML = renderLangBar(items);
+    if (medals && medals.isConnected) {
+      medals.innerHTML = stats ? renderLangMedalStrip(stats.langs) : '';
+    }
   } finally {
-    if (slot.isConnected) delete slot.dataset.hydrating;
+    if (slot && slot.isConnected) delete slot.dataset.hydrating;
   }
 }
 
