@@ -2651,28 +2651,31 @@ html[data-hide-badges] .file-badge {
   display: none !important;
 }
 
-/* ---------- right-click account menu (on sidebar me-card) ----------
-   Twitter-style: full-screen translucent backdrop reliably catches
-   outside clicks, popover has a header with a title + X close
-   button. The previous document-level click listener sometimes
-   raced with other handlers (router link interception, tab clicks)
-   and left the menu stuck open. */
-.account-menu__backdrop {
+/* ---------- account-switch modal (Twitter-style) ----------
+   Single overlay element holding both the dim backdrop and the
+   centred card. Uses `.is-open` for show/hide rather than the
+   [hidden] attribute so no other CSS can accidentally suppress
+   it. Backdrop click + X button + Escape all close. */
+.account-menu-overlay {
   position: fixed; inset: 0;
-  z-index: 1599;
-  background: rgba(0,0,0,.35);
-  cursor: default;
+  z-index: 1600;
+  background: rgba(0,0,0,.55);
+  display: none;
+  align-items: center; justify-content: center;
+  padding: 1rem;
 }
-.account-menu {
-  position: fixed; z-index: 1600;
-  min-width: 280px; max-width: 320px;
+.account-menu-overlay.is-open { display: flex; }
+.account-menu__card {
+  width: 100%; max-width: 360px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0,0,0,.5);
-  padding: .3rem;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.55);
+  padding: .4rem;
   display: flex; flex-direction: column; gap: .15rem;
+  max-height: 80vh; overflow-y: auto;
 }
+html.account-menu-locked { overflow: hidden; }
 .account-menu__head {
   display: flex; align-items: center; justify-content: space-between;
   padding: .35rem .35rem .35rem .55rem;

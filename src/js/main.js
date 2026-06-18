@@ -225,39 +225,38 @@ function renderSideMe() {
 // saved-accounts list (each row clickable to switch) and a "Log out"
 // footer. The profile page's stand-alone logout button was removed
 // once this existed — the right-click menu is the only entry point.
-// Twitter-style overlay backdrop + popover. The backdrop catches
-// any click outside the popover so close behaviour is deterministic
-// — the previous "document.addEventListener('click', …)" approach
-// sometimes raced with other handlers (router link interception,
-// settings tab handler, etc.) and left the menu stuck open.
-let accountMenuEl = null;
-let accountMenuBackdropEl = null;
+// Twitter-style modal. A single overlay element holds both the dim
+// backdrop and the centred card; clicking the backdrop (or the X
+// button, or pressing Escape) closes it. Uses an `is-open` class
+// for show/hide so no [hidden] CSS override can break it.
+let accountMenuRoot = null;
 function ensureAccountMenu() {
-  if (accountMenuEl) return accountMenuEl;
-  accountMenuBackdropEl = document.createElement('div');
-  accountMenuBackdropEl.className = 'account-menu__backdrop';
-  accountMenuBackdropEl.hidden = true;
-  accountMenuBackdropEl.addEventListener('click', closeAccountMenu);
-  document.body.appendChild(accountMenuBackdropEl);
-
-  accountMenuEl = document.createElement('div');
-  accountMenuEl.className = 'account-menu';
-  accountMenuEl.setAttribute('role', 'dialog');
-  accountMenuEl.hidden = true;
-  document.body.appendChild(accountMenuEl);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && accountMenuEl && !accountMenuEl.hidden) closeAccountMenu();
+  if (accountMenuRoot) return accountMenuRoot;
+  accountMenuRoot = document.createElement('div');
+  accountMenuRoot.className = 'account-menu-overlay';
+  accountMenuRoot.setAttribute('role', 'dialog');
+  accountMenuRoot.setAttribute('aria-modal', 'true');
+  document.body.appendChild(accountMenuRoot);
+  // Backdrop click → close. The card stops propagation so clicks
+  // inside don't bubble to the backdrop's handler.
+  accountMenuRoot.addEventListener('click', (e) => {
+    if (e.target === accountMenuRoot) closeAccountMenu();
   });
-  return accountMenuEl;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && accountMenuRoot.classList.contains('is-open')) {
+      closeAccountMenu();
+    }
+  });
+  return accountMenuRoot;
 }
 function closeAccountMenu() {
-  if (accountMenuEl) accountMenuEl.hidden = true;
-  if (accountMenuBackdropEl) accountMenuBackdropEl.hidden = true;
+  if (accountMenuRoot) accountMenuRoot.classList.remove('is-open');
+  document.documentElement.classList.remove('account-menu-locked');
 }
-function openAccountMenu(anchorRect) {
+function openAccountMenu() {
   const me = currentUser();
   if (!me) return;
-  const menu = ensureAccountMenu();
+  const root = ensureAccountMenu();
   const saved = listSavedAccounts();
   const rows = saved.map(acc => {
     const active = acc.id === me.id;
@@ -276,36 +275,28 @@ function openAccountMenu(anchorRect) {
       '</button>'
     );
   }).join('');
-  menu.innerHTML =
-    // Header with the X close button — Twitter-style.
-    '<div class="account-menu__head">' +
-      '<span class="account-menu__title">' + escapeText(t('account_menu.title')) + '</span>' +
-      '<button type="button" class="account-menu__close" data-account-menu-close aria-label="Close">' +
-        icon('close', { size: 16 }) +
+  root.innerHTML =
+    '<div class="account-menu__card" role="document">' +
+      '<header class="account-menu__head">' +
+        '<span class="account-menu__title">' + escapeText(t('account_menu.title')) + '</span>' +
+        '<button type="button" class="account-menu__close" data-account-menu-close aria-label="Close">' +
+          icon('close', { size: 18 }) +
+        '</button>' +
+      '</header>' +
+      '<div class="account-menu__list">' + rows + '</div>' +
+      '<div class="account-menu__sep"></div>' +
+      '<button type="button" class="account-menu__row account-menu__row--bad" data-account-menu-logout>' +
+        icon('arrow_right', { size: 14, className: 'icon--inline' }) +
+        escapeText(t('nav.logout')) +
       '</button>' +
-    '</div>' +
-    '<div class="account-menu__list">' + rows + '</div>' +
-    '<div class="account-menu__sep"></div>' +
-    '<button type="button" class="account-menu__row account-menu__row--bad" data-account-menu-logout>' +
-      icon('arrow_right', { size: 14, className: 'icon--inline' }) +
-      escapeText(t('nav.logout')) +
-    '</button>';
+    '</div>';
+  root.classList.add('is-open');
+  document.documentElement.classList.add('account-menu-locked');
 
-  // Position next to the anchor — to the right of the side rail.
-  // Clamp into viewport. (Backdrop is full-screen; only the
-  // popover is positioned.)
-  const W = 280, H = 56 + 48 * (saved.length + 1) + 16;
-  let left = (anchorRect.right + 8);
-  let top  = anchorRect.top;
-  if (left + W > window.innerWidth - 8) left = Math.max(8, anchorRect.left - W - 8);
-  if (top + H > window.innerHeight - 8) top  = Math.max(8, window.innerHeight - H - 8);
-  menu.style.position = 'fixed';
-  menu.style.left = left + 'px';
-  menu.style.top  = top + 'px';
-  if (accountMenuBackdropEl) accountMenuBackdropEl.hidden = false;
-  menu.hidden = false;
-
-  menu.onclick = async (e) => {
+  root.onclick = async (e) => {
+    // Backdrop click (target === root) is caught by the listener
+    // in ensureAccountMenu — here we only handle clicks inside
+    // the card.
     if (e.target.closest('[data-account-menu-close]')) {
       closeAccountMenu();
       return;
@@ -324,6 +315,11 @@ function openAccountMenu(anchorRect) {
       logout().finally(() => navigate('/'));
       return;
     }
+    // Re-attach the root-as-backdrop close behaviour (innerHTML
+    // doesn't replace listeners on root itself, just descendants).
+    if (e.target.classList && e.target.classList.contains('account-menu-overlay')) {
+      closeAccountMenu();
+    }
   };
 }
 function escapeText(s) {
@@ -336,7 +332,7 @@ document.addEventListener('contextmenu', (e) => {
   const anchor = e.target.closest('[data-account-menu]');
   if (!anchor) return;
   e.preventDefault();
-  openAccountMenu(anchor.getBoundingClientRect());
+  openAccountMenu();
 });
 
 // Spot picked in the composer for the current home view, kept in memory
