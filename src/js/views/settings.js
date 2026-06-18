@@ -11,6 +11,7 @@ import { getUser } from '../data.js';
 import { searchProfiles, fetchProfileByHandle } from '../profiles.js';
 import { debounce } from '../drafts.js';
 import { hydrateMyFollows, myFollowingHandles } from '../interactions.js';
+import { navigate, currentPath, url } from '../router.js';
 
 // In-memory state for the two audience-list editors so add/remove
 // can re-render without a round trip. Initialised in renderSettings()
@@ -248,8 +249,8 @@ function roleCard() {
 // time, so the page stops being one long scroll.
 //
 // Per-tab card composition lives here. The active tab id comes from
-// the URL hash (#account / #profile / …) for shareable links + the
-// browser back button.
+// the URL path (/settings/account, /settings/display, …) so the
+// browser back button + bookmarks work the same as any other route.
 
 function accountSection() {
   // orgLabelCard moved in here after the "profile" tab was retired —
@@ -316,9 +317,16 @@ function visibleSections() {
   return SETTINGS_SECTIONS.concat({ id: 'dev', icon: 'spark', render: null });
 }
 
-function currentSettingsTab() {
-  const hash = (location.hash || '').replace(/^#/, '');
-  if (visibleSections().some(s => s.id === hash)) return hash;
+// Tab id is the third path segment of /settings/<tab>. Reading from
+// the route (not location.hash) is essential so that in HASH_MODE
+// builds (Electron / iOS Capacitor) the tab survives the hash-routing
+// step — `#account` previously got rewritten to `/account` by the
+// router's currentPath(), which then matched the @handle profile
+// route and rendered "そのアカウントは存在しません".
+export function currentSettingsTab() {
+  const m = currentPath().match(/^\/settings\/([a-z]+)$/);
+  const id = m ? m[1] : '';
+  if (visibleSections().some(s => s.id === id)) return id;
   return 'account';
 }
 
@@ -328,7 +336,7 @@ function settingsNav(activeId) {
       visibleSections().map(s => (
         '<a class="settings-nav__tab' + (s.id === activeId ? ' is-active' : '') + '" ' +
           'role="tab" aria-selected="' + (s.id === activeId ? 'true' : 'false') + '" ' +
-          'href="#' + s.id + '" data-settings-tab="' + s.id + '">' +
+          'href="' + url('/settings/' + s.id) + '" data-settings-tab="' + s.id + '">' +
           icon(s.icon, { size: 14, className: 'icon--inline' }) +
           t('settings.tab.' + s.id) +
         '</a>'
@@ -420,19 +428,12 @@ export function renderSettings() {
 }
 
 export function bindSettings() {
-  // Tab strip — anchor hrefs are `#account` etc. so the browser's
-  // back button works. We re-render the panel ourselves on every
-  // tab click so the active state + content swap without a full
-  // page reload (which would lose the audience editor's in-memory
-  // chip state). Bound to the rendered nav links and to hashchange
-  // so external nav (bookmark, address bar edit) also works.
-  function rerenderForTab() {
-    const app = document.getElementById('app');
-    if (app) {
-      app.innerHTML = renderSettings();
-      bindSettings();
-    }
-  }
+  // Tab strip — anchor hrefs are `/settings/<tab>` so the browser's
+  // back button works and HASH_MODE builds (Electron / iOS) survive
+  // the hash-routing pass without the tab id being mistaken for a
+  // bare /<handle> profile route. The main dispatcher re-runs
+  // renderSettings + bindSettings on every navigation, so a tab
+  // click just needs to push the new route via navigate().
   // Selector scoped to the nav anchors specifically — earlier
   // `[data-settings-tab]` also matched the wrapper <div> (which
   // used the same attribute as an "active tab" marker), so a tab
@@ -442,24 +443,13 @@ export function bindSettings() {
     el.addEventListener('click', (e) => {
       e.preventDefault();
       const id = el.getAttribute('data-settings-tab');
-      if (location.hash.replace(/^#/, '') === id) return;
-      // pushState rather than direct hash assignment so we don't
-      // trigger the hashchange handler twice (once for assignment,
-      // once for our own rerender).
-      history.pushState(null, '', '#' + id);
-      rerenderForTab();
+      if (currentSettingsTab() === id) return;
+      // navigate() pushes the URL and triggers the main dispatcher,
+      // which re-runs renderSettings/bindSettings — no explicit
+      // rerender call needed (would cause a double render).
+      navigate('/settings/' + id);
     });
   });
-  if (!bindSettings._hashWired) {
-    bindSettings._hashWired = true;
-    window.addEventListener('hashchange', () => {
-      // Only re-render if we're still on /settings — other routes
-      // own their own hash semantics.
-      if (location.pathname.endsWith('/settings') || location.pathname === '/settings') {
-        rerenderForTab();
-      }
-    });
-  }
 
   // Map test
   const mapStatus = document.getElementById('map-status');

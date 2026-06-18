@@ -451,7 +451,7 @@ function dispatch(path) {
     restoreComposerDraft();
     if (pendingSpot) syncSpotChip(pendingSpot);
     hydrateHome('following');
-  } else if (path === '/settings') {
+  } else if (path === '/settings' || /^\/settings\/[a-z]+$/.test(path)) {
     document.title = 'Settings / spotcode-sns';
     app.innerHTML = renderSettings();
     bindSettings();
