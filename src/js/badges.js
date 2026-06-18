@@ -31,8 +31,19 @@ import { read, write } from './storage.js';
 // private (the GitHub default) finally pick up the languages of
 // those orgs. v6 caches were missing those repos.
 const CACHE_KEY = 'spotcode:badges_cache:v7';
-const TTL_MS    = 24 * 60 * 60 * 1000;
+const TTL_MS       = 24 * 60 * 60 * 1000;
+// Empty results expire fast so a transient rate-limit (or a hiccup
+// during the recent v7 cache-busts) doesn't lock a real user out of
+// their badges for a full day.
+const EMPTY_TTL_MS = 10 * 60 * 1000;
 const MAX_REPOS_TO_SCAN = 12;
+
+// Module-level rate-limit cooldown. Set when fetchJson sees a 403
+// from GitHub; while it's in effect, getBadges short-circuits to
+// whatever the cache holds (empty or stale) instead of burning more
+// requests. Cleared by the next fetchJson that succeeds.
+let rateLimitedUntil = 0;
+const RATE_LIMIT_COOLDOWN_MS = 60 * 60 * 1000;
 
 // Each badge:
 //   id        — unique slug
@@ -123,7 +134,10 @@ function cacheFor(handle) {
   const all = readCache();
   const entry = all[handle];
   if (!entry) return null;
-  if (Date.now() - entry.ts > TTL_MS) return null;
+  // Empty results get a much shorter TTL (10 min) so a transient
+  // rate-limit or hiccup doesn't poison the cache for a full day.
+  const ttl = (Array.isArray(entry.badges) && entry.badges.length === 0) ? EMPTY_TTL_MS : TTL_MS;
+  if (Date.now() - entry.ts > ttl) return null;
   return entry.badges;
 }
 
@@ -145,8 +159,18 @@ async function fetchJson(url, timeoutMs = 10000) {
       headers: { 'Accept': 'application/vnd.github+json' },
       signal: ctl.signal,
     });
-    if (r.status === 403) throw new Error('RATE_LIMIT');
+    if (r.status === 403) {
+      // GitHub usually 403s with a rate-limit reason. Mark the
+      // cooldown so getBadges can short-circuit the rest of the
+      // chain instead of doing 30+ more doomed fetches.
+      rateLimitedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+      throw new Error('RATE_LIMIT');
+    }
     if (!r.ok) throw new Error('HTTP_' + r.status);
+    // A successful request means the limit has reset — clear any
+    // stale cooldown so subsequent visits work even when the
+    // 60-min timer hasn't elapsed.
+    if (rateLimitedUntil) rateLimitedUntil = 0;
     return await r.json();
   } finally {
     clearTimeout(timer);
@@ -293,6 +317,12 @@ export async function getBadges(githubHandle) {
   const cached = cacheFor(githubHandle);
   if (cached) return cached;
 
+  // GitHub is rate-limiting our IP — don't pile on another 30+
+  // doomed requests; just hand back whatever the cache has (likely
+  // empty) without writing to it, so the next visit after the
+  // cooldown gets a real fetch.
+  if (Date.now() < rateLimitedUntil) return [];
+
   // Personal-skill badges don't apply to GitHub Organization
   // accounts — those are containers, the actual code is written
   // by the contributors. Cache the empty result so we don't
@@ -305,6 +335,9 @@ export async function getBadges(githubHandle) {
     storeCache(githubHandle, []);
     return [];
   }
+  // The userMeta fetch above may have just set the cooldown via
+  // fetchJson. Bail before doing the expensive 30+ tree scans.
+  if (Date.now() < rateLimitedUntil) return [];
 
   const { repos: eventsRepos, owners: eventOwners } = await reposFromPushEvents(githubHandle);
   const ownedRepos = await reposOwned(githubHandle);
@@ -354,6 +387,12 @@ export async function getBadges(githubHandle) {
     }
   }
 
+  // Don't cache an empty result that came from a mid-flight rate-
+  // limit — otherwise a user who happens to load during a 403
+  // burst gets locked out of their badges until the cache TTL.
+  // Skipping the write means the next visit (after the cooldown)
+  // does a fresh fetch.
+  if (!earned.length && Date.now() < rateLimitedUntil) return [];
   storeCache(githubHandle, earned);
   return earned;
 }
