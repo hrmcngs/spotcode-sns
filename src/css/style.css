@@ -2484,9 +2484,12 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 }
 .profile-badges__loading { color: var(--muted); font-size: .78rem; }
 .badge-medal {
-  display: inline-flex; flex-direction: column; align-items: center;
-  gap: .35rem;
-  width: 70px;
+  /* Just the disc — the full name lives in the title tooltip and
+     the click-opened detail modal, not under the medal. Sized to
+     match the disc so flex-gap in .profile-badges spaces the row
+     evenly. */
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 64px; height: 64px;
   background: transparent; border: 0; padding: 0;
   font: inherit; color: inherit;
   cursor: pointer;
@@ -2581,18 +2584,6 @@ html[data-theme='light'] .badge-medal__disc {
      the contrast with a heavier shadow only when the disc is bright.
      Cheap to do globally rather than per-language. */
   text-shadow: 0 1px 1px rgba(0,0,0,.45);
-}
-.badge-medal__name {
-  font-size: .68rem;
-  color: var(--muted);
-  text-align: center;
-  line-height: 1.15;
-  max-width: 78px;
-  /* The long "始めたて X" prefix wraps cleanly under the medal —
-     don't ellipsis-truncate it, the badge is more recognisable when
-     the full name is visible. */
-  word-break: keep-all;
-  overflow-wrap: break-word;
 }
 
 /* GitHub contributions heatmap inline on the profile header. */

@@ -494,6 +494,11 @@ function renderBadgeMedal(b) {
   // pointer cursor signals it can be opened for details. The dataset
   // carries the badge id so the delegated click handler in main.js
   // can look it up in the cache by handle.
+  //
+  // The full name (「始めたて X」) is intentionally NOT printed under
+  // the disc — it's available via the title tooltip (hover) and the
+  // click-opened detail modal. Showing it inline ate vertical
+  // space and made the row look cluttered.
   return (
     '<button type="button" class="badge-medal" data-badge-id="' + escAttr(b.id) + '" ' +
       'title="' + title + '" aria-label="' + escAttr(b.name) + '">' +
@@ -501,7 +506,6 @@ function renderBadgeMedal(b) {
         inner +
         countChip +
       '</span>' +
-      '<span class="badge-medal__name">' + escAttr(b.name) + '</span>' +
     '</button>'
   );
 }
