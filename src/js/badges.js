@@ -61,3 +61,37 @@ for (const b of BADGES) BADGES_BY_ID[b.id] = b;
 export function getBadgeById(id) {
   return BADGES_BY_ID[id] || null;
 }
+
+// Skill ranks. Stored alongside the badge id in the
+// profiles.skills array using `id:rank` strings (e.g.
+// "typescripter:gold"). Ranks are user-self-selected and shown
+// visually on the medal (coloured outer ring) — no text label
+// like "ゴールド" anywhere in the UI, the swatch colour carries
+// the meaning.
+//
+//   id     — slug stored in profiles.skills after the colon
+//   colour — the swatch + ring colour
+//   order  — for sorting medals by rank if we ever want that
+export const RANKS = [
+  { id: 'bronze',   colour: '#cd7f32', order: 1 },
+  { id: 'silver',   colour: '#c0c0c0', order: 2 },
+  { id: 'gold',     colour: '#f6c200', order: 3 },
+  { id: 'platinum', colour: '#b9d4dc', order: 4 },
+];
+const RANK_IDS = new Set(RANKS.map(r => r.id));
+
+// Parse one entry from profiles.skills. Legacy entries that were
+// stored before the rank model existed are bare ids — default
+// those to 'bronze' so they keep showing without re-saving.
+export function parseSkill(entry) {
+  if (!entry) return null;
+  const s = String(entry);
+  const colon = s.indexOf(':');
+  if (colon < 0) return { id: s, rank: 'bronze' };
+  const id   = s.slice(0, colon);
+  const rank = s.slice(colon + 1);
+  return { id, rank: RANK_IDS.has(rank) ? rank : 'bronze' };
+}
+export function serializeSkill(id, rank) {
+  return id + ':' + (RANK_IDS.has(rank) ? rank : 'bronze');
+}

@@ -9,7 +9,7 @@ import { isFollowing, isRequested, followerCount, followingCount,
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
-import { BADGES, getBadgeById } from '../badges.js';
+import { BADGES, getBadgeById, parseSkill } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
@@ -238,13 +238,15 @@ export function renderProfile(handle) {
       // Skill badges, rendered straight from profiles.skills with
       // no async fetch — the auto-detection-via-GitHub-API path was
       // removed because the unauth 60/h rate limit made it
-      // unreliable. Users now pick badges manually in /settings.
+      // unreliable. Users now pick badges (and per-badge ranks)
+      // manually in /settings; the rank shows on the medal as a
+      // coloured outer ring, no text label.
       (!u.isOrg && Array.isArray(u.skills) && u.skills.length
         ? '<div class="profile-badges" id="profile-badges-' + u.handle + '">' +
             u.skills
-              .map(getBadgeById)
-              .filter(Boolean)
-              .map(renderBadgeMedal)
+              .map(parseSkill)
+              .filter(p => p && getBadgeById(p.id))
+              .map(p => renderBadgeMedal(getBadgeById(p.id), p.rank))
               .join('') +
           '</div>'
         : '') +
@@ -459,9 +461,10 @@ export async function hydrateProfileBadges(_handle) { /* intentionally empty */ 
 // flat colour patch. The language colour is passed in through a
 // CSS custom property so the gradient + ring + shadow declarations
 // stay in the stylesheet.
-function renderBadgeMedal(b) {
+function renderBadgeMedal(b, rank) {
   const abbr   = escAttr(b.abbr || (b.name || '?').slice(0, 2));
   const colour = b.colour || '#666';
+  const safeRank = rank || 'bronze';
   const title  = (b.name + ' — ' + (b.tooltip || '')).replace(/"/g, '&quot;');
   // Render the language logo via Simple Icons CDN (CC0). The icon
   // arrives as a white-filled SVG and sits on top of the pastel
@@ -482,7 +485,7 @@ function renderBadgeMedal(b) {
   // carries the badge id so the delegated click handler in main.js
   // can look it up in the catalogue.
   return (
-    '<button type="button" class="badge-medal" data-badge-id="' + escAttr(b.id) + '" ' +
+    '<button type="button" class="badge-medal badge-medal--rank-' + escAttr(safeRank) + '" data-badge-id="' + escAttr(b.id) + '" ' +
       'title="' + title + '" aria-label="' + escAttr(b.name) + '">' +
       '<span class="badge-medal__disc" style="--badge-color:' + colour + '">' +
         inner +

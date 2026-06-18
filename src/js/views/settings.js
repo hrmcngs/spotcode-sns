@@ -4,7 +4,7 @@ import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
-import { BADGES } from '../badges.js';
+import { BADGES, RANKS, parseSkill, serializeSkill } from '../badges.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
 import { getUser } from '../data.js';
@@ -140,23 +140,46 @@ function orgLabelCard() {
 function skillsCard() {
   const me = currentUser();
   if (!me) return '';
-  const have = new Set(Array.isArray(me.skills) ? me.skills : []);
+  // Map badge id → currently-picked rank ('off' | bronze | silver | gold | platinum).
+  const have = new Map();
+  for (const entry of (Array.isArray(me.skills) ? me.skills : [])) {
+    const p = parseSkill(entry);
+    if (p) have.set(p.id, p.rank);
+  }
   const rows = BADGES.map(b => {
-    const checked = have.has(b.id) ? ' checked' : '';
-    const colour  = b.colour || '#666';
-    const slug    = b.iconSlug;
-    const abbr    = attr(b.abbr || (b.name || '?').slice(0, 2));
+    const colour = b.colour || '#666';
+    const slug   = b.iconSlug;
+    const abbr   = attr(b.abbr || (b.name || '?').slice(0, 2));
+    const cur    = have.get(b.id) || 'off';
     const iconHtml = slug
       ? '<img class="skill-row__icon" alt="" loading="lazy" decoding="async" ' +
           'src="https://cdn.simpleicons.org/' + attr(slug) + '/white" ' +
           'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'skill-row__abbr\',textContent:\'' + abbr + '\'}))">'
       : '<span class="skill-row__abbr">' + abbr + '</span>';
+    // Rank swatch picker — 5 radio buttons (off + 4 rank colours).
+    // Each radio is visually a small coloured circle (or empty
+    // outline for "off"); no text labels, the colour is the
+    // meaning. Same `name` per row so they form a radio group.
+    const groupName = 'skill-' + b.id;
+    const swatches =
+      '<label class="skill-rank skill-rank--off" title="' + attr(t('settings.skills.rank.off')) + '">' +
+        '<input type="radio" name="' + attr(groupName) + '" value="off" data-skill-id="' + attr(b.id) + '"' +
+          (cur === 'off' ? ' checked' : '') + '>' +
+        '<span class="skill-rank__dot"></span>' +
+      '</label>' +
+      RANKS.map(r => (
+        '<label class="skill-rank skill-rank--' + r.id + '" title="' + attr(t('settings.skills.rank.' + r.id)) + '">' +
+          '<input type="radio" name="' + attr(groupName) + '" value="' + r.id + '" data-skill-id="' + attr(b.id) + '"' +
+            (cur === r.id ? ' checked' : '') + '>' +
+          '<span class="skill-rank__dot" style="--rank-color:' + r.colour + '"></span>' +
+        '</label>'
+      )).join('');
     return (
-      '<label class="skill-row">' +
-        '<input type="checkbox" data-skill="' + attr(b.id) + '"' + checked + '>' +
+      '<div class="skill-row">' +
         '<span class="skill-row__disc" style="--badge-color:' + colour + '">' + iconHtml + '</span>' +
         '<span class="skill-row__name">' + attr(b.name) + '</span>' +
-      '</label>'
+        '<span class="skill-row__ranks">' + swatches + '</span>' +
+      '</div>'
     );
   }).join('');
   return (
@@ -540,19 +563,28 @@ export function bindSettings() {
     openAuth('login');
   });
 
-  // Skill-badge checkboxes — every toggle persists the full set
-  // (not just the delta) so the user can't end up in a partial
-  // state if a previous save errored. Debounced so a fast burst of
-  // clicks coalesces into one update.
+  // Skill-badge rank picker. Each badge row has 5 radio swatches
+  // (off + 4 ranks). On any change we re-collect the full picked
+  // set and persist it — never a delta, so a previous failed save
+  // can't leave us in a partial state. Debounced to coalesce a
+  // burst of clicks (e.g. cycling through ranks).
   let skillsTimer = 0;
-  document.querySelectorAll('[data-skill]').forEach(cb => {
-    cb.addEventListener('change', () => {
+  document.querySelectorAll('[data-skill-id]').forEach(input => {
+    input.addEventListener('change', () => {
       clearTimeout(skillsTimer);
       skillsTimer = setTimeout(async () => {
         const me = currentUser();
         if (!me) return;
-        const picked = Array.from(document.querySelectorAll('[data-skill]:checked'))
-          .map(el => el.getAttribute('data-skill'));
+        // Build serialized entries from each row's selected radio,
+        // skipping the "off" rows entirely.
+        const picked = [];
+        const ids = new Set();
+        document.querySelectorAll('[data-skill-id]').forEach(el => ids.add(el.getAttribute('data-skill-id')));
+        for (const id of ids) {
+          const sel = document.querySelector('[data-skill-id="' + id + '"]:checked');
+          const rank = sel ? sel.value : 'off';
+          if (rank && rank !== 'off') picked.push(serializeSkill(id, rank));
+        }
         const status = document.getElementById('skills-status');
         if (status) {
           status.textContent = t('settings.skills.saving');

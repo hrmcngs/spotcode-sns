@@ -2579,6 +2579,38 @@ html[data-theme='light'] .badge-medal__disc {
     0 2px 3px rgba(0,0,0,.15),
     0 6px 14px rgba(0,0,0,.20);
 }
+
+/* Rank ring — coloured halo *outside* the white sticker ring on
+   the disc. The user picks the rank in /settings via colour
+   swatches; no text label like "ゴールド" appears, the ring colour
+   carries the meaning. Bronze is intentionally subtler than gold/
+   silver/platinum so the medals visually escalate. */
+.badge-medal--rank-bronze   .badge-medal__disc { box-shadow:
+  0 0 0 3px #cd7f32,
+  0 0 0 4px rgba(0,0,0,.35),
+  0 3px 6px rgba(0,0,0,.32); }
+.badge-medal--rank-silver   .badge-medal__disc { box-shadow:
+  0 0 0 3px #c0c0c0,
+  0 0 0 4px rgba(0,0,0,.30),
+  0 3px 6px rgba(0,0,0,.32),
+  0 0 8px rgba(192,192,192,.5); }
+.badge-medal--rank-gold     .badge-medal__disc { box-shadow:
+  0 0 0 3px #f6c200,
+  0 0 0 4px rgba(0,0,0,.30),
+  0 3px 8px rgba(0,0,0,.35),
+  0 0 12px rgba(246,194,0,.55); }
+.badge-medal--rank-platinum .badge-medal__disc { box-shadow:
+  0 0 0 3px #b9d4dc,
+  0 0 0 4px rgba(0,0,0,.30),
+  0 3px 10px rgba(0,0,0,.4),
+  0 0 16px rgba(185,212,220,.7); }
+html[data-theme='light'] .badge-medal--rank-bronze .badge-medal__disc,
+html[data-theme='light'] .badge-medal--rank-silver .badge-medal__disc,
+html[data-theme='light'] .badge-medal--rank-gold .badge-medal__disc,
+html[data-theme='light'] .badge-medal--rank-platinum .badge-medal__disc {
+  /* Same rings, lighter contact shadow for the light theme. */
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.18));
+}
 .badge-medal__abbr {
   font-family: var(--mono);
   /* The yellow JS badge fades into the page on white text — punch up
@@ -2850,4 +2882,45 @@ html[data-theme='light'] .badge-medal__disc {
   font-size: .85rem;
   flex: 1 1 auto; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Rank picker swatches: 5 radio inputs styled as colour dots.
+   The native input itself is sr-only; the .skill-rank__dot span
+   does the visual. No text labels — title attr handles
+   accessibility / hover. */
+.skill-row__ranks {
+  display: inline-flex; align-items: center; gap: .18rem;
+  flex: 0 0 auto;
+}
+.skill-rank {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  cursor: pointer;
+}
+.skill-rank input {
+  /* sr-only */
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+.skill-rank__dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--rank-color, transparent);
+  border: 1px solid color-mix(in srgb, var(--rank-color, var(--muted)) 60%, #000);
+  transition: transform .1s ease, box-shadow .12s ease;
+}
+/* "Off" swatch — empty hollow circle so the user can clear the
+   rank entirely. Visually different from the coloured dots. */
+.skill-rank--off .skill-rank__dot {
+  background: transparent;
+  border: 1.5px dashed var(--muted);
+}
+.skill-rank:hover .skill-rank__dot { transform: scale(1.15); }
+.skill-rank input:checked + .skill-rank__dot {
+  /* Selected swatch grows + gets a tight white halo so it pops
+     even when the colour is muted (e.g. silver). */
+  transform: scale(1.35);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text);
+}
+.skill-rank input:focus-visible + .skill-rank__dot {
+  outline: 2px solid var(--accent); outline-offset: 2px;
 }
