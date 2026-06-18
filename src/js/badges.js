@@ -19,7 +19,10 @@ import { read, write } from './storage.js';
 // v2: switched derivation from owned-repos-only to events ∪ owned and
 // added the GitHub-org skip. Bumped so stale empty-badge results
 // from the v1 logic don't linger 24h before re-checking.
-const CACHE_KEY = 'spotcode:badges_cache:v2';
+// v3: expanded the BADGES table beyond just lisp, so the cached empty
+// arrays from v2 (where most users earned nothing and the row was
+// hidden entirely) need to re-resolve against the new badge set.
+const CACHE_KEY = 'spotcode:badges_cache:v3';
 const TTL_MS    = 24 * 60 * 60 * 1000;
 const MAX_REPOS_TO_SCAN = 12;
 
@@ -31,9 +34,34 @@ const MAX_REPOS_TO_SCAN = 12;
 //   minFiles  — how many qualifying files needed
 //   minBytes  — minimum file size in bytes to qualify
 //   tone      — chip color (accent / green / warn / danger / boost / like)
+// Threshold is intentionally low (2 files of 100 bytes each) — these
+// are "you've started" badges, not "you're a senior". A new sign-up
+// who's been pushing to *anything* should pick up at least one within
+// their first few sessions, otherwise the badges row vanishes and
+// looks broken. Names use the existing 「始めたて X」 motif.
 const BADGES = [
-  { id: 'lisper', name: '始めたて Lisper', tooltip: '.lisp / .cl ファイルが 2 つ以上、各 100 バイト以上',
-    exts: ['lisp','cl'], minFiles: 2, minBytes: 100, tone: 'warn' },
+  { id: 'lisper',     name: '始めたて Lisper',     tooltip: '.lisp / .cl ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['lisp','cl'],                          minFiles: 2, minBytes: 100, tone: 'warn' },
+  { id: 'typescripter', name: '始めたて TypeScripter', tooltip: '.ts / .tsx ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['ts','tsx'],                           minFiles: 2, minBytes: 100, tone: 'accent' },
+  { id: 'jser',       name: '始めたて JavaScripter', tooltip: '.js / .jsx / .mjs ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['js','jsx','mjs'],                     minFiles: 2, minBytes: 100, tone: 'boost' },
+  { id: 'pythoneer',  name: '始めたて Pythoneer',  tooltip: '.py ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['py'],                                 minFiles: 2, minBytes: 100, tone: 'green' },
+  { id: 'rustacean',  name: '始めたて Rustacean',  tooltip: '.rs ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['rs'],                                 minFiles: 2, minBytes: 100, tone: 'danger' },
+  { id: 'gopher',     name: '始めたて Gopher',     tooltip: '.go ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['go'],                                 minFiles: 2, minBytes: 100, tone: 'accent' },
+  { id: 'javaer',     name: '始めたて Java/Kotlin', tooltip: '.java / .kt ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['java','kt'],                          minFiles: 2, minBytes: 100, tone: 'warn' },
+  { id: 'cppr',       name: '始めたて C/C++',      tooltip: '.c / .cc / .cpp / .h / .hpp ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['c','cc','cpp','h','hpp'],             minFiles: 2, minBytes: 100, tone: 'boost' },
+  { id: 'webmaker',   name: '始めたて Web Maker',  tooltip: '.html / .css / .scss ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['html','htm','css','scss'],            minFiles: 2, minBytes: 100, tone: 'like' },
+  { id: 'gamedev',    name: '始めたて Game Dev',   tooltip: '.gd / .lua / .cs / .pde ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['gd','lua','cs','pde'],                minFiles: 2, minBytes: 100, tone: 'like' },
+  { id: 'shellr',     name: '始めたて Shell Hacker', tooltip: '.sh / .bash / .zsh ファイルが 2 つ以上、各 100 バイト以上',
+    exts: ['sh','bash','zsh'],                    minFiles: 2, minBytes: 100, tone: 'green' },
 ];
 
 function readCache() { return read(CACHE_KEY, {}); }
@@ -185,3 +213,12 @@ export async function getBadges(githubHandle) {
 }
 
 export function clearBadgeCache() { writeCache({}); }
+
+// Sync read of the cache so renderProfile can paint the badge row
+// straight from cached data on subsequent renders — without it, the
+// row would flash back to the "loading" placeholder on every
+// onAuthChange-triggered refresh().
+export function cachedBadges(githubHandle) {
+  if (!githubHandle) return null;
+  return cacheFor(githubHandle);
+}
