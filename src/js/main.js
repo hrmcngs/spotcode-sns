@@ -21,6 +21,9 @@ import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
 import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
+import { hasSavedAccount } from './saved-accounts.js';
+import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_EMAIL } from './official-account.js';
+import { isAdmin, isOperator } from './dev-mode.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
@@ -269,7 +272,7 @@ function openAccountMenu(anchorRect) {
   if (!me) return;
   const root = ensureAccountMenu();
   const saved = listSavedAccounts();
-  const rows = saved.map(acc => {
+  let rows = saved.map(acc => {
     const active = acc.id === me.id;
     const u = { handle: acc.handle, name: acc.name, avatarImage: acc.avatarUrl,
                 avatarShape: acc.avatarShape, avatar: (acc.name[0] || '?').toUpperCase() };
@@ -293,6 +296,45 @@ function openAccountMenu(anchorRect) {
       '</button>'
     );
   }).join('');
+
+  // Admin / operator surface: the shared brand account (@spotcode_official)
+  // appears as an extra row so staff can switch into it from the same
+  // menu without going through Settings → Add account. The first time
+  // they click it the saved-accounts list doesn't have a session yet
+  // → fall back to the auth modal pre-filled with the official email
+  // (the shared password is typed by hand). Subsequent clicks switch
+  // sessions like any other saved account.
+  const showOfficial = isAdmin() || isOperator();
+  const official = showOfficial ? cachedOfficialAccount() : null;
+  // Don't list the brand row when the staffer is already signed in
+  // as it — they're "current" via the normal saved-accounts row above.
+  if (official && official.id !== me.id && !saved.some(a => a.id === official.id)) {
+    const ou = {
+      handle: official.handle, name: official.name,
+      avatarImage: official.avatar_url, avatarShape: official.avatar_shape,
+      avatar: (official.name[0] || '?').toUpperCase(),
+    };
+    const hasSession = hasSavedAccount(official.id);
+    const dataAttr = hasSession
+      ? 'data-account-switch-to="' + official.id + '"'
+      : 'data-account-login-official="1"';
+    rows +=
+      '<button type="button" class="account-menu__row account-menu__row--official" ' + dataAttr + '>' +
+        renderAvatar(ou, { size: 'sm' }) +
+        '<span class="account-menu__row-text">' +
+          '<span class="account-menu__row-name">' + escapeText(official.name) +
+            ' <span class="account-menu__row-badge account-menu__row-badge--official">' + escapeText(t('account_menu.official')) + '</span>' +
+          '</span>' +
+          '<span class="account-menu__row-handle">@' + escapeText(official.handle) +
+            (hasSession ? '' : ' · ' + escapeText(t('account_menu.official_login'))) +
+          '</span>' +
+        '</span>' +
+      '</button>';
+  } else if (showOfficial && !official) {
+    // Cache miss + admin/op viewer → kick off the lookup in the
+    // background so the row appears on the next open of the menu.
+    getOfficialAccount().catch(() => {});
+  }
   root.innerHTML =
     '<div class="account-menu__card" role="document">' +
       '<header class="account-menu__head">' +
@@ -354,6 +396,15 @@ function openAccountMenu(anchorRect) {
       closeAccountMenu();
       try { await switchAccount(id); }
       catch (ex) { alert(ex.message || String(ex)); }
+      return;
+    }
+    // Brand-account row, first time: open the auth modal with the
+    // shared official email pre-filled. After a successful login the
+    // session is saved automatically and the next menu open shows the
+    // normal switch row instead.
+    if (e.target.closest('[data-account-login-official]')) {
+      closeAccountMenu();
+      openAuth('login', { email: OFFICIAL_EMAIL });
       return;
     }
     if (e.target.closest('[data-account-menu-logout]')) {
@@ -870,6 +921,11 @@ initThemeToggle(document.getElementById('theme-toggle'));
 // (Supabase down, no network) leave cachedUser null — the app still works
 // as a logged-out static site.
 try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
+// Warm the official-account cache for admins / operators so the
+// brand-account row shows up the first time they open the account
+// menu instead of on the second open. Regular users skip the call —
+// they have no use for the row.
+if (isAdmin() || isOperator()) getOfficialAccount().catch(() => {});
 // Once logged in, pre-load the set of handles I follow so isFollowing()
 // can answer synchronously from the render path.
 hydrateMyFollows();
