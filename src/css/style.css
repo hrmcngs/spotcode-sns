@@ -1513,11 +1513,12 @@ html[data-theme='light'] .profile-header--org .profile-cover {
    letter abbreviation in YIQ-picked contrast text, slight glow ring
    so they read on dark + light backgrounds. */
 .profile-lang-medals {
-  display: inline-flex; vertical-align: middle; gap: .25rem;
+  display: inline-flex; vertical-align: middle; gap: .45rem;
   margin-left: .35rem;
 }
 .profile-lang-medals:empty { display: none; }
 .lang-medal {
+  position: relative;
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: 50%;
   background: var(--lm-bg, #8b949e); color: var(--lm-fg, #fff);
@@ -1531,6 +1532,50 @@ html[data-theme='light'] .profile-header--org .profile-cover {
 }
 .lang-medal:hover { transform: translateY(-1px) scale(1.06); }
 .lang-medal__abbr { line-height: 1; pointer-events: none; }
+
+/* ×N stack indicator pinned to the bottom-right of the coin, GitHub-
+   Achievements-style. Default (×11+) keeps the coin's Linguist colour
+   on a surface background; the bronze/silver/gold modifier classes
+   below override the palette in a 9-tier cycle for ×2..×10. */
+.lang-medal__count {
+  position: absolute;
+  bottom: -5px; right: -8px;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 7px;
+  background: var(--lmc-bg, var(--surface, #fff));
+  color: var(--lmc-fg, var(--lm-bg, #8b949e));
+  font-family: var(--mono); font-size: .58rem; font-weight: 800;
+  line-height: 1; letter-spacing: -.04em;
+  border: 1.5px solid var(--lmc-border, var(--lm-bg, #8b949e));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+.lang-medal--stacked { margin-right: .15rem; }
+
+/* Tier palettes — metal hex + chosen contrast for the "whole" mode. */
+.lang-medal__count--bronze { --tier-metal: #cd7f32; --tier-on-metal: #ffffff; }
+.lang-medal__count--silver { --tier-metal: #b8b8b8; --tier-on-metal: #1a1a1a; }
+.lang-medal__count--gold   { --tier-metal: #d4a017; --tier-on-metal: #1a1a1a; }
+
+/* Mode A — border only: keep the surface background + language-colour
+   text, swap just the ring to the tier metal. */
+.lang-medal__count--border {
+  --lmc-border: var(--tier-metal);
+}
+/* Mode B — text only: keep the surface background, swap the digits to
+   the tier metal; the ring fades to a tinted echo so the change is
+   readable but doesn't look "broken". */
+.lang-medal__count--text {
+  --lmc-fg: var(--tier-metal);
+  --lmc-border: color-mix(in srgb, var(--tier-metal) 35%, var(--surface, #fff));
+}
+/* Mode C — whole: fill, border, and text all metal. */
+.lang-medal__count--whole {
+  --lmc-bg: var(--tier-metal);
+  --lmc-fg: var(--tier-on-metal);
+  --lmc-border: var(--tier-metal);
+}
 
 .profile-gh {
   color: var(--accent);

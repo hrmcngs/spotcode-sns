@@ -120,29 +120,64 @@ function renderOrgMembers(u) {
   );
 }
 
+// Tiered styling for the ×N pill — three metal palettes (bronze,
+// silver, gold), each cycling through three modes (border-only →
+// text-only → whole). 9 tier slots in total for ×2..×10; ×11+
+// drops back to the language's Linguist colour (the default).
+//
+//   ×2  bronze border       ×5  silver border       ×8   gold border
+//   ×3  bronze text         ×6  silver text         ×9   gold text
+//   ×4  bronze whole        ×7  silver whole        ×10  gold whole
+//   ×11+ language colour (current default)
+function medalTier(n) {
+  if (!(n >= 2) || n >= 11) return null;
+  const metals = ['bronze', 'silver', 'gold'];
+  const modes  = ['border', 'text', 'whole'];
+  const idx    = n - 2;
+  return { metal: metals[Math.floor(idx / 3)], mode: modes[idx % 3] };
+}
+
 // Round GitHub-Achievements-style medal for one language. Background
-// is the Linguist colour, abbreviation in YIQ-picked contrast.
-function renderLangMedal(name, pct) {
+// is the Linguist colour, abbreviation in YIQ-picked contrast. If
+// `repoCount` is given (>= 2), render a small ×N stack indicator in
+// the corner — same idea as GitHub's "earned ×3" overlay on medals.
+function renderLangMedal(name, pct, repoCount) {
   const c = langColor(name);
   const tc = langTextColor(c);
-  const title = name + (pct != null ? ' · ' + pct + '%' : '');
+  const titleParts = [name];
+  if (pct != null)        titleParts.push(pct + '%');
+  if (repoCount != null)  titleParts.push(repoCount + ' repo' + (repoCount === 1 ? '' : 's'));
+  const title = titleParts.join(' · ');
+  const tier = (typeof repoCount === 'number') ? medalTier(repoCount) : null;
+  const stackCls = (typeof repoCount === 'number' && repoCount >= 2)
+    ? 'lang-medal__count' +
+      (tier ? ' lang-medal__count--' + tier.metal + ' lang-medal__count--' + tier.mode : '')
+    : '';
+  const stack = stackCls
+    ? '<span class="' + stackCls + '" aria-hidden="true">×' + repoCount + '</span>'
+    : '';
   return (
-    '<span class="lang-medal" style="--lm-bg:' + c + ';--lm-fg:' + tc + ';" ' +
+    '<span class="lang-medal' + (stack ? ' lang-medal--stacked' : '') + '" ' +
+      'style="--lm-bg:' + c + ';--lm-fg:' + tc + ';" ' +
       'title="' + escAttr(title) + '" aria-label="' + escAttr(title) + '">' +
       '<span class="lang-medal__abbr">' + escAttr(langAbbr(name)) + '</span>' +
+      stack +
     '</span>'
   );
 }
 
 // Top-N round medals to sit next to the `{}` programmer badge in the
 // profile-name row. Returns '' when there's no data — the slot stays
-// empty until hydrateProfileLanguages fills it in.
-function renderLangMedalStrip(langs, n = 4) {
+// empty until hydrateProfileLanguages fills it in. `repoCounts` is the
+// optional `{ [lang]: count }` map from language-stats; passing it
+// turns on the ×N stack indicator.
+function renderLangMedalStrip(langs, repoCounts, n = 4) {
   if (!Array.isArray(langs) || !langs.length) return '';
   const total = langs.reduce((a, [, b]) => a + (b || 0), 0) || 1;
   return langs.slice(0, n).map(([name, bytes]) => {
     const pct = Math.round((bytes / total) * 100);
-    return renderLangMedal(name, pct);
+    const count = repoCounts ? repoCounts[name] : undefined;
+    return renderLangMedal(name, pct, count);
   }).join('');
 }
 
@@ -242,7 +277,7 @@ export function renderProfile(handle) {
             ? ' <span class="profile-lang-medals" id="profile-lang-medals-' + u.handle + '" data-gh="' + u.github.handle + '">' +
                 (() => {
                   const c = cachedLanguageStats(u.github.handle);
-                  return c ? renderLangMedalStrip(c.langs) : '';
+                  return c ? renderLangMedalStrip(c.langs, c.repoCounts) : '';
                 })() +
               '</span>'
             : '') +
@@ -600,7 +635,7 @@ export async function hydrateProfileLanguages(handle) {
   try {
     const stats = await getLanguageStats(gh);
     if (!medals.isConnected) return;
-    medals.innerHTML = stats ? renderLangMedalStrip(stats.langs) : '';
+    medals.innerHTML = stats ? renderLangMedalStrip(stats.langs, stats.repoCounts) : '';
   } finally {
     if (medals.isConnected) delete medals.dataset.hydrating;
   }
