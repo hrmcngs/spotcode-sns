@@ -19,10 +19,11 @@ import { read, write } from './storage.js';
 // v2: switched derivation from owned-repos-only to events ∪ owned and
 // added the GitHub-org skip. Bumped so stale empty-badge results
 // from the v1 logic don't linger 24h before re-checking.
-// v3: expanded the BADGES table beyond just lisp, so the cached empty
-// arrays from v2 (where most users earned nothing and the row was
-// hidden entirely) need to re-resolve against the new badge set.
-const CACHE_KEY = 'spotcode:badges_cache:v3';
+// v4: now unions in repos from the user's public orgs, so a v3
+// "no badges" result for a contributor whose pushes are all on
+// private branches should re-resolve and pick up org-language
+// affinity badges.
+const CACHE_KEY = 'spotcode:badges_cache:v4';
 const TTL_MS    = 24 * 60 * 60 * 1000;
 const MAX_REPOS_TO_SCAN = 12;
 
@@ -111,6 +112,51 @@ async function reposFromPushEvents(handle) {
   return out;
 }
 
+// Public repos belonging to the orgs the user is a (public) member
+// of. Captures languages the user *works in* via their org affiliation
+// even when there's no individual commit signal — e.g. a contributor
+// who pulls more than they push, or a dev whose recent activity is
+// all on private branches.
+//
+// Rate-limit caution: we cap at MAX_ORGS_TO_SCAN orgs and pull only
+// the most recently pushed MAX_REPOS_PER_ORG repos from each. With
+// the default caps below this adds at most 1 + 3 = 4 API calls on
+// top of the existing events + owned + tree-per-repo scan.
+const MAX_ORGS_TO_SCAN     = 3;
+const MAX_REPOS_PER_ORG    = 6;
+async function reposFromUserOrgs(handle) {
+  const out = new Map();
+  let orgs;
+  try {
+    orgs = await fetchJson(
+      'https://api.github.com/users/' + encodeURIComponent(handle) + '/orgs?per_page=' + MAX_ORGS_TO_SCAN
+    );
+  } catch { return out; }
+  const orgList = Array.isArray(orgs) ? orgs.slice(0, MAX_ORGS_TO_SCAN) : [];
+  // Sequential to keep the rate-limit budget predictable (paralleling
+  // would still spend the same total, but if one org's call fails
+  // mid-flight we want the others' results, not a stalled Promise.all).
+  for (const org of orgList) {
+    const login = org && org.login;
+    if (!login) continue;
+    let repos;
+    try {
+      repos = await fetchJson(
+        'https://api.github.com/orgs/' + encodeURIComponent(login) +
+        '/repos?per_page=' + MAX_REPOS_PER_ORG + '&sort=pushed&type=public'
+      );
+    } catch { continue; }
+    for (const r of repos || []) {
+      if (r.fork) continue;
+      const key = r.owner.login + '/' + r.name;
+      if (!out.has(key)) {
+        out.set(key, { owner: r.owner.login, name: r.name, defaultBranch: r.default_branch || null });
+      }
+    }
+  }
+  return out;
+}
+
 // Owned non-fork repos backfill the events list for users whose
 // recent activity is older than ~90 days. Carries default_branch
 // straight through so we don't need a per-repo metadata fetch.
@@ -175,10 +221,17 @@ export async function getBadges(githubHandle) {
 
   const eventsRepos = await reposFromPushEvents(githubHandle);
   const ownedRepos  = await reposOwned(githubHandle);
-  // Events first (most recent activity), then owned to backfill.
-  // Slice after union so we keep the freshest signal under the cap.
+  const orgRepos    = await reposFromUserOrgs(githubHandle);
+  // Priority order matches "how strong a signal this is":
+  //   events → personally pushed (strongest)
+  //   owned  → personal repos (likely worked in)
+  //   orgs   → affiliation (weakest, but covers the read-mostly
+  //            contributor or someone whose recent work is private)
+  // We then slice to MAX_REPOS_TO_SCAN after union so the strongest
+  // signals are guaranteed to land in the probe set.
   const combined = new Map(eventsRepos);
   for (const [k, v] of ownedRepos) if (!combined.has(k)) combined.set(k, v);
+  for (const [k, v] of orgRepos)   if (!combined.has(k)) combined.set(k, v);
   const probe = Array.from(combined.values()).slice(0, MAX_REPOS_TO_SCAN);
 
   const counts = Object.create(null);
