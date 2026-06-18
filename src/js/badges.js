@@ -26,11 +26,12 @@ import { read, write } from './storage.js';
 // GitHub-achievement-style medal render; dropped the chip `tone`
 // field), so v3/v4 cached arrays don't carry the fields the new
 // renderer needs and would paint as colour-less circles.
-// v7: org-repo source now also infers candidate orgs from the
-// owners of event-feed repos, so users whose org memberships are
-// private (the GitHub default) finally pick up the languages of
-// those orgs. v6 caches were missing those repos.
-const CACHE_KEY = 'spotcode:badges_cache:v7';
+// v8: bump to force-invalidate every "stuck-empty" cache entry from
+// the v7 era — v7 deployed alongside the 30+ API call per profile
+// fan-out, which made the unauth 60/h rate limit trivial to hit and
+// poisoned a lot of caches with empty arrays. Without a bump, those
+// users would wait up to the EMPTY_TTL_MS (10 min) for self-heal.
+const CACHE_KEY = 'spotcode:badges_cache:v8';
 const TTL_MS       = 24 * 60 * 60 * 1000;
 // Empty results expire fast so a transient rate-limit (or a hiccup
 // during the recent v7 cache-busts) doesn't lock a real user out of
@@ -406,4 +407,11 @@ export function clearBadgeCache() { writeCache({}); }
 export function cachedBadges(githubHandle) {
   if (!githubHandle) return null;
   return cacheFor(githubHandle);
+}
+
+// True while the module-level cooldown is active. Lets the UI tell
+// the user "API rate-limited, try again later" instead of silently
+// disappearing the section when getBadges returns [].
+export function isRateLimited() {
+  return Date.now() < rateLimitedUntil;
 }

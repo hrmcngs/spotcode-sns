@@ -9,7 +9,7 @@ import { isFollowing, isRequested, followerCount, followingCount,
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
-import { getBadges, cachedBadges } from '../badges.js';
+import { getBadges, cachedBadges, isRateLimited } from '../badges.js';
 import { renderAvatar } from '../avatar.js';
 import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
@@ -463,7 +463,20 @@ export async function hydrateProfileBadges(handle) {
   slot.dataset.hydrating = '1';
   try {
     const badges = await getBadges(u.github.handle);
-    if (!badges.length) { slot.remove(); return; }
+    if (!badges.length) {
+      // Empty for a known-good reason vs empty because GitHub is
+      // throttling us — the user needs different copy for each.
+      // Rate-limited: keep the slot and explain. Otherwise hide.
+      if (isRateLimited()) {
+        slot.innerHTML =
+          '<span class="profile-badges__loading is-bad" ' +
+          'title="GitHub の未認証 API レート制限 (60 req/h) に達しました。約 1 時間後に自動で再試行されます。">' +
+          'GitHub API 制限中 — しばらく待って再読み込みしてください</span>';
+      } else {
+        slot.remove();
+      }
+      return;
+    }
     slot.innerHTML = badges.map(renderBadgeMedal).join('');
   } catch {
     slot.remove();

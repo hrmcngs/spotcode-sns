@@ -2483,6 +2483,7 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   padding: .8rem 1rem 0;
 }
 .profile-badges__loading { color: var(--muted); font-size: .78rem; }
+.profile-badges__loading.is-bad { color: var(--danger); }
 .badge-medal {
   /* Just the disc — the full name lives in the title tooltip and
      the click-opened detail modal, not under the medal. Sized to
