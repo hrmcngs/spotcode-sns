@@ -133,11 +133,24 @@ function storeCache(handle, badges) {
   writeCache(all);
 }
 
-async function fetchJson(url) {
-  const r = await fetch(url, { headers: { 'Accept': 'application/vnd.github+json' } });
-  if (r.status === 403) throw new Error('RATE_LIMIT');
-  if (!r.ok) throw new Error('HTTP_' + r.status);
-  return r.json();
+// Every GitHub fetch goes through here, so a hung request can't
+// silently lock the whole badge resolution. The 10s AbortController
+// timeout converts a hang into an AbortError, which the callers'
+// try/catch wrappers then handle the same as any other failure.
+async function fetchJson(url, timeoutMs = 10000) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, {
+      headers: { 'Accept': 'application/vnd.github+json' },
+      signal: ctl.signal,
+    });
+    if (r.status === 403) throw new Error('RATE_LIMIT');
+    if (!r.ok) throw new Error('HTTP_' + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Pull repos the user has actually pushed to recently AND the set
