@@ -26,7 +26,10 @@ import { read, write } from './storage.js';
 // GitHub-achievement-style medal render; dropped the chip `tone`
 // field), so v3/v4 cached arrays don't carry the fields the new
 // renderer needs and would paint as colour-less circles.
-const CACHE_KEY = 'spotcode:badges_cache:v5';
+// v6: badge object shape adds iconSlug / count / tier / tierName /
+// exts. v5 entries lack these and would render as colour-less /
+// tier-less medals.
+const CACHE_KEY = 'spotcode:badges_cache:v6';
 const TTL_MS    = 24 * 60 * 60 * 1000;
 const MAX_REPOS_TO_SCAN = 12;
 
@@ -34,12 +37,13 @@ const MAX_REPOS_TO_SCAN = 12;
 //   id        — unique slug
 //   name      — displayed text
 //   tooltip   — explanation
-//   abbr      — 2-char glyph rendered inside the achievement medal
-//               (mirrors GitHub achievement style — circular badge
-//               with a short symbol, name + tooltip on hover)
+//   abbr      — 2-char glyph fallback when the icon image fails to load
 //   colour    — solid hex used for the medal background
+//   iconSlug  — Simple Icons (CC0) slug used to render the language
+//               logo inside the medal via cdn.simpleicons.org. Fetched
+//               at runtime so we don't bundle the SVG paths.
 //   exts      — file extensions to look for (lowercase, no dot)
-//   minFiles  — how many qualifying files needed
+//   minFiles  — how many qualifying files needed to *earn* the badge
 //   minBytes  — minimum file size in bytes to qualify
 // Threshold is intentionally low (2 files of 100 bytes each) — these
 // are "you've started" badges, not "you're a senior". A new sign-up
@@ -50,39 +54,66 @@ const MAX_REPOS_TO_SCAN = 12;
 // medal is recognisable at a glance.
 const BADGES = [
   { id: 'lisper',       name: '始めたて Lisper',        abbr: 'Lp', colour: '#8a4cc4',
+    iconSlug: 'commonlisp',
     tooltip: '.lisp / .cl ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['lisp','cl'],                                minFiles: 2, minBytes: 100 },
   { id: 'typescripter', name: '始めたて TypeScripter',  abbr: 'Ts', colour: '#3178c6',
+    iconSlug: 'typescript',
     tooltip: '.ts / .tsx ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['ts','tsx'],                                 minFiles: 2, minBytes: 100 },
   { id: 'jser',         name: '始めたて JavaScripter',  abbr: 'Js', colour: '#f1e05a',
+    iconSlug: 'javascript',
     tooltip: '.js / .jsx / .mjs ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['js','jsx','mjs'],                           minFiles: 2, minBytes: 100 },
   { id: 'pythoneer',    name: '始めたて Pythoneer',     abbr: 'Py', colour: '#3776ab',
+    iconSlug: 'python',
     tooltip: '.py ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['py'],                                       minFiles: 2, minBytes: 100 },
   { id: 'rustacean',    name: '始めたて Rustacean',     abbr: 'Rs', colour: '#dea584',
+    iconSlug: 'rust',
     tooltip: '.rs ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['rs'],                                       minFiles: 2, minBytes: 100 },
   { id: 'gopher',       name: '始めたて Gopher',        abbr: 'Go', colour: '#00add8',
+    iconSlug: 'go',
     tooltip: '.go ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['go'],                                       minFiles: 2, minBytes: 100 },
   { id: 'javaer',       name: '始めたて Java/Kotlin',   abbr: 'Jv', colour: '#b07219',
+    iconSlug: 'openjdk',
     tooltip: '.java / .kt ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['java','kt'],                                minFiles: 2, minBytes: 100 },
   { id: 'cppr',         name: '始めたて C/C++',         abbr: 'C+', colour: '#5e6cb0',
+    iconSlug: 'cplusplus',
     tooltip: '.c / .cc / .cpp / .h / .hpp ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['c','cc','cpp','h','hpp'],                   minFiles: 2, minBytes: 100 },
   { id: 'webmaker',     name: '始めたて Web Maker',     abbr: 'Wb', colour: '#e34c26',
+    iconSlug: 'html5',
     tooltip: '.html / .css / .scss ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['html','htm','css','scss'],                  minFiles: 2, minBytes: 100 },
   { id: 'gamedev',      name: '始めたて Game Dev',      abbr: 'Gd', colour: '#c84d96',
+    iconSlug: 'godotengine',
     tooltip: '.gd / .lua / .cs / .pde ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['gd','lua','cs','pde'],                      minFiles: 2, minBytes: 100 },
   { id: 'shellr',       name: '始めたて Shell Hacker',  abbr: 'Sh', colour: '#4eaa25',
+    iconSlug: 'gnubash',
     tooltip: '.sh / .bash / .zsh ファイルが 2 つ以上、各 100 バイト以上',
     exts: ['sh','bash','zsh'],                          minFiles: 2, minBytes: 100 },
 ];
+
+// Tier ladder. Mirrors GitHub's "x4 / x3" achievement counters
+// but expressed as named tiers because that's clearer to a JP user
+// than a raw multiplier. Counts measure qualifying files across the
+// scanned repo set, not commits.
+const TIERS = [
+  { id: 'bronze',   nameJa: 'ブロンズ', nameEn: 'Bronze',   min: 2 },
+  { id: 'silver',   nameJa: 'シルバー', nameEn: 'Silver',   min: 6 },
+  { id: 'gold',     nameJa: 'ゴールド', nameEn: 'Gold',     min: 16 },
+  { id: 'platinum', nameJa: 'プラチナ', nameEn: 'Platinum', min: 50 },
+];
+function tierFor(count) {
+  let t = TIERS[0];
+  for (const cand of TIERS) if (count >= cand.min) t = cand;
+  return t;
+}
 
 function readCache() { return read(CACHE_KEY, {}); }
 function writeCache(o) { write(CACHE_KEY, o); }
@@ -224,7 +255,13 @@ export async function getBadges(githubHandle) {
       for (const sz of bucket.sizes) if (sz >= b.minBytes) qualifying++;
     }
     if (qualifying >= b.minFiles) {
-      earned.push({ id: b.id, name: b.name, tooltip: b.tooltip, abbr: b.abbr, colour: b.colour });
+      const tier = tierFor(qualifying);
+      earned.push({
+        id: b.id, name: b.name, tooltip: b.tooltip,
+        abbr: b.abbr, colour: b.colour, iconSlug: b.iconSlug || null,
+        exts: b.exts, count: qualifying,
+        tier: tier.id, tierName: tier.nameJa,
+      });
     }
   }
 

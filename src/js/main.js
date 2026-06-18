@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
-import { renderProfile, hydrateProfileBadges, hydrateProfileActivity, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
+import { renderProfile, hydrateProfileBadges, hydrateProfileActivity, hydrateProfile, setProfileTab, openProfileMore, openBadgeDetail } from './views/profile.js';
 import { renderStub }      from './views/stub.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
@@ -840,6 +840,18 @@ document.addEventListener('click', (e) => {
   if (moreBtn) {
     e.preventDefault();
     openProfileMore(moreBtn.getAttribute('data-profile-more'), moreBtn);
+    return;
+  }
+
+  // Badge medal click → open detail modal with tier + count + tooltip.
+  // The handle comes from the parent .profile-badges container's id
+  // (profile-badges-<handle>) so the badge id is enough on the button.
+  const medalBtn = e.target.closest('[data-badge-id]');
+  if (medalBtn) {
+    e.preventDefault();
+    const container = medalBtn.closest('.profile-badges');
+    const profileHandle = container ? (container.id || '').replace(/^profile-badges-/, '') : '';
+    openBadgeDetail(profileHandle, medalBtn.getAttribute('data-badge-id'));
     return;
   }
 

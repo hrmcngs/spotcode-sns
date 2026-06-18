@@ -2487,8 +2487,50 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   display: inline-flex; flex-direction: column; align-items: center;
   gap: .35rem;
   width: 70px;
-  cursor: default;
+  background: transparent; border: 0; padding: 0;
+  font: inherit; color: inherit;
+  cursor: pointer;
 }
+.badge-medal:hover .badge-medal__disc { transform: translateY(-1px); }
+.badge-medal:focus-visible { outline: none; }
+.badge-medal:focus-visible .badge-medal__disc {
+  box-shadow:
+    0 0 0 3px var(--accent),
+    0 2px 3px rgba(0,0,0,.25),
+    0 6px 14px rgba(0,0,0,.32);
+}
+.badge-medal__disc { transition: transform .12s ease; }
+.badge-medal__icon {
+  width: 60%; height: 60%; object-fit: contain;
+  display: block;
+  /* Sit above the disc's gradient background. The Simple Icons SVG
+     arrives as a pure white silhouette, so it reads as the medal's
+     centrepiece without needing a separate filter. */
+  position: relative; z-index: 1;
+  /* Subtle shadow so the white logo doesn't dissolve into the
+     light-coloured discs (JS yellow especially). */
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,.45));
+}
+.badge-medal__count {
+  position: absolute;
+  right: -4px; bottom: -2px;
+  min-width: 22px; height: 18px;
+  padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 2px solid var(--bg);
+  font-size: .65rem; font-weight: 700;
+  z-index: 2;
+}
+/* Tier-tinted count chips. Mirrors the bronze/silver/gold/platinum
+   ladder so the chip's colour reads at a glance, like GitHub's
+   tiered achievement counters. */
+.badge-medal__count--bronze   { background: #cd7f32; color: #fff; }
+.badge-medal__count--silver   { background: #c0c0c0; color: #1a1a1a; }
+.badge-medal__count--gold     { background: #f6c200; color: #1a1a1a; }
+.badge-medal__count--platinum { background: #b9d4dc; color: #1a1a1a; }
 .badge-medal__disc {
   /* GitHub-achievement-style sticker disc: pastel gradient face
      (language colour, lightened to ~70%), thick white ring around
@@ -2697,4 +2739,76 @@ html[data-theme='light'] .badge-medal__disc {
 }
 .profile-toast.is-show {
   opacity: 1; transform: translate(-50%, 0);
+}
+
+/* ---------- badge detail modal ---------- */
+.badge-modal__card {
+  max-width: 360px;
+  text-align: center;
+  padding: 1.4rem 1.2rem 1.2rem;
+}
+.badge-modal__hero {
+  width: 96px; height: 96px;
+  margin: 0 auto .8rem;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 30% 25%,
+      rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 55%),
+    radial-gradient(circle at 35% 25%,
+      color-mix(in srgb, var(--badge-color, #666) 55%, #fff)  0%,
+      color-mix(in srgb, var(--badge-color, #666) 85%, #000) 100%);
+  box-shadow:
+    0 3px 6px rgba(0,0,0,.28),
+    0 12px 28px rgba(0,0,0,.32);
+}
+.badge-modal__icon {
+  width: 56%; height: 56%; object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,.45));
+}
+.badge-modal__abbr {
+  font-family: var(--mono);
+  font-size: 2rem; font-weight: 800; color: #fff;
+  text-shadow: 0 1px 1px rgba(0,0,0,.45), 0 0 3px rgba(0,0,0,.35);
+}
+.badge-modal__name {
+  font-size: 1.1rem; font-weight: 800; margin: 0 0 .4rem;
+}
+.badge-modal__tierline {
+  display: inline-flex; align-items: center; gap: .4rem;
+  margin-bottom: .8rem;
+}
+.badge-modal__tier {
+  display: inline-block;
+  padding: .25em .7em;
+  border-radius: 999px;
+  font-size: .8rem; font-weight: 700; letter-spacing: .02em;
+  background: var(--surface-2); color: var(--text);
+}
+.badge-modal__tier--bronze   { background: #cd7f32; color: #fff; }
+.badge-modal__tier--silver   { background: #c0c0c0; color: #1a1a1a; }
+.badge-modal__tier--gold     { background: #f6c200; color: #1a1a1a; }
+.badge-modal__tier--platinum { background: #b9d4dc; color: #1a1a1a; }
+.badge-modal__count {
+  font-family: var(--mono);
+  font-size: 1rem; font-weight: 800; color: var(--text);
+}
+.badge-modal__meta {
+  font-size: .82rem; color: var(--muted); margin-bottom: .55rem;
+}
+.badge-modal__meta code {
+  background: var(--surface-2);
+  padding: .1em .35em;
+  border-radius: 4px;
+}
+.badge-modal__desc {
+  margin: 0 0 .8rem;
+  color: var(--text);
+  font-size: .9rem; line-height: 1.5;
+}
+.badge-modal__ladder {
+  margin: 0;
+  color: var(--muted);
+  font-size: .78rem; line-height: 1.5;
 }

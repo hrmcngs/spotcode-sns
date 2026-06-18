@@ -472,14 +472,105 @@ function renderBadgeMedal(b) {
   const abbr   = escAttr(b.abbr || (b.name || '?').slice(0, 2));
   const colour = b.colour || '#666';
   const title  = (b.name + ' — ' + (b.tooltip || '')).replace(/"/g, '&quot;');
+  // Render the language logo via Simple Icons CDN (CC0). The icon
+  // arrives as a white-filled SVG and sits on top of the pastel
+  // gradient. onerror falls back to the abbreviation glyph in case
+  // the CDN fetch fails (offline, blocked, slug not in Simple Icons).
+  const slug = b.iconSlug;
+  const inner = slug
+    ? '<img class="badge-medal__icon" alt="" loading="lazy" decoding="async" ' +
+        'src="https://cdn.simpleicons.org/' + encodeURIComponent(slug) + '/white" ' +
+        'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'badge-medal__abbr\',textContent:\'' + abbr + '\'}))">'
+    : '<span class="badge-medal__abbr">' + abbr + '</span>';
+  // Tier chip — small bubble hanging off the bottom-right of the
+  // medal showing the qualifying-file count, GitHub-achievement
+  // style ("x4"). Hidden if we don't have a count (old cache).
+  const count = Number(b.count) || 0;
+  const tierClass = b.tier ? ' badge-medal__count--' + b.tier : '';
+  const countChip = count > 0
+    ? '<span class="badge-medal__count' + tierClass + '">x' + count + '</span>'
+    : '';
+  // The whole medal is a <button> so it's keyboard-accessible and the
+  // pointer cursor signals it can be opened for details. The dataset
+  // carries the badge id so the delegated click handler in main.js
+  // can look it up in the cache by handle.
   return (
-    '<span class="badge-medal" title="' + title + '" aria-label="' + escAttr(b.name) + '">' +
+    '<button type="button" class="badge-medal" data-badge-id="' + escAttr(b.id) + '" ' +
+      'title="' + title + '" aria-label="' + escAttr(b.name) + '">' +
       '<span class="badge-medal__disc" style="--badge-color:' + colour + '">' +
-        '<span class="badge-medal__abbr">' + abbr + '</span>' +
+        inner +
+        countChip +
       '</span>' +
       '<span class="badge-medal__name">' + escAttr(b.name) + '</span>' +
-    '</span>'
+    '</button>'
   );
+}
+
+// Detail popover for a badge — opened on medal click. Singleton DOM
+// element mounted on first use, dismissed on backdrop / Escape /
+// close button. Shows: language logo (full size), name, tier
+// medal, qualifying file count, file extensions scanned, and the
+// human-readable threshold from the tooltip field.
+let badgeModalEl = null;
+function ensureBadgeModal() {
+  if (badgeModalEl) return badgeModalEl;
+  badgeModalEl = document.createElement('div');
+  badgeModalEl.className = 'modal badge-modal';
+  badgeModalEl.hidden = true;
+  badgeModalEl.innerHTML =
+    '<div class="modal__backdrop" data-badge-close></div>' +
+    '<div class="modal__card badge-modal__card" role="dialog">' +
+      '<button class="modal__close" data-badge-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
+      '<div class="badge-modal__body"></div>' +
+    '</div>';
+  document.body.appendChild(badgeModalEl);
+  badgeModalEl.addEventListener('click', (e) => {
+    if (e.target.closest('[data-badge-close]')) closeBadgeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && badgeModalEl && !badgeModalEl.hidden) closeBadgeModal();
+  });
+  return badgeModalEl;
+}
+function closeBadgeModal() {
+  if (!badgeModalEl) return;
+  badgeModalEl.hidden = true;
+}
+export async function openBadgeDetail(profileHandle, badgeId) {
+  const u = getUser(profileHandle);
+  if (!u || !u.github?.handle) return;
+  const list = cachedBadges(u.github.handle) || await getBadges(u.github.handle);
+  const b = (list || []).find(x => x.id === badgeId);
+  if (!b) return;
+  const modal = ensureBadgeModal();
+  const body = modal.querySelector('.badge-modal__body');
+  const colour = b.colour || '#666';
+  const abbr   = escAttr(b.abbr || (b.name || '?').slice(0, 2));
+  const tier   = b.tier || 'bronze';
+  const tierName = b.tierName || 'Bronze';
+  const count  = Number(b.count) || 0;
+  const exts   = Array.isArray(b.exts) ? b.exts.map(e => '.' + e).join(' / ') : '';
+  const iconHtml = b.iconSlug
+    ? '<img class="badge-modal__icon" alt="" loading="lazy" decoding="async" ' +
+        'src="https://cdn.simpleicons.org/' + encodeURIComponent(b.iconSlug) + '/white" ' +
+        'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'badge-modal__abbr\',textContent:\'' + abbr + '\'}))">'
+    : '<span class="badge-modal__abbr">' + abbr + '</span>';
+  body.innerHTML =
+    '<div class="badge-modal__hero" style="--badge-color:' + colour + '">' +
+      iconHtml +
+    '</div>' +
+    '<h2 class="badge-modal__name">' + escAttr(b.name) + '</h2>' +
+    '<div class="badge-modal__tierline">' +
+      '<span class="badge-modal__tier badge-modal__tier--' + tier + '">' + escAttr(tierName) + '</span>' +
+      (count ? '<span class="badge-modal__count">x' + count + '</span>' : '') +
+    '</div>' +
+    (exts ? '<div class="badge-modal__meta">対象拡張子: <code>' + escAttr(exts) + '</code></div>' : '') +
+    (b.tooltip ? '<p class="badge-modal__desc">' + escAttr(b.tooltip) + '</p>' : '') +
+    '<p class="badge-modal__ladder">' +
+      '次の段階: ' +
+      'ブロンズ (2+) → シルバー (6+) → ゴールド (16+) → プラチナ (50+)' +
+    '</p>';
+  modal.hidden = false;
 }
 
 // Reset both dedupe maps so a fresh navigation to the same handle
