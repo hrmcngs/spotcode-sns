@@ -8,6 +8,7 @@
 import { icon } from './icons.js';
 import { renderAvatar } from './avatar.js';
 import { t } from './i18n.js';
+import { isPostingAsOfficial } from './posting-identity.js';
 
 export function renderIdeaForm({ user = null } = {}) {
   if (!user) {
@@ -24,10 +25,20 @@ export function renderIdeaForm({ user = null } = {}) {
     );
   }
 
+  const asOfficial = isPostingAsOfficial();
   return (
-    '<div class="composer">' +
+    '<div class="composer' + (asOfficial ? ' composer--as-official' : '') + '">' +
       renderAvatar(user, { size: 'lg' }) +
       '<form class="idea-form">' +
+        (asOfficial
+          ? '<div class="composer-as-official-banner">' +
+              icon('building', { size: 12, className: 'icon--inline' }) +
+              ' <span>' + t('compose.as_official.banner').replace('{handle}', '@' + (user.handle || 'spotcode_official')) + '</span>' +
+              '<button type="button" class="composer-as-official-banner__revert" data-account-revert-official="1">' +
+                t('compose.as_official.revert') +
+              '</button>' +
+            '</div>'
+          : '') +
         '<div class="composer-body">' +
           '<textarea name="text" placeholder="' + t('home.composer.placeholder') + '" rows="2"></textarea>' +
         '</div>' +

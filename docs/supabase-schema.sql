@@ -1059,3 +1059,98 @@ create policy "authors can delete their posts"
 drop index if exists profiles_one_official_uniq;
 alter table public.profiles drop column if exists is_official;
 alter table public.profiles drop column if exists is_operator;
+
+-- ===================================================================
+-- Stage 25 — bring back the "post as official via privilege" plumbing
+-- ===================================================================
+-- We tried two flavours:
+--   • Stage 23: schema flag + Composer "Post as official" toggle (PR
+--     #174). The toggle UX confused the user — felt like a
+--     per-post checkbox.
+--   • Stage 24 + PR #176/#177: revert; the brand account becomes a
+--     normal shared-password Supabase user, accessed via the account
+--     switcher (with the auth modal pre-filling the shared email on
+--     first sign-in).
+--
+-- New direction (user: 「hrmc.ngs+official@gmail.comいらない、運営者と
+-- 管理者全員がログインできる特例アカウントなの」): the brand
+-- account's password should be *irrelevant* to day-to-day use. Admin
+-- and operator privileges ARE the authorization — clicking the
+-- 「公式」 row in the account switcher should just put the staffer
+-- "into" the brand identity (no password prompt, no separate
+-- session). Server-side RLS validates the privilege on each insert.
+--
+-- This re-adds the columns + relaxed posts policies from Stage 23.
+-- Safe to run after Stage 24 wiped them: ADD COLUMN IF NOT EXISTS is
+-- idempotent, the DROP POLICY IF EXISTS lines clear any leftover
+-- names from earlier attempts.
+
+-- 1. Operator flag mirrors OPERATOR_HANDLES in src/js/dev-mode.js.
+alter table public.profiles
+  add column if not exists is_operator boolean default false;
+update public.profiles
+  set is_operator = true
+  where handle in ('hrmcngs', 'aya526dev');
+
+-- 2. Official flag. Partial unique index keeps exactly one row hot —
+--    flipping a second profile fails loudly instead of silently
+--    creating two officials.
+alter table public.profiles
+  add column if not exists is_official boolean default false;
+drop index if exists profiles_one_official_uniq;
+create unique index profiles_one_official_uniq
+  on public.profiles ((true)) where is_official = true;
+
+-- 3. Posts INSERT: own author_id (the normal case) OR author_id =
+--    the official profile when the requester is admin or operator.
+--    The client-side mode flag (src/js/posting-identity.js) drives
+--    the substitution; this policy is what makes it actually go
+--    through.
+drop policy if exists "authors or staff-as-official can insert posts" on public.posts;
+drop policy if exists "authors or staff can insert posts"             on public.posts;
+drop policy if exists "authors can insert their posts"                on public.posts;
+create policy "authors or staff-as-official can insert posts"
+  on public.posts for insert with check (
+    auth.uid() = author_id
+    or (
+      exists (select 1 from public.profiles where id = author_id  and is_official = true)
+      and
+      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
+    )
+  );
+
+-- 4. Posts UPDATE / DELETE on the official account: same admin-or-
+--    operator gate, so a staffer who posted as official can fix a
+--    typo or take it down without escalating to another role.
+drop policy if exists "authors or staff can update posts" on public.posts;
+drop policy if exists "authors can update their posts"   on public.posts;
+create policy "authors or staff can update posts"
+  on public.posts for update using (
+    auth.uid() = author_id
+    or (
+      exists (select 1 from public.profiles where id = author_id  and is_official = true)
+      and
+      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
+    )
+  );
+
+drop policy if exists "authors or staff can delete posts" on public.posts;
+drop policy if exists "authors can delete their posts"   on public.posts;
+create policy "authors or staff can delete posts"
+  on public.posts for delete using (
+    auth.uid() = author_id
+    or (
+      exists (select 1 from public.profiles where id = author_id  and is_official = true)
+      and
+      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
+    )
+  );
+-- (Stage 15's "admins can delete any post" stays too — global
+-- moderation override still applies.)
+
+-- 5. One-shot bootstrap — uncomment and run ONCE after the official
+--    profile exists (any throwaway email is fine for signup; the
+--    password isn't shared because admins/operators never log in
+--    with it).
+--
+-- update public.profiles set is_official = true where handle = 'spotcode_official';

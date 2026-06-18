@@ -9,6 +9,8 @@
 import { KEYS, read, write } from './storage.js';
 import { currentUser }       from './auth.js';
 import { getClient }         from './supa.js';
+import { isPostingAsOfficial } from './posting-identity.js';
+import { getOfficialAccount }  from './official-account.js';
 
 // ----- users (read-only cache shim, populated by profiles.js + auth.js) -----
 
@@ -521,8 +523,19 @@ export async function addPost(post) {
   const wantsPhotos = Array.isArray(post.photos) && post.photos.length > 0;
   const wantsPoll = post.poll && Array.isArray(post.poll.options) && post.poll.options.length >= 2;
 
+  // "Posting as official" overlay (admin/op only). The user's
+  // Supabase session is unchanged — Stage 25 RLS validates that
+  // admin/op privileges are present before letting the substituted
+  // author_id through.
+  let authorId = user.id;
+  if (isPostingAsOfficial()) {
+    const official = await getOfficialAccount();
+    if (!official) throw new Error('公式アカウントが設定されていません (Stage 25 マイグレーション未実行?)');
+    authorId = official.id;
+  }
+
   const row = {
-    author_id:   user.id,
+    author_id:   authorId,
     body:        post.body,
     github_link: post.githubLink || null,
     spot:        post.spot || null,

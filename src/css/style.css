@@ -520,6 +520,38 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 }
 .compose-draft-banner__discard:hover { color: var(--danger, #f85149); background: var(--surface-2); }
 
+/* "Posting as @spotcode_official" banner — sits above the textarea
+   so the staffer can't miss that the next post will go out as the
+   brand account. Amber accent matches the 公式 badge in the menu. */
+.composer-as-official-banner {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .35rem .75rem;
+  background: color-mix(in srgb, #febc2e 14%, transparent);
+  border: 1px solid color-mix(in srgb, #febc2e 45%, transparent);
+  border-radius: 8px;
+  font-size: .8rem; color: #febc2e; font-weight: 600;
+}
+.composer-as-official-banner .icon { stroke: currentColor; fill: none; }
+.composer-as-official-banner > span { flex: 1; color: var(--text); font-weight: 500; }
+.composer-as-official-banner__revert {
+  background: transparent; border: 0;
+  color: #febc2e; cursor: pointer;
+  font-size: .78rem; font-weight: 700;
+  padding: .2em .5em; border-radius: 6px;
+}
+.composer-as-official-banner__revert:hover {
+  background: color-mix(in srgb, #febc2e 18%, transparent);
+}
+
+/* Subtle amber ring around the topbar avatar when the overlay is on,
+   so the "you are posting as official" state is visible globally,
+   not just on the home page. */
+.auth-area__avatar--official {
+  outline: 2px solid #febc2e;
+  outline-offset: 1px;
+  border-radius: 50%;
+}
+
 /* Optional link row: collapsed by default so the textarea stays the only
    obvious place to type. */
 .compose-link-toggle {

@@ -21,9 +21,9 @@ import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
 import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
-import { hasSavedAccount } from './saved-accounts.js';
-import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_EMAIL } from './official-account.js';
+import { getOfficialAccount, cachedOfficialAccount } from './official-account.js';
 import { isAdmin, isOperator } from './dev-mode.js';
+import { isPostingAsOfficial, setPostingAsOfficial, onPostingIdentityChange, displayUser } from './posting-identity.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
@@ -182,8 +182,12 @@ function setActiveNav(path) {
 function renderAuthArea() {
   const slot = document.getElementById('auth-area');
   if (!slot) return;
-  const me = currentUser();
-  if (me) {
+  const real = currentUser();
+  if (real) {
+    // When the "posting as official" overlay is on the topbar
+    // avatar swaps to the brand avatar so the staffer always sees
+    // which identity their next post will go out as.
+    const me = displayUser(real);
     // Topbar avatar opens the account-switcher menu on click. The
     // sidebar Profile nav already covers "go to my profile", so the
     // avatar's job is the dropdown trigger (matches Twitter/X).
@@ -192,7 +196,7 @@ function renderAuthArea() {
       href: url('/' + me.handle),
       size: 'me',
       title: me.name,
-      extra: 'auth-area__avatar',
+      extra: 'auth-area__avatar' + (isPostingAsOfficial() ? ' auth-area__avatar--official' : ''),
     });
     const a = slot.firstElementChild;
     if (a) a.setAttribute('data-account-menu', '1');
@@ -205,8 +209,9 @@ function renderAuthArea() {
 function renderSideMe() {
   const slot = document.getElementById('side-me');
   if (!slot) return;
-  const me = currentUser();
-  if (me) {
+  const real = currentUser();
+  if (real) {
+    const me = displayUser(real);
     slot.innerHTML =
       '<a class="me-card" href="' + url('/' + me.handle) + '" data-account-menu="1">' +
         renderAvatar(me, { size: 'lg' }) +
@@ -272,17 +277,29 @@ function openAccountMenu(anchorRect) {
   if (!me) return;
   const root = ensureAccountMenu();
   const saved = listSavedAccounts();
+  // "Posting as official" is an identity overlay, not a real session
+  // swap. While it's on, the brand row reads as the active account
+  // and the staffer's own row becomes the "switch back" target.
+  const asOfficial = isPostingAsOfficial();
   let rows = saved.map(acc => {
-    const active = acc.id === me.id;
+    const isSelfRow = acc.id === me.id;
+    // When the overlay is on, the staffer's own row is no longer
+    // "active" — the official row below is. Click → revert overlay
+    // (handled via data-account-revert-official below).
+    const active = isSelfRow && !asOfficial;
     const u = { handle: acc.handle, name: acc.name, avatarImage: acc.avatarUrl,
                 avatarShape: acc.avatarShape, avatar: (acc.name[0] || '?').toUpperCase() };
-    // Active row: click navigates to the active account's profile
-    // (so the avatar / row stays useful and the user doesn't lose
-    // the only entry point to their own profile). Inactive rows
-    // switch sessions as before.
-    const dataAttr = active
-      ? 'data-account-profile="' + escapeText(acc.handle) + '"'
-      : 'data-account-switch-to="' + acc.id + '"';
+    let dataAttr;
+    if (active) {
+      // Active row: navigate to that profile so the avatar stays a
+      // useful entry point.
+      dataAttr = 'data-account-profile="' + escapeText(acc.handle) + '"';
+    } else if (isSelfRow && asOfficial) {
+      // Self row while overlay is on → click reverts the overlay.
+      dataAttr = 'data-account-revert-official="1"';
+    } else {
+      dataAttr = 'data-account-switch-to="' + acc.id + '"';
+    }
     return (
       '<button type="button" class="account-menu__row' + (active ? ' is-active' : '') + '" ' +
         dataAttr + '>' +
@@ -297,40 +314,34 @@ function openAccountMenu(anchorRect) {
     );
   }).join('');
 
-  // Admin / operator surface: the shared brand account (@spotcode_official)
-  // appears as an extra row so staff can switch into it from the same
-  // menu without going through Settings → Add account. The first time
-  // they click it the saved-accounts list doesn't have a session yet
-  // → fall back to the auth modal pre-filled with the official email
-  // (the shared password is typed by hand). Subsequent clicks switch
-  // sessions like any other saved account.
+  // Admin / operator surface: the brand account (@spotcode_official)
+  // is the "shared identity" everyone with privilege can act under.
+  // No password prompt, no real session swap — the overlay flag
+  // tells addPost() to substitute author_id, and Stage 25 RLS
+  // validates that the substitution is allowed.
   const showOfficial = isAdmin() || isOperator();
   const official = showOfficial ? cachedOfficialAccount() : null;
-  // Don't list the brand row when the staffer is already signed in
-  // as it — they're "current" via the normal saved-accounts row above.
-  if (official && official.id !== me.id && !saved.some(a => a.id === official.id)) {
+  if (official) {
     const ou = {
       handle: official.handle, name: official.name,
       avatarImage: official.avatar_url, avatarShape: official.avatar_shape,
       avatar: (official.name[0] || '?').toUpperCase(),
     };
-    const hasSession = hasSavedAccount(official.id);
-    const dataAttr = hasSession
-      ? 'data-account-switch-to="' + official.id + '"'
-      : 'data-account-login-official="1"';
+    const isActiveOverlay = asOfficial;
     rows +=
-      '<button type="button" class="account-menu__row account-menu__row--official" ' + dataAttr + '>' +
+      '<button type="button" class="account-menu__row account-menu__row--official' +
+        (isActiveOverlay ? ' is-active' : '') + '" ' +
+        'data-account-as-official="1">' +
         renderAvatar(ou, { size: 'sm' }) +
         '<span class="account-menu__row-text">' +
           '<span class="account-menu__row-name">' + escapeText(official.name) +
             ' <span class="account-menu__row-badge account-menu__row-badge--official">' + escapeText(t('account_menu.official')) + '</span>' +
+            (isActiveOverlay ? ' <span class="account-menu__row-badge">' + escapeText(t('settings.accounts.current')) + '</span>' : '') +
           '</span>' +
-          '<span class="account-menu__row-handle">@' + escapeText(official.handle) +
-            (hasSession ? '' : ' · ' + escapeText(t('account_menu.official_login'))) +
-          '</span>' +
+          '<span class="account-menu__row-handle">@' + escapeText(official.handle) + '</span>' +
         '</span>' +
       '</button>';
-  } else if (showOfficial && !official) {
+  } else if (showOfficial) {
     // Cache miss + admin/op viewer → kick off the lookup in the
     // background so the row appears on the next open of the menu.
     getOfficialAccount().catch(() => {});
@@ -398,13 +409,21 @@ function openAccountMenu(anchorRect) {
       catch (ex) { alert(ex.message || String(ex)); }
       return;
     }
-    // Brand-account row, first time: open the auth modal with the
-    // shared official email pre-filled. After a successful login the
-    // session is saved automatically and the next menu open shows the
-    // normal switch row instead.
-    if (e.target.closest('[data-account-login-official]')) {
+    // Brand-account row: flip the "posting as official" overlay on.
+    // No auth modal, no session swap — the staffer's privilege is
+    // the authorization. Stage 25 RLS rechecks the substitution on
+    // each insert/update/delete server-side.
+    if (e.target.closest('[data-account-as-official]')) {
       closeAccountMenu();
-      openAuth('login', { email: OFFICIAL_EMAIL });
+      if (!isAdmin() && !isOperator()) return;
+      setPostingAsOfficial(true);
+      return;
+    }
+    // Own row while the overlay is on → drop back to your own
+    // identity for posting.
+    if (e.target.closest('[data-account-revert-official]')) {
+      closeAccountMenu();
+      setPostingAsOfficial(false);
       return;
     }
     if (e.target.closest('[data-account-menu-logout]')) {
@@ -994,6 +1013,21 @@ onAuthChange(() => {
   // right `auth.uid()` context, then warm the new user's follows.
   clearInteractionsCache();
   hydrateMyFollows();
+  // If the new identity isn't admin / operator, drop the
+  // "posting as official" overlay so a regular user can't inherit it
+  // by signing in on the same device.
+  if (!isAdmin() && !isOperator() && isPostingAsOfficial()) {
+    setPostingAsOfficial(false);
+  }
+  renderAuthArea();
+  renderSideMe();
+  refresh();
+});
+
+// The "posting as official" overlay flips on / off → re-paint the
+// chrome (avatars, composer) so the new identity is visible
+// immediately without a page reload.
+onPostingIdentityChange(() => {
   renderAuthArea();
   renderSideMe();
   refresh();

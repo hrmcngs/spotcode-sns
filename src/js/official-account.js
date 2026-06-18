@@ -13,11 +13,9 @@
 import { getClient } from './supa.js';
 
 export const OFFICIAL_HANDLE = 'spotcode_official';
-// Same Gmail alias used at signup (see README setup). Surface it from
-// here so the account-menu's "Log in to official" prompt can pre-fill
-// the email field in the auth modal — staff still have to type the
-// shared password by hand.
-export const OFFICIAL_EMAIL  = 'hrmc.ngs+official@gmail.com';
+// (No exported OFFICIAL_EMAIL: per Stage 25 the brand account's
+// password / email is irrelevant to day-to-day use — admins and
+// operators "become" the official via privilege, no auth prompt.)
 
 const POSITIVE_TTL_MS = 6  * 60 * 60 * 1000; // 6h — official identity is stable
 const NEGATIVE_TTL_MS = 10 * 60 * 1000;       // 10min — re-probe after a miss
