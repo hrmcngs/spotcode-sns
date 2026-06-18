@@ -193,7 +193,7 @@ export function renderProfile(handle) {
           (isMe
             ? '<button class="btn btn--ghost" id="logout-btn">' + t('nav.logout') + '</button>' +
               '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
-            : '<button class="btn btn--ghost">' + t('profile.btn.more') + '</button>' +
+            : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
               '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
                 followBtnLabel +
               '</button>') +
@@ -437,6 +437,110 @@ export async function hydrateProfileBadges(handle) {
   } catch {
     slot.remove();
   }
+}
+
+// "More" popover handler. Wired from main.js's delegated click
+// listener (`#profile-more-btn`). Mounts a singleton menu the first
+// time it's needed and positions it under the button. Two actions:
+//   - Copy profile link → navigator.clipboard
+//   - Report user → confirm + prompt for a free-text reason, then
+//     write to localStorage `spotcode:user-reports` so operators can
+//     review later. (Schema-backed reporting is a follow-up.)
+let moreMenuEl = null;
+function ensureMoreMenu() {
+  if (moreMenuEl) return moreMenuEl;
+  moreMenuEl = document.createElement('div');
+  moreMenuEl.className = 'profile-more-menu';
+  moreMenuEl.setAttribute('role', 'menu');
+  moreMenuEl.hidden = true;
+  document.body.appendChild(moreMenuEl);
+  document.addEventListener('click', (e) => {
+    if (!moreMenuEl || moreMenuEl.hidden) return;
+    if (moreMenuEl.contains(e.target)) return;
+    if (e.target.closest('[data-profile-more]')) return;
+    closeMoreMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && moreMenuEl && !moreMenuEl.hidden) closeMoreMenu();
+  });
+  return moreMenuEl;
+}
+function closeMoreMenu() {
+  if (!moreMenuEl) return;
+  moreMenuEl.hidden = true;
+  const trigger = document.getElementById('profile-more-btn');
+  if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+export function openProfileMore(handle, anchor) {
+  const menu = ensureMoreMenu();
+  menu.innerHTML =
+    '<button type="button" class="profile-more-menu__item" data-more-action="copy">' +
+      icon('share', { size: 14, className: 'icon--inline' }) +
+      t('profile.more.copy_link') +
+    '</button>' +
+    '<button type="button" class="profile-more-menu__item profile-more-menu__item--bad" data-more-action="report">' +
+      icon('flag', { size: 14, className: 'icon--inline' }) +
+      t('profile.more.report') +
+    '</button>';
+  const r = anchor.getBoundingClientRect();
+  menu.style.position = 'fixed';
+  menu.style.top  = (r.bottom + 6) + 'px';
+  menu.style.left = Math.max(8, r.right - 220) + 'px';
+  menu.hidden = false;
+  if (anchor.setAttribute) anchor.setAttribute('aria-expanded', 'true');
+
+  menu.onclick = async (e) => {
+    const btn = e.target.closest('[data-more-action]');
+    if (!btn) return;
+    const action = btn.getAttribute('data-more-action');
+    closeMoreMenu();
+    if (action === 'copy') {
+      const link = location.origin + url('/' + handle);
+      try {
+        await navigator.clipboard.writeText(link);
+        toast(t('profile.more.copied'));
+      } catch {
+        // Fallback for browsers without clipboard API access (older
+        // Safari without HTTPS, etc.) — show the link in a prompt so
+        // the user can copy manually.
+        prompt(t('profile.more.copy_manual'), link);
+      }
+    } else if (action === 'report') {
+      const me = currentUser();
+      if (!me) return;
+      if (!confirm(t('profile.more.report_confirm').replace('{handle}', handle))) return;
+      const reason = prompt(t('profile.more.report_prompt')) || '';
+      if (!reason.trim()) return;
+      try {
+        const KEY = 'spotcode:user-reports';
+        const list = JSON.parse(localStorage.getItem(KEY) || '[]');
+        list.push({
+          target: handle,
+          reporter: me.handle,
+          reason: reason.trim().slice(0, 400),
+          ts: Date.now(),
+        });
+        localStorage.setItem(KEY, JSON.stringify(list));
+      } catch {}
+      toast(t('profile.more.report_sent'));
+    }
+  };
+}
+
+// Lightweight non-blocking toast — single shared element, fades after
+// 2s. The popover uses it for "リンクをコピーしました" / "通報を受け
+// 付けました" so the user gets visible feedback without a modal.
+let toastEl = null;
+function toast(text) {
+  if (!toastEl) {
+    toastEl = document.createElement('div');
+    toastEl.className = 'profile-toast';
+    document.body.appendChild(toastEl);
+  }
+  toastEl.textContent = text;
+  toastEl.classList.add('is-show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toastEl.classList.remove('is-show'), 2000);
 }
 
 // Same idea for the GitHub contributions heatmap: render the empty grid
