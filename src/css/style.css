@@ -2651,17 +2651,43 @@ html[data-hide-badges] .file-badge {
   display: none !important;
 }
 
-/* ---------- right-click account menu (on sidebar me-card) ---------- */
+/* ---------- right-click account menu (on sidebar me-card) ----------
+   Twitter-style: full-screen translucent backdrop reliably catches
+   outside clicks, popover has a header with a title + X close
+   button. The previous document-level click listener sometimes
+   raced with other handlers (router link interception, tab clicks)
+   and left the menu stuck open. */
+.account-menu__backdrop {
+  position: fixed; inset: 0;
+  z-index: 1599;
+  background: rgba(0,0,0,.35);
+  cursor: default;
+}
 .account-menu {
   position: fixed; z-index: 1600;
-  min-width: 240px; max-width: 320px;
+  min-width: 280px; max-width: 320px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(0,0,0,.4);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.5);
   padding: .3rem;
   display: flex; flex-direction: column; gap: .15rem;
 }
+.account-menu__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .35rem .35rem .35rem .55rem;
+}
+.account-menu__title {
+  font-size: .82rem; font-weight: 700; color: var(--muted); letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.account-menu__close {
+  background: transparent; border: 0; color: var(--muted); cursor: pointer;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+}
+.account-menu__close:hover { background: var(--surface-2); color: var(--text); }
 .account-menu__list { display: flex; flex-direction: column; gap: .1rem; }
 .account-menu__row {
   display: flex; align-items: center; gap: .55rem;

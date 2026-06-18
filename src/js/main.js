@@ -225,19 +225,26 @@ function renderSideMe() {
 // saved-accounts list (each row clickable to switch) and a "Log out"
 // footer. The profile page's stand-alone logout button was removed
 // once this existed — the right-click menu is the only entry point.
+// Twitter-style overlay backdrop + popover. The backdrop catches
+// any click outside the popover so close behaviour is deterministic
+// — the previous "document.addEventListener('click', …)" approach
+// sometimes raced with other handlers (router link interception,
+// settings tab handler, etc.) and left the menu stuck open.
 let accountMenuEl = null;
+let accountMenuBackdropEl = null;
 function ensureAccountMenu() {
   if (accountMenuEl) return accountMenuEl;
+  accountMenuBackdropEl = document.createElement('div');
+  accountMenuBackdropEl.className = 'account-menu__backdrop';
+  accountMenuBackdropEl.hidden = true;
+  accountMenuBackdropEl.addEventListener('click', closeAccountMenu);
+  document.body.appendChild(accountMenuBackdropEl);
+
   accountMenuEl = document.createElement('div');
   accountMenuEl.className = 'account-menu';
-  accountMenuEl.setAttribute('role', 'menu');
+  accountMenuEl.setAttribute('role', 'dialog');
   accountMenuEl.hidden = true;
   document.body.appendChild(accountMenuEl);
-  document.addEventListener('click', (e) => {
-    if (!accountMenuEl || accountMenuEl.hidden) return;
-    if (accountMenuEl.contains(e.target)) return;
-    closeAccountMenu();
-  });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && accountMenuEl && !accountMenuEl.hidden) closeAccountMenu();
   });
@@ -245,6 +252,7 @@ function ensureAccountMenu() {
 }
 function closeAccountMenu() {
   if (accountMenuEl) accountMenuEl.hidden = true;
+  if (accountMenuBackdropEl) accountMenuBackdropEl.hidden = true;
 }
 function openAccountMenu(anchorRect) {
   const me = currentUser();
@@ -269,15 +277,24 @@ function openAccountMenu(anchorRect) {
     );
   }).join('');
   menu.innerHTML =
+    // Header with the X close button — Twitter-style.
+    '<div class="account-menu__head">' +
+      '<span class="account-menu__title">' + escapeText(t('account_menu.title')) + '</span>' +
+      '<button type="button" class="account-menu__close" data-account-menu-close aria-label="Close">' +
+        icon('close', { size: 16 }) +
+      '</button>' +
+    '</div>' +
     '<div class="account-menu__list">' + rows + '</div>' +
     '<div class="account-menu__sep"></div>' +
     '<button type="button" class="account-menu__row account-menu__row--bad" data-account-menu-logout>' +
       icon('arrow_right', { size: 14, className: 'icon--inline' }) +
       escapeText(t('nav.logout')) +
     '</button>';
+
   // Position next to the anchor — to the right of the side rail.
-  // Clamp into viewport.
-  const W = 240, H = 48 * (saved.length + 1) + 16;
+  // Clamp into viewport. (Backdrop is full-screen; only the
+  // popover is positioned.)
+  const W = 280, H = 56 + 48 * (saved.length + 1) + 16;
   let left = (anchorRect.right + 8);
   let top  = anchorRect.top;
   if (left + W > window.innerWidth - 8) left = Math.max(8, anchorRect.left - W - 8);
@@ -285,8 +302,14 @@ function openAccountMenu(anchorRect) {
   menu.style.position = 'fixed';
   menu.style.left = left + 'px';
   menu.style.top  = top + 'px';
+  if (accountMenuBackdropEl) accountMenuBackdropEl.hidden = false;
   menu.hidden = false;
+
   menu.onclick = async (e) => {
+    if (e.target.closest('[data-account-menu-close]')) {
+      closeAccountMenu();
+      return;
+    }
     const switchBtn = e.target.closest('[data-account-switch-to]');
     if (switchBtn) {
       const id = switchBtn.getAttribute('data-account-switch-to');
