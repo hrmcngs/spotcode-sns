@@ -934,3 +934,91 @@ alter table public.profiles
 
 alter table public.profiles
   add column if not exists skills text[] default '{}';
+
+-- ===================================================================
+-- Stage 23 — official account + operator role
+-- ===================================================================
+-- Goal:
+--   • A shared "official" profile (@spotcode_official) that the admin
+--     and operators can post AS — like a brand account on Twitter,
+--     where multiple staffers post under the same identity without
+--     sharing the underlying credentials.
+--   • Server-side knowledge of who's an operator so RLS can decide
+--     whether a "post as official" request is allowed.
+--
+-- The auth.users row for @spotcode_official is created via the normal
+-- /signup UI flow (with a dev+official@... email) — Supabase doesn't
+-- expose user-creation to the anon key, so it has to come through
+-- signup. After signup, run the `update … set is_official = true`
+-- statement below to mark that profile as THE official account.
+-- (Same one-time bootstrap pattern as is_admin in Stage 15.)
+--
+-- @spotcode_dev is just a regular test profile — no schema flag.
+
+-- 1. Operator flag, mirroring the client-side OPERATOR_HANDLES list
+--    in src/js/dev-mode.js. Admins are implicitly operators (the
+--    RLS policies below check either flag).
+alter table public.profiles
+  add column if not exists is_operator boolean default false;
+update public.profiles
+  set is_operator = true
+  where handle in ('hrmcngs', 'aya526dev');
+
+-- 2. Official-account flag. Partial unique index enforces "at most
+--    one official account at a time" — flipping the flag on a second
+--    profile fails loudly instead of silently producing two officials.
+alter table public.profiles
+  add column if not exists is_official boolean default false;
+drop index if exists profiles_one_official_uniq;
+create unique index profiles_one_official_uniq
+  on public.profiles ((true)) where is_official = true;
+
+-- 3. Posts INSERT: allow author_id = auth.uid() (the existing rule)
+--    OR author_id = (the official account's id) when the requester
+--    is admin or operator. This is what lets the Composer's
+--    "Post as @spotcode_official" toggle work.
+drop policy if exists "authors can insert their posts" on public.posts;
+drop policy if exists "authors or staff-as-official can insert posts" on public.posts;
+create policy "authors or staff-as-official can insert posts"
+  on public.posts for insert with check (
+    auth.uid() = author_id
+    or (
+      exists (select 1 from public.profiles where id = author_id   and is_official = true)
+      and
+      exists (select 1 from public.profiles where id = auth.uid()  and (is_admin = true or is_operator = true))
+    )
+  );
+
+-- 4. Posts UPDATE / DELETE on official posts: same staff-only rule.
+--    Admin already had a global delete via Stage 15; we add the
+--    operator-side coverage here so an operator can take down (or
+--    edit a typo on) an official post without escalating to admin.
+drop policy if exists "authors can update their posts" on public.posts;
+drop policy if exists "authors or staff can update posts" on public.posts;
+create policy "authors or staff can update posts"
+  on public.posts for update using (
+    auth.uid() = author_id
+    or (
+      exists (select 1 from public.profiles where id = author_id  and is_official = true)
+      and
+      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
+    )
+  );
+
+drop policy if exists "authors can delete their posts" on public.posts;
+drop policy if exists "authors or staff can delete posts" on public.posts;
+create policy "authors or staff can delete posts"
+  on public.posts for delete using (
+    auth.uid() = author_id
+    or (
+      exists (select 1 from public.profiles where id = author_id  and is_official = true)
+      and
+      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
+    )
+  );
+
+-- 5. One-shot bootstrap — uncomment and run AFTER signing up
+--    @spotcode_official via the /signup UI (with the dev+official@…
+--    email). Marks that profile as the unique official account.
+--
+-- update public.profiles set is_official = true where handle = 'spotcode_official';
