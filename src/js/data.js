@@ -9,7 +9,6 @@
 import { KEYS, read, write } from './storage.js';
 import { currentUser }       from './auth.js';
 import { getClient }         from './supa.js';
-import { getOfficialAccount } from './official-account.js';
 
 // ----- users (read-only cache shim, populated by profiles.js + auth.js) -----
 
@@ -515,25 +514,15 @@ const POLL_MIGRATION_MSG =
   'user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE, option_idx int NOT NULL, ' +
   'created_at timestamptz DEFAULT now(), PRIMARY KEY (post_id, user_id));';
 
-// `opts.postAs === 'official'` swaps the author_id to the cached
-// official-account id (Stage 23 schema). RLS enforces that this only
-// succeeds when the requesting user is admin or operator.
-export async function addPost(post, opts = {}) {
+export async function addPost(post) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
   if (!user) throw new Error('ログインしていません');
   const wantsPhotos = Array.isArray(post.photos) && post.photos.length > 0;
   const wantsPoll = post.poll && Array.isArray(post.poll.options) && post.poll.options.length >= 2;
 
-  let authorId = user.id;
-  if (opts.postAs === 'official') {
-    const official = await getOfficialAccount();
-    if (!official) throw new Error('公式アカウントが設定されていません (Stage 23 マイグレーション未実行?)');
-    authorId = official.id;
-  }
-
   const row = {
-    author_id:   authorId,
+    author_id:   user.id,
     body:        post.body,
     github_link: post.githubLink || null,
     spot:        post.spot || null,

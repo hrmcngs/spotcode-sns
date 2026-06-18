@@ -562,28 +562,6 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 }
 .compose-kind-toggle__icon { font-size: 1em; }
 
-/* "Post as @spotcode_official" toggle — shares the kind-toggle pill
-   shape, but uses the accent colour so it reads as a distinct, more
-   serious action ("you are about to post under the brand account"). */
-.compose-official-toggle {
-  display: inline-flex; align-items: center; gap: .3em;
-  background: transparent; border: 1px dashed var(--border);
-  color: var(--muted); cursor: pointer;
-  padding: .2em .65em; border-radius: 999px;
-  font-size: .78rem; font-weight: 600;
-}
-.compose-official-toggle:hover {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-}
-.compose-official-toggle[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-  border-style: solid;
-}
-.compose-official-toggle .icon { stroke: currentColor; fill: none; }
-
 /* Audience picker — native <select> wrapped in a pill so it lines up
    with the spot / link / idea chips. Sized so the OS picker is one
    tap on mobile. */
