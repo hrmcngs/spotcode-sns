@@ -2,6 +2,7 @@ import { getUser, postsByHandle, likedPostsByHandle } from '../data.js';
 import { renderPost }              from '../post.js';
 import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
+import { displayUser }             from '../posting-identity.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, isRequested, followerCount, followingCount,
          hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls,
@@ -225,7 +226,18 @@ export function renderProfile(handle) {
   if (!u) return loading(handle);
 
   const me = currentUser();
-  const isMe = me && me.handle === u.handle;
+  // While the "posting as official" overlay is on, the staffer is
+  // effectively viewing /spotcode_official as themselves — don't
+  // offer Follow / More buttons against their own brand identity.
+  // The real auth identity (me) still owns Edit privileges; only
+  // it can update the profile row. So we have two flavours of
+  // "self":
+  //   • canEdit          — strict, only the actual auth user
+  //   • viewingSelfRow   — relaxed, includes the overlay identity
+  const display = me ? displayUser(me) : null;
+  const canEdit        = me && me.handle === u.handle;
+  const viewingSelfRow = !!(display && display.handle === u.handle);
+  const isMe = canEdit || viewingSelfRow;
   const ghLink = u.github?.url || (u.github?.handle ? 'https://github.com/' + u.github.handle : null);
   // Counts come from Supabase via hydrateProfileFollow; the cache returns
   // 0 until then, which is fine — hydrateProfile re-renders after fill.
@@ -251,14 +263,20 @@ export function renderProfile(handle) {
       '<div class="profile-top">' +
         renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
-          // Logout moved off the profile page — it now lives in the
-          // right-click menu on the sidebar account card.
-          (isMe
+          // Edit only when the row actually belongs to the auth user
+          // (canEdit). When the overlay is the only reason it's
+          // "self" (viewingSelfRow without canEdit), render no
+          // action buttons — Follow/More against your own brand
+          // identity is wrong, but Edit would silently 403 because
+          // RLS requires auth.uid() = profiles.id.
+          (canEdit
             ? '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
-            : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
-              '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
-                followBtnLabel +
-              '</button>') +
+            : viewingSelfRow
+              ? ''
+              : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
+                '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
+                  followBtnLabel +
+                '</button>') +
         '</div>' +
       '</div>' +
       '<div class="profile-id">' +

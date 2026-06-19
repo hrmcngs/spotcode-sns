@@ -97,11 +97,18 @@ async function renderRail() {
   try { await hydrateMyFollows(); } catch {}
   // Pull fresh suggestions from Supabase so the card isn't empty when
   // the local user cache only knows about the viewer themselves.
-  // Excludes the viewer + the handles they already follow; falls
-  // through silently to the local-cache path if the fetch fails.
+  // Excludes the viewer + the handles they already follow + the
+  // overlay identity (so @spotcode_official doesn't show up as a
+  // "follow me" suggestion to its own admin while they're posting
+  // as it). Silent on failure → fall through to the local cache.
+  const overlay = me ? displayUser(me) : null;
+  const overlayHandle = (overlay && overlay.handle !== (me && me.handle))
+    ? overlay.handle
+    : null;
   const excludeHandles = [];
   if (me) {
     excludeHandles.push(me.handle);
+    if (overlayHandle) excludeHandles.push(overlayHandle);
     try { excludeHandles.push(...myFollowingHandles()); } catch {}
   }
   try {
@@ -110,6 +117,7 @@ async function renderRail() {
   const others = Object.values(allUsers()).filter(u => {
     if (!me) return true; // guest: don't hide anyone
     if (u.handle === me.handle) return false;
+    if (overlayHandle && u.handle === overlayHandle) return false;
     return !isFollowing(me.handle, u.handle);
   });
   const trending = await computeTrendingCities();
