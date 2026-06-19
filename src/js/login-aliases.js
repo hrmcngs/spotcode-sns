@@ -11,38 +11,34 @@
 // accounts don't receive mail (passwords are managed by hand and
 // reset via the Supabase Dashboard).
 //
-// Current aliases:
-//   `dev.test.account`  → `dev.test.account@spotcode-sns.local`  (QA login)
-//   `official.account`  → `official.account@spotcode-sns.local`  (brand)
-// Add more here as the need arises.
+// Current alias: `dev.test.account` → `dev.test.account@spotcode-sns.local`
+// (the in-house QA login). Add more here as the need arises.
+//
+// The brand `@spotcode_official` account is NOT in this map — it's
+// created directly via the Stage 25 SQL bootstrap as a "virtual"
+// auth.users row that nobody logs into. No sign-up alias needed.
 
 const ALIAS_DOMAIN = '@spotcode-sns.local';
 
 const ALIASES = {
   // bare identifier → full email Supabase actually stores
   'dev.test.account': 'dev.test.account' + ALIAS_DOMAIN,
-  'official.account': 'official.account' + ALIAS_DOMAIN,
 };
 
-// Two-tier reservation:
-//   • RESERVED_AFTER_SIGNUP — names that have already been provisioned
-//     by the admin at least once. Random visitors hitting the signup
-//     form must be blocked here, otherwise they could re-claim the
-//     identifier if the row is ever deleted.
-//   • Anything NOT in these sets (including a brand-new alias like
-//     `official.account` before the admin has signed it up) stays
-//     open so the first signup can go through. Once provisioned,
-//     move the handle / bare-alias into RESERVED_AFTER_SIGNUP.
+// Names already provisioned by the project — random visitors must
+// not be able to re-claim them at signup. Brand-new aliases stay
+// OUT of these sets until the first signup is done.
 //
 // Supabase's `unique(email)` on auth.users and `unique(handle)` on
-// profiles already prevent literal duplicates. These sets are the
-// extra "this name belongs to the project, not to you" check that
-// gives the user a friendlier error than a raw Supabase rejection.
+// profiles already prevent literal duplicates; these sets are the
+// extra "this name belongs to the project" check so the user gets
+// a friendly error rather than a raw Supabase rejection.
 const RESERVED_BARE_LOGINS = new Set([
   'dev.test.account',
 ]);
 export const RESERVED_HANDLES = new Set([
   'spotcode_dev',
+  'spotcode_official',
 ]);
 
 // Public so callers (auth modal) can reject any signup attempting
