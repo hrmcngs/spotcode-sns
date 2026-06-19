@@ -293,7 +293,14 @@ export function renderProfile(handle) {
             : (viewingSelfRow || (overlayOn && me && me.handle === u.handle))
               ? ''
               : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
-                '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
+                // Overlay-on Follow button: greyed out + click-disabled
+                // so the displayed state stays consistent with the
+                // brand's graph WITHOUT toggling the auth user's row
+                // by accident (the "Follow appears unfollowed but
+                // clicking decreases the count" symptom).
+                '<button class="btn ' + followBtnCls + ' btn--follow"' +
+                  (overlayOn ? ' disabled aria-disabled="true" title="' + escAttr(t('profile.btn.follow_overlay_blocked')) + '"' : '') +
+                  ' data-target="' + u.handle + '">' +
                   followBtnLabel +
                 '</button>') +
         '</div>' +
