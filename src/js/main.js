@@ -175,16 +175,11 @@ async function renderRail() {
         '<div class="followlist">' +
           others.slice(0, 5).map(u => {
             const f = me && isFollowing(me.handle, u.handle);
-            // While the overlay is on, omit the Follow button — keep
-            // the row clickable (avatar / name link out to the
-            // profile) so discovery still works, but no follow
-            // operation runs as the brand.
-            const showFollowBtn = !isPostingAsOfficial();
-            const followBtnHtml = showFollowBtn
-              ? '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
-                  (f ? t('profile.btn.following') : t('profile.btn.follow')) +
-                '</button>'
-              : '';
+            // Show the Follow button on every row, including while
+            // the overlay is on — follow runs as the auth user
+            // (overlay doesn't affect the follow insert). The
+            // exclude filter above already drops the overlay handle
+            // from the suggestion set, so there's no self-row here.
             return (
               '<div class="followlist__row">' +
                 renderAvatar(u, { tag: 'a', href: url('/' + u.handle) }) +
@@ -192,7 +187,9 @@ async function renderRail() {
                   '<a class="followlist__name" href="' + url('/' + u.handle) + '" title="' + escape(u.name) + '">' + escape(u.name) + '</a>' +
                   '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
                 '</div>' +
-                followBtnHtml +
+                '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
+                  (f ? t('profile.btn.following') : t('profile.btn.follow')) +
+                '</button>' +
               '</div>'
             );
           }).join('') +
@@ -1351,46 +1348,21 @@ document.addEventListener('click', (e) => {
   }
 
   // Follow / unfollow (profile + Who-to-follow).
+  // Follow always executes as the auth user — the「公式」overlay
+  // only affects display + post author_id, not who follows whom.
+  // (Following AS the brand needed Stage 26 RLS + actorUserId
+  // plumbing which we intentionally dropped per user request.)
   const followBtn = e.target.closest('.btn--follow, .followlist__follow');
   if (followBtn) {
     e.preventDefault();
     const me = currentUser();
     if (!me) return openAuth('login');
     const target = followBtn.getAttribute('data-target');
-    if (!target) return;
-    // While the "posting as official" overlay is on, the staffer's
-    // effective identity is the brand handle. Don't bail when the
-    // target equals their own real handle (that's now a different
-    // account from their POV) — instead, build the official's
-    // follow graph by passing the brand id as `actorUserId`.
-    // Stage 26 RLS allows the substitution for admin/operator.
-    const overlayOn = isPostingAsOfficial();
-    const effectiveHandle = overlayOn ? OFFICIAL_HANDLE : me.handle;
-    if (target === effectiveHandle) return;
+    if (!target || target === me.handle) return;
     followBtn.disabled = true;
-    (async () => {
-      // Make sure the official id is hot before computing actorUserId
-      // — first-click after a fresh reload may hit a cold cache, and
-      // falling back to undefined would silently downgrade to a real-
-      // user follow → self-follow alert.
-      let actorUserId;
-      if (overlayOn) {
-        let official = cachedOfficialAccount();
-        if (!official) { try { official = await getOfficialAccount(); } catch {} }
-        actorUserId = official?.id;
-        if (!actorUserId) {
-          alert('公式アカウントの読み込みに失敗しました。リロードしてもう一度お試しください。');
-          return;
-        }
-      }
-      const followOpts = overlayOn ? { actorUserId } : {};
-      return toggleFollow(me.handle, target, followOpts);
-    })()
+    toggleFollow(me.handle, target)
       .then((res) => {
-        if (!res) return; // overlay aborted above
-        // toggleFollow returns { state: 'following' | 'requested' | 'none' }
-        // — earlier the truthy-object was always treated as "followed",
-        // so the Unfollow path never visually reverted.
+        // toggleFollow returns { state: 'following' | 'requested' | 'none' }.
         const state = (res && res.state) || 'none';
         const isFollowed = state === 'following' || state === 'requested';
         followBtn.classList.toggle('is-following', isFollowed);
