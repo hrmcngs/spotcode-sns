@@ -273,22 +273,24 @@ export function renderProfile(handle) {
       '<div class="profile-top">' +
         renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
-          // While the "公式" overlay is on, hide Follow / More / Edit
-          // on every profile. Acting on behalf of the brand for
-          // these actions would need extra RLS plumbing we've
-          // intentionally dropped — turn the overlay OFF (avatar
-          // menu → your own row) to follow / report / edit as
-          // yourself again.
-          (overlayOn
-            ? ''
-            : canEdit
-              ? '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
-              : viewingSelfRow
-                ? ''
-                : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
-                  '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
-                    followBtnLabel +
-                  '</button>') +
+          // Edit only fires when the row actually belongs to the
+          // auth user AND the overlay is off (canEdit).
+          // Hide Follow / More for two "self" cases:
+          //   • viewingSelfRow — overlay-aware self (e.g. overlay
+          //     on + /spotcode_official, or overlay off + /hrmcngs).
+          //   • overlay ON + /hrmcngs (auth-self while overlay on)
+          //     — follow click would alert "自分自身はフォロー…" at
+          //     the auth layer, hide it to avoid the dead end.
+          // Everyone else gets Follow + More — clicks execute as
+          // the auth user (overlay doesn't affect follow inserts).
+          (canEdit
+            ? '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
+            : (viewingSelfRow || (overlayOn && me && me.handle === u.handle))
+              ? ''
+              : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
+                '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
+                  followBtnLabel +
+                '</button>') +
         '</div>' +
       '</div>' +
       '<div class="profile-id">' +
