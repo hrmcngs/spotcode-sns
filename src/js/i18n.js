@@ -12,7 +12,7 @@ const DEFAULT_LANG = 'ja';
 const DICT = {
   ja: {
     // ---------------- nav / topbar ----------------
-    'nav.search.placeholder':  'スポット・アイデア・リポジトリを検索…',
+    'nav.search.placeholder':  'ユーザー・スポット・アイデア・リポジトリを検索…',
     'nav.home':                'Home',
     'nav.explore':             'Explore',
     'nav.notifications':       'Notifications',
@@ -289,7 +289,7 @@ const DICT = {
   },
 
   en: {
-    'nav.search.placeholder':  'Search spots, ideas, repos…',
+    'nav.search.placeholder':  'Search users, spots, ideas, repos…',
     'nav.home':                'Home',
     'nav.explore':             'Explore',
     'nav.notifications':       'Notifications',
