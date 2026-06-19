@@ -2,6 +2,7 @@ import { renderIdeaForm } from '../idea-post.js';
 import { allPosts, followingPosts, hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
+import { displayUser }    from '../posting-identity.js';
 import { url }            from '../router.js';
 import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls } from '../interactions.js';
 import { t }              from '../i18n.js';
@@ -75,7 +76,7 @@ export function renderHome(tab = 'foryou') {
   renderVersion++;
   return [
     timelineTabs(tab),
-    renderIdeaForm({ user: currentUser() }),
+    renderIdeaForm({ user: displayUser(currentUser()) }),
     '<div id="timeline-list">',
       loadingTimeline(tab),
     '</div>',

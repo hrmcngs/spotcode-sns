@@ -1059,3 +1059,149 @@ create policy "authors can delete their posts"
 drop index if exists profiles_one_official_uniq;
 alter table public.profiles drop column if exists is_official;
 alter table public.profiles drop column if exists is_operator;
+
+-- ===================================================================
+-- Stage 25 — bring back the "post as official via privilege" plumbing
+-- ===================================================================
+-- We tried two flavours:
+--   • Stage 23: schema flag + Composer "Post as official" toggle (PR
+--     #174). The toggle UX confused the user — felt like a
+--     per-post checkbox.
+--   • Stage 24 + PR #176/#177: revert; the brand account becomes a
+--     normal shared-password Supabase user, accessed via the account
+--     switcher (with the auth modal pre-filling the shared email on
+--     first sign-in).
+--
+-- New direction (user: 「hrmc.ngs+official@gmail.comいらない、運営者と
+-- 管理者全員がログインできる特例アカウントなの」): the brand
+-- account's password should be *irrelevant* to day-to-day use. Admin
+-- and operator privileges ARE the authorization — clicking the
+-- 「公式」 row in the account switcher should just put the staffer
+-- "into" the brand identity (no password prompt, no separate
+-- session). Server-side RLS validates the privilege on each insert.
+--
+-- This re-adds the columns + relaxed posts policies from Stage 23.
+-- Safe to run after Stage 24 wiped them: ADD COLUMN IF NOT EXISTS is
+-- idempotent, the DROP POLICY IF EXISTS lines clear any leftover
+-- names from earlier attempts.
+
+-- 1. Operator flag mirrors OPERATOR_HANDLES in src/js/dev-mode.js.
+alter table public.profiles
+  add column if not exists is_operator boolean default false;
+update public.profiles
+  set is_operator = true
+  where handle in ('hrmcngs', 'aya526dev');
+
+-- 2. Official flag. Partial unique index keeps exactly one row hot —
+--    flipping a second profile fails loudly instead of silently
+--    creating two officials.
+alter table public.profiles
+  add column if not exists is_official boolean default false;
+drop index if exists profiles_one_official_uniq;
+create unique index profiles_one_official_uniq
+  on public.profiles ((true)) where is_official = true;
+
+-- 3. Posts INSERT: own author_id (the normal case) OR author_id =
+--    the official profile when the requester is admin or operator.
+--    The client-side mode flag (src/js/posting-identity.js) drives
+--    the substitution; this policy is what makes it actually go
+--    through.
+drop policy if exists "authors or staff-as-official can insert posts" on public.posts;
+drop policy if exists "authors or staff can insert posts"             on public.posts;
+drop policy if exists "authors can insert their posts"                on public.posts;
+create policy "authors or staff-as-official can insert posts"
+  on public.posts for insert with check (
+    auth.uid() = author_id
+    or (
+      exists (select 1 from public.profiles where id = author_id  and is_official = true)
+      and
+      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
+    )
+  );
+
+-- 4. Posts UPDATE / DELETE on the official account: same admin-or-
+--    operator gate, so a staffer who posted as official can fix a
+--    typo or take it down without escalating to another role.
+drop policy if exists "authors or staff can update posts" on public.posts;
+drop policy if exists "authors can update their posts"   on public.posts;
+create policy "authors or staff can update posts"
+  on public.posts for update using (
+    auth.uid() = author_id
+    or (
+      exists (select 1 from public.profiles where id = author_id  and is_official = true)
+      and
+      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
+    )
+  );
+
+drop policy if exists "authors or staff can delete posts" on public.posts;
+drop policy if exists "authors can delete their posts"   on public.posts;
+create policy "authors or staff can delete posts"
+  on public.posts for delete using (
+    auth.uid() = author_id
+    or (
+      exists (select 1 from public.profiles where id = author_id  and is_official = true)
+      and
+      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
+    )
+  );
+-- (Stage 15's "admins can delete any post" stays too — global
+-- moderation override still applies.)
+
+-- 5. Bootstrap the "virtual" official account in one shot.
+--    Idempotent — re-running this block on a DB that already has
+--    the row is a no-op.
+--
+--    The auth.users row is created here with an **unrecoverable
+--    random password**. Nobody logs into this account directly —
+--    admin / operator privileges are the only path to acting as
+--    it (the account-switcher overlay in PR #179 substitutes
+--    author_id without calling signInWithPassword). This is what
+--    makes the account "virtual" from the user's perspective:
+--    no signup flow, no shared password, no auth modal.
+--
+--    Runs in the SQL Editor as the project's postgres role, so
+--    it has the privilege to write into the `auth` schema —
+--    same path Supabase itself uses for user provisioning.
+
+do $$
+declare
+  v_id uuid;
+begin
+  -- Look up by the sentinel email so re-running the block is
+  -- idempotent (auth.users has a unique constraint on email).
+  select id into v_id
+  from auth.users
+  where email = 'official@spotcode-sns.local';
+
+  if v_id is null then
+    insert into auth.users (
+      instance_id, email, encrypted_password,
+      email_confirmed_at, created_at, updated_at,
+      aud, role,
+      raw_user_meta_data, raw_app_meta_data
+    )
+    values (
+      '00000000-0000-0000-0000-000000000000',
+      'official@spotcode-sns.local',
+      crypt(gen_random_uuid()::text, gen_salt('bf')),
+      now(), now(), now(),
+      'authenticated', 'authenticated',
+      jsonb_build_object('handle', 'spotcode_official', 'name', 'spotcode'),
+      '{"provider":"email","providers":["email"]}'::jsonb
+    )
+    returning id into v_id;
+    -- The handle_new_user trigger (Stage 2/3) already created the
+    -- matching profiles row using the metadata above.
+  end if;
+
+  -- Upsert the profile fields, since the trigger may have run with
+  -- empty metadata on older DBs, and we want re-runs to repair any
+  -- drift (renamed handle / is_official set back to true / etc.).
+  insert into public.profiles (id, handle, name, is_official)
+  values (v_id, 'spotcode_official', 'spotcode', true)
+  on conflict (id) do update set
+    handle      = excluded.handle,
+    name        = excluded.name,
+    is_official = true;
+end $$;
