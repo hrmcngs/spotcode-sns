@@ -20,12 +20,24 @@ const followsMine = new Set();
 const requestsMine = new Set();
 let followsMineLoaded = false;
 
+// Same shape, but for the @spotcode_official identity — used when the
+// staffer is in the "公式" overlay so the Follow / Following badge
+// reflects what the BRAND follows, not what they personally follow.
+// Populated by hydrateOfficialFollows(), called when the overlay
+// turns on. Cleared by clearInteractionsCache.
+const officialFollows = new Set();
+let officialFollowsLoaded = false;
+let officialFollowsOwnerId = null;
+
 export function clearInteractionsCache() {
   likes.clear();
   followCounts.clear();
   followsMine.clear();
   requestsMine.clear();
   followsMineLoaded = false;
+  officialFollows.clear();
+  officialFollowsLoaded = false;
+  officialFollowsOwnerId = null;
   reposts.clear();
   bookmarks.clear();
 }
@@ -131,6 +143,35 @@ export async function hydrateMyFollows() {
     else                        followsMine.add(h);
   }
   followsMineLoaded = true;
+}
+
+// Load the @spotcode_official profile's accepted follows into a
+// separate set, so the overlay can display "Following" correctly
+// against the BRAND's graph (the viewer's own followsMine is no
+// help for that). `officialId` is the profile id — pass null /
+// undefined when not in overlay; the function early-returns then.
+export async function hydrateOfficialFollows(officialId) {
+  if (!officialId) return;
+  if (officialFollowsLoaded && officialFollowsOwnerId === officialId) return;
+  let supa; try { supa = await getClient(); } catch { return; }
+  const { data } = await supa
+    .from('follows')
+    .select('status, target:profiles!follows_target_id_fkey(handle)')
+    .eq('follower_id', officialId)
+    .eq('status', 'accepted');
+  officialFollows.clear();
+  for (const r of data || []) {
+    const h = r.target?.handle;
+    if (h) officialFollows.add(h);
+  }
+  officialFollowsLoaded = true;
+  officialFollowsOwnerId = officialId;
+}
+
+// Synchronous read against the cache loaded above. Profile renders
+// call this when the overlay is on instead of isFollowing().
+export function isOfficialFollowing(targetHandle) {
+  return officialFollows.has(targetHandle);
 }
 
 // Fill followCounts for a single user (used by profile page).
