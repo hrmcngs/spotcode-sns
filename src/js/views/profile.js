@@ -2,7 +2,8 @@ import { getUser, postsByHandle, likedPostsByHandle } from '../data.js';
 import { renderPost }              from '../post.js';
 import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
-import { displayUser }             from '../posting-identity.js';
+import { displayUser, isPostingAsOfficial } from '../posting-identity.js';
+import { OFFICIAL_HANDLE }         from '../official-account.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, isRequested, followerCount, followingCount,
          hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls,
@@ -234,9 +235,16 @@ export function renderProfile(handle) {
   // "self":
   //   • canEdit          — strict, only the actual auth user
   //   • viewingSelfRow   — relaxed, includes the overlay identity
+  //
+  // The displayUser() path depends on cachedOfficialAccount() being
+  // populated; we also do a direct handle match against the
+  // hardcoded OFFICIAL_HANDLE so the gating still works on the
+  // first paint (before the Supabase profile lookup resolves).
   const display = me ? displayUser(me) : null;
-  const canEdit        = me && me.handle === u.handle;
-  const viewingSelfRow = !!(display && display.handle === u.handle);
+  const canEdit         = me && me.handle === u.handle;
+  const viaDisplayUser  = !!(display && display.handle === u.handle);
+  const viaDirectMatch  = !!(me && isPostingAsOfficial() && u.handle === OFFICIAL_HANDLE);
+  const viewingSelfRow  = viaDisplayUser || viaDirectMatch;
   const isMe = canEdit || viewingSelfRow;
   const ghLink = u.github?.url || (u.github?.handle ? 'https://github.com/' + u.github.handle : null);
   // Counts come from Supabase via hydrateProfileFollow; the cache returns
