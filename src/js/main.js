@@ -1351,16 +1351,19 @@ document.addEventListener('click', (e) => {
     const target = followBtn.getAttribute('data-target');
     if (!target) return;
     // While the "posting as official" overlay is on, the staffer's
-    // effective identity is the brand handle — so don't bail when
-    // the target equals their own real handle (that's now a
-    // different account from their POV). The Supabase-side
-    // self-follow guard in toggleFollow still catches the actual
-    // auth self-follow and surfaces a clear alert.
+    // effective identity is the brand handle. Don't bail when the
+    // target equals their own real handle (that's now a different
+    // account from their POV) — instead, build the official's
+    // follow graph by passing the brand id as `actorUserId`.
+    // Stage 26 RLS allows the substitution for admin/operator.
     const overlayOn = isPostingAsOfficial();
     const effectiveHandle = overlayOn ? OFFICIAL_HANDLE : me.handle;
     if (target === effectiveHandle) return;
+    const followOpts = overlayOn
+      ? { actorUserId: cachedOfficialAccount()?.id }
+      : {};
     followBtn.disabled = true;
-    toggleFollow(me.handle, target)
+    toggleFollow(me.handle, target, followOpts)
       .then((res) => {
         // toggleFollow returns { state: 'following' | 'requested' | 'none' }
         // — earlier the truthy-object was always treated as "followed",

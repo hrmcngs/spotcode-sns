@@ -197,32 +197,57 @@ function shapeProfile(p) {
 //   'following' — accepted follow now exists
 //   'requested' — pending follow now exists (private target)
 //   'none'      — the follow / request was removed
-export async function toggleFollow(myHandle, targetHandle) {
+// `opts.actorUserId` overrides the follow's `follower_id` — used by
+// the "post as official" overlay so admin/op can build the brand
+// account's follow graph without logging into it. Stage 26 RLS
+// validates the substitution (admin or operator only). When the
+// override is given, the local `followsMine` / `requestsMine` caches
+// are NOT touched — those track the SIGNED-IN user, not the overlay.
+export async function toggleFollow(myHandle, targetHandle, opts = {}) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
   if (!user) throw new Error('ログインしてください');
   const meta = await userMetaByHandle(targetHandle);
   if (!meta) throw new Error('対象ユーザーが見つかりません');
-  if (user.id === meta.id) throw new Error('自分自身はフォローできません');
+  const asOverlay = !!opts.actorUserId;
+  const actorId   = asOverlay ? opts.actorUserId : user.id;
+  if (actorId === meta.id) throw new Error('自分自身はフォローできません');
 
-  const wasAccepted = followsMine.has(targetHandle);
-  const wasPending  = requestsMine.has(targetHandle);
+  // Overlay path can't trust the followsMine cache (it tracks the
+  // signed-in user, not the overlay identity). Round-trip to DB
+  // for the current state. Cheap because there's a unique index on
+  // (follower_id, target_id).
+  let wasAccepted, wasPending;
+  if (asOverlay) {
+    const { data: existing } = await supa.from('follows')
+      .select('status')
+      .eq('follower_id', actorId)
+      .eq('target_id', meta.id)
+      .maybeSingle();
+    wasAccepted = !!(existing && existing.status === 'accepted');
+    wasPending  = !!(existing && existing.status === 'pending');
+  } else {
+    wasAccepted = followsMine.has(targetHandle);
+    wasPending  = requestsMine.has(targetHandle);
+  }
 
   // Tap on Following / Requested → remove the row entirely.
   if (wasAccepted || wasPending) {
     const { error } = await supa.from('follows')
-      .delete().eq('follower_id', user.id).eq('target_id', meta.id);
+      .delete().eq('follower_id', actorId).eq('target_id', meta.id);
     if (error) throw new Error(error.message);
-    followsMine.delete(targetHandle);
-    requestsMine.delete(targetHandle);
-    if (wasAccepted) {
-      // Bump cached counts — pending requests don't show in follower count.
-      const target = followCounts.get(targetHandle);
-      if (target) followCounts.set(targetHandle,
-        { ...target, followers: Math.max(0, target.followers - 1) });
-      const mine = myHandle ? followCounts.get(myHandle) : null;
-      if (mine) followCounts.set(myHandle,
-        { ...mine, following: Math.max(0, mine.following - 1) });
+    if (!asOverlay) {
+      followsMine.delete(targetHandle);
+      requestsMine.delete(targetHandle);
+      if (wasAccepted) {
+        // Bump cached counts — pending requests don't show in follower count.
+        const target = followCounts.get(targetHandle);
+        if (target) followCounts.set(targetHandle,
+          { ...target, followers: Math.max(0, target.followers - 1) });
+        const mine = myHandle ? followCounts.get(myHandle) : null;
+        if (mine) followCounts.set(myHandle,
+          { ...mine, following: Math.max(0, mine.following - 1) });
+      }
     }
     return { state: 'none' };
   }
@@ -230,8 +255,14 @@ export async function toggleFollow(myHandle, targetHandle) {
   // Insert a new row. Private target → status pending. Public → accepted.
   const status = meta.is_private ? 'pending' : 'accepted';
   const { error } = await supa.from('follows')
-    .insert({ follower_id: user.id, target_id: meta.id, status });
+    .insert({ follower_id: actorId, target_id: meta.id, status });
   if (error) throw new Error(error.message);
+  if (asOverlay) {
+    // Counts get repainted from the DB on the next renderProfile
+    // hydration; we don't try to mirror the overlay's follow graph
+    // into the followCounts cache here.
+    return { state: status === 'accepted' ? 'following' : 'requested' };
+  }
   if (status === 'accepted') {
     followsMine.add(targetHandle);
     const target = followCounts.get(targetHandle);
