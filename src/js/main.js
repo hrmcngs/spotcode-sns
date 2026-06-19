@@ -29,7 +29,7 @@ import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
          toggleRepost, toggleBookmark,
          hydrateMyFollows, myFollowingHandles, clearInteractionsCache,
-         hydrateOfficialFollows } from './interactions.js';
+         hydrateOfficialFollows, isOfficialFollowing } from './interactions.js';
 import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
 import { applyDisplayPrefs } from './display-prefs.js';
@@ -175,12 +175,12 @@ async function renderRail() {
         '<h3>' + t('rail.who_to_follow') + '</h3>' +
         '<div class="followlist">' +
           others.slice(0, 5).map(u => {
-            const f = me && isFollowing(me.handle, u.handle);
-            // Show the Follow button on every row, including while
-            // the overlay is on — follow runs as the auth user
-            // (overlay doesn't affect the follow insert). The
-            // exclude filter above already drops the overlay handle
-            // from the suggestion set, so there's no self-row here.
+            // While overlay is on, render the badge from the brand's
+            // graph (officialFollows) and disable the click — see
+            // profile.js for the rationale (display ≠ click identity
+            // is too confusing).
+            const overlayOn = isPostingAsOfficial();
+            const f = me && (overlayOn ? isOfficialFollowing(u.handle) : isFollowing(me.handle, u.handle));
             return (
               '<div class="followlist__row">' +
                 renderAvatar(u, { tag: 'a', href: url('/' + u.handle) }) +
@@ -188,7 +188,9 @@ async function renderRail() {
                   '<a class="followlist__name" href="' + url('/' + u.handle) + '" title="' + escape(u.name) + '">' + escape(u.name) + '</a>' +
                   '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
                 '</div>' +
-                '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
+                '<button class="followlist__follow' + (f ? ' is-following' : '') + '"' +
+                  (overlayOn ? ' disabled aria-disabled="true" title="' + escape(t('profile.btn.follow_overlay_blocked')) + '"' : '') +
+                  ' data-target="' + u.handle + '">' +
                   (f ? t('profile.btn.following') : t('profile.btn.follow')) +
                 '</button>' +
               '</div>'
@@ -1378,6 +1380,13 @@ document.addEventListener('click', (e) => {
     if (!me) return openAuth('login');
     const target = followBtn.getAttribute('data-target');
     if (!target || target === me.handle) return;
+    // Defense in depth: the renderer already sets `disabled` on
+    // every Follow button while the overlay is on, but stop here
+    // too in case the attribute gets stripped (DevTools edits etc.)
+    // — the click identity (auth user) and the displayed identity
+    // (brand) don't match in that mode, so toggling would corrupt
+    // the auth user's follow graph against what the button showed.
+    if (isPostingAsOfficial()) return;
     followBtn.disabled = true;
     toggleFollow(me.handle, target)
       .then((res) => {

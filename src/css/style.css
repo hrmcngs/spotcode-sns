@@ -1373,6 +1373,24 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   color: var(--danger); border-color: var(--danger);
 }
 
+/* Read-only Follow button while the 公式 overlay is on — the
+   displayed state (brand's graph) and the click identity (auth
+   user) don't match, so the click is hard-disabled. Greyed out
+   + not-allowed cursor so the user sees it's intentional. */
+.followlist__follow:disabled,
+.btn--follow:disabled {
+  opacity: .45; cursor: not-allowed;
+}
+.followlist__follow:disabled:hover,
+.btn--follow:disabled:hover {
+  opacity: .45; background: var(--text); color: var(--bg);
+}
+.btn--follow.is-following:disabled:hover,
+.followlist__follow.is-following:disabled:hover {
+  background: transparent; color: var(--text);
+  border-color: var(--border);
+}
+
 /* ---------- profile page ---------- */
 .profile-header {
   border-bottom: 1px solid var(--border);
