@@ -210,8 +210,12 @@ function renderSideMe() {
   const slot = document.getElementById('side-me');
   if (!slot) return;
   const real = currentUser();
-  if (real) {
-    const me = displayUser(real);
+  // `me` is the overlay-aware identity: returns the official profile
+  // when the "post as official" toggle is on, otherwise the real
+  // user. Hoisted out of the `if (real)` block so the Profile link
+  // logic below can read it too.
+  const me = real ? displayUser(real) : null;
+  if (me) {
     slot.innerHTML =
       '<a class="me-card" href="' + url('/' + me.handle) + '" data-account-menu="1">' +
         renderAvatar(me, { size: 'lg' }) +
@@ -224,16 +228,15 @@ function renderSideMe() {
     slot.innerHTML =
       '<button class="btn btn--ghost btn--block" data-auth="login">' + t('nav.login') + '</button>';
   }
-  // Profile side-nav item: link to YOUR OWN profile when logged in
-  // (not the official overlay), otherwise turn it into a login
-  // trigger. Use `real` here — the side-nav Profile link should
-  // always jump to your account, even while the "post as official"
-  // overlay is on.
+  // Profile side-nav item: follows the overlay identity, so while
+  // posting as official the Profile link jumps to @spotcode_official
+  // instead of the staffer's own profile. (Matches the side-rail
+  // me-card above, the topbar avatar, and the composer avatar.)
   const profileLink = document.querySelector('.side-nav__item[data-nav="profile"]');
   if (profileLink) {
-    if (real) {
-      profileLink.setAttribute('href', '/' + real.handle);
-      profileLink.setAttribute('data-route', '/' + real.handle);
+    if (me) {
+      profileLink.setAttribute('href', '/' + me.handle);
+      profileLink.setAttribute('data-route', '/' + me.handle);
       profileLink.removeAttribute('data-auth');
     } else {
       profileLink.setAttribute('href', '/');
