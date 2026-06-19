@@ -77,6 +77,39 @@ export async function fetchProfileByHandle(handle) {
   return profile;
 }
 
+// "Recommended" users for the right-rail Who-to-follow card. Pulls
+// the most-recently-created public profiles from Supabase so the
+// suggestion list is populated even when the local user cache only
+// knows about the viewer themselves. `excludeHandles` filters out
+// the viewer + anyone they already follow; the caller is expected
+// to pass that set so the suggestions never include duplicates of
+// what the viewer is already connected to.
+export async function recommendedProfiles({ limit = 5, excludeHandles = [] } = {}) {
+  let supa;
+  try { supa = await getClient(); } catch { return []; }
+  // Over-fetch a bit so we still have N results after filtering out
+  // the excludeHandles set client-side. (Doing the exclusion in SQL
+  // would need a NOT IN clause that grows with every follow.)
+  const buffer = Math.max(limit + excludeHandles.length, limit * 3);
+  const { data, error } = await supa
+    .from('profiles')
+    .select(COLUMNS)
+    .order('created_at', { ascending: false })
+    .limit(buffer);
+  if (error) { console.warn('recommendedProfiles', error); return []; }
+  const excludeLower = new Set(
+    excludeHandles.map(h => String(h || '').toLowerCase()).filter(Boolean)
+  );
+  const profiles = (data || [])
+    .map(shapeProfile)
+    .filter(Boolean)
+    .filter(p => !excludeLower.has(String(p.handle || '').toLowerCase()))
+    .slice(0, limit);
+  // Cache for the right-rail's allUsers() fallback + the search dropdown.
+  profiles.forEach(cacheLocally);
+  return profiles;
+}
+
 export async function searchProfiles(q, limit = 10) {
   if (!q) return [];
   let supa;
