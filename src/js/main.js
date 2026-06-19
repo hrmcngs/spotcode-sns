@@ -28,7 +28,7 @@ import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
          toggleRepost, toggleBookmark,
-         hydrateMyFollows, clearInteractionsCache } from './interactions.js';
+         hydrateMyFollows, myFollowingHandles, clearInteractionsCache } from './interactions.js';
 import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
 import { applyDisplayPrefs } from './display-prefs.js';
@@ -37,6 +37,7 @@ import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
 import { lockBodyScroll, unlockBodyScroll, forceUnlockBodyScroll } from './body-scroll-lock.js';
 import { fetchContributions, cachedContributions } from './github-activity.js';
+import { recommendedProfiles } from './profiles.js';
 import { saveDraft, loadDraft, clearDraft, debounce } from './drafts.js';
 import { quickNavLinks } from './quick-nav.js';
 import { initMentionAutocomplete } from './mention-autocomplete.js';
@@ -94,6 +95,18 @@ async function renderRail() {
   // Make sure followsMine is filled before deciding who to suggest, so the
   // "Who to follow" list never re-suggests someone you already follow.
   try { await hydrateMyFollows(); } catch {}
+  // Pull fresh suggestions from Supabase so the card isn't empty when
+  // the local user cache only knows about the viewer themselves.
+  // Excludes the viewer + the handles they already follow; falls
+  // through silently to the local-cache path if the fetch fails.
+  const excludeHandles = [];
+  if (me) {
+    excludeHandles.push(me.handle);
+    try { excludeHandles.push(...myFollowingHandles()); } catch {}
+  }
+  try {
+    await recommendedProfiles({ limit: 5, excludeHandles });
+  } catch {}
   const others = Object.values(allUsers()).filter(u => {
     if (!me) return true; // guest: don't hide anyone
     if (u.handle === me.handle) return false;
