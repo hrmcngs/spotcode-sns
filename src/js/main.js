@@ -1359,12 +1359,27 @@ document.addEventListener('click', (e) => {
     const overlayOn = isPostingAsOfficial();
     const effectiveHandle = overlayOn ? OFFICIAL_HANDLE : me.handle;
     if (target === effectiveHandle) return;
-    const followOpts = overlayOn
-      ? { actorUserId: cachedOfficialAccount()?.id }
-      : {};
     followBtn.disabled = true;
-    toggleFollow(me.handle, target, followOpts)
+    (async () => {
+      // Make sure the official id is hot before computing actorUserId
+      // — first-click after a fresh reload may hit a cold cache, and
+      // falling back to undefined would silently downgrade to a real-
+      // user follow → self-follow alert.
+      let actorUserId;
+      if (overlayOn) {
+        let official = cachedOfficialAccount();
+        if (!official) { try { official = await getOfficialAccount(); } catch {} }
+        actorUserId = official?.id;
+        if (!actorUserId) {
+          alert('公式アカウントの読み込みに失敗しました。リロードしてもう一度お試しください。');
+          return;
+        }
+      }
+      const followOpts = overlayOn ? { actorUserId } : {};
+      return toggleFollow(me.handle, target, followOpts);
+    })()
       .then((res) => {
+        if (!res) return; // overlay aborted above
         // toggleFollow returns { state: 'following' | 'requested' | 'none' }
         // — earlier the truthy-object was always treated as "followed",
         // so the Unfollow path never visually reverted.
