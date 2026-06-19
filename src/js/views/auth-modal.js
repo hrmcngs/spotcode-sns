@@ -2,9 +2,14 @@
 import { register, login, fetchGithubProfile } from '../auth.js';
 import { icon } from '../icons.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
-import { resolveLoginEmail } from '../login-aliases.js';
+import { resolveLoginEmail, isAcceptableLoginEmail } from '../login-aliases.js';
 
 let rootEl = null;
+
+// Shown when the user types a bare identifier that isn't a known
+// alias. login-aliases.js's ALIASES map is the source of truth for
+// what we accept without an `@`.
+const BARE_EMAIL_REJECTED = 'メールアドレスを入力してください（@ を含めてください）';
 
 function template() {
   return (
@@ -179,10 +184,18 @@ function bindEvents() {
     const form = e.currentTarget;
     setError(form, '');
     const fd = new FormData(form);
+    const rawEmail = fd.get('email');
+    // Reject bare strings that aren't a known alias before Supabase
+    // sees them — gives the user a clearer error than "invalid login
+    // credentials".
+    if (!isAcceptableLoginEmail(rawEmail)) {
+      setError(form, BARE_EMAIL_REJECTED);
+      return;
+    }
     try {
       // Expand internal bare identifiers (e.g. dev.test.account →
       // dev.test.account@spotcode-sns.local) before calling Supabase.
-      await login({ email: resolveLoginEmail(fd.get('email')), password: fd.get('password') });
+      await login({ email: resolveLoginEmail(rawEmail), password: fd.get('password') });
       close();
     } catch (err) { setError(form, err.message || String(err)); }
   });
@@ -192,11 +205,16 @@ function bindEvents() {
     e.preventDefault();
     setError(reg, '');
     const fd = new FormData(reg);
+    const rawEmail = fd.get('email');
+    if (!isAcceptableLoginEmail(rawEmail)) {
+      setError(reg, BARE_EMAIL_REJECTED);
+      return;
+    }
     try {
       await register({
         // Same alias expansion as login, so the same bare identifier
         // can be used to initially sign up an internal account.
-        email: resolveLoginEmail(fd.get('email')),
+        email: resolveLoginEmail(rawEmail),
         password: fd.get('password'),
         handle: fd.get('handle'),
         name: fd.get('name'),

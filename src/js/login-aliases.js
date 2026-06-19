@@ -40,3 +40,15 @@ export function isAliasedLogin(input) {
   const v = String(input || '').trim().toLowerCase();
   return !!ALIASES[v];
 }
+
+// Accept a login-field value if it either contains `@` (we let
+// Supabase enforce the full email format from there) or is a known
+// bare alias. Used by the auth modal to reject typos like `foo`
+// before they reach Supabase, so the user sees a clear "use a real
+// email or the dev alias" error instead of a generic auth failure.
+export function isAcceptableLoginEmail(input) {
+  const v = String(input || '').trim();
+  if (!v) return false;
+  if (v.indexOf('@') >= 0) return true;
+  return !!ALIASES[v.toLowerCase()];
+}
