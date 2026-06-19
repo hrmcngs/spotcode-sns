@@ -1148,9 +1148,60 @@ create policy "authors or staff can delete posts"
 -- (Stage 15's "admins can delete any post" stays too — global
 -- moderation override still applies.)
 
--- 5. One-shot bootstrap — uncomment and run ONCE after the official
---    profile exists (any throwaway email is fine for signup; the
---    password isn't shared because admins/operators never log in
---    with it).
+-- 5. Bootstrap the "virtual" official account in one shot.
+--    Idempotent — re-running this block on a DB that already has
+--    the row is a no-op.
 --
--- update public.profiles set is_official = true where handle = 'spotcode_official';
+--    The auth.users row is created here with an **unrecoverable
+--    random password**. Nobody logs into this account directly —
+--    admin / operator privileges are the only path to acting as
+--    it (the account-switcher overlay in PR #179 substitutes
+--    author_id without calling signInWithPassword). This is what
+--    makes the account "virtual" from the user's perspective:
+--    no signup flow, no shared password, no auth modal.
+--
+--    Runs in the SQL Editor as the project's postgres role, so
+--    it has the privilege to write into the `auth` schema —
+--    same path Supabase itself uses for user provisioning.
+
+do $$
+declare
+  v_id uuid;
+begin
+  -- Look up by the sentinel email so re-running the block is
+  -- idempotent (auth.users has a unique constraint on email).
+  select id into v_id
+  from auth.users
+  where email = 'official@spotcode-sns.local';
+
+  if v_id is null then
+    insert into auth.users (
+      instance_id, email, encrypted_password,
+      email_confirmed_at, created_at, updated_at,
+      aud, role,
+      raw_user_meta_data, raw_app_meta_data
+    )
+    values (
+      '00000000-0000-0000-0000-000000000000',
+      'official@spotcode-sns.local',
+      crypt(gen_random_uuid()::text, gen_salt('bf')),
+      now(), now(), now(),
+      'authenticated', 'authenticated',
+      jsonb_build_object('handle', 'spotcode_official', 'name', 'spotcode'),
+      '{"provider":"email","providers":["email"]}'::jsonb
+    )
+    returning id into v_id;
+    -- The handle_new_user trigger (Stage 2/3) already created the
+    -- matching profiles row using the metadata above.
+  end if;
+
+  -- Upsert the profile fields, since the trigger may have run with
+  -- empty metadata on older DBs, and we want re-runs to repair any
+  -- drift (renamed handle / is_official set back to true / etc.).
+  insert into public.profiles (id, handle, name, is_official)
+  values (v_id, 'spotcode_official', 'spotcode', true)
+  on conflict (id) do update set
+    handle      = excluded.handle,
+    name        = excluded.name,
+    is_official = true;
+end $$;
