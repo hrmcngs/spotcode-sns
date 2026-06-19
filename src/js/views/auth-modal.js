@@ -2,8 +2,14 @@
 import { register, login, fetchGithubProfile } from '../auth.js';
 import { icon } from '../icons.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
+import { resolveLoginEmail, isAcceptableLoginEmail, reservedSignupReason } from '../login-aliases.js';
 
 let rootEl = null;
+
+// Shown when the user types a bare identifier that isn't a known
+// alias. login-aliases.js's ALIASES map is the source of truth for
+// what we accept without an `@`.
+const BARE_EMAIL_REJECTED = 'メールアドレスを入力してください（@ を含めてください）';
 
 function template() {
   return (
@@ -36,8 +42,13 @@ function template() {
         //     as a real login (otherwise Safari sometimes ignores it).
         '<form class="auth-form" data-pane="login" method="post" action="#">' +
           '<h2 id="auth-title">Log in</h2>' +
+          // type="text" (not "email") so internal aliased identifiers
+          // like `dev.test.account` are accepted at the field level —
+          // login-aliases.js expands them before they hit Supabase,
+          // which still receives a well-formed email. inputmode="email"
+          // keeps the right mobile keyboard for the common case.
           '<label for="auth-login-email">Email' +
-            '<input id="auth-login-email" type="email" name="email" required ' +
+            '<input id="auth-login-email" type="text" name="email" required ' +
               'autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false">' +
           '</label>' +
           '<label for="auth-login-password">Password' +
@@ -63,8 +74,12 @@ function template() {
               'pattern="[A-Za-z0-9_][A-Za-z0-9_-]{1,19}" placeholder="2〜20 文字 半角英数 _ -" ' +
               'autocomplete="off" autocapitalize="off" spellcheck="false">' +
           '</label>' +
+          // Same type="text" relaxation as the login pane — internal
+          // aliased identifiers (login-aliases.js) get expanded into a
+          // valid email before Supabase ever sees them, so we don't
+          // need the browser to enforce the format here.
           '<label for="auth-reg-email">Email' +
-            '<input id="auth-reg-email" type="email" name="email" required ' +
+            '<input id="auth-reg-email" type="text" name="email" required ' +
               'autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false">' +
           '</label>' +
           '<label for="auth-reg-password">Password <span class="hint">(8 文字以上)</span>' +
@@ -169,8 +184,18 @@ function bindEvents() {
     const form = e.currentTarget;
     setError(form, '');
     const fd = new FormData(form);
+    const rawEmail = fd.get('email');
+    // Reject bare strings that aren't a known alias before Supabase
+    // sees them — gives the user a clearer error than "invalid login
+    // credentials".
+    if (!isAcceptableLoginEmail(rawEmail)) {
+      setError(form, BARE_EMAIL_REJECTED);
+      return;
+    }
     try {
-      await login({ email: fd.get('email'), password: fd.get('password') });
+      // Expand internal bare identifiers (e.g. dev.test.account →
+      // dev.test.account@spotcode-sns.local) before calling Supabase.
+      await login({ email: resolveLoginEmail(rawEmail), password: fd.get('password') });
       close();
     } catch (err) { setError(form, err.message || String(err)); }
   });
@@ -180,9 +205,25 @@ function bindEvents() {
     e.preventDefault();
     setError(reg, '');
     const fd = new FormData(reg);
+    const rawEmail = fd.get('email');
+    if (!isAcceptableLoginEmail(rawEmail)) {
+      setError(reg, BARE_EMAIL_REJECTED);
+      return;
+    }
+    // Block any signup that would collide with the reserved brand
+    // / QA identifiers (handle, alias key, or internal fake domain).
+    // The login flow still accepts these — only NEW account creation
+    // is gated.
+    const reserved = reservedSignupReason({ email: rawEmail, handle: fd.get('handle') });
+    if (reserved) {
+      setError(reg, reserved);
+      return;
+    }
     try {
       await register({
-        email: fd.get('email'),
+        // Same alias expansion as login, so the same bare identifier
+        // can be used to initially sign up an internal account.
+        email: resolveLoginEmail(rawEmail),
         password: fd.get('password'),
         handle: fd.get('handle'),
         name: fd.get('name'),
