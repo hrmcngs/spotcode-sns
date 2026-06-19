@@ -1349,14 +1349,30 @@ document.addEventListener('click', (e) => {
     const me = currentUser();
     if (!me) return openAuth('login');
     const target = followBtn.getAttribute('data-target');
-    if (!target || target === me.handle) return;
+    if (!target) return;
+    // While the "posting as official" overlay is on, the staffer's
+    // effective identity is the brand handle — so don't bail when
+    // the target equals their own real handle (that's now a
+    // different account from their POV). The Supabase-side
+    // self-follow guard in toggleFollow still catches the actual
+    // auth self-follow and surfaces a clear alert.
+    const overlayOn = isPostingAsOfficial();
+    const effectiveHandle = overlayOn ? OFFICIAL_HANDLE : me.handle;
+    if (target === effectiveHandle) return;
     followBtn.disabled = true;
     toggleFollow(me.handle, target)
-      .then((now) => {
-        followBtn.classList.toggle('is-following', now);
-        followBtn.classList.toggle('btn--primary', !now);
-        followBtn.classList.toggle('btn--ghost', now);
-        followBtn.textContent = now ? 'Following' : 'Follow';
+      .then((res) => {
+        // toggleFollow returns { state: 'following' | 'requested' | 'none' }
+        // — earlier the truthy-object was always treated as "followed",
+        // so the Unfollow path never visually reverted.
+        const state = (res && res.state) || 'none';
+        const isFollowed = state === 'following' || state === 'requested';
+        followBtn.classList.toggle('is-following', isFollowed);
+        followBtn.classList.toggle('btn--primary', !isFollowed);
+        followBtn.classList.toggle('btn--ghost', isFollowed);
+        followBtn.textContent = state === 'following' ? 'Following'
+                              : state === 'requested' ? 'Requested'
+                              :                          'Follow';
         // Re-render so any visible follower/following counts re-read the cache.
         refresh();
       })
