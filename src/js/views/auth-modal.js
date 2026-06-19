@@ -2,7 +2,7 @@
 import { register, login, fetchGithubProfile } from '../auth.js';
 import { icon } from '../icons.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
-import { resolveLoginEmail, isAcceptableLoginEmail } from '../login-aliases.js';
+import { resolveLoginEmail, isAcceptableLoginEmail, reservedSignupReason } from '../login-aliases.js';
 
 let rootEl = null;
 
@@ -208,6 +208,15 @@ function bindEvents() {
     const rawEmail = fd.get('email');
     if (!isAcceptableLoginEmail(rawEmail)) {
       setError(reg, BARE_EMAIL_REJECTED);
+      return;
+    }
+    // Block any signup that would collide with the reserved brand
+    // / QA identifiers (handle, alias key, or internal fake domain).
+    // The login flow still accepts these — only NEW account creation
+    // is gated.
+    const reserved = reservedSignupReason({ email: rawEmail, handle: fd.get('handle') });
+    if (reserved) {
+      setError(reg, reserved);
       return;
     }
     try {
