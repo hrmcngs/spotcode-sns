@@ -273,20 +273,22 @@ export function renderProfile(handle) {
       '<div class="profile-top">' +
         renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
-          // Edit only when the row actually belongs to the auth user
-          // (canEdit). When the overlay is the only reason it's
-          // "self" (viewingSelfRow without canEdit), render no
-          // action buttons — Follow/More against your own brand
-          // identity is wrong, but Edit would silently 403 because
-          // RLS requires auth.uid() = profiles.id.
-          (canEdit
-            ? '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
-            : viewingSelfRow
-              ? ''
-              : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
-                '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
-                  followBtnLabel +
-                '</button>') +
+          // While the "公式" overlay is on, hide Follow / More / Edit
+          // on every profile. Acting on behalf of the brand for
+          // these actions would need extra RLS plumbing we've
+          // intentionally dropped — turn the overlay OFF (avatar
+          // menu → your own row) to follow / report / edit as
+          // yourself again.
+          (overlayOn
+            ? ''
+            : canEdit
+              ? '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
+              : viewingSelfRow
+                ? ''
+                : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
+                  '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
+                    followBtnLabel +
+                  '</button>') +
         '</div>' +
       '</div>' +
       '<div class="profile-id">' +

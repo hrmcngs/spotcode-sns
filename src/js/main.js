@@ -175,6 +175,16 @@ async function renderRail() {
         '<div class="followlist">' +
           others.slice(0, 5).map(u => {
             const f = me && isFollowing(me.handle, u.handle);
+            // While the overlay is on, omit the Follow button — keep
+            // the row clickable (avatar / name link out to the
+            // profile) so discovery still works, but no follow
+            // operation runs as the brand.
+            const showFollowBtn = !isPostingAsOfficial();
+            const followBtnHtml = showFollowBtn
+              ? '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
+                  (f ? t('profile.btn.following') : t('profile.btn.follow')) +
+                '</button>'
+              : '';
             return (
               '<div class="followlist__row">' +
                 renderAvatar(u, { tag: 'a', href: url('/' + u.handle) }) +
@@ -182,9 +192,7 @@ async function renderRail() {
                   '<a class="followlist__name" href="' + url('/' + u.handle) + '" title="' + escape(u.name) + '">' + escape(u.name) + '</a>' +
                   '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
                 '</div>' +
-                '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
-                  (f ? t('profile.btn.following') : t('profile.btn.follow')) +
-                '</button>' +
+                followBtnHtml +
               '</div>'
             );
           }).join('') +
