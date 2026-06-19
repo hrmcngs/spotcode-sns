@@ -315,6 +315,19 @@ function parseMissingCol(error) {
 
 export async function updateProfile(patch) {
   if (!cachedUser) throw new Error('ログインしていません');
+  // Refuse to write while the "posting as official" overlay is on —
+  // the user is viewing settings as @spotcode_official but their
+  // auth.uid() is still the real staffer, so the RLS update would
+  // either silently rewrite the wrong row or 403. Surface a clear
+  // message instead.
+  let postingAsOfficial = false;
+  try {
+    const { isPostingAsOfficial } = await import('./posting-identity.js');
+    postingAsOfficial = !!isPostingAsOfficial();
+  } catch {}
+  if (postingAsOfficial) {
+    throw new Error('公式モード中は自分のプロフィールを編集できません。アバターメニューで自分に戻ってから保存してください。');
+  }
   const supa = await getClient();
   const db = {};
   if (patch.name != null)              db.name         = String(patch.name).trim();

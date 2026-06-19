@@ -310,17 +310,24 @@ export async function denyFollowRequest(followerHandle) {
 //             my posts (everything except follow/follow_request)
 //   body      string — the comment body or the quoting post body
 //   status    'pending' | 'accepted' for follow events
-export async function notificationsForMe({ limit = 80 } = {}) {
+// `targetUserId` lets the caller compute notifications for a profile
+// other than the signed-in user — used by the "posting as official"
+// overlay to surface the brand account's incoming likes / comments /
+// follows / mentions while the staffer is still authed as their
+// own account. All the source tables (likes, comments, follows,
+// posts) are publicly readable, so no extra RLS is needed.
+export async function notificationsForMe({ limit = 80, targetUserId } = {}) {
   let supa; try { supa = await getClient(); } catch { return []; }
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return [];
+  const effectiveId = targetUserId || user.id;
 
-  // First grab my own post ids — every author-side event needs them.
-  // Capped at 200 so the IN-list stays small (Postgres / PostgREST
-  // handle bigger but the round trip gets chunky).
+  // First grab the target's post ids — every author-side event needs
+  // them. Capped at 200 so the IN-list stays small (Postgres /
+  // PostgREST handle bigger but the round trip gets chunky).
   const { data: myPosts, error: myPostsErr } = await supa
     .from('posts').select('id, body, created_at')
-    .eq('author_id', user.id)
+    .eq('author_id', effectiveId)
     .order('created_at', { ascending: false })
     .limit(200);
   if (myPostsErr) console.warn('notificationsForMe: myPosts', myPostsErr);
@@ -342,7 +349,7 @@ export async function notificationsForMe({ limit = 80 } = {}) {
     const { data, error } = await supa.from('likes')
       .select('post_id, created_at, user:profiles!likes_user_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
       .in('post_id', myPostIds)
-      .neq('user_id', user.id)   // ignore self-likes
+      .neq('user_id', effectiveId)   // ignore self-likes
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) { console.warn('notif likes', error); return []; }
@@ -361,7 +368,7 @@ export async function notificationsForMe({ limit = 80 } = {}) {
     const { data, error } = await supa.from('comments')
       .select('id, body, post_id, created_at, author:profiles!comments_author_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
       .in('post_id', myPostIds)
-      .neq('author_id', user.id)
+      .neq('author_id', effectiveId)
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) { console.warn('notif comments', error); return []; }
@@ -387,7 +394,7 @@ export async function notificationsForMe({ limit = 80 } = {}) {
   //     match @aya526dev. Requires we know my own handle; pulled from
   //     the profiles table since the auth user only carries the id. ---
   const { data: meProfile } = await supa
-    .from('profiles').select('handle').eq('id', user.id).maybeSingle();
+    .from('profiles').select('handle').eq('id', effectiveId).maybeSingle();
   const myHandle = meProfile?.handle;
   if (myHandle) {
     const mentionRe = new RegExp(
@@ -398,7 +405,7 @@ export async function notificationsForMe({ limit = 80 } = {}) {
       const { data, error } = await supa.from('posts')
         .select('id, body, created_at, author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
         .ilike('body', '%@' + myHandle + '%')
-        .neq('author_id', user.id)
+        .neq('author_id', effectiveId)
         .order('created_at', { ascending: false })
         .limit(limit);
       if (error) { console.warn('notif mentions (posts)', error); return []; }
@@ -416,7 +423,7 @@ export async function notificationsForMe({ limit = 80 } = {}) {
       const { data, error } = await supa.from('comments')
         .select('id, body, post_id, created_at, author:profiles!comments_author_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
         .ilike('body', '%@' + myHandle + '%')
-        .neq('author_id', user.id)
+        .neq('author_id', effectiveId)
         .order('created_at', { ascending: false })
         .limit(limit);
       if (error) { console.warn('notif mentions (comments)', error); return []; }
@@ -438,7 +445,7 @@ export async function notificationsForMe({ limit = 80 } = {}) {
   tasks.push((async () => {
     const { data, error } = await supa.from('follows')
       .select('status, created_at, follower:profiles!follows_follower_id_fkey(handle, name, avatar_url, avatar_shape, bio, is_private)')
-      .eq('target_id', user.id)
+      .eq('target_id', effectiveId)
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) { console.warn('notif follows', error); return []; }

@@ -5,6 +5,7 @@ import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
 import { badgesHidden, setBadgesHidden } from '../display-prefs.js';
+import { isPostingAsOfficial, setPostingAsOfficial } from '../posting-identity.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
 import { getUser } from '../data.js';
@@ -418,9 +419,22 @@ export function renderSettings() {
   const body = (tab === 'dev')
     ? devCards({ cfg, override, usingOverride })
     : (section && section.render ? section.render() : '');
+  // When the "posting as official" overlay is on, the staffer is
+  // viewing their own settings — but updateProfile() now refuses to
+  // save in that mode. Surface a banner so the user knows why their
+  // Save buttons return an error, and offer a one-tap revert.
+  const overlayBanner = isPostingAsOfficial()
+    ? '<section class="settings-overlay-banner">' +
+        '<span>' + t('settings.overlay.banner') + '</span>' +
+        '<button type="button" class="btn btn--ghost btn--sm" data-settings-overlay-revert>' +
+          t('settings.overlay.revert') +
+        '</button>' +
+      '</section>'
+    : '';
   return (
     '<div class="settings" data-active-settings-tab="' + tab + '">' +
       '<h1 class="settings__title">' + t('settings.title') + '</h1>' +
+      overlayBanner +
       settingsNav(tab) +
       '<div class="settings__content">' + body + '</div>' +
     '</div>'
@@ -428,6 +442,14 @@ export function renderSettings() {
 }
 
 export function bindSettings() {
+  // Revert button on the overlay banner — flips the "posting as
+  // official" flag off so the staffer can save their own settings.
+  const revertBtn = document.querySelector('[data-settings-overlay-revert]');
+  if (revertBtn) {
+    revertBtn.addEventListener('click', () => {
+      setPostingAsOfficial(false);
+    });
+  }
   // Tab strip — anchor hrefs are `/settings/<tab>` so the browser's
   // back button works and HASH_MODE builds (Electron / iOS) survive
   // the hash-routing pass without the tab id being mistaken for a

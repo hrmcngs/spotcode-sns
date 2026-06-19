@@ -2262,6 +2262,19 @@ a.mention:hover { text-decoration: underline; }
 /* ---------- settings page ---------- */
 .settings { padding: 1.5rem; }
 .settings__title { font-size: 1.5rem; margin-bottom: 1rem; }
+
+/* Banner shown on /settings while the "posting as official" overlay
+   is on — informs the staffer that updateProfile() will refuse to
+   save until they revert. Amber accent to match the 公式 badge. */
+.settings-overlay-banner {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .65rem 1rem; margin-bottom: 1rem;
+  background: color-mix(in srgb, #febc2e 14%, transparent);
+  border: 1px solid color-mix(in srgb, #febc2e 45%, transparent);
+  border-radius: 10px;
+  color: var(--text); font-size: .9rem;
+}
+.settings-overlay-banner > span { flex: 1; }
 .settings__section {
   font-size: 1.1rem; margin: 1.8rem 0 .25rem;
   color: var(--warn);

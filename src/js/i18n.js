@@ -124,6 +124,8 @@ const DICT = {
 
     // ---------------- settings ----------------
     'settings.title':          'Settings',
+    'settings.overlay.banner': '公式モード中です — 自分のプロフィールを編集するには「自分に戻る」を押してから保存してください。',
+    'settings.overlay.revert': '自分に戻る',
     'settings.tab.account':    'アカウント',
     'settings.tab.privacy':    'プライバシー',
     'settings.tab.display':    '表示',
@@ -395,6 +397,8 @@ const DICT = {
     'notif.label.follow_request': 'requested to follow you',
 
     'settings.title':          'Settings',
+    'settings.overlay.banner': 'Posting as @spotcode_official — switch back to yourself before saving your own profile.',
+    'settings.overlay.revert': 'Switch back',
     'settings.tab.account':    'Account',
     'settings.tab.privacy':    'Privacy',
     'settings.tab.display':    'Display',

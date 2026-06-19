@@ -9,6 +9,8 @@
 import { notificationsForMe,
          acceptFollowRequest, denyFollowRequest } from '../interactions.js';
 import { currentUser }   from '../auth.js';
+import { isPostingAsOfficial } from '../posting-identity.js';
+import { cachedOfficialAccount, getOfficialAccount } from '../official-account.js';
 import { renderAvatar }  from '../avatar.js';
 import { url }           from '../router.js';
 import { icon }          from '../icons.js';
@@ -138,8 +140,19 @@ export async function hydrateNotifications() {
     return;
   }
 
+  // While the "posting as official" overlay is on, show notifications
+  // addressed to the brand account instead of the staffer's own —
+  // the staffer is acting as the official, so their inbox should
+  // reflect that. Resolve the official id (await once on cache miss).
+  let targetUserId;
+  if (isPostingAsOfficial()) {
+    let official = cachedOfficialAccount();
+    if (!official) { try { official = await getOfficialAccount(); } catch {} }
+    if (official) targetUserId = official.id;
+  }
+
   let items;
-  try { items = await notificationsForMe(); }
+  try { items = await notificationsForMe({ targetUserId }); }
   catch (err) {
     if (myVersion !== renderVersion) return;
     root.innerHTML = '<div class="stub"><h2 class="stub__title">' + t('notif.error.title') + '</h2><p class="stub__sub">' + escape(err.message || '') + '</p></div>';
