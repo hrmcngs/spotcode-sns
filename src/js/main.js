@@ -176,9 +176,8 @@ async function renderRail() {
         '<div class="followlist">' +
           others.slice(0, 5).map(u => {
             // While overlay is on, render the badge from the brand's
-            // graph (officialFollows) and disable the click — see
-            // profile.js for the rationale (display ≠ click identity
-            // is too confusing).
+            // graph (officialFollows). Click goes through with
+            // actorUserId = official.id (Stage 26 RLS allows it).
             const overlayOn = isPostingAsOfficial();
             const f = me && (overlayOn ? isOfficialFollowing(u.handle) : isFollowing(me.handle, u.handle));
             return (
@@ -188,9 +187,7 @@ async function renderRail() {
                   '<a class="followlist__name" href="' + url('/' + u.handle) + '" title="' + escape(u.name) + '">' + escape(u.name) + '</a>' +
                   '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
                 '</div>' +
-                '<button class="followlist__follow' + (f ? ' is-following' : '') + '"' +
-                  (overlayOn ? ' disabled aria-disabled="true" title="' + escape(t('profile.btn.follow_overlay_blocked')) + '"' : '') +
-                  ' data-target="' + u.handle + '">' +
+                '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
                   (f ? t('profile.btn.following') : t('profile.btn.follow')) +
                 '</button>' +
               '</div>'
@@ -1369,27 +1366,37 @@ document.addEventListener('click', (e) => {
   }
 
   // Follow / unfollow (profile + Who-to-follow).
-  // Follow always executes as the auth user — the「公式」overlay
-  // only affects display + post author_id, not who follows whom.
-  // (Following AS the brand needed Stage 26 RLS + actorUserId
-  // plumbing which we intentionally dropped per user request.)
+  // While the「公式」overlay is on, the click runs with
+  // `actorUserId = official.id` so the row goes into the brand's
+  // follow graph (Stage 26 RLS validates the substitution).
+  // Otherwise the click executes as the auth user.
   const followBtn = e.target.closest('.btn--follow, .followlist__follow');
   if (followBtn) {
     e.preventDefault();
     const me = currentUser();
     if (!me) return openAuth('login');
     const target = followBtn.getAttribute('data-target');
-    if (!target || target === me.handle) return;
-    // Defense in depth: the renderer already sets `disabled` on
-    // every Follow button while the overlay is on, but stop here
-    // too in case the attribute gets stripped (DevTools edits etc.)
-    // — the click identity (auth user) and the displayed identity
-    // (brand) don't match in that mode, so toggling would corrupt
-    // the auth user's follow graph against what the button showed.
-    if (isPostingAsOfficial()) return;
+    if (!target) return;
+    const overlayOn = isPostingAsOfficial();
+    const effectiveHandle = overlayOn ? OFFICIAL_HANDLE : me.handle;
+    if (target === effectiveHandle) return;
     followBtn.disabled = true;
-    toggleFollow(me.handle, target)
+    (async () => {
+      let actorUserId;
+      if (overlayOn) {
+        let acct = cachedOfficialAccount();
+        if (!acct) { try { acct = await getOfficialAccount(); } catch {} }
+        actorUserId = acct?.id;
+        if (!actorUserId) {
+          alert('公式アカウントの読み込みに失敗しました。リロードしてもう一度お試しください。');
+          return;
+        }
+      }
+      const opts = overlayOn ? { actorUserId } : {};
+      return toggleFollow(me.handle, target, opts);
+    })()
       .then((res) => {
+        if (!res) return; // overlay aborted above
         // toggleFollow returns { state: 'following' | 'requested' | 'none' }.
         const state = (res && res.state) || 'none';
         const isFollowed = state === 'following' || state === 'requested';
