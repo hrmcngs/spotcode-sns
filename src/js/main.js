@@ -21,7 +21,7 @@ import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
 import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
-import { getOfficialAccount, cachedOfficialAccount } from './official-account.js';
+import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_HANDLE } from './official-account.js';
 import { isAdmin, isOperator } from './dev-mode.js';
 import { isPostingAsOfficial, setPostingAsOfficial, onPostingIdentityChange, displayUser } from './posting-identity.js';
 import { icon }            from './icons.js';
@@ -102,8 +102,11 @@ async function renderRail() {
   // "follow me" suggestion to its own admin while they're posting
   // as it). Silent on failure → fall through to the local cache.
   const overlay = me ? displayUser(me) : null;
-  const overlayHandle = (overlay && overlay.handle !== (me && me.handle))
-    ? overlay.handle
+  // Use displayUser's overlay when available, otherwise fall back to
+  // the hardcoded OFFICIAL_HANDLE so the brand account is excluded
+  // even before cachedOfficialAccount() has populated.
+  const overlayHandle = (me && isPostingAsOfficial())
+    ? ((overlay && overlay.handle !== me.handle) ? overlay.handle : OFFICIAL_HANDLE)
     : null;
   const excludeHandles = [];
   if (me) {
