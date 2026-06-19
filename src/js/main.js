@@ -224,13 +224,16 @@ function renderSideMe() {
     slot.innerHTML =
       '<button class="btn btn--ghost btn--block" data-auth="login">' + t('nav.login') + '</button>';
   }
-  // Profile side-nav item: link to own profile when logged in,
-  // otherwise turn it into a login trigger.
+  // Profile side-nav item: link to YOUR OWN profile when logged in
+  // (not the official overlay), otherwise turn it into a login
+  // trigger. Use `real` here — the side-nav Profile link should
+  // always jump to your account, even while the "post as official"
+  // overlay is on.
   const profileLink = document.querySelector('.side-nav__item[data-nav="profile"]');
   if (profileLink) {
-    if (me) {
-      profileLink.setAttribute('href', '/' + me.handle);
-      profileLink.setAttribute('data-route', '/' + me.handle);
+    if (real) {
+      profileLink.setAttribute('href', '/' + real.handle);
+      profileLink.setAttribute('data-route', '/' + real.handle);
       profileLink.removeAttribute('data-auth');
     } else {
       profileLink.setAttribute('href', '/');
