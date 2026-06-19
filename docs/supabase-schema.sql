@@ -1175,13 +1175,19 @@ begin
   where email = 'official@spotcode-sns.local';
 
   if v_id is null then
+    -- auth.users.id has no DEFAULT in some Supabase project versions
+    -- (Postgres throws NOT NULL on insert if we omit it). Generate
+    -- the uuid explicitly so the block works regardless of which
+    -- version provisioned the project. RETURNING captures it for
+    -- the profiles upsert below.
     insert into auth.users (
-      instance_id, email, encrypted_password,
+      id, instance_id, email, encrypted_password,
       email_confirmed_at, created_at, updated_at,
       aud, role,
       raw_user_meta_data, raw_app_meta_data
     )
     values (
+      gen_random_uuid(),
       '00000000-0000-0000-0000-000000000000',
       'official@spotcode-sns.local',
       crypt(gen_random_uuid()::text, gen_salt('bf')),
