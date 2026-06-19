@@ -2,7 +2,7 @@ import { getUser, postsByHandle, likedPostsByHandle } from '../data.js';
 import { renderPost }              from '../post.js';
 import { url }                     from '../router.js';
 import { currentUser }             from '../auth.js';
-import { displayUser, isPostingAsOfficial } from '../posting-identity.js';
+import { isPostingAsOfficial } from '../posting-identity.js';
 import { OFFICIAL_HANDLE }         from '../official-account.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, isRequested, followerCount, followingCount,
@@ -227,24 +227,26 @@ export function renderProfile(handle) {
   if (!u) return loading(handle);
 
   const me = currentUser();
-  // While the "posting as official" overlay is on, the staffer is
-  // effectively viewing /spotcode_official as themselves — don't
-  // offer Follow / More buttons against their own brand identity.
-  // The real auth identity (me) still owns Edit privileges; only
-  // it can update the profile row. So we have two flavours of
-  // "self":
-  //   • canEdit          — strict, only the actual auth user
-  //   • viewingSelfRow   — relaxed, includes the overlay identity
+  // The "posting as official" overlay flips your effective identity
+  // wholesale. Each value below is computed against the OVERLAY
+  // identity, not the underlying Supabase session:
   //
-  // The displayUser() path depends on cachedOfficialAccount() being
-  // populated; we also do a direct handle match against the
-  // hardcoded OFFICIAL_HANDLE so the gating still works on the
-  // first paint (before the Supabase profile lookup resolves).
-  const display = me ? displayUser(me) : null;
-  const canEdit         = me && me.handle === u.handle;
-  const viaDisplayUser  = !!(display && display.handle === u.handle);
-  const viaDirectMatch  = !!(me && isPostingAsOfficial() && u.handle === OFFICIAL_HANDLE);
-  const viewingSelfRow  = viaDisplayUser || viaDirectMatch;
+  //   overlay OFF + viewing /hrmcngs           → self (Edit)
+  //   overlay OFF + viewing /spotcode_official → other (Follow)
+  //   overlay ON  + viewing /hrmcngs           → other (Follow) ← user asked
+  //   overlay ON  + viewing /spotcode_official → self (no Follow,
+  //                                              no Edit — RLS blocks)
+  //
+  // `canEdit` only fires for the real auth user when the overlay is
+  // OFF (Edit submits a profiles UPDATE that RLS would reject
+  // otherwise). `viewingSelfRow` is the "hide Follow / Requested"
+  // gate — overlay flips its target from your real handle to the
+  // brand handle.
+  const overlayOn = !!(me && isPostingAsOfficial());
+  const canEdit = !!(me && !overlayOn && me.handle === u.handle);
+  const viewingSelfRow = overlayOn
+    ? u.handle === OFFICIAL_HANDLE
+    : !!(me && me.handle === u.handle);
   const isMe = canEdit || viewingSelfRow;
   const ghLink = u.github?.url || (u.github?.handle ? 'https://github.com/' + u.github.handle : null);
   // Counts come from Supabase via hydrateProfileFollow; the cache returns
