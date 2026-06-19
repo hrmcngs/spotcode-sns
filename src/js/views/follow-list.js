@@ -5,10 +5,8 @@
 import { followersOf, followingOf, isFollowing } from '../interactions.js';
 import { currentUser } from '../auth.js';
 import { renderAvatar } from '../avatar.js';
-import { url } from '../router.js';
+import { url, currentPath } from '../router.js';
 import { t } from '../i18n.js';
-
-let renderVersion = 0;
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -17,7 +15,6 @@ function escape(s) {
 }
 
 export function renderFollowList(handle, kind) {
-  renderVersion++;
   const titleLeft  = kind === 'followers' ? t('profile.stat.followers') : t('profile.stat.following');
   const titleRight = kind === 'followers' ? t('profile.stat.following') : t('profile.stat.followers');
   const leftHref   = url('/' + handle + '/' + kind);
@@ -37,18 +34,31 @@ export function renderFollowList(handle, kind) {
 }
 
 export async function hydrateFollowList(handle, kind) {
-  const myVersion = renderVersion;
-  const list = document.getElementById('follow-list');
-  if (!list) return;
+  // Guard by the actual current route, not a monotonic version
+  // counter — the counter was bumping on every dispatch (including
+  // benign re-renders from auth refresh + GitHub-graph fetch),
+  // which left the loading stub up forever when a refresh fired
+  // between renderFollowList and the network completing.
+  const myPath = '/' + handle + '/' + kind;
+  const stillHere = () => currentPath() === myPath;
+  // Re-resolve the DOM target after each await: a refresh() between
+  // start and resolve replaces #follow-list with a fresh element,
+  // and writing to the stale orphaned reference is invisible.
+  const slot = () => document.getElementById('follow-list');
+
+  if (!slot()) return;
   let users;
   try {
     users = kind === 'followers' ? await followersOf(handle) : await followingOf(handle);
   } catch (err) {
-    if (myVersion !== renderVersion) return;
-    list.innerHTML = '<div class="stub"><p class="stub__sub">取得に失敗しました: ' + escape(err.message || '') + '</p></div>';
+    if (!stillHere()) return;
+    const list = slot();
+    if (list) list.innerHTML = '<div class="stub"><p class="stub__sub">取得に失敗しました: ' + escape(err.message || '') + '</p></div>';
     return;
   }
-  if (myVersion !== renderVersion) return;
+  if (!stillHere()) return;
+  const list = slot();
+  if (!list) return;
   if (!users.length) {
     list.innerHTML = '<div class="stub"><p class="stub__sub">' +
       (kind === 'followers' ? t('follow.empty.followers') : t('follow.empty.following')) +
