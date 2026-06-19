@@ -7,7 +7,7 @@ import { OFFICIAL_HANDLE }         from '../official-account.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, isRequested, followerCount, followingCount,
          hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls,
-         hydrateProfileFollow } from '../interactions.js';
+         hydrateProfileFollow, isOfficialFollowing } from '../interactions.js';
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
@@ -253,8 +253,13 @@ export function renderProfile(handle) {
   // 0 until then, which is fine — hydrateProfile re-renders after fill.
   const followingN = followingCount(u.handle);
   const followersN = followerCount(u.handle);
-  const followed   = me && !isMe && isFollowing(me.handle, u.handle);
-  const requested  = me && !isMe && isRequested(me.handle, u.handle);
+  // Display follow state from the OVERLAY identity's perspective:
+  // while overlay is on, "Following" must reflect what
+  // @spotcode_official follows, not what hrmcngs does. Click still
+  // executes as the auth user (overlay doesn't write follows on the
+  // brand's behalf), but the visible badge has to match the role.
+  const followed   = me && !isMe && (overlayOn ? isOfficialFollowing(u.handle) : isFollowing(me.handle, u.handle));
+  const requested  = me && !isMe && !overlayOn && isRequested(me.handle, u.handle);
   // Follow-button text/style depends on (target privacy) × (current state).
   const followBtnLabel = followed   ? 'Following'
                        : requested  ? 'Requested'

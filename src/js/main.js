@@ -28,7 +28,8 @@ import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
          toggleFollow, isFollowing,
          toggleRepost, toggleBookmark,
-         hydrateMyFollows, myFollowingHandles, clearInteractionsCache } from './interactions.js';
+         hydrateMyFollows, myFollowingHandles, clearInteractionsCache,
+         hydrateOfficialFollows } from './interactions.js';
 import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
 import { applyDisplayPrefs } from './display-prefs.js';
@@ -979,7 +980,15 @@ try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
 // brand-account row shows up the first time they open the account
 // menu instead of on the second open. Regular users skip the call —
 // they have no use for the row.
-if (isAdmin() || isOperator()) getOfficialAccount().catch(() => {});
+if (isAdmin() || isOperator()) {
+  getOfficialAccount().then((acct) => {
+    // If the overlay is already on from a previous session, also
+    // warm the official's follows so the profile / who-to-follow
+    // badges paint with the brand's graph instead of falling back
+    // to the auth user's followsMine.
+    if (acct && isPostingAsOfficial()) hydrateOfficialFollows(acct.id).catch(() => {});
+  }).catch(() => {});
+}
 // Once logged in, pre-load the set of handles I follow so isFollowing()
 // can answer synchronously from the render path.
 hydrateMyFollows();
@@ -1061,8 +1070,18 @@ onAuthChange(() => {
 
 // The "posting as official" overlay flips on / off → re-paint the
 // chrome (avatars, composer) so the new identity is visible
-// immediately without a page reload.
-onPostingIdentityChange(() => {
+// immediately without a page reload. When flipping ON, also warm
+// the official's follows cache so the next renderProfile reads
+// the brand's graph (otherwise "Following" badges would echo the
+// auth user's followsMine, showing wrong state for the brand).
+onPostingIdentityChange((on) => {
+  if (on) {
+    const acct = cachedOfficialAccount();
+    if (acct) hydrateOfficialFollows(acct.id).then(refresh).catch(() => {});
+    else      getOfficialAccount().then((a) => {
+                if (a) return hydrateOfficialFollows(a.id);
+              }).then(refresh).catch(() => {});
+  }
   renderAuthArea();
   renderSideMe();
   refresh();
