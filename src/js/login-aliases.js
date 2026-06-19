@@ -11,22 +11,37 @@
 // accounts don't receive mail (passwords are managed by hand and
 // reset via the Supabase Dashboard).
 //
-// Current alias: `dev.test.account` → `dev.test.account@spotcode-sns.local`
-// (the in-house QA login). Add more here as the need arises.
+// Current aliases:
+//   `dev.test.account`  → `dev.test.account@spotcode-sns.local`  (QA login)
+//   `official.account`  → `official.account@spotcode-sns.local`  (brand)
+// Add more here as the need arises.
 
 const ALIAS_DOMAIN = '@spotcode-sns.local';
 
 const ALIASES = {
   // bare identifier → full email Supabase actually stores
   'dev.test.account': 'dev.test.account' + ALIAS_DOMAIN,
+  'official.account': 'official.account' + ALIAS_DOMAIN,
 };
 
-// Handles that are pre-claimed by the project itself. Used by the
-// auth modal to block any signup attempt that would collide with
-// the brand / QA accounts (which are signed up once by the admin
-// and must never be re-claimed by a random user).
+// Two-tier reservation:
+//   • RESERVED_AFTER_SIGNUP — names that have already been provisioned
+//     by the admin at least once. Random visitors hitting the signup
+//     form must be blocked here, otherwise they could re-claim the
+//     identifier if the row is ever deleted.
+//   • Anything NOT in these sets (including a brand-new alias like
+//     `official.account` before the admin has signed it up) stays
+//     open so the first signup can go through. Once provisioned,
+//     move the handle / bare-alias into RESERVED_AFTER_SIGNUP.
+//
+// Supabase's `unique(email)` on auth.users and `unique(handle)` on
+// profiles already prevent literal duplicates. These sets are the
+// extra "this name belongs to the project, not to you" check that
+// gives the user a friendlier error than a raw Supabase rejection.
+const RESERVED_BARE_LOGINS = new Set([
+  'dev.test.account',
+]);
 export const RESERVED_HANDLES = new Set([
-  'spotcode_official',
   'spotcode_dev',
 ]);
 
@@ -79,21 +94,18 @@ export function isAcceptableLoginEmail(input) {
 // why the signup is blocked.
 export function reservedSignupReason({ email, handle } = {}) {
   const rawEmail   = String(email  || '').trim();
-  const expanded   = resolveLoginEmail(rawEmail).toLowerCase();
   const bareEmail  = rawEmail.toLowerCase();
   const cleanHandle = String(handle || '').trim().toLowerCase();
 
   if (cleanHandle && RESERVED_HANDLES.has(cleanHandle)) {
     return 'このハンドルは予約されています（@' + cleanHandle + ' は運営専用です）。別のハンドルを選んでください。';
   }
-  // Reject the bare alias OR its expanded form OR ANY use of the
-  // internal domain — only the ALIASES map machinery is allowed to
-  // mint addresses there.
-  if (ALIASES[bareEmail]) {
+  if (RESERVED_BARE_LOGINS.has(bareEmail)) {
     return 'この識別子は予約されています（' + bareEmail + ' は運営専用）。';
   }
-  if (expanded.endsWith(ALIAS_DOMAIN.toLowerCase())) {
-    return 'このドメイン (' + ALIAS_DOMAIN + ') は内部予約です。実在するメールアドレスでサインアップしてください。';
-  }
+  // (No blanket `@spotcode-sns.local` reservation — the alias
+  //  machinery has to be able to mint addresses there for first-
+  //  time signup of a new bare alias. Supabase's unique(email)
+  //  prevents literal duplicates of an already-existing one.)
   return null;
 }
