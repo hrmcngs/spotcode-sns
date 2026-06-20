@@ -25,21 +25,18 @@ const ALIASES = {
   'dev.test.account': 'dev.test.account' + ALIAS_DOMAIN,
 };
 
-// Names already provisioned by the project — random visitors must
-// not be able to re-claim them at signup. Brand-new aliases stay
-// OUT of these sets until the first signup is done.
-//
-// Supabase's `unique(email)` on auth.users and `unique(handle)` on
-// profiles already prevent literal duplicates; these sets are the
-// extra "this name belongs to the project" check so the user gets
-// a friendly error rather than a raw Supabase rejection.
+// Names that the project owns at the bare-alias layer — typing
+// just `dev.test.account` and expecting the `@spotcode-sns.local`
+// expansion is reserved. The handle layer relies on Supabase's
+// own `unique(handle)` constraint on `profiles` to prevent
+// duplicate claims after the first signup, so it doesn't need a
+// client-side reservation set (and a client-side one would
+// chicken-and-egg the very-first signup of `@spotcode_dev` and
+// `@spotcode_official`).
 const RESERVED_BARE_LOGINS = new Set([
   'dev.test.account',
 ]);
-export const RESERVED_HANDLES = new Set([
-  'spotcode_dev',
-  'spotcode_official',
-]);
+export const RESERVED_HANDLES = new Set();
 
 // Public so callers (auth modal) can reject any signup attempting
 // to use the internal-only fake domain. Real users sign up with a
