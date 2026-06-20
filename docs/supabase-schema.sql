@@ -1356,3 +1356,83 @@ begin
 end $$;
 
 revoke execute on function public.set_dev_password(text) from public, anon, authenticated;
+
+-- ===================================================================
+-- Stage 29 — RPC: ensure dev account exists + set password
+-- ===================================================================
+-- Backs the「dev test アカウントのパスワード」card on /settings.
+-- One call handles both initial provisioning AND rotation, so the
+-- admin / operator doesn't have to chain Stage 27 → set_dev_password
+-- (or remember which is which).
+--
+-- Auth check lives INSIDE the function: only an authenticated user
+-- whose profiles row has is_admin OR is_operator true can call it.
+-- EXECUTE is granted to `authenticated` so PostgREST forwards the
+-- request; the in-function check is the actual gate (a regular
+-- end-user JWT will hit the friendly exception, not silently
+-- succeed in writing).
+
+create or replace function public.ensure_dev_account(new_pass text)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth, extensions
+as $$
+declare
+  v_caller uuid := auth.uid();
+  v_email  text := 'dev.test.account@spotcode-sns.local';
+  v_handle text := 'spotcode_dev';
+  v_name   text := 'spotcode dev';
+  v_id     uuid;
+  v_is_staff boolean;
+begin
+  if v_caller is null then
+    raise exception 'Sign in first.';
+  end if;
+  select (coalesce(is_admin, false) or coalesce(is_operator, false))
+    into v_is_staff
+  from public.profiles
+  where id = v_caller;
+  if not coalesce(v_is_staff, false) then
+    raise exception 'admin / operator のみ実行できます。';
+  end if;
+  if new_pass is null or length(new_pass) < 8 then
+    raise exception 'パスワードは 8 文字以上で設定してください。';
+  end if;
+
+  select id into v_id from auth.users where email = v_email;
+
+  if v_id is null then
+    insert into auth.users (
+      id, instance_id, email, encrypted_password,
+      email_confirmed_at, created_at, updated_at,
+      aud, role, raw_user_meta_data, raw_app_meta_data
+    )
+    values (
+      gen_random_uuid(),
+      '00000000-0000-0000-0000-000000000000',
+      v_email,
+      crypt(new_pass, gen_salt('bf')),
+      now(), now(), now(),
+      'authenticated', 'authenticated',
+      jsonb_build_object('handle', v_handle, 'name', v_name),
+      '{"provider":"email","providers":["email"]}'::jsonb
+    )
+    returning id into v_id;
+  else
+    update auth.users
+    set encrypted_password = crypt(new_pass, gen_salt('bf')),
+        updated_at         = now()
+    where id = v_id;
+  end if;
+
+  insert into public.profiles (id, handle, name, role)
+  values (v_id, v_handle, v_name, 'general')
+  on conflict (id) do update set
+    handle = excluded.handle,
+    name   = excluded.name,
+    role   = excluded.role;
+end $$;
+
+revoke execute on function public.ensure_dev_account(text) from public, anon;
+grant  execute on function public.ensure_dev_account(text) to   authenticated;

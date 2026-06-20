@@ -1,5 +1,5 @@
 import { loadMaps } from '../gmap.js';
-import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping } from '../supa.js';
+import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping, getClient } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
@@ -361,6 +361,25 @@ function devCards({ cfg, override, usingOverride }) {
       '</div>' +
     '</section>' +
 
+    // @spotcode_dev password card — backed by the ensure_dev_account
+    // RPC (Stage 29). Auto-creates the auth.users row if it doesn't
+    // exist yet, otherwise rotates the password. Admin/operator only;
+    // the function double-checks server-side too.
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.dev_account.title') + '</h2>' +
+      '<p class="settings__hint">' + t('settings.dev_account.hint') + '</p>' +
+      '<form class="settings-form" id="dev-account-form">' +
+        '<label>' + t('settings.dev_account.password_label') +
+          '<input name="newPassword" type="password" minlength="8" ' +
+            'autocomplete="new-password" placeholder="' + attr(t('settings.dev_account.password_placeholder')) + '">' +
+        '</label>' +
+        '<div class="settings-form__actions">' +
+          '<button type="submit" class="btn btn--primary btn--sm">' + t('settings.dev_account.save') + '</button>' +
+        '</div>' +
+        '<p class="settings-status" id="dev-account-status"></p>' +
+      '</form>' +
+    '</section>' +
+
     '<section class="settings-card">' +
       '<h2>' + t('settings.supa.title') +
         (isConfigured() ? ' <span class="settings-tag is-ok">' + t('settings.supa.connected') + '</span>'
@@ -489,6 +508,40 @@ export function bindSettings() {
       } catch (err) { show(t('settings.map.failed') + ': ' + err.message, 'bad'); }
     });
   }
+
+  // @spotcode_dev password — calls the `ensure_dev_account` RPC
+  // (Stage 29). The RPC self-gates on is_admin / is_operator, so a
+  // non-staff user hitting it directly via PostgREST gets a friendly
+  // exception rather than a silent write. The card itself is only
+  // rendered inside devCards() (allow-listed accounts), but treat the
+  // RPC as the actual gate.
+  const devForm   = document.getElementById('dev-account-form');
+  const devStatus = document.getElementById('dev-account-status');
+  devForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const setStatus = (msg, kind = '') => {
+      if (!devStatus) return;
+      devStatus.textContent = msg;
+      devStatus.className = 'settings-status' + (kind ? ' is-' + kind : '');
+    };
+    const input = devForm.querySelector('input[name="newPassword"]');
+    const next = String(input?.value || '');
+    if (next.length < 8) { setStatus(t('settings.dev_account.too_short'), 'bad'); return; }
+    const submitBtn = devForm.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    setStatus(t('settings.dev_account.saving'));
+    try {
+      const supa = await getClient();
+      const { error } = await supa.rpc('ensure_dev_account', { new_pass: next });
+      if (error) throw new Error(error.message || String(error));
+      if (input) input.value = '';
+      setStatus(t('settings.dev_account.saved'), 'ok');
+    } catch (ex) {
+      setStatus((ex && ex.message) ? ex.message : String(ex), 'bad');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
 
   // Supabase
   const supaForm   = document.getElementById('supa-form');
