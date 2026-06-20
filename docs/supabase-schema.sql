@@ -1350,3 +1350,72 @@ end $$;
 -- login-aliases.js if you want the short form), or paste the full
 -- `official@spotcode-sns.local` into the Email field. Password is
 -- what you set above.
+
+-- ===================================================================
+-- Stage 29 — one-line password helpers for the SQL Editor
+-- ===================================================================
+-- Stages 27 and 28 require editing a `v_pass :=` line inside a
+-- DO block before pasting — easy to mess up, can't be aliased
+-- in a snippet. These two SECURITY DEFINER functions take the
+-- password as an argument so the SQL Editor call is a single
+-- line you can keep in your password manager's "Notes" field:
+--
+--   select public.set_official_password('your-strong-pass');
+--   select public.set_dev_password('your-other-strong-pass');
+--
+-- Both functions live in the `public` schema but EXECUTE access
+-- is revoked from `anon` and `authenticated` — only the
+-- `postgres` role (which the Supabase SQL Editor runs as) can
+-- call them. The `service_role` keeps default access as a
+-- backup path for tooling.
+
+create or replace function public.set_official_password(new_pass text)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth, extensions
+as $$
+declare
+  v_id uuid;
+begin
+  if new_pass is null or length(new_pass) < 8 then
+    raise exception 'new_pass must be at least 8 characters';
+  end if;
+  select id into v_id from auth.users where email = 'official@spotcode-sns.local';
+  if v_id is null then
+    raise exception 'Run Stage 25 first — it provisions the @spotcode_official auth.users row.';
+  end if;
+  update auth.users
+  set encrypted_password = crypt(new_pass, gen_salt('bf')),
+      updated_at         = now()
+  where id = v_id;
+end $$;
+
+create or replace function public.set_dev_password(new_pass text)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth, extensions
+as $$
+declare
+  v_id uuid;
+begin
+  if new_pass is null or length(new_pass) < 8 then
+    raise exception 'new_pass must be at least 8 characters';
+  end if;
+  select id into v_id from auth.users where email = 'dev.test.account@spotcode-sns.local';
+  if v_id is null then
+    raise exception 'Run Stage 27 first — it provisions the @spotcode_dev auth.users row.';
+  end if;
+  update auth.users
+  set encrypted_password = crypt(new_pass, gen_salt('bf')),
+      updated_at         = now()
+  where id = v_id;
+end $$;
+
+-- Lock the helpers down — only the postgres role (Dashboard SQL
+-- Editor runs as it) and service_role can call them. Anyone with
+-- an anon / authenticated session must NOT be able to rotate the
+-- brand or dev account passwords from PostgREST.
+revoke execute on function public.set_official_password(text) from public, anon, authenticated;
+revoke execute on function public.set_dev_password(text)      from public, anon, authenticated;
