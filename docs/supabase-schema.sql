@@ -1246,3 +1246,66 @@ create policy "users or staff-as-official delete follows"
     )
   );
 -- (SELECT stays public — `follows are public` from Stage 5.)
+
+-- ===================================================================
+-- Stage 27 — bootstrap the @spotcode_dev QA test account
+-- ===================================================================
+-- Same shape as Stage 25's official-account bootstrap, just for the
+-- QA test login. Unlike the brand account this one IS meant to be
+-- logged into directly (admin uses it to QA the regular-user
+-- surface), so pick a real password before running the block — the
+-- placeholder `CHANGE_ME_BEFORE_RUNNING` is rejected on purpose so
+-- you can't accidentally provision a weak account.
+--
+-- Idempotent: re-running on a DB that already has the row only
+-- repairs handle / name / role fields, never touches the password.
+
+do $$
+declare
+  v_id      uuid;
+  v_pass    text := 'CHANGE_ME_BEFORE_RUNNING';
+  v_email   text := 'dev.test.account@spotcode-sns.local';
+  v_handle  text := 'spotcode_dev';
+  v_name    text := 'spotcode dev';
+begin
+  if v_pass = 'CHANGE_ME_BEFORE_RUNNING' then
+    raise exception 'Set v_pass to your chosen QA password before running Stage 27 (then save it in your password manager).';
+  end if;
+
+  select id into v_id from auth.users where email = v_email;
+  if v_id is null then
+    -- auth.users.id has no DEFAULT in some Supabase project versions,
+    -- so generate it explicitly. Same pattern as Stage 25.
+    insert into auth.users (
+      id, instance_id, email, encrypted_password,
+      email_confirmed_at, created_at, updated_at,
+      aud, role,
+      raw_user_meta_data, raw_app_meta_data
+    )
+    values (
+      gen_random_uuid(),
+      '00000000-0000-0000-0000-000000000000',
+      v_email,
+      crypt(v_pass, gen_salt('bf')),
+      now(), now(), now(),
+      'authenticated', 'authenticated',
+      jsonb_build_object('handle', v_handle, 'name', v_name),
+      '{"provider":"email","providers":["email"]}'::jsonb
+    )
+    returning id into v_id;
+    -- The handle_new_user trigger (Stage 2/3) already created the
+    -- profiles row using the metadata above.
+  end if;
+
+  -- Heal the profile row in case the trigger ran with empty metadata
+  -- on older DBs, or someone manually edited it.
+  insert into public.profiles (id, handle, name, role)
+  values (v_id, v_handle, v_name, 'general')
+  on conflict (id) do update set
+    handle = excluded.handle,
+    name   = excluded.name,
+    role   = excluded.role;
+end $$;
+-- (No is_official / is_admin / is_operator flags — @spotcode_dev is
+-- explicitly a plain user; the admin uses it to QA what a regular
+-- viewer sees.)
