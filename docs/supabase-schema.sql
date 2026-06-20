@@ -1246,3 +1246,176 @@ create policy "users or staff-as-official delete follows"
     )
   );
 -- (SELECT stays public — `follows are public` from Stage 5.)
+
+-- ===================================================================
+-- Stage 27 — bootstrap the @spotcode_dev QA test account
+-- ===================================================================
+-- Same shape as Stage 25's official-account bootstrap, just for the
+-- QA test login. Unlike the brand account this one IS meant to be
+-- logged into directly (admin uses it to QA the regular-user
+-- surface), so pick a real password before running the block — the
+-- placeholder `CHANGE_ME_BEFORE_RUNNING` is rejected on purpose so
+-- you can't accidentally provision a weak account.
+--
+-- Idempotent: re-running on a DB that already has the row only
+-- repairs handle / name / role fields, never touches the password.
+
+do $$
+declare
+  v_id      uuid;
+  v_pass    text := 'CHANGE_ME_BEFORE_RUNNING';
+  v_email   text := 'dev.test.account@spotcode-sns.local';
+  v_handle  text := 'spotcode_dev';
+  v_name    text := 'spotcode dev';
+begin
+  if v_pass = 'CHANGE_ME_BEFORE_RUNNING' then
+    raise exception 'Set v_pass to your chosen QA password before running Stage 27 (then save it in your password manager).';
+  end if;
+
+  select id into v_id from auth.users where email = v_email;
+  if v_id is null then
+    -- auth.users.id has no DEFAULT in some Supabase project versions,
+    -- so generate it explicitly. Same pattern as Stage 25.
+    insert into auth.users (
+      id, instance_id, email, encrypted_password,
+      email_confirmed_at, created_at, updated_at,
+      aud, role,
+      raw_user_meta_data, raw_app_meta_data
+    )
+    values (
+      gen_random_uuid(),
+      '00000000-0000-0000-0000-000000000000',
+      v_email,
+      crypt(v_pass, gen_salt('bf')),
+      now(), now(), now(),
+      'authenticated', 'authenticated',
+      jsonb_build_object('handle', v_handle, 'name', v_name),
+      '{"provider":"email","providers":["email"]}'::jsonb
+    )
+    returning id into v_id;
+    -- The handle_new_user trigger (Stage 2/3) already created the
+    -- profiles row using the metadata above.
+  end if;
+
+  -- Heal the profile row in case the trigger ran with empty metadata
+  -- on older DBs, or someone manually edited it.
+  insert into public.profiles (id, handle, name, role)
+  values (v_id, v_handle, v_name, 'general')
+  on conflict (id) do update set
+    handle = excluded.handle,
+    name   = excluded.name,
+    role   = excluded.role;
+end $$;
+-- (No is_official / is_admin / is_operator flags — @spotcode_dev is
+-- explicitly a plain user; the admin uses it to QA what a regular
+-- viewer sees.)
+
+-- ===================================================================
+-- Stage 28 — set / rotate the @spotcode_official password
+-- ===================================================================
+-- Stage 25 bootstrapped the brand account with `crypt(gen_random_uuid(),
+-- gen_salt('bf'))` — deliberately unrecoverable, because the original
+-- design was "nobody logs in, admins post via the overlay". If you'd
+-- rather also be able to sign in to the brand account directly (e.g.
+-- to share the credential with a co-operator who hasn't been set up
+-- as an admin / operator on their own auth user yet), run this block
+-- to overwrite the encrypted password with a known one.
+--
+-- Same placeholder safety as Stage 27: `CHANGE_ME_BEFORE_RUNNING`
+-- raises so you can't accidentally provision a weak password by
+-- pasting the block unchanged.
+--
+-- Idempotent — re-running just rotates the password to whatever
+-- `v_pass` is set to.
+
+do $$
+declare
+  v_pass  text := 'CHANGE_ME_BEFORE_RUNNING';
+  v_email text := 'official@spotcode-sns.local';
+  v_id    uuid;
+begin
+  if v_pass = 'CHANGE_ME_BEFORE_RUNNING' then
+    raise exception 'Set v_pass to your chosen password before running Stage 28 (then save it in your password manager).';
+  end if;
+  select id into v_id from auth.users where email = v_email;
+  if v_id is null then
+    raise exception 'Run Stage 25 first — it provisions the @spotcode_official auth.users row that this block updates.';
+  end if;
+  update auth.users
+  set encrypted_password = crypt(v_pass, gen_salt('bf')),
+      updated_at         = now()
+  where id = v_id;
+end $$;
+-- Login: email = `official.account` (add it as a bare-alias in
+-- login-aliases.js if you want the short form), or paste the full
+-- `official@spotcode-sns.local` into the Email field. Password is
+-- what you set above.
+
+-- ===================================================================
+-- Stage 29 — one-line password helpers for the SQL Editor
+-- ===================================================================
+-- Stages 27 and 28 require editing a `v_pass :=` line inside a
+-- DO block before pasting — easy to mess up, can't be aliased
+-- in a snippet. These two SECURITY DEFINER functions take the
+-- password as an argument so the SQL Editor call is a single
+-- line you can keep in your password manager's "Notes" field:
+--
+--   select public.set_official_password('your-strong-pass');
+--   select public.set_dev_password('your-other-strong-pass');
+--
+-- Both functions live in the `public` schema but EXECUTE access
+-- is revoked from `anon` and `authenticated` — only the
+-- `postgres` role (which the Supabase SQL Editor runs as) can
+-- call them. The `service_role` keeps default access as a
+-- backup path for tooling.
+
+create or replace function public.set_official_password(new_pass text)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth, extensions
+as $$
+declare
+  v_id uuid;
+begin
+  if new_pass is null or length(new_pass) < 8 then
+    raise exception 'new_pass must be at least 8 characters';
+  end if;
+  select id into v_id from auth.users where email = 'official@spotcode-sns.local';
+  if v_id is null then
+    raise exception 'Run Stage 25 first — it provisions the @spotcode_official auth.users row.';
+  end if;
+  update auth.users
+  set encrypted_password = crypt(new_pass, gen_salt('bf')),
+      updated_at         = now()
+  where id = v_id;
+end $$;
+
+create or replace function public.set_dev_password(new_pass text)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth, extensions
+as $$
+declare
+  v_id uuid;
+begin
+  if new_pass is null or length(new_pass) < 8 then
+    raise exception 'new_pass must be at least 8 characters';
+  end if;
+  select id into v_id from auth.users where email = 'dev.test.account@spotcode-sns.local';
+  if v_id is null then
+    raise exception 'Run Stage 27 first — it provisions the @spotcode_dev auth.users row.';
+  end if;
+  update auth.users
+  set encrypted_password = crypt(new_pass, gen_salt('bf')),
+      updated_at         = now()
+  where id = v_id;
+end $$;
+
+-- Lock the helpers down — only the postgres role (Dashboard SQL
+-- Editor runs as it) and service_role can call them. Anyone with
+-- an anon / authenticated session must NOT be able to rotate the
+-- brand or dev account passwords from PostgREST.
+revoke execute on function public.set_official_password(text) from public, anon, authenticated;
+revoke execute on function public.set_dev_password(text)      from public, anon, authenticated;
