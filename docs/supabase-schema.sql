@@ -1309,3 +1309,44 @@ end $$;
 -- (No is_official / is_admin / is_operator flags — @spotcode_dev is
 -- explicitly a plain user; the admin uses it to QA what a regular
 -- viewer sees.)
+
+-- ===================================================================
+-- Stage 28 — set / rotate the @spotcode_official password
+-- ===================================================================
+-- Stage 25 bootstrapped the brand account with `crypt(gen_random_uuid(),
+-- gen_salt('bf'))` — deliberately unrecoverable, because the original
+-- design was "nobody logs in, admins post via the overlay". If you'd
+-- rather also be able to sign in to the brand account directly (e.g.
+-- to share the credential with a co-operator who hasn't been set up
+-- as an admin / operator on their own auth user yet), run this block
+-- to overwrite the encrypted password with a known one.
+--
+-- Same placeholder safety as Stage 27: `CHANGE_ME_BEFORE_RUNNING`
+-- raises so you can't accidentally provision a weak password by
+-- pasting the block unchanged.
+--
+-- Idempotent — re-running just rotates the password to whatever
+-- `v_pass` is set to.
+
+do $$
+declare
+  v_pass  text := 'CHANGE_ME_BEFORE_RUNNING';
+  v_email text := 'official@spotcode-sns.local';
+  v_id    uuid;
+begin
+  if v_pass = 'CHANGE_ME_BEFORE_RUNNING' then
+    raise exception 'Set v_pass to your chosen password before running Stage 28 (then save it in your password manager).';
+  end if;
+  select id into v_id from auth.users where email = v_email;
+  if v_id is null then
+    raise exception 'Run Stage 25 first — it provisions the @spotcode_official auth.users row that this block updates.';
+  end if;
+  update auth.users
+  set encrypted_password = crypt(v_pass, gen_salt('bf')),
+      updated_at         = now()
+  where id = v_id;
+end $$;
+-- Login: email = `official.account` (add it as a bare-alias in
+-- login-aliases.js if you want the short form), or paste the full
+-- `official@spotcode-sns.local` into the Email field. Password is
+-- what you set above.
