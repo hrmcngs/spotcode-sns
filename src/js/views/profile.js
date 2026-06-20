@@ -1,6 +1,6 @@
 import { getUser, postsByHandle, likedPostsByHandle } from '../data.js';
 import { renderPost }              from '../post.js';
-import { url }                     from '../router.js';
+import { url, currentPath }        from '../router.js';
 import { currentUser }             from '../auth.js';
 import { isPostingAsOfficial } from '../posting-identity.js';
 import { OFFICIAL_HANDLE }         from '../official-account.js';
@@ -18,9 +18,12 @@ import { renderGrass } from '../grass.js';
 import { fetchContributions, cachedContributions } from '../github-activity.js';
 import { getLanguageStats, cachedLanguageStats, langColor, langAbbr, langTextColor } from '../language-stats.js';
 
-// Monotonic version so async hydrations can detect a newer renderProfile
-// has superseded them and bail out before clobbering the DOM.
-let renderVersion = 0;
+// (Previously a `let renderVersion = 0` lived here as the freshness
+//  flag for async hydrations. It's been replaced with path-based
+//  `stillHere()` checks inside hydrateProfile / hydrateProfileBody —
+//  the version counter bumped on every dispatch and ate completed
+//  fetches whenever an unrelated refresh fired mid-load, leaving
+//  the page stuck on the loading skeleton.)
 
 function escAttr(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -220,7 +223,6 @@ function loading(handle) {
 }
 
 export function renderProfile(handle) {
-  renderVersion++;
   const u = getUser(handle);
   // No local cache yet — show a loading skeleton; hydrateProfile() will
   // fetch from Supabase and re-render this card.
@@ -293,14 +295,7 @@ export function renderProfile(handle) {
             : (viewingSelfRow || (overlayOn && me && me.handle === u.handle))
               ? ''
               : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
-                // Overlay-on Follow button: greyed out + click-disabled
-                // so the displayed state stays consistent with the
-                // brand's graph WITHOUT toggling the auth user's row
-                // by accident (the "Follow appears unfollowed but
-                // clicking decreases the count" symptom).
-                '<button class="btn ' + followBtnCls + ' btn--follow"' +
-                  (overlayOn ? ' disabled aria-disabled="true" title="' + escAttr(t('profile.btn.follow_overlay_blocked')) + '"' : '') +
-                  ' data-target="' + u.handle + '">' +
+                '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
                   followBtnLabel +
                 '</button>') +
         '</div>' +
@@ -390,10 +385,16 @@ export function renderProfile(handle) {
 
 // Look up the profile + follow counts in Supabase if needed, render the
 // finalised profile shell, then hydrate the posts list. 404 → notFound.
-// Every DOM write is gated on `renderVersion` so a newer navigation
-// can't be silently overwritten by a stale fetch.
+// Every DOM write is gated on `currentPath() === myPath` so a newer
+// navigation can't be silently overwritten by a stale fetch.
 export async function hydrateProfile(handle) {
-  const myVersion = renderVersion;
+  // Guard by the actual current route, not a monotonic renderVersion
+  // — the version counter bumped on every dispatch (auth refresh,
+  // GitHub-graph fetch's refresh, overlay flip, etc.), and the
+  // matching pre-await capture often went stale before the DOM got
+  // its update, leaving the page stuck on the loading skeleton.
+  const myPath = '/' + handle;
+  const stillHere = () => currentPath() === myPath;
   const me = currentUser();
   const isMe = me && me.handle === handle;
   // Always go to Supabase for other users' profiles so their avatar /
@@ -403,12 +404,12 @@ export async function hydrateProfile(handle) {
     let fetched;
     try { fetched = await fetchProfileByHandle(handle); }
     catch (err) {
-      if (myVersion !== renderVersion) return;
+      if (!stillHere()) return;
       const app = document.getElementById('app');
       if (app) app.innerHTML = '<div class="stub"><h2 class="stub__title">読み込みに失敗しました</h2><p class="stub__sub">' + (err.message || '') + '</p></div>';
       return;
     }
-    if (myVersion !== renderVersion) return;
+    if (!stillHere()) return;
     if (!fetched) {
       const app = document.getElementById('app');
       if (app) app.innerHTML = notFound(handle);
@@ -416,16 +417,14 @@ export async function hydrateProfile(handle) {
     }
   }
   await hydrateProfileFollow(handle);
-  if (myVersion !== renderVersion) return;
+  if (!stillHere()) return;
   // Reset the tab to Posts whenever a fresh profile is opened so the new
   // page never inherits the active tab of the previous one.
   activeTab = 'posts';
   const app = document.getElementById('app');
   if (app) app.innerHTML = renderProfile(handle);
-  // renderProfile bumped renderVersion — capture the new value for the
-  // body hydration below.
   hydrateOrgMembers(handle).catch(() => {});
-  await hydrateProfileBody(handle, renderVersion);
+  await hydrateProfileBody(handle);
 }
 
 // For org accounts: members are listed by handle only; fetch the full
@@ -463,12 +462,18 @@ export async function setProfileTab(handle, tab) {
   });
   const list = document.getElementById('profile-posts');
   if (list) list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('follow.loading') + '</p></div>';
-  await hydrateProfileBody(handle, renderVersion);
+  await hydrateProfileBody(handle);
 }
 
-async function hydrateProfileBody(handle, myVersion) {
-  const list = document.getElementById('profile-posts');
-  if (!list) return;
+async function hydrateProfileBody(handle) {
+  const myPath = '/' + handle;
+  const stillHere = () => currentPath() === myPath;
+  // Re-resolve the slot after each await — a refresh() between start
+  // and resolve replaces #profile-posts with a fresh element, and
+  // writing to the stale orphan reference is invisible.
+  const slot = () => document.getElementById('profile-posts');
+
+  if (!slot()) return;
 
   // Private accounts: if the viewer isn't the owner and isn't an
   // accepted follower, the Posts RLS already drops their rows so we'd
@@ -479,6 +484,8 @@ async function hydrateProfileBody(handle, myVersion) {
     && (!me || (me.handle !== handle && !isFollowing(me.handle, handle)));
   if (blockedByPrivacy) {
     const requested = me && isRequested(me.handle, handle);
+    const list = slot();
+    if (!list) return;
     list.innerHTML =
       '<div class="stub">' +
         '<h2 class="stub__title">' + icon('lock', { size: 18, className: 'icon--inline' }) + 'このアカウントは非公開です</h2>' +
@@ -500,25 +507,30 @@ async function hydrateProfileBody(handle, myVersion) {
     else if (tab === 'spots') posts = (await postsByHandle(handle)).filter(p => p.spot);
     else                      posts = await postsByHandle(handle);
   } catch (err) {
-    if (myVersion !== renderVersion) return;
+    if (!stillHere()) return;
     console.error('hydrateProfileBody', err);
-    list.innerHTML = '<div class="stub"><p class="stub__sub">取得に失敗しました: ' + (err.message || '') + '</p></div>';
+    const list = slot();
+    if (list) list.innerHTML = '<div class="stub"><p class="stub__sub">取得に失敗しました: ' + (err.message || '') + '</p></div>';
     return;
   }
-  if (myVersion !== renderVersion) return;
+  if (!stillHere()) return;
   // Only the Posts tab drives the header "Posts" count.
   if (tab === 'posts') {
     const countEl = document.getElementById('profile-postcount');
     if (countEl) countEl.textContent = String(posts.length);
   }
-  if (!posts.length) {
-    const empty = tab === 'likes' ? t('profile.empty.likes')
-                : tab === 'spots' ? t('profile.empty.spots')
-                :                   t('profile.empty.posts');
-    list.innerHTML = '<div class="stub"><p class="stub__sub">' + empty + '</p></div>';
-    return;
+  {
+    const list = slot();
+    if (!list) return;
+    if (!posts.length) {
+      const empty = tab === 'likes' ? t('profile.empty.likes')
+                  : tab === 'spots' ? t('profile.empty.spots')
+                  :                   t('profile.empty.posts');
+      list.innerHTML = '<div class="stub"><p class="stub__sub">' + empty + '</p></div>';
+      return;
+    }
+    list.innerHTML = posts.map(renderPost).join('');
   }
-  list.innerHTML = posts.map(renderPost).join('');
   const ids = posts.map(p => p.id);
   try {
     await Promise.all([
@@ -528,8 +540,12 @@ async function hydrateProfileBody(handle, myVersion) {
       hydrateQuotedPosts(posts),
     ]);
   } catch (err) { console.warn('hydrate batch (profile)', err); return; }
-  if (myVersion !== renderVersion) return;
-  list.innerHTML = posts.map(renderPost).join('');
+  if (!stillHere()) return;
+  {
+    const list = slot();
+    if (!list) return;
+    list.innerHTML = posts.map(renderPost).join('');
+  }
   hydratePolls(posts).catch(() => {});
 }
 

@@ -277,7 +277,12 @@ export async function toggleFollow(myHandle, targetHandle, opts = {}) {
     const { error } = await supa.from('follows')
       .delete().eq('follower_id', actorId).eq('target_id', meta.id);
     if (error) throw new Error(error.message);
-    if (!asOverlay) {
+    if (asOverlay) {
+      // Mirror the deletion into the brand's local follow set so
+      // the next renderProfile reads "Follow" without waiting for
+      // a re-hydrate.
+      officialFollows.delete(targetHandle);
+    } else {
       followsMine.delete(targetHandle);
       requestsMine.delete(targetHandle);
       if (wasAccepted) {
@@ -299,9 +304,11 @@ export async function toggleFollow(myHandle, targetHandle, opts = {}) {
     .insert({ follower_id: actorId, target_id: meta.id, status });
   if (error) throw new Error(error.message);
   if (asOverlay) {
-    // Counts get repainted from the DB on the next renderProfile
-    // hydration; we don't try to mirror the overlay's follow graph
-    // into the followCounts cache here.
+    // Mirror the insert into the brand's follow set so the next
+    // render shows "Following" without waiting for a re-hydrate.
+    // Counts on the target's profile repaint from the DB next
+    // hydrateProfileFollow; we don't try to mirror them locally.
+    if (status === 'accepted') officialFollows.add(targetHandle);
     return { state: status === 'accepted' ? 'following' : 'requested' };
   }
   if (status === 'accepted') {
