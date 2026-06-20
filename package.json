@@ -88,6 +88,9 @@
   "overrides": {
     "@electron/get": {
       "undici": "^7.28.0"
+    },
+    "node-gyp": {
+      "undici": "^6.27.0"
     }
   }
 }
