@@ -246,6 +246,31 @@ export async function login({ email, password }) {
   return cachedUser;
 }
 
+// Rotate the password of the currently-signed-in auth user. The
+// Supabase server validates auth.uid() == the user being updated,
+// so there's no way to set someone else's password from the client
+// — perfect for a "change password" field on /edit.
+//
+// Refuses to run while the「公式」overlay is on, for the same reason
+// updateProfile does: writes against the wrong identity would
+// either RLS-403 or silently mutate the brand row.
+export async function updatePassword(newPassword) {
+  if (!cachedUser) throw new Error('ログインしていません');
+  let postingAsOfficial = false;
+  try {
+    const { isPostingAsOfficial } = await import('./posting-identity.js');
+    postingAsOfficial = !!isPostingAsOfficial();
+  } catch {}
+  if (postingAsOfficial) {
+    throw new Error('公式モード中はパスワードを変更できません。アバターメニューで自分に戻ってから変更してください。');
+  }
+  const pw = String(newPassword || '');
+  if (pw.length < 8) throw new Error('パスワードは 8 文字以上で設定してください');
+  const supa = await getClient();
+  const { error } = await supa.auth.updateUser({ password: pw });
+  if (error) throw new Error(translateAuthError(error.message));
+}
+
 export async function logout() {
   const me = cachedUser;
   try {

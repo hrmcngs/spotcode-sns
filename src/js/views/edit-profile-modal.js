@@ -2,7 +2,7 @@
 // change display name, avatar (image upload or 1-2 char fallback),
 // avatar shape (round / square), bio, and location label.
 
-import { currentUser, updateProfile } from '../auth.js';
+import { currentUser, updateProfile, updatePassword } from '../auth.js';
 import { icon }                       from '../icons.js';
 import { fileToAvatarDataUrl, renderAvatar } from '../avatar.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
@@ -112,6 +112,20 @@ function template(u) {
             '<button type="submit" class="btn btn--primary">Save</button>' +
           '</div>' +
           '<p class="auth-error" data-error></p>' +
+        '</form>' +
+
+        // Password change — separate form so Save above stays a
+        // single-purpose profile-fields write. Empty input + Save
+        // does nothing; non-empty hits Supabase auth.updateUser.
+        '<form class="auth-form" id="edit-password-form">' +
+          '<label>パスワード変更 <span class="hint">(8 文字以上、変更しないなら空のまま)</span>' +
+            '<input name="newPassword" type="password" minlength="8" ' +
+              'autocomplete="new-password" placeholder="新しいパスワード">' +
+          '</label>' +
+          '<div class="edit-actions">' +
+            '<button type="submit" class="btn btn--ghost btn--sm">パスワードを更新</button>' +
+            '<span class="verify-row__status" data-password-status></span>' +
+          '</div>' +
         '</form>' +
       '</div>' +
     '</div>'
@@ -254,6 +268,35 @@ export function openEditProfile() {
     } catch (ex) {
       err.textContent = ex.message || String(ex);
       if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }
+    }
+  });
+
+  // Password update — separate form, only fires when there's
+  // something in the field. Empty submits are a no-op so the
+  // user can hit Enter on it by mistake.
+  const pwForm   = document.getElementById('edit-password-form');
+  const pwStatus = pwForm?.querySelector('[data-password-status]');
+  function showPw(msg, kind) {
+    if (!pwStatus) return;
+    pwStatus.textContent = msg || '';
+    pwStatus.className = 'verify-row__status' + (kind ? ' is-' + kind : '');
+  }
+  pwForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = pwForm.querySelector('input[name="newPassword"]');
+    const next = (input?.value || '').trim();
+    if (!next) return;
+    const submitBtn = pwForm.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    showPw('更新中…');
+    try {
+      await updatePassword(next);
+      if (input) input.value = '';
+      showPw('✓ パスワードを更新しました', 'ok');
+    } catch (ex) {
+      showPw(ex.message || String(ex), 'bad');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 
