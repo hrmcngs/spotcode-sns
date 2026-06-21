@@ -217,7 +217,38 @@ export function renderRepos() {
 // navigated away doesn't overwrite the next view's DOM.
 function stillHere() { return currentPath() === '/repos' || currentPath() === '/repos/'; }
 
-function paintList(list, working) {
+// requestAnimationFrame batcher. With ~20 followed users we can get
+// ~20 fetchUserRepos.then() resolves in a single tick — calling
+// paintList() once per resolve means rebuilding the entire list's
+// innerHTML 20 times in the same frame, which janks scrolling and
+// any in-progress UI. Coalesce to one paint per frame.
+//
+// We hand the Map (not a sorted array) to the scheduler so the
+// callback always sorts the LATEST contents — intermediate resolves
+// in the same frame don't pay for an extra sort each.
+let pendingMap   = null;
+let pendingList  = null;
+let paintFrame   = 0;
+function schedulePaint(list, workingMap) {
+  pendingList = list;
+  pendingMap  = workingMap;
+  if (paintFrame) return;
+  paintFrame = requestAnimationFrame(() => {
+    paintFrame = 0;
+    const l = pendingList;
+    const m = pendingMap;
+    pendingList = null;
+    pendingMap  = null;
+    if (!l || !l.isConnected) return;
+    const sorted = Array.from(m.values()).sort((a, b) => b.pushedAt - a.pushedAt);
+    l.innerHTML = sorted.map(renderRepoCard).join('');
+  });
+}
+
+// Synchronous variant for the very first paint (we want it in the
+// same tick the user lands on the page). All subsequent paints from
+// the streaming-fetch loop go through schedulePaint.
+function paintListNow(list, working) {
   list.innerHTML = working.map(renderRepoCard).join('');
 }
 
@@ -302,15 +333,15 @@ export async function hydrateRepos() {
     if (cached) for (const r of cached) working.set(r.fullName, r);
     else needFetch.push(gh);
   }
-  let workingArr = Array.from(working.values()).sort((a, b) => b.pushedAt - a.pushedAt);
-  if (workingArr.length) paintList(list, workingArr);
+  const initialSorted = Array.from(working.values()).sort((a, b) => b.pushedAt - a.pushedAt);
+  if (initialSorted.length) paintListNow(list, initialSorted);
 
   // ----- Step 2: stream missing fetches ----------------------------
   // Fire each uncached fetch independently; re-paint the list as each
   // resolves. Promise.all would have blocked the first paint behind
   // the slowest user.
   if (needFetch.length === 0) {
-    if (workingArr.length === 0) {
+    if (initialSorted.length === 0) {
       list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('repos.empty.no_repos') + '</p></div>';
     }
     return;
@@ -322,12 +353,11 @@ export async function hydrateRepos() {
       landed++;
       if (!stillHere()) return;
       for (const r of repos) working.set(r.fullName, r);
-      workingArr = Array.from(working.values()).sort((a, b) => b.pushedAt - a.pushedAt);
-      if (workingArr.length === 0 && landed === needFetch.length) {
+      if (working.size === 0 && landed === needFetch.length) {
         list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('repos.empty.no_repos') + '</p></div>';
         return;
       }
-      paintList(list, workingArr);
+      schedulePaint(list, working);
     }).catch(() => { landed++; });
   }
 }
