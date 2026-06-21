@@ -494,28 +494,39 @@ export async function postsByCity(city) {
   return shaped;
 }
 
-// Posts tagged with a specific GitHub repository (Stage 30). Used by
-// the /repos view to populate each repo card. Case-insensitive match
-// — `owner/repo` is folded on both sides so the lookup hits the
-// `lower(repo_full_name)` index regardless of how the caller typed it.
+// Every post that references a GitHub repo — either explicitly via
+// the Stage 30 `repo_full_name` column, or implicitly via a
+// `github_link` URL we can parse owner/repo out of. Returned in one
+// round trip so the /repos view can build its `fullName → posts[]`
+// map client-side instead of N queries (one per repo card).
 //
-// Silently returns [] when the column hasn't been migrated yet so the
-// /repos view degrades to "GitHub data only" instead of erroring out.
-export async function postsByRepo(fullName) {
-  if (!fullName) return [];
-  if (!hasRepoFullName) return [];
+// Why this also reads github_link: every post in the wild today has
+// no repo_full_name (the tagging UI ships in a follow-up), but many
+// already paste a github.com/owner/repo URL into the link field.
+// Without this synthetic fallback /repos would show empty forever
+// despite real activity.
+//
+// Filter is server-side: PostgREST `or()` matches rows where EITHER
+// column is non-null, so the table-scan cost stays bounded even on a
+// large posts table.
+export async function postsWithGithubRefs({ limit = 200 } = {}) {
   const supa = await getClient();
+  // Only one branch of the OR can use repo_full_name when the column
+  // hasn't been migrated yet — drop it from the predicate in that
+  // case so the request doesn't 400.
+  const filter = hasRepoFullName
+    ? 'repo_full_name.not.is.null,github_link.not.is.null'
+    : 'github_link.not.is.null';
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols)
-      .ilike('repo_full_name', fullName)
+      .or(filter)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(limit)
   );
   if (error) {
-    // The column might have been dropped server-side after our schema
-    // cache went stale — withResilientCols already retried once
-    // without the column and got here, so just return empty.
-    if (/repo_full_name/i.test(error.message)) return [];
+    // Schema mismatch → return empty rather than throwing; the /repos
+    // view already degrades to "GitHub data only" in that case.
+    if (/repo_full_name|github_link/i.test(error.message)) return [];
     throw new Error(error.message);
   }
   return (data || []).map(shapePost);
