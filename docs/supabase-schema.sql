@@ -1436,3 +1436,27 @@ end $$;
 
 revoke execute on function public.ensure_dev_account(text) from public, anon;
 grant  execute on function public.ensure_dev_account(text) to   authenticated;
+
+-- ===================================================================
+-- Stage 30 — posts.repo_full_name (GitHub repo tagging)
+-- ===================================================================
+-- Backs the /repos view: when a post is "about" a particular GitHub
+-- repository, we store its `owner/repo` slug so /repos can show
+-- per-repo activity (posts tagged with that repo) alongside the
+-- public GitHub data (recent commits, language, stars).
+--
+-- The tagging UI itself ships in a follow-up — for now the column
+-- is nullable and the existing compose flow leaves it null. The
+-- /repos view degrades gracefully (shows「まだ投稿なし」) on empty.
+--
+-- The case-insensitive index supports the equality scan we do from
+-- `postsByRepo(fullName)` — GitHub treats owner/repo as case-folded
+-- so the index keeps lookups O(log n) regardless of how the user
+-- typed it.
+
+alter table public.posts
+  add column if not exists repo_full_name text;
+
+create index if not exists posts_repo_full_name_idx
+  on public.posts (lower(repo_full_name))
+  where repo_full_name is not null;

@@ -2880,3 +2880,63 @@ html.account-menu-locked { overflow: hidden; }
   background: color-mix(in srgb, #febc2e 22%, transparent);
   color: #febc2e;
 }
+
+/* /repos view — list of GitHub repos owned by you + people you follow,
+   each card with primary language pill, stars, recent push, and
+   per-repo spotcode-sns posts (Stage 30 repo_full_name tag). */
+.repos-head {
+  text-align: center;
+  padding: 1.5rem 1rem 1rem;
+}
+.repos-head__icon { color: var(--accent); margin-bottom: .5rem; }
+.repos-head__title { font-size: 1.4rem; color: var(--text); margin: 0; }
+.repos-head__sub { color: var(--muted); margin: .3rem 0 0; max-width: 36em; margin-left: auto; margin-right: auto; }
+
+.repos-list { display: flex; flex-direction: column; gap: .75rem; padding: 0 .5rem 2rem; }
+
+.repo-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: .9rem 1rem;
+  background: var(--surface);
+}
+.repo-card__head { margin-bottom: .35rem; }
+.repo-card__title {
+  display: inline-flex; align-items: center; gap: .35rem;
+  color: var(--accent); text-decoration: none; font-weight: 600;
+}
+.repo-card__title:hover { text-decoration: underline; }
+.repo-card__owner { color: var(--muted); font-weight: 500; }
+.repo-card__slash { color: var(--muted); margin: 0 .1rem; }
+.repo-card__name  { color: var(--accent); }
+.repo-card__desc {
+  color: var(--text); margin: .25rem 0 .5rem;
+  font-size: .92rem; line-height: 1.4;
+}
+.repo-card__meta {
+  display: flex; flex-wrap: wrap; gap: .8rem;
+  color: var(--muted); font-size: .82rem;
+}
+.repo-card__lang {
+  display: inline-flex; align-items: center; gap: .35rem;
+  color: var(--text);
+}
+.repo-card__lang-dot {
+  width: .65rem; height: .65rem; border-radius: 50%;
+  background: var(--lang-color, var(--muted));
+}
+.repo-card__stat { display: inline-flex; align-items: center; gap: .25rem; }
+
+.repo-card__posts { margin-top: .8rem; border-top: 1px dashed var(--border); padding-top: .6rem; }
+.repo-card__posts-title { font-size: .85rem; color: var(--muted); margin: 0 0 .4rem; font-weight: 600; }
+.repo-card__posts-loading,
+.repo-card__posts-empty { color: var(--muted); font-size: .82rem; margin: 0; }
+.repo-card__post {
+  display: block;
+  padding: .35rem .5rem;
+  color: var(--text); text-decoration: none;
+  border-radius: 6px;
+}
+.repo-card__post:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.repo-card__post-author { color: var(--muted); margin-right: .4rem; font-size: .82rem; }
+.repo-card__post-body { font-size: .9rem; }

@@ -110,7 +110,11 @@ export function isRateLimited() {
   return Date.now() < rateLimitedUntil;
 }
 
-async function fetchJson(url, timeoutMs = 10000) {
+// Exported so other GitHub-data views (e.g. /repos) share the same
+// rate-limit cooldown. When this helper trips RATE_LIMIT, every caller
+// in the app starts returning cached/empty for the next hour instead
+// of each one independently hammering the 60/h IP budget.
+export async function fetchJson(url, timeoutMs = 10000) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
