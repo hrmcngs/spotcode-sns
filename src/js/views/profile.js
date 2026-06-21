@@ -383,11 +383,32 @@ export function renderProfile(handle) {
   return header + tabs + body;
 }
 
-// Look up the profile + follow counts in Supabase if needed, render the
-// finalised profile shell, then hydrate the posts list. 404 → notFound.
-// Every DOM write is gated on `currentPath() === myPath` so a newer
-// navigation can't be silently overwritten by a stale fetch.
-export async function hydrateProfile(handle) {
+// In-flight hydration dedupe. dispatch() in main.js fires from many
+// triggers (initial onRoute, onAuthChange's refresh, the official
+// overlay flip's refresh, fetchContributions, …), and each fires its
+// own `hydrateProfile(handle)`. Without dedupe two or more of these
+// run concurrently and race on `app.innerHTML = renderProfile(...)`
+// and on the inner #profile-posts writes; one of them stalling on a
+// Supabase auth-refresh leaves the page stuck on the post skeleton
+// even though another already had the data ready. By short-circuiting
+// to the in-flight Promise we guarantee at most one hydration per
+// handle and the user reliably sees the posts on first paint.
+const inFlight = new Map(); // handle → Promise
+
+export function hydrateProfile(handle) {
+  const existing = inFlight.get(handle);
+  if (existing) return existing;
+  const p = doHydrateProfile(handle).finally(() => {
+    // Only clear if THIS run is still the registered one — a follow-up
+    // call after we'd resolved would have replaced the slot, and we
+    // mustn't wipe its newer entry.
+    if (inFlight.get(handle) === p) inFlight.delete(handle);
+  });
+  inFlight.set(handle, p);
+  return p;
+}
+
+async function doHydrateProfile(handle) {
   // Guard by the actual current route, not a monotonic renderVersion
   // — the version counter bumped on every dispatch (auth refresh,
   // GitHub-graph fetch's refresh, overlay flip, etc.), and the
