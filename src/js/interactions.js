@@ -30,8 +30,9 @@ let officialFollowsLoaded = false;
 let officialFollowsOwnerId = null;
 
 export function clearInteractionsCache() {
+  // Auth-user-dependent caches — clear on identity change so the next
+  // render fetches with the new auth.uid().
   likes.clear();
-  followCounts.clear();
   followsMine.clear();
   requestsMine.clear();
   followsMineLoaded = false;
@@ -40,6 +41,14 @@ export function clearInteractionsCache() {
   officialFollowsOwnerId = null;
   reposts.clear();
   bookmarks.clear();
+  // followCounts is intentionally NOT cleared: it's a public per-
+  // handle followers/following tally that doesn't depend on who's
+  // logged in. Wiping it caused the profile stats to flicker
+  // "N → 0 → N" on every onAuthChange refresh — renderProfile would
+  // synchronously repaint with 0 (the cleared value), then
+  // hydrateProfileFollow would refill and trigger another paint with
+  // the real number. hydrateProfileFollow always re-fetches on
+  // profile view anyway, so the cache stays fresh.
 }
 
 // ----------------------------------------------------------------------

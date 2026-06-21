@@ -255,6 +255,13 @@ export function renderProfile(handle) {
   // 0 until then, which is fine — hydrateProfile re-renders after fill.
   const followingN = followingCount(u.handle);
   const followersN = followerCount(u.handle);
+  // Seed the post count from the localStorage timeline cache so
+  // back-to-back renderProfile() calls (initial dispatch +
+  // post-hydration re-render + onAuthChange refresh) don't flash the
+  // count back to "…" between renders. hydrateProfileBody still
+  // overwrites with the fresh count once Supabase resolves.
+  const cachedForCount = cachedPosts('handle:' + u.handle);
+  const initialPostN = cachedForCount ? String(cachedForCount.length) : '…';
   // Display follow state from the OVERLAY identity's perspective:
   // while overlay is on, "Following" must reflect what
   // @spotcode_official follows, not what hrmcngs does. Click still
@@ -345,7 +352,7 @@ export function renderProfile(handle) {
       '<div class="profile-stats">' +
         '<a href="' + url('/' + u.handle + '/following') + '"><b>' + followingN + '</b> ' + t('profile.stat.following') + '</a>' +
         '<a href="' + url('/' + u.handle + '/followers') + '"><b>' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +
-        '<span><b id="profile-postcount">…</b> ' + t('profile.stat.posts') + '</span>' +
+        '<span><b id="profile-postcount">' + initialPostN + '</b> ' + t('profile.stat.posts') + '</span>' +
       '</div>' +
       renderOrgMembers(u) +
       (u.github?.handle
