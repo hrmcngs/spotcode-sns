@@ -3,7 +3,7 @@ import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
 import { renderProfile, hydrateProfileActivity, hydrateProfileLanguages, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
-import { renderStub }      from './views/stub.js';
+import { renderRepos, hydrateRepos } from './views/repos.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
 // /requests folded into /notifications (follow_request rows have
@@ -533,7 +533,7 @@ function dispatch(path) {
   // mid-animation, …) the body would still be position:fixed and the
   // next page would render shifted. Force-clear once on every nav.
   forceUnlockBodyScroll();
-  const stubMatch      = path.match(/^\/(repos)\/?$/);
+  const reposMatch     = path === '/repos' || path === '/repos/';
   const mapMatch       = path === '/spots' || path === '/spots/';
   const mapCityMatch   = path.match(/^\/spots\/(.+?)\/?$/);
   const spotMatch      = path.match(/^\/spot\/(.+?)\/?$/);
@@ -606,9 +606,10 @@ function dispatch(path) {
     document.title = 'Notifications / spotcode-sns';
     app.innerHTML = renderNotifications();
     hydrateNotifications();
-  } else if (stubMatch) {
-    document.title = stubMatch[1] + ' / spotcode-sns';
-    app.innerHTML = renderStub(stubMatch[1]);
+  } else if (reposMatch) {
+    document.title = 'Repos / spotcode-sns';
+    app.innerHTML = renderRepos();
+    hydrateRepos();
   } else if (userMatch) {
     const handle = userMatch[1];
     document.title = '@' + handle + ' / spotcode-sns';

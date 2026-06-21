@@ -69,6 +69,7 @@ let hasKind           = true;
 let hasVisibility     = true;
 let hasCloseFriends   = true;
 let hasOrganization   = true;
+let hasRepoFullName   = true;
 
 (function loadSchemaCache() {
   try {
@@ -87,6 +88,7 @@ let hasOrganization   = true;
     if (v.hasVisibility     === false) hasVisibility     = false;
     if (v.hasCloseFriends   === false) hasCloseFriends   = false;
     if (v.hasOrganization   === false) hasOrganization   = false;
+    if (v.hasRepoFullName   === false) hasRepoFullName   = false;
   } catch {}
 })();
 function persistSchemaCache() {
@@ -95,6 +97,7 @@ function persistSchemaCache() {
       at: Date.now(),
       hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf,
       hasPhotos, hasPoll, hasKind, hasVisibility, hasCloseFriends, hasOrganization,
+      hasRepoFullName,
     }));
   } catch {}
 }
@@ -110,6 +113,7 @@ function postCols() {
   if (hasPoll)           extras.push('poll');
   if (hasKind)           extras.push('kind');
   if (hasVisibility)     extras.push('visibility');
+  if (hasRepoFullName)   extras.push('repo_full_name');
   const head =
     'id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
@@ -136,6 +140,7 @@ const OPTIONAL = [
   { needle: 'visibility',       off: () => { if (hasVisibility)     { console.warn('posts.visibility missing — run Stage 16 SQL: ALTER TABLE posts ADD COLUMN visibility text DEFAULT \'public\'.'); hasVisibility = false; return true; } return false; } },
   { needle: 'close_friends',    off: () => { if (hasCloseFriends)   { console.warn('profiles.close_friends missing — run Stage 16 SQL.'); hasCloseFriends = false; return true; } return false; } },
   { needle: 'organization',     off: () => { if (hasOrganization)   { console.warn('profiles.organization missing — run Stage 16 SQL.'); hasOrganization = false; return true; } return false; } },
+  { needle: 'repo_full_name',   off: () => { if (hasRepoFullName)   { console.warn('posts.repo_full_name missing — run Stage 30 SQL.'); hasRepoFullName = false; return true; } return false; } },
 ];
 function isMissingOptionalColumn(error) {
   const msg = String(error?.message || '').toLowerCase();
@@ -222,6 +227,10 @@ function shapePost(row) {
     visibility:    (['public','mutuals','following','friends','org','restricted'].includes(row.visibility)
                       ? row.visibility : 'public'),
     quoteOfPostId: row.quote_of_post_id || null,
+    // GitHub repo this post is "about", as owner/repo (Stage 30).
+    // Used by /repos to group posts under each repository card.
+    // Null when the column is missing or the post isn't tagged.
+    repoFullName:  row.repo_full_name || null,
     actions: {
       replies:   row.comments_count   || 0,
       forks:     row.reposts_count    || 0,  // fork icon repurposed as リポスト
@@ -483,6 +492,33 @@ export async function postsByCity(city) {
   const shaped = (data || []).map(shapePost);
   savePostsCache('city:' + city, shaped);
   return shaped;
+}
+
+// Posts tagged with a specific GitHub repository (Stage 30). Used by
+// the /repos view to populate each repo card. Case-insensitive match
+// — `owner/repo` is folded on both sides so the lookup hits the
+// `lower(repo_full_name)` index regardless of how the caller typed it.
+//
+// Silently returns [] when the column hasn't been migrated yet so the
+// /repos view degrades to "GitHub data only" instead of erroring out.
+export async function postsByRepo(fullName) {
+  if (!fullName) return [];
+  if (!hasRepoFullName) return [];
+  const supa = await getClient();
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').select(cols)
+      .ilike('repo_full_name', fullName)
+      .order('created_at', { ascending: false })
+      .limit(20)
+  );
+  if (error) {
+    // The column might have been dropped server-side after our schema
+    // cache went stale — withResilientCols already retried once
+    // without the column and got here, so just return empty.
+    if (/repo_full_name/i.test(error.message)) return [];
+    throw new Error(error.message);
+  }
+  return (data || []).map(shapePost);
 }
 
 // Fetch + attach the quoted post for any visible post with quoteOfPostId
