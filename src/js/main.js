@@ -19,7 +19,7 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema } from './data.js';
+import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_HANDLE } from './official-account.js';
 import { isAdmin, isOperator } from './dev-mode.js';
@@ -1738,7 +1738,16 @@ document.addEventListener('submit', (e) => {
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;
   addPost(post)
-    .then(() => {
+    .then((created) => {
+      // Optimistically inject the new row into every timeline cache
+      // it could surface in — home, the author's profile, and the
+      // spot view if it's spot-tagged. The next renderXxx() reads
+      // from cache first, so the user sees the post immediately
+      // even if the Supabase read replica hasn't caught up yet.
+      // Without this, refresh() below could re-fetch from a replica
+      // that still doesn't see the just-inserted row, and the
+      // timeline would silently rebuild without the new post.
+      if (created) prependToTimelineCaches(created);
       clearDraft(draftHandle());
       clearComposerUI();
       refresh();

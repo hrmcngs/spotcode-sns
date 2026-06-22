@@ -314,6 +314,92 @@ function savePostsCache(scope, posts) {
   } catch {}
 }
 
+// Module-level map of just-inserted post id → shaped post, kept in
+// memory so the fetchers below can merge them back in when they
+// race the Postgres read-replica. addPost() registers each new row
+// here right after Supabase confirms the INSERT; the entry self-
+// expires after `OPTIMISTIC_TTL_MS` so a row that was eventually
+// reflected in a fetch stops being injected forever.
+//
+// Without this, the sequence:
+//   addPost → refresh() → hydrateHome fetches from a replica that
+//   hasn't seen the insert yet → list rebuilds WITHOUT the new row
+// made the user think their post didn't go through. Localstorage
+// prepend alone couldn't fix it because `savePostsCache` overwrites
+// the cache with whatever the fetch returned a moment later.
+const OPTIMISTIC_TTL_MS = 60 * 1000;
+const optimisticPosts = new Map();   // id → { at, post }
+
+function optimisticPostsForScope(scope) {
+  const now = Date.now();
+  const out = [];
+  for (const [id, entry] of optimisticPosts) {
+    if (now - entry.at > OPTIMISTIC_TTL_MS) { optimisticPosts.delete(id); continue; }
+    const p = entry.post;
+    if (scope === 'home') out.push(p);
+    else if (scope.startsWith('handle:') && ('handle:' + p.authorHandle) === scope) out.push(p);
+    else if (scope.startsWith('city:')) {
+      const city = p.spot && p.spot.addressDetails && p.spot.addressDetails.city;
+      if (city && ('city:' + city) === scope) out.push(p);
+    }
+    else if (scope === 'following') out.push(p); // overlay's brand follows itself; harmless either way
+  }
+  return out;
+}
+
+// Merge optimistic posts into a freshly-fetched array. Any id that
+// the fetch already returned wins (the server-side row is the truth
+// once it's visible). Dedupe + re-sort newest-first.
+function mergeOptimistic(fetched, scope) {
+  const opt = optimisticPostsForScope(scope);
+  if (!opt.length) return fetched;
+  const fetchedIds = new Set(fetched.map((p) => p.id));
+  // If the fetch confirmed an optimistic entry, drop it from the
+  // map — replica caught up; no further injection needed.
+  for (const p of opt) {
+    if (fetchedIds.has(p.id)) optimisticPosts.delete(p.id);
+  }
+  const stillOpt = opt.filter((p) => !fetchedIds.has(p.id));
+  if (!stillOpt.length) return fetched;
+  return [...stillOpt, ...fetched]
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+// Optimistically prepend a freshly-inserted post into every
+// localStorage timeline scope it could plausibly appear in (so the
+// next renderXxx() paints with the new row), AND register it in the
+// in-memory optimisticPosts map (so the next fetch's overwrite
+// merges it back in if the read replica still hasn't seen it).
+//
+// Followers' "Following" feeds aren't seeded into localStorage:
+// only the auth user would benefit, and they almost never appear in
+// their own following list. The optimisticPosts map does inject
+// into 'following' though — harmless if the user doesn't follow
+// themselves, and correct if they (or their overlay identity) do.
+export function prependToTimelineCaches(post) {
+  if (!post || !post.id) return;
+  optimisticPosts.set(post.id, { at: Date.now(), post });
+  const scopes = ['home'];
+  if (post.authorHandle && post.authorHandle !== '?') {
+    scopes.push('handle:' + post.authorHandle);
+  }
+  const city = post.spot && post.spot.addressDetails && post.spot.addressDetails.city;
+  if (city) scopes.push('city:' + city);
+  try {
+    const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
+    for (const scope of scopes) {
+      const e = all[scope];
+      const prev = (e && Array.isArray(e.posts)) ? e.posts : [];
+      // Dedupe by id — addPost re-running (e.g. on a retry) would
+      // otherwise queue the same row twice.
+      const next = [post, ...prev.filter((p) => p.id !== post.id)]
+        .slice(0, POSTS_CACHE_MAX);
+      all[scope] = { at: Date.now(), posts: next };
+    }
+    localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(all));
+  } catch {}
+}
+
 // Returns the cached posts array (already in the same shape as
 // shapePost output — they were saved post-shape), or null if no entry
 // for this scope or the entry is older than TTL.
@@ -398,7 +484,7 @@ export async function allPosts({ limit = 100 } = {}) {
       .limit(limit)
   );
   if (error) throw new Error(error.message);
-  const shaped = (data || []).map(shapePost);
+  const shaped = mergeOptimistic((data || []).map(shapePost), 'home');
   savePostsCache('home', shaped);
   return shaped;
 }
@@ -424,7 +510,7 @@ export async function followingPosts({ limit = 100 } = {}) {
       .limit(limit)
   );
   if (error) throw new Error(error.message);
-  const shaped = (data || []).map(shapePost);
+  const shaped = mergeOptimistic((data || []).map(shapePost), 'following');
   savePostsCache('following', shaped);
   return shaped;
 }
@@ -445,7 +531,7 @@ export async function postsByHandle(handle) {
       .order('created_at', { ascending: false })
   );
   if (error) throw new Error(error.message);
-  const shaped = (data || []).map(shapePost);
+  const shaped = mergeOptimistic((data || []).map(shapePost), 'handle:' + handle);
   savePostsCache('handle:' + handle, shaped);
   return shaped;
 }
@@ -489,7 +575,7 @@ export async function postsByCity(city) {
       .order('created_at', { ascending: false })
   );
   if (error) throw new Error(error.message);
-  const shaped = (data || []).map(shapePost);
+  const shaped = mergeOptimistic((data || []).map(shapePost), 'city:' + city);
   savePostsCache('city:' + city, shaped);
   return shaped;
 }
