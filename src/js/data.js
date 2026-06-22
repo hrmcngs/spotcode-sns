@@ -343,6 +343,11 @@ function optimisticPostsForScope(scope) {
       if (city && ('city:' + city) === scope) out.push(p);
     }
     else if (scope === 'following') out.push(p); // overlay's brand follows itself; harmless either way
+    else if (scope === 'github-refs') {
+      // The /repos lookup wants every post with either an explicit
+      // repo tag OR a parseable github_link — let either through.
+      if (p.repoFullName || p.githubLink) out.push(p);
+    }
   }
   return out;
 }
@@ -615,7 +620,7 @@ export async function postsWithGithubRefs({ limit = 200 } = {}) {
     if (/repo_full_name|github_link/i.test(error.message)) return [];
     throw new Error(error.message);
   }
-  return (data || []).map(shapePost);
+  return mergeOptimistic((data || []).map(shapePost), 'github-refs');
 }
 
 // Fetch + attach the quoted post for any visible post with quoteOfPostId
