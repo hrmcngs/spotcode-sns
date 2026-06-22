@@ -981,18 +981,21 @@ try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
 // menu instead of on the second open. Regular users skip the call —
 // they have no use for the row.
 if (isAdmin() || isOperator()) {
-  getOfficialAccount().then((acct) => {
+  getOfficialAccount().then(async (acct) => {
     if (acct && isPostingAsOfficial()) {
       // Overlay was persisted ON from a previous session: at first
       // paint `cachedOfficialAccount()` was still null, so
       // displayUser() fell back to the real user — the topbar /
       // side-nav / profile cards rendered the WRONG identity. Now
-      // that the official row is cached, re-paint the chrome (auth
-      // area + side-nav avatar) and re-dispatch so the active view
-      // (profile, home, etc.) re-runs renderXxx against the brand.
-      // Also warm the official's follows so "Following" badges
-      // reflect the brand graph, not the auth user's.
-      hydrateOfficialFollows(acct.id).then(refresh).catch(() => {});
+      // that the official row is cached, await
+      // `hydrateOfficialFollows` first, then re-render the chrome +
+      // re-dispatch ONCE so the active view paints with the brand
+      // identity AND the correct "Following" badges in a single
+      // pass. The previous version did `refresh()` synchronously and
+      // again via `hydrateOfficialFollows().then(refresh)` — two
+      // full dispatches per page load, which doubled every render's
+      // network cost on admin/operator accounts.
+      try { await hydrateOfficialFollows(acct.id); } catch {}
       renderAuthArea();
       renderSideMe();
       refresh();

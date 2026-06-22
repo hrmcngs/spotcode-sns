@@ -29,7 +29,8 @@ import { currentUser }       from '../auth.js';
 import { getClient }         from '../supa.js';
 import { hydrateMyFollows, myFollowingHandles } from '../interactions.js';
 import { langColor, fetchJson, isRateLimited } from '../language-stats.js';
-import { postsByRepo, relTime } from '../data.js';
+import { postsWithGithubRefs, relTime } from '../data.js';
+import { parseGithubLink } from '../gh-link.js';
 import { icon }              from '../icons.js';
 import { t }                 from '../i18n.js';
 import { currentPath }       from '../router.js';
@@ -113,17 +114,21 @@ async function ghHandlesForUsers(appHandles) {
   return out;
 }
 
-// Per-hydrate cache of postsByRepo results so a re-paint (caused by a
-// late repo fetch landing) doesn't wipe the already-rendered post
-// lists. Keyed by fullName, value is either the resolved posts array
-// or undefined (= still loading / not started).
-const postsCache = new Map();
+// Per-hydrate map of fullName (lower-cased) → posts[]. Filled once
+// at hydrate from postsWithGithubRefs(), then read synchronously by
+// renderRepoCard so re-paints don't need to re-query Supabase.
+//
+// `postsLoaded` flips true after the single Supabase round-trip
+// resolves so renderPostsSection can tell "still loading" apart
+// from "loaded, no posts for this repo".
+let postsByFullName = new Map();
+let postsLoaded = false;
 
 function renderPostsSection(fullName) {
-  if (!postsCache.has(fullName)) {
+  if (!postsLoaded) {
     return '<p class="repo-card__posts-loading">' + t('repos.posts.loading') + '</p>';
   }
-  const posts = postsCache.get(fullName);
+  const posts = postsByFullName.get(fullName.toLowerCase()) || [];
   if (!posts.length) {
     return '<p class="repo-card__posts-empty">' + t('repos.posts.empty') + '</p>';
   }
@@ -133,6 +138,19 @@ function renderPostsSection(fullName) {
     '</h3>' +
     posts.slice(0, 5).map(renderPostLink).join('')
   );
+}
+
+// Derive owner/repo for a post: explicit `repoFullName` wins;
+// otherwise parse the GitHub link out of `githubLink`. Returns the
+// lower-cased fullName or null. Used both for grouping and to ignore
+// posts that don't point at a parseable repo.
+function repoFullNameForPost(p) {
+  if (p.repoFullName) return p.repoFullName.toLowerCase();
+  if (p.githubLink) {
+    const parsed = parseGithubLink(p.githubLink);
+    if (parsed) return (parsed.owner + '/' + parsed.repo).toLowerCase();
+  }
+  return null;
 }
 
 function renderRepoCard(repo) {
@@ -199,24 +217,50 @@ export function renderRepos() {
 // navigated away doesn't overwrite the next view's DOM.
 function stillHere() { return currentPath() === '/repos' || currentPath() === '/repos/'; }
 
-// Track which postsByRepo lookups have been kicked off so a re-paint
-// doesn't refire the same Supabase query. Posts results live in the
-// module-level `postsCache` map so renderRepoCard can read them back
-// even after a wholesale innerHTML replacement.
-const postsFiring = new Set();
+// requestAnimationFrame batcher. With ~20 followed users we can get
+// ~20 fetchUserRepos.then() resolves in a single tick — calling
+// paintList() once per resolve means rebuilding the entire list's
+// innerHTML 20 times in the same frame, which janks scrolling and
+// any in-progress UI. Coalesce to one paint per frame.
+//
+// We hand the Map (not a sorted array) to the scheduler so the
+// callback always sorts the LATEST contents — intermediate resolves
+// in the same frame don't pay for an extra sort each.
+let pendingMap   = null;
+let pendingList  = null;
+let paintFrame   = 0;
+function schedulePaint(list, workingMap) {
+  pendingList = list;
+  pendingMap  = workingMap;
+  if (paintFrame) return;
+  paintFrame = requestAnimationFrame(() => {
+    paintFrame = 0;
+    const l = pendingList;
+    const m = pendingMap;
+    pendingList = null;
+    pendingMap  = null;
+    if (!l || !l.isConnected) return;
+    const sorted = Array.from(m.values()).sort((a, b) => b.pushedAt - a.pushedAt);
+    l.innerHTML = sorted.map(renderRepoCard).join('');
+  });
+}
 
-function paintList(list, working) {
+// Synchronous variant for the very first paint (we want it in the
+// same tick the user lands on the page). All subsequent paints from
+// the streaming-fetch loop go through schedulePaint.
+function paintListNow(list, working) {
   list.innerHTML = working.map(renderRepoCard).join('');
-  for (const repo of working) {
-    if (postsFiring.has(repo.fullName)) continue;
-    postsFiring.add(repo.fullName);
-    postsByRepo(repo.fullName).then((posts) => {
-      postsCache.set(repo.fullName, posts);
-      if (!stillHere()) return;
-      const slot = list.querySelector('[data-repo-posts="' + CSS.escape(repo.fullName) + '"]');
-      if (slot) slot.innerHTML = renderPostsSection(repo.fullName);
-    }).catch(() => {});
-  }
+}
+
+// Refresh just the posts sections of every visible repo card. Called
+// once after the single postsWithGithubRefs() round trip lands, so
+// every card transitions from "読み込み中" to either the post list
+// or the empty state in one go.
+function refreshAllPostsSections(list) {
+  list.querySelectorAll('[data-repo-posts]').forEach((slot) => {
+    const fullName = slot.getAttribute('data-repo-posts');
+    slot.innerHTML = renderPostsSection(fullName);
+  });
 }
 
 export async function hydrateRepos() {
@@ -252,11 +296,35 @@ export async function hydrateRepos() {
   // Read whatever each handle has cached and paint it before any
   // network call. On a repeat visit this means the user sees the full
   // list with zero spinner.
-  // Reset per-hydrate post caches so a stale entry from the last
-  // /repos visit can't survive into this one (the user might have
-  // tagged new posts in the interim).
-  postsCache.clear();
-  postsFiring.clear();
+  // Reset per-hydrate post state so a previous /repos visit's data
+  // can't leak into this one (the user might have made new posts in
+  // the interim).
+  postsByFullName = new Map();
+  postsLoaded = false;
+
+  // Kick off the single posts round-trip immediately, parallel with
+  // the github_handle lookup below. It rarely beats the GitHub repo
+  // fetches, but on a warm GitHub cache it's the limiting step, so
+  // starting it first matters.
+  postsWithGithubRefs({ limit: 200 })
+    .then((posts) => {
+      const map = new Map();
+      for (const p of posts) {
+        const key = repoFullNameForPost(p);
+        if (!key) continue;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(p);
+      }
+      postsByFullName = map;
+      postsLoaded = true;
+      if (stillHere()) refreshAllPostsSections(list);
+    })
+    .catch(() => {
+      // Posts lookup failed — flip loaded so cards show empty state
+      // instead of an eternal「読み込み中」.
+      postsLoaded = true;
+      if (stillHere()) refreshAllPostsSections(list);
+    });
 
   const working = new Map();    // fullName → repo
   const needFetch = [];
@@ -265,15 +333,15 @@ export async function hydrateRepos() {
     if (cached) for (const r of cached) working.set(r.fullName, r);
     else needFetch.push(gh);
   }
-  let workingArr = Array.from(working.values()).sort((a, b) => b.pushedAt - a.pushedAt);
-  if (workingArr.length) paintList(list, workingArr);
+  const initialSorted = Array.from(working.values()).sort((a, b) => b.pushedAt - a.pushedAt);
+  if (initialSorted.length) paintListNow(list, initialSorted);
 
   // ----- Step 2: stream missing fetches ----------------------------
   // Fire each uncached fetch independently; re-paint the list as each
   // resolves. Promise.all would have blocked the first paint behind
   // the slowest user.
   if (needFetch.length === 0) {
-    if (workingArr.length === 0) {
+    if (initialSorted.length === 0) {
       list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('repos.empty.no_repos') + '</p></div>';
     }
     return;
@@ -285,12 +353,11 @@ export async function hydrateRepos() {
       landed++;
       if (!stillHere()) return;
       for (const r of repos) working.set(r.fullName, r);
-      workingArr = Array.from(working.values()).sort((a, b) => b.pushedAt - a.pushedAt);
-      if (workingArr.length === 0 && landed === needFetch.length) {
+      if (working.size === 0 && landed === needFetch.length) {
         list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('repos.empty.no_repos') + '</p></div>';
         return;
       }
-      paintList(list, workingArr);
+      schedulePaint(list, working);
     }).catch(() => { landed++; });
   }
 }
