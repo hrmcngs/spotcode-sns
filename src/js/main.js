@@ -1123,6 +1123,37 @@ document.getElementById('open-compose')?.addEventListener('click', () => {
   }, 30);
 });
 
+// Delegated handler for "Post about this repo" buttons on /repos
+// cards. Same shape as #open-compose, but additionally pre-fills the
+// composer's GitHub link input + unhides the link row so the URL is
+// already attached when the user starts typing. The `setTimeout` is
+// what lets `dispatch('/')` finish (it replaces #app synchronously,
+// so the composer textarea exists on the next tick).
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-compose-repo]');
+  if (!btn) return;
+  e.preventDefault();
+  if (!currentUser()) return openAuth('register');
+  const url = btn.getAttribute('data-compose-repo') || '';
+  navigate('/');
+  setTimeout(() => {
+    const form = document.querySelector('.idea-form');
+    if (!form) return;
+    const gh = form.querySelector('input[name="github"]');
+    if (gh) gh.value = url;
+    const row = document.getElementById('compose-link-row');
+    if (row) row.hidden = false;
+    const toggle = document.getElementById('compose-link-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', 'true');
+    const ta = form.querySelector('textarea[name="text"]');
+    if (!ta) return;
+    const r = ta.getBoundingClientRect();
+    const offscreen = r.top < 0 || r.top > window.innerHeight - 80;
+    if (offscreen) ta.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    ta.focus();
+  }, 30);
+});
+
 document.addEventListener('click', (e) => {
   const auth = e.target.closest('[data-auth]');
   if (auth) {

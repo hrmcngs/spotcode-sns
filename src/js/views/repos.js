@@ -169,6 +169,18 @@ function renderRepoCard(repo) {
   const desc = repo.description
     ? '<p class="repo-card__desc">' + escape(repo.description) + '</p>'
     : '';
+  // "Post about this repo" — jumps to the home composer with the
+  // GitHub link pre-filled to repo.htmlUrl. Picked up by the
+  // delegated `[data-compose-repo]` handler in main.js; that handler
+  // mirrors #open-compose's navigate + setTimeout-then-focus dance.
+  const composeBtn =
+    '<button type="button" class="repo-card__compose" ' +
+      'data-compose-repo="' + escape(repo.htmlUrl) + '" ' +
+      'title="' + escape(t('repos.compose')) + '" ' +
+      'aria-label="' + escape(t('repos.compose')) + '">' +
+      icon('plus', { size: 14, className: 'icon--inline' }) +
+      ' ' + escape(t('repos.compose')) +
+    '</button>';
   return (
     '<article class="repo-card" data-repo="' + escape(repo.fullName) + '">' +
       '<header class="repo-card__head">' +
@@ -178,6 +190,7 @@ function renderRepoCard(repo) {
           '<span class="repo-card__slash">/</span>' +
           '<span class="repo-card__name">' + escape(repo.name) + '</span>' +
         '</a>' +
+        composeBtn +
       '</header>' +
       desc +
       '<footer class="repo-card__meta">' + lang + stars + pushed + '</footer>' +
