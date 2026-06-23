@@ -19,7 +19,8 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches } from './data.js';
+import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
+         markPendingDelete, unmarkPendingDelete } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_HANDLE } from './official-account.js';
 import { isAdmin, isOperator } from './dev-mode.js';
@@ -1272,13 +1273,25 @@ document.addEventListener('click', (e) => {
       : 'この投稿を削除しますか？元に戻せません。';
     if (!confirm(msg)) return;
     deleteBtn.disabled = true;
-    // Optimistically fade the card so the user sees an immediate response,
-    // then drop it from the DOM on success or restore on error.
+    const id = post.getAttribute('data-post-id');
+    // Mark the id as pending-delete BEFORE the round-trip so any
+    // navigation / refresh that fires mid-flight (renderHome,
+    // renderProfile, etc.) filters this row out instead of painting
+    // it from the cached snapshot. cachedPosts + mergeOptimistic
+    // both consult `pendingDeletes` for this.
+    markPendingDelete(id);
+    // Fade-then-hide is what the user perceives as "instant" — drop
+    // it from the DOM on success, restore (unmark + un-fade) on error.
     post.style.opacity = '.4';
     post.style.pointerEvents = 'none';
-    removePost(post.getAttribute('data-post-id'))
-      .then(() => { post.remove(); })
+    removePost(id)
+      .then(() => {
+        // removePost already pruned the persistent caches; just
+        // remove the DOM node so the surrounding cards reflow.
+        post.remove();
+      })
       .catch((err) => {
+        unmarkPendingDelete(id);
         alert('削除に失敗しました: ' + err.message);
         post.style.opacity = '';
         post.style.pointerEvents = '';

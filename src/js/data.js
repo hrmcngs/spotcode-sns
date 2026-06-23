@@ -330,6 +330,14 @@ function savePostsCache(scope, posts) {
 const OPTIMISTIC_TTL_MS = 60 * 1000;
 const optimisticPosts = new Map();   // id → { at, post }
 
+// Pre-emptive delete tombstone. The click handler in main.js marks an
+// id here BEFORE awaiting Supabase, so any render that fires during
+// the round-trip (e.g. an onAuthChange refresh, a navigation) hides
+// the post immediately. Confirmed-delete promotes the id to the
+// `removeFromTimelineCaches` path which wipes the persistent cache;
+// failed-delete unmarks it so the next render restores the post.
+const pendingDeletes = new Set();   // post ids
+
 function optimisticPostsForScope(scope) {
   const now = Date.now();
   const out = [];
@@ -354,19 +362,24 @@ function optimisticPostsForScope(scope) {
 
 // Merge optimistic posts into a freshly-fetched array. Any id that
 // the fetch already returned wins (the server-side row is the truth
-// once it's visible). Dedupe + re-sort newest-first.
+// once it's visible). Dedupe + re-sort newest-first. Posts currently
+// in `pendingDeletes` are filtered out so an in-flight delete doesn't
+// flash the row back into the timeline on a concurrent fetch.
 function mergeOptimistic(fetched, scope) {
+  const live = pendingDeletes.size
+    ? fetched.filter((p) => !pendingDeletes.has(p.id))
+    : fetched;
   const opt = optimisticPostsForScope(scope);
-  if (!opt.length) return fetched;
-  const fetchedIds = new Set(fetched.map((p) => p.id));
+  if (!opt.length) return live;
+  const liveIds = new Set(live.map((p) => p.id));
   // If the fetch confirmed an optimistic entry, drop it from the
   // map — replica caught up; no further injection needed.
   for (const p of opt) {
-    if (fetchedIds.has(p.id)) optimisticPosts.delete(p.id);
+    if (liveIds.has(p.id)) optimisticPosts.delete(p.id);
   }
-  const stillOpt = opt.filter((p) => !fetchedIds.has(p.id));
-  if (!stillOpt.length) return fetched;
-  return [...stillOpt, ...fetched]
+  const stillOpt = opt.filter((p) => !liveIds.has(p.id) && !pendingDeletes.has(p.id));
+  if (!stillOpt.length) return live;
+  return [...stillOpt, ...live]
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
@@ -407,14 +420,18 @@ export function prependToTimelineCaches(post) {
 
 // Returns the cached posts array (already in the same shape as
 // shapePost output — they were saved post-shape), or null if no entry
-// for this scope or the entry is older than TTL.
+// for this scope or the entry is older than TTL. In-flight deletes
+// are filtered out here too so a navigation-triggered re-render
+// during the round-trip doesn't paint a row the user just removed.
 export function cachedPosts(scope) {
   try {
     const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
     const e = all[scope];
     if (!e || !e.posts) return null;
     if (Date.now() - (e.at || 0) > POSTS_CACHE_TTL_MS) return null;
-    return e.posts;
+    return pendingDeletes.size
+      ? e.posts.filter((p) => !pendingDeletes.has(p.id))
+      : e.posts;
   } catch { return null; }
 }
 
@@ -772,7 +789,48 @@ export async function removePost(postId) {
       'USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true));'
     );
   }
+  // Confirmed delete: wipe the row from every persistent cache scope
+  // and the in-memory optimistic map so a later renderXxx never
+  // re-paints it from a stale snapshot.
+  removeFromTimelineCaches(postId);
   return true;
+}
+
+// Mark a post id as in-flight delete. Filtered out by `cachedPosts`
+// and `mergeOptimistic` until either `removeFromTimelineCaches`
+// (success, persistent prune) or `unmarkPendingDelete` (failure,
+// restore) clears it.
+export function markPendingDelete(id) {
+  if (id) pendingDeletes.add(String(id));
+}
+export function unmarkPendingDelete(id) {
+  pendingDeletes.delete(String(id));
+}
+
+// Persistent prune: drop the row from every timeline scope in
+// localStorage + the in-memory optimisticPosts map + the
+// pendingDeletes tombstone (no longer "pending", actually gone).
+// Idempotent — safe to call multiple times for the same id.
+export function removeFromTimelineCaches(id) {
+  if (!id) return;
+  const key = String(id);
+  pendingDeletes.delete(key);
+  optimisticPosts.delete(key);
+  try {
+    const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
+    let dirty = false;
+    for (const scope of Object.keys(all)) {
+      const e = all[scope];
+      if (!e || !Array.isArray(e.posts)) continue;
+      const before = e.posts.length;
+      e.posts = e.posts.filter((p) => p.id !== key);
+      if (e.posts.length !== before) {
+        dirty = true;
+        all[scope] = { at: e.at, posts: e.posts };
+      }
+    }
+    if (dirty) localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(all));
+  } catch {}
 }
 
 // ----------------------------------------------------------------------
