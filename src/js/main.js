@@ -1214,8 +1214,9 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  // Enter edit mode — swap the post body for a textarea + Save/Cancel.
-  // Only rendered on own posts, so no extra owner check needed here.
+  // Enter edit mode — swap the post body for a textarea + metadata
+  // pills + Save/Cancel. Only rendered on own posts, so no extra
+  // owner check needed here.
   const editBtn = e.target.closest('.act--edit');
   if (editBtn) {
     e.preventDefault();
@@ -1226,12 +1227,32 @@ document.addEventListener('click', (e) => {
     const original = body.textContent;
     // Cache original DOM so Cancel restores formatting (mentions etc.).
     body.dataset.originalHtml = body.innerHTML;
+    // Seed the edit-mode metadata fields from what's already visible
+    // on the post card so the user can rotate / clear values without
+    // re-typing. Idea badge: `.post__kind--idea` on the head.
+    // GitHub link: `.post__meta > .post__link` sibling of the body
+    // (NOT inside the body — escape() in renderPost puts it after).
+    const isIdea = !!post.querySelector('.post__kind--idea');
+    const ghLink = post.querySelector('.post__meta .post__link')?.getAttribute('href') || '';
+    const escAttr = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
     body.innerHTML =
       '<textarea class="post__edit-input" rows="3">' +
         // textareas treat raw text only — escape isn't needed because
         // the browser handles it, but we do need < / & sanitised.
         String(original).replace(/&/g, '&amp;').replace(/</g, '&lt;') +
       '</textarea>' +
+      '<div class="post__edit-meta">' +
+        '<button type="button" class="post__edit-pill act--edit-toggle-idea' +
+          (isIdea ? ' is-active' : '') + '" aria-pressed="' + (isIdea ? 'true' : 'false') + '">' +
+          'アイデア' +
+        '</button>' +
+        '<label class="post__edit-link">' +
+          'GitHub link' +
+          '<input type="url" class="post__edit-link-input" placeholder="https://github.com/owner/repo" value="' + escAttr(ghLink) + '">' +
+        '</label>' +
+      '</div>' +
       '<div class="post__edit-actions">' +
         '<button type="button" class="btn btn--ghost btn--sm act--edit-cancel">キャンセル</button>' +
         '<button type="button" class="btn btn--primary btn--sm act--edit-save">保存</button>' +
@@ -1239,6 +1260,14 @@ document.addEventListener('click', (e) => {
     const ta = body.querySelector('textarea');
     ta.focus();
     ta.setSelectionRange(ta.value.length, ta.value.length);
+    return;
+  }
+  // Toggle the idea pill in-place (no save until the Save button).
+  const ideaToggleBtn = e.target.closest('.act--edit-toggle-idea');
+  if (ideaToggleBtn) {
+    e.preventDefault();
+    const active = ideaToggleBtn.classList.toggle('is-active');
+    ideaToggleBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
     return;
   }
   const cancelBtn = e.target.closest('.act--edit-cancel');
@@ -1262,9 +1291,20 @@ document.addEventListener('click', (e) => {
     if (!ta) return;
     const newBody = ta.value.trim();
     if (!newBody) { alert('本文を入力してください'); return; }
+    // Pull the metadata fields from the inline editor. Idea toggle
+    // state lives on the pill (.is-active class); the link input is
+    // text, trimmed; empty → null so the backing column gets cleared.
+    const ideaActive = !!body.querySelector('.act--edit-toggle-idea.is-active');
+    const linkInput = body.querySelector('.post__edit-link-input');
+    const newLink = linkInput ? linkInput.value.trim() : '';
     saveBtn.disabled = true;
     ta.disabled = true;
-    updatePost(post.getAttribute('data-post-id'), { body: newBody })
+    if (linkInput) linkInput.disabled = true;
+    updatePost(post.getAttribute('data-post-id'), {
+      body:       newBody,
+      kind:       ideaActive ? 'idea' : null,
+      githubLink: newLink || null,
+    })
       .then(() => {
         // Re-render the body inline — keep the post card in place so
         // scroll position / surrounding cards don't jump.
@@ -1281,12 +1321,60 @@ document.addEventListener('click', (e) => {
             head.querySelector('.post__time')?.insertAdjacentHTML('afterend',
               '<span class="post__edited">（編集済み）</span>');
           }
+          // Patch the idea badge in the head: add it if newly tagged,
+          // remove it if untagged. Cheaper than a full re-render and
+          // keeps the rest of the head (spot chip, time, visibility
+          // pill) untouched. The badge HTML matches renderPost's
+          // template so a follow-up refresh() wouldn't see a delta.
+          if (head) {
+            const existingIdea = head.querySelector('.post__kind--idea');
+            if (ideaActive && !existingIdea) {
+              head.querySelector('.post__time')?.insertAdjacentHTML('afterend',
+                ' <span class="post__kind post__kind--idea" title="アイデア">' +
+                  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon--inline"><path d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>' +
+                  'アイデア' +
+                '</span>');
+            } else if (!ideaActive && existingIdea) {
+              existingIdea.remove();
+            }
+          }
+          // Patch the github_link chip (sibling of .post__body inside
+          // .post__main). Three transitions to handle:
+          //   added (no chip → new) — insert .post__meta after body
+          //   updated (chip → diff url) — set href + text
+          //   cleared (chip → empty) — remove the chip's wrapper
+          const safeNewLink = (newLink || '').replace(/[&<>"']/g, (c) => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+          }[c]));
+          let metaRow = post.querySelector('.post__meta');
+          const existingLink = metaRow?.querySelector('.post__link');
+          if (newLink) {
+            const linkHtml =
+              '<a class="post__link" href="' + safeNewLink + '" target="_blank" rel="noopener noreferrer">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="icon--inline"><path d="M12 0a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.1c-3.3.7-4-1.6-4-1.6-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.3-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.3a11.5 11.5 0 0 1 6 0c2.3-1.6 3.3-1.3 3.3-1.3.6 1.7.2 2.9.1 3.2.8.9 1.2 2 1.2 3.3 0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 0z"/></svg>' +
+                safeNewLink +
+              '</a>';
+            if (existingLink) {
+              existingLink.outerHTML = linkHtml;
+            } else if (metaRow) {
+              metaRow.insertAdjacentHTML('beforeend', linkHtml);
+            } else {
+              body.insertAdjacentHTML('afterend',
+                '<div class="post__meta">' + linkHtml + '</div>');
+            }
+          } else if (existingLink) {
+            const wrapper = existingLink.parentElement;
+            existingLink.remove();
+            // Drop the meta row if it's now empty so the layout collapses.
+            if (wrapper && !wrapper.children.length) wrapper.remove();
+          }
         });
       })
       .catch((err) => {
         alert('編集に失敗しました: ' + err.message);
         saveBtn.disabled = false;
         ta.disabled = false;
+        if (linkInput) linkInput.disabled = false;
       });
     return;
   }

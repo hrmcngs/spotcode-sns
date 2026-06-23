@@ -741,6 +741,13 @@ export async function updatePost(postId, fields) {
   if (fields.kind === 'idea' || fields.kind === null) {
     if (hasKind) patch.kind = fields.kind;
   }
+  // `githubLink` is always optional — undefined means "leave alone",
+  // empty string / null means "clear it". Saved as posts.github_link
+  // (NOT a Stage 30 column, present in the base schema since v0).
+  if (Object.prototype.hasOwnProperty.call(fields, 'githubLink')) {
+    const v = fields.githubLink;
+    patch.github_link = (v && String(v).trim()) || null;
+  }
   if (!Object.keys(patch).length) return null;
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').update(patch).eq('id', postId).select(cols)

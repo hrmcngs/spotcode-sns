@@ -941,6 +941,45 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   display: flex; justify-content: flex-end; gap: .5rem;
   margin-top: .5rem;
 }
+/* Metadata row inside the inline editor: idea-tag toggle + github
+   link input. Tight row directly under the textarea so the eye
+   travels textarea → metadata → save without leaving the card. */
+.post__edit-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .6rem;
+  margin-top: .5rem;
+}
+.post__edit-pill {
+  display: inline-flex; align-items: center; gap: .25rem;
+  padding: .2rem .65rem;
+  font-size: .8rem; line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.post__edit-pill.is-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.post__edit-link {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-size: .8rem; color: var(--muted);
+  flex: 1; min-width: 14rem;
+}
+.post__edit-link-input {
+  flex: 1; min-width: 0;
+  padding: .25rem .55rem;
+  font-size: .82rem; color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.post__edit-link-input:focus {
+  outline: 0;
+  border-color: var(--accent);
+}
 
 /* Composer photo preview row — horizontal scroll-row of thumbnails
    with an x button overlaid on each. Stays inside .composer-body so
