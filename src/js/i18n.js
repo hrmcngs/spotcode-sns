@@ -286,6 +286,7 @@ const DICT = {
     'repos.posts.loading':     '関連投稿を読み込み中…',
     'repos.posts.empty':       'このリポに紐づく投稿はまだありません。',
     'repos.posts.heading':     'spotcode-sns 内の投稿 ({n})',
+    'repos.compose':           'このリポで投稿',
 
     // ---------------- geo gate ----------------
     'geo.waiting':             '📍 位置情報を取得しています…（許可を求められたら「許可」を押してください）',
@@ -570,6 +571,7 @@ const DICT = {
     'repos.posts.loading':     'Loading related posts…',
     'repos.posts.empty':       'No posts tagged with this repo yet.',
     'repos.posts.heading':     'spotcode-sns posts ({n})',
+    'repos.compose':           'Post about this repo',
 
     'geo.waiting':             '📍 Getting your location… (allow access when asked)',
     'geo.denied':              "📍 Location is off. Spot-tagged posts become visible once you're near them.",
