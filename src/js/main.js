@@ -1065,6 +1065,47 @@ renderSideMe();
 initSearch();
 initMentionAutocomplete();
 
+// Browser Notifications API plumbing — fires OS-level banners for
+// likes / comments / mentions / follows / follow_requests (via the
+// notif poller diffing notificationsForMe), and for nearby spots
+// (geolocation + distance compute against cached spot posts).
+// Both pollers self-gate on `canPush()` so leaving them booted is
+// cheap when the user hasn't opted in; the import is intentional so
+// they can flip on / off via the /settings toggle without a reload.
+import('./push-notify.js').then(({ isPushEnabled, onPushPrefChange }) => {
+  let started = false;
+  function syncBoot() {
+    const want = isPushEnabled() && !!currentUser();
+    if (want && !started) {
+      started = true;
+      Promise.all([
+        import('./notif-poller.js'),
+        import('./nearby-spot-watcher.js'),
+      ]).then(([{ startNotifPoller }, { startNearbySpotWatcher }]) => {
+        startNotifPoller();
+        startNearbySpotWatcher();
+      });
+    } else if (!want && started) {
+      started = false;
+      Promise.all([
+        import('./notif-poller.js'),
+        import('./nearby-spot-watcher.js'),
+      ]).then(([{ stopNotifPoller }, { stopNearbySpotWatcher }]) => {
+        stopNotifPoller();
+        stopNearbySpotWatcher();
+      });
+    }
+  }
+  syncBoot();
+  onPushPrefChange(syncBoot);
+  onAuthChange(() => {
+    // Identity change → reset the dedupe watermark so the new user's
+    // existing inbox doesn't fire as backlog, then re-evaluate boot.
+    import('./notif-poller.js').then(({ resetNotifPollerSeed }) => resetNotifPollerSeed());
+    syncBoot();
+  });
+});
+
 onAuthChange(() => {
   // The signed-in identity changed (login / logout / profile update) —
   // drop the like/follow cache so the next renders re-fetch with the

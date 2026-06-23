@@ -13,6 +13,7 @@ import { searchProfiles, fetchProfileByHandle } from '../profiles.js';
 import { debounce } from '../drafts.js';
 import { hydrateMyFollows, myFollowingHandles } from '../interactions.js';
 import { navigate, currentPath, url } from '../router.js';
+import { isPushEnabled, setPushEnabled, browserPermissionState, requestBrowserPermission } from '../push-notify.js';
 
 // In-memory state for the two audience-list editors so add/remove
 // can re-render without a round trip. Initialised in renderSettings()
@@ -257,7 +258,54 @@ function accountSection() {
   // orgLabelCard moved in here after the "profile" tab was retired —
   // the free-text affiliation is a small enough card to ride with
   // the account-identity group.
-  return accountsCard() + roleCard() + accountTypeCard() + orgLabelCard();
+  return accountsCard() + roleCard() + accountTypeCard() + orgLabelCard()
+       + pushNotifyCard();
+}
+
+// Browser Notifications API opt-in. Two switches in series: the
+// `Notification.permission` (OS-level "Allow / Block / Default") and
+// our own localStorage flag so the user can pause banners without
+// re-granting permission each time.
+function pushNotifyCard() {
+  const perm = browserPermissionState();
+  const enabled = isPushEnabled();
+  // Status tag mirrors the gate state: ON if permission granted AND
+  // user opted in; otherwise the closest reason. 'unsupported' covers
+  // iOS Safari < 16.4 and any context without Notification global.
+  let statusKey;
+  if (perm === 'unsupported')      statusKey = 'settings.push.unsupported';
+  else if (perm === 'denied')      statusKey = 'settings.push.denied';
+  else if (perm === 'default')     statusKey = 'settings.push.not_asked';
+  else if (!enabled)               statusKey = 'settings.push.paused';
+  else                             statusKey = 'settings.push.on';
+
+  const actionLabelKey = (perm === 'granted' && enabled)
+    ? 'settings.push.turn_off'
+    : 'settings.push.turn_on';
+
+  return (
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.push.title') +
+        ' <span class="settings-tag' + (enabled && perm === 'granted' ? ' is-ok' : '') + '">' +
+          t(statusKey) +
+        '</span>' +
+      '</h2>' +
+      '<p class="settings__hint">' + t('settings.push.hint') + '</p>' +
+      (perm === 'denied'
+        ? '<p class="settings-status is-bad">' + t('settings.push.denied_hint') + '</p>'
+        : (perm === 'unsupported'
+            ? '<p class="settings-status">' + t('settings.push.unsupported_hint') + '</p>'
+            : '<div class="settings-form__actions">' +
+                '<button type="button" class="btn btn--' +
+                  ((perm === 'granted' && enabled) ? 'ghost' : 'primary') +
+                  '" id="push-notify-toggle">' +
+                  t(actionLabelKey) +
+                '</button>' +
+              '</div>'
+          )
+      ) +
+    '</section>'
+  );
 }
 function privacySection() {
   return privacyCard() + audienceCard();
@@ -591,6 +639,29 @@ export function bindSettings() {
   document.getElementById('badges-toggle')?.addEventListener('click', () => {
     setBadgesHidden(!badgesHidden());
     // Re-render the Display tab in place so the new state is reflected.
+    const app = document.getElementById('app');
+    if (app) { app.innerHTML = renderSettings(); bindSettings(); }
+  });
+
+  // Push-notify toggle — chains the browser permission ask onto the
+  // localStorage opt-in so the user gets the OS dialog at the moment
+  // they explicitly opt in (not at boot). Asking later is a Chrome
+  // best-practice — auto-prompting on page load is now blocked in
+  // some browsers, so this is also the only path that works.
+  document.getElementById('push-notify-toggle')?.addEventListener('click', async () => {
+    const wantOn = !(isPushEnabled() && browserPermissionState() === 'granted');
+    if (wantOn) {
+      const perm = await requestBrowserPermission();
+      if (perm !== 'granted') {
+        // Re-render so the status tag flips to denied / unsupported.
+        const app = document.getElementById('app');
+        if (app) { app.innerHTML = renderSettings(); bindSettings(); }
+        return;
+      }
+      setPushEnabled(true);
+    } else {
+      setPushEnabled(false);
+    }
     const app = document.getElementById('app');
     if (app) { app.innerHTML = renderSettings(); bindSettings(); }
   });
