@@ -93,11 +93,16 @@ async function loadProfile(userId) {
   return data;
 }
 
-async function refreshFromSession() {
-  let supa;
-  try { supa = await getClient(); } catch { cachedUser = null; emit(); return; }
-  const { data } = await supa.auth.getSession();
-  const session = data?.session;
+// Build cachedUser from a known-good session. Factored out so login()
+// can hand in the session that signInWithPassword JUST returned
+// (instead of round-tripping through getSession, which can race the
+// supabase-js storage layer — supabase-js sometimes resolves
+// signInWithPassword before the session is written to localStorage,
+// so getSession on the next tick returns null, refreshFromSession
+// emits cachedUser=null, and the UI thinks the user is logged out
+// until onAuthStateChange catches up — which, when it doesn't, is
+// the "had to reload to log in" symptom).
+async function adoptSession(session) {
   if (!session) { cachedUser = null; emit(); return; }
   const profile = await loadProfile(session.user.id);
   cachedUser = projectUser(session.user, profile);
@@ -105,6 +110,13 @@ async function refreshFromSession() {
   // flip back to this account later without re-typing their password.
   if (cachedUser) rememberAccount({ user: cachedUser, session });
   emit();
+}
+
+async function refreshFromSession() {
+  let supa;
+  try { supa = await getClient(); } catch { cachedUser = null; emit(); return; }
+  const { data } = await supa.auth.getSession();
+  await adoptSession(data?.session || null);
 }
 
 export async function initAuth() {
@@ -234,15 +246,25 @@ export async function register({ email, password, handle, name, role, githubHand
     }
   }
 
-  await refreshFromSession();
+  // Adopt the session signUp returned (same race avoidance as login).
+  // signUp embeds the new session inline when auto-confirm is on; if
+  // the project requires email confirmation, data.session is null and
+  // adoptSession correctly leaves cachedUser=null.
+  await adoptSession(data?.session || null);
   return cachedUser;
 }
 
 export async function login({ email, password }) {
   const supa = await getClient();
-  const { error } = await supa.auth.signInWithPassword({ email, password });
+  // Use the session signInWithPassword returns directly — calling
+  // getSession() on the next tick races supabase-js's storage write
+  // and can return null, in which case the UI flickers to a
+  // logged-out state and only recovers when onAuthStateChange catches
+  // up (or, when it doesn't, only after a full page reload). The
+  // password-auth response always carries the new session inline.
+  const { data, error } = await supa.auth.signInWithPassword({ email, password });
   if (error) throw new Error(translateAuthError(error.message));
-  await refreshFromSession();
+  await adoptSession(data?.session || null);
   return cachedUser;
 }
 
