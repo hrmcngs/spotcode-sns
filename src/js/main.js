@@ -24,6 +24,7 @@ import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema, prepe
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_HANDLE } from './official-account.js';
 import { isAdmin, isOperator } from './dev-mode.js';
+import { onPrivacyModeChange, maskHandle, maskName } from './privacy-mode.js';
 import { isPostingAsOfficial, setPostingAsOfficial, onPostingIdentityChange, displayUser } from './posting-identity.js';
 import { icon }            from './icons.js';
 import { toggleLike, isLiked, likeCount,
@@ -181,12 +182,14 @@ async function renderRail() {
             // actorUserId = official.id (Stage 26 RLS allows it).
             const overlayOn = isPostingAsOfficial();
             const f = me && (overlayOn ? isOfficialFollowing(u.handle) : isFollowing(me.handle, u.handle));
+            const displayName   = maskName(u.handle, u.name);
+            const displayHandle = maskHandle(u.handle);
             return (
               '<div class="followlist__row">' +
                 renderAvatar(u, { tag: 'a', href: url('/' + u.handle) }) +
                 '<div class="followlist__text">' +
-                  '<a class="followlist__name" href="' + url('/' + u.handle) + '" title="' + escape(u.name) + '">' + escape(u.name) + '</a>' +
-                  '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + u.handle + '</a>' +
+                  '<a class="followlist__name" href="' + url('/' + u.handle) + '" title="' + escape(displayName) + '">' + escape(displayName) + '</a>' +
+                  '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + displayHandle + '</a>' +
                 '</div>' +
                 '<button class="followlist__follow' + (f ? ' is-following' : '') + '" data-target="' + u.handle + '">' +
                   (f ? t('profile.btn.following') : t('profile.btn.follow')) +
@@ -1105,6 +1108,14 @@ import('./push-notify.js').then(({ isPushEnabled, onPushPrefChange }) => {
     syncBoot();
   });
 });
+
+// Privacy-mode flip: every visible surface needs to re-render so
+// names/handles swap in (or out). refresh() re-dispatches the
+// current route, which re-renders the timeline / profile / inbox /
+// rail — the masking helpers themselves self-gate on isOperator(),
+// so no extra side-effects when the toggle is a no-op for the
+// current viewer.
+onPrivacyModeChange(() => { refresh(); });
 
 onAuthChange(() => {
   // The signed-in identity changed (login / logout / profile update) —

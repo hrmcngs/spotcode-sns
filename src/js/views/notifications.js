@@ -16,8 +16,7 @@ import { url }           from '../router.js';
 import { icon }          from '../icons.js';
 import { relTime }       from '../data.js';
 import { t }             from '../i18n.js';
-
-let renderVersion = 0;
+import { maskHandle, maskName, maskMentionsInText } from '../privacy-mode.js';
 
 function escape(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -69,10 +68,12 @@ function renderRow(n) {
 
   // Title line — name + handle + action label + relative time.
   // Wrap @handle and · time so they break cleanly on narrow viewports.
+  const displayName   = maskName(n.actor.handle, n.actor.name);
+  const displayHandle = maskHandle(n.actor.handle);
   const title =
     '<div class="notif__title">' +
-      '<span class="notif__name">' + escape(n.actor.name) + '</span>' +
-      ' <span class="notif__handle">@' + escape(n.actor.handle) + '</span>' +
+      '<span class="notif__name">' + escape(displayName) + '</span>' +
+      ' <span class="notif__handle">@' + escape(displayHandle) + '</span>' +
       ' <span class="notif__action">' + escape(t(meta.labelKey)) + '</span>' +
       ' <span class="notif__time">· ' + escape(relTime(n.createdAt)) + '</span>' +
     '</div>';
@@ -80,12 +81,13 @@ function renderRow(n) {
   // Context line — comment / mention body, or referenced post excerpt.
   // Mentions render the mentioning text in the quote style because the
   // actor's own words are what the recipient cares about, not the post
-  // they're commenting on.
+  // they're commenting on. Bodies + excerpts route through
+  // maskMentionsInText so an inline @other-user doesn't leak through.
   const context =
     (n.type === 'comment' || n.type === 'mention')
-      ? '<div class="notif__quote">' + escape(n.body || '') + '</div>'
+      ? '<div class="notif__quote">' + escape(maskMentionsInText(n.body || '')) + '</div>'
     : n.post
-      ? '<div class="notif__post">' + escape(postExcerpt(n.post)) + '</div>'
+      ? '<div class="notif__post">' + escape(maskMentionsInText(postExcerpt(n.post))) + '</div>'
     : '';
 
   // Inline Accept / Deny for pending follow requests.
@@ -109,7 +111,6 @@ function renderRow(n) {
 }
 
 export function renderNotifications() {
-  renderVersion++;
   // Real page header, not a fake one-item tab bar. The previous markup
   // reused .timeline__head + .tab and rendered a lone centered "通知"
   // with a blue underline, which (a) looked broken next to home's 3-tab
@@ -125,13 +126,20 @@ export function renderNotifications() {
 }
 
 export async function hydrateNotifications() {
-  const myVersion = renderVersion;
-  const root = document.getElementById('notif-list');
-  if (!root) return;
+  // Don't capture #notif-list once and write to it after the awaits —
+  // a refresh() during the fetch can replace it with a fresh element,
+  // and the orphan reference's innerHTML write goes nowhere (the
+  // visible list stays on the loading stub). Re-resolve right before
+  // every write; bail only when nothing matches (= user navigated
+  // away from /notifications entirely).
+  const live = () => document.getElementById('notif-list');
+  if (!live()) return;
 
   const me = currentUser();
   if (!me) {
-    root.innerHTML =
+    const r = live();
+    if (!r) return;
+    r.innerHTML =
       '<div class="stub">' +
         '<h2 class="stub__title">' + t('notif.signin.title') + '</h2>' +
         '<p class="stub__sub">' + t('notif.signin.sub') + '</p>' +
@@ -154,21 +162,23 @@ export async function hydrateNotifications() {
   let items;
   try { items = await notificationsForMe({ targetUserId }); }
   catch (err) {
-    if (myVersion !== renderVersion) return;
-    root.innerHTML = '<div class="stub"><h2 class="stub__title">' + t('notif.error.title') + '</h2><p class="stub__sub">' + escape(err.message || '') + '</p></div>';
+    const r = live();
+    if (!r) return;
+    r.innerHTML = '<div class="stub"><h2 class="stub__title">' + t('notif.error.title') + '</h2><p class="stub__sub">' + escape(err.message || '') + '</p></div>';
     return;
   }
-  if (myVersion !== renderVersion) return;
+  const r = live();
+  if (!r) return;
 
   if (!items.length) {
-    root.innerHTML =
+    r.innerHTML =
       '<div class="stub">' +
         '<h2 class="stub__title">' + t('notif.empty.title') + '</h2>' +
         '<p class="stub__sub">' + t('notif.empty.sub') + '</p>' +
       '</div>';
     return;
   }
-  root.innerHTML = items.map(renderRow).join('');
+  r.innerHTML = items.map(renderRow).join('');
 }
 
 // Click delegation for Accept / Deny on inline follow-request rows.

@@ -242,6 +242,21 @@ function stillHere() { return currentPath() === '/repos' || currentPath() === '/
 let pendingMap   = null;
 let pendingList  = null;
 let paintFrame   = 0;
+
+// Cancel any rAF + state retained from a previous /repos visit. Without
+// this, a fetchUserRepos resolve from the previous visit that lands
+// after the user navigates away can leave pendingList pointing at a
+// detached element and paintFrame > 0. On the next visit, the very
+// first schedulePaint call early-returns on `if (paintFrame) return;`
+// and the orphan rAF fires, bails on `!l.isConnected`, and the new
+// visit never gets its paint scheduled — stuck on the loading stub.
+function resetPaintScheduler() {
+  if (paintFrame) cancelAnimationFrame(paintFrame);
+  paintFrame = 0;
+  pendingList = null;
+  pendingMap  = null;
+}
+
 function schedulePaint(list, workingMap) {
   pendingList = list;
   pendingMap  = workingMap;
@@ -277,6 +292,7 @@ function refreshAllPostsSections(list) {
 }
 
 export async function hydrateRepos() {
+  resetPaintScheduler();
   const list = document.getElementById('repos-list');
   if (!list) return;
 

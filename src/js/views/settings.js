@@ -1,6 +1,7 @@
 import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping, getClient } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
+import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode } from '../privacy-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
@@ -308,7 +309,24 @@ function pushNotifyCard() {
   );
 }
 function privacySection() {
-  return privacyCard() + audienceCard();
+  // Privacy-mode card lives under Privacy so the @spotcode_dev QA
+  // account sees it without needing the admin-only Developer tab.
+  // canUsePrivacyMode() gates rendering so regular users don't see a
+  // toggle they can't activate (the helpers themselves self-gate too,
+  // so a flipped localStorage flag on a non-allowed account is a
+  // no-op).
+  const privacyModeCard = canUsePrivacyMode()
+    ? '<section class="settings-card">' +
+        '<h2>' + t('settings.privacy_mode.title') + ' <span class="settings-tag">' + (isPrivacyMode() ? 'ON' : 'OFF') + '</span></h2>' +
+        '<p class="settings__hint">' + t('settings.privacy_mode.hint') + '</p>' +
+        '<div class="settings-form__actions">' +
+          '<button type="button" class="btn btn--' + (isPrivacyMode() ? 'ghost' : 'primary') + '" id="privacy-mode-toggle">' +
+            (isPrivacyMode() ? t('settings.privacy_mode.on') : t('settings.privacy_mode.off')) +
+          '</button>' +
+        '</div>' +
+      '</section>'
+    : '';
+  return privacyCard() + audienceCard() + privacyModeCard;
 }
 function displaySection() {
   const lang = getLang();
@@ -1040,6 +1058,16 @@ export function bindSettings() {
   document.getElementById('dev-mode-toggle')?.addEventListener('click', () => {
     setDevMode(!isDevMode());
     location.reload();
+  });
+
+  // Privacy-mode toggle. setPrivacyMode fires onPrivacyModeChange
+  // listeners — main.js wires that to refresh() so every visible
+  // surface re-renders with the (un)masked identities. We still need
+  // to repaint /settings itself so the tag + button label flip
+  // immediately; the cheap path is to navigate to the same URL.
+  document.getElementById('privacy-mode-toggle')?.addEventListener('click', () => {
+    setPrivacyMode(!isPrivacyMode());
+    navigate(currentPath(), true);
   });
 
   document.getElementById('supa-test')?.addEventListener('click', async () => {
