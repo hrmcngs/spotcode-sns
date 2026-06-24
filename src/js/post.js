@@ -9,6 +9,7 @@ import { currentUser }      from './auth.js';
 import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
 import { isDevMode, isOperator } from './dev-mode.js';
+import { maskHandle, maskName, maskMentionsInText } from './privacy-mode.js';
 import { t }                from './i18n.js';
 import { safeLinkUrl, safeImageUrl } from './safe-url.js';
 
@@ -160,14 +161,17 @@ function spotAddress(spot) {
 function quoteCard(q) {
   if (!q) return '';
   const u = q.author || { name: q.authorHandle || '?', handle: q.authorHandle || '?', avatar: '?' };
+  const displayName   = maskName(u.handle, u.name);
+  const displayHandle = maskHandle(u.handle);
+  const body = (q.body || '').slice(0, 240);
   return (
     '<a class="quote-card" href="' + url('/post/' + q.id) + '">' +
       '<div class="quote-card__head">' +
-        '<span class="quote-card__name">' + escape(u.name) + '</span>' +
-        '<span class="quote-card__handle">@' + escape(u.handle) + '</span>' +
+        '<span class="quote-card__name">' + escape(displayName) + '</span>' +
+        '<span class="quote-card__handle">@' + escape(displayHandle) + '</span>' +
         '<span class="quote-card__time">· ' + escape(relTime(q.createdAt || Date.now())) + '</span>' +
       '</div>' +
-      '<div class="quote-card__body">' + escape((q.body || '').slice(0, 240)) +
+      '<div class="quote-card__body">' + escape(maskMentionsInText(body)) +
         ((q.body || '').length > 240 ? '…' : '') +
       '</div>' +
     '</a>'
@@ -244,13 +248,15 @@ export function renderPost(p) {
   const canEdit = isOwn;
   const wasEdited = p.editedAt && p.editedAt - (p.createdAt || 0) > 2000;
   const locked = isLockedBySpot(p, me);
+  const displayName   = maskName(u.handle, u.name);
+  const displayHandle = maskHandle(u.handle);
   return (
     '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '">' +
       renderAvatar(u, { tag: 'a', href: profileUrl }) +
       '<div class="post__main">' +
         '<div class="post__head">' +
-          '<a class="post__name" href="' + profileUrl + '">' + escape(u.name) + '</a>' +
-          '<a class="post__handle" href="' + profileUrl + '">@' + escape(u.handle) + '</a>' +
+          '<a class="post__name" href="' + profileUrl + '">' + escape(displayName) + '</a>' +
+          '<a class="post__handle" href="' + profileUrl + '">@' + escape(displayHandle) + '</a>' +
           '<span class="post__sep">·</span>' +
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">（編集済み）</span>' : '') +
@@ -271,7 +277,7 @@ export function renderPost(p) {
           ? lockedBanner() + spotAddress(p.spot)
           : (
             '<div class="post__body' + (canEdit ? ' post__body--editable-tasks' : '') + '">' +
-              renderMarkdown(escape(p.body), { editable: canEdit }) +
+              renderMarkdown(escape(maskMentionsInText(p.body)), { editable: canEdit }) +
             '</div>' +
             spotAddress(p.spot) +
             // Author-supplied URL — validated against the safeLinkUrl

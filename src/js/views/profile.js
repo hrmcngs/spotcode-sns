@@ -17,6 +17,7 @@ import { t } from '../i18n.js';
 import { renderGrass } from '../grass.js';
 import { fetchContributions, cachedContributions } from '../github-activity.js';
 import { getLanguageStats, cachedLanguageStats, langColor, langAbbr, langTextColor } from '../language-stats.js';
+import { maskHandle, maskName } from '../privacy-mode.js';
 
 // (Previously a `let renderVersion = 0` lived here as the freshness
 //  flag for async hydrations. It's been replaced with path-based
@@ -301,7 +302,7 @@ export function renderProfile(handle) {
         '</div>' +
       '</div>' +
       '<div class="profile-id">' +
-        '<div class="profile-name">' + u.name +
+        '<div class="profile-name">' + maskName(u.handle, u.name) +
           // Unconditional {} for non-org users — the previous
           // role / github-handle gating was hiding it for too many
           // accounts whose DB fields weren't populated as expected.
@@ -327,7 +328,7 @@ export function renderProfile(handle) {
               t('profile.badge.org') +
             '</div>'
           : '') +
-        '<div class="profile-handle">@' + u.handle +
+        '<div class="profile-handle">@' + maskHandle(u.handle) +
           (u.isPrivate ? ' <span class="profile-lock" title="非公開アカウント">' + icon('lock', { size: 12, className: 'icon--inline' }) + '</span>' : '') +
         '</div>' +
       '</div>' +

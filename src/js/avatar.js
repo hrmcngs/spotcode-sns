@@ -6,6 +6,8 @@
 //   user.avatarShape  — 'round' (default) | 'square'
 
 import { safeImageUrl, cssUrlValue, safeLinkUrl } from './safe-url.js';
+import { isPrivacyMode, maskInitial } from './privacy-mode.js';
+import { currentUser } from './auth.js';
 
 function escapeAttr(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -34,9 +36,18 @@ export function renderAvatar(user, {
   //   ');background:url(javascript:...
   // would break out of the CSS url() literal and inject arbitrary
   // rules. The text fallback (`user.avatar`) renders instead.
-  const rawImg = user && user.avatarImage;
+  //
+  // Privacy mode also drops the image for non-self users — the photo
+  // is the most identifying surface on the avatar, so masking just
+  // the text initial would be cosmetic. The own-user is identified by
+  // comparing the avatar's handle against currentUser() — same gate
+  // maskInitial() applies internally.
+  const handle = user && user.handle;
+  const me = currentUser();
+  const maskNonSelf = isPrivacyMode() && handle && (!me || me.handle !== handle);
+  const rawImg = maskNonSelf ? null : (user && user.avatarImage);
   const img = safeImageUrl(rawImg);
-  const inner = img ? '' : escapeAttr(user?.avatar || '?');
+  const inner = img ? '' : escapeAttr(maskInitial(handle, user?.avatar || '?'));
   const style = img
     ? ' style="background-image:url(\'' + cssUrlValue(img) + '\');background-size:cover;background-position:center;color:transparent"'
     : '';

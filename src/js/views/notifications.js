@@ -16,6 +16,7 @@ import { url }           from '../router.js';
 import { icon }          from '../icons.js';
 import { relTime }       from '../data.js';
 import { t }             from '../i18n.js';
+import { maskHandle, maskName, maskMentionsInText } from '../privacy-mode.js';
 
 function escape(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -67,10 +68,12 @@ function renderRow(n) {
 
   // Title line — name + handle + action label + relative time.
   // Wrap @handle and · time so they break cleanly on narrow viewports.
+  const displayName   = maskName(n.actor.handle, n.actor.name);
+  const displayHandle = maskHandle(n.actor.handle);
   const title =
     '<div class="notif__title">' +
-      '<span class="notif__name">' + escape(n.actor.name) + '</span>' +
-      ' <span class="notif__handle">@' + escape(n.actor.handle) + '</span>' +
+      '<span class="notif__name">' + escape(displayName) + '</span>' +
+      ' <span class="notif__handle">@' + escape(displayHandle) + '</span>' +
       ' <span class="notif__action">' + escape(t(meta.labelKey)) + '</span>' +
       ' <span class="notif__time">· ' + escape(relTime(n.createdAt)) + '</span>' +
     '</div>';
@@ -78,12 +81,13 @@ function renderRow(n) {
   // Context line — comment / mention body, or referenced post excerpt.
   // Mentions render the mentioning text in the quote style because the
   // actor's own words are what the recipient cares about, not the post
-  // they're commenting on.
+  // they're commenting on. Bodies + excerpts route through
+  // maskMentionsInText so an inline @other-user doesn't leak through.
   const context =
     (n.type === 'comment' || n.type === 'mention')
-      ? '<div class="notif__quote">' + escape(n.body || '') + '</div>'
+      ? '<div class="notif__quote">' + escape(maskMentionsInText(n.body || '')) + '</div>'
     : n.post
-      ? '<div class="notif__post">' + escape(postExcerpt(n.post)) + '</div>'
+      ? '<div class="notif__post">' + escape(maskMentionsInText(postExcerpt(n.post))) + '</div>'
     : '';
 
   // Inline Accept / Deny for pending follow requests.
