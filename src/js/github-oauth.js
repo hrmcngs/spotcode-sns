@@ -23,7 +23,7 @@
 //                          from the redirect always lands here.
 
 import { getClient } from './supa.js';
-import { refreshProfile } from './auth.js';
+import { refreshProfile, currentUser } from './auth.js';
 
 // Kick off the link flow. Supabase-js redirects the browser to
 // github.com's consent page; when the user approves, GitHub bounces
@@ -54,7 +54,17 @@ export async function linkGithub(redirectTo = window.location.href) {
 //
 // Returns { handle, avatarUrl } when a GitHub identity is present
 // (whether newly written or already synced), null otherwise.
+//
+// Boot path: the vast majority of calls come from main.js's boot
+// hook and hit the "already-synced" fast path. Do the cheapest
+// possible check FIRST — the auth cache in memory — so we don't
+// queue three Supabase RPCs (getUser + profiles.select +
+// possibly profiles.update + refreshProfile) behind whatever
+// hydrate the current view is trying to run. When the profile in
+// cachedUser already has github_verified + matching handle we can
+// safely no-op without ever talking to Supabase.
 export async function syncGithubIdentity() {
+  const cached = currentUser();
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return null;
@@ -64,8 +74,16 @@ export async function syncGithubIdentity() {
   const handle = gd.user_name || gd.preferred_username;
   if (!handle) return null;
 
-  // Skip the profile UPDATE when the row already reflects this
-  // identity. Avoids a redundant round-trip on every boot.
+  // Fast path: profile in memory already matches. No Supabase writes,
+  // no refreshProfile (which emits and cascades a refresh() through
+  // every onAuthChange subscriber — expensive during boot when a
+  // hydrate is already running).
+  if (cached && cached.github?.handle === handle && cached.github?.verified) {
+    return { handle, avatarUrl: gd.avatar_url || null };
+  }
+
+  // Fall back to a Supabase probe (cachedUser can lag behind the DB
+  // in edge cases — e.g. profile was updated on another tab).
   const { data: profile } = await supa
     .from('profiles')
     .select('github_handle, github_verified')

@@ -139,6 +139,15 @@ export async function initAuth() {
   // hasn't started yet either — refreshSession runs on a fresh
   // runtime, which is the only configuration we've found that
   // reliably survives back-to-back switches.
+  //
+  // `switchedSession` captures the session refreshSession returned
+  // directly. Reading it back via getSession() a moment later races
+  // supabase-js's storage write and can return the PREVIOUS user's
+  // session instead — cachedUser then holds the wrong identity, and
+  // every downstream self-check (privacy-mode "is this me?", the
+  // active row in the account switcher, the composer avatar) points
+  // at the pre-switch account. Same race that bit the login path.
+  let switchedSession = null;
   const pendingId = consumePendingSwitch();
   if (pendingId) {
     const refreshToken = getRefreshToken(pendingId);
@@ -152,6 +161,8 @@ export async function initAuth() {
           // (we never signed it out), so the user lands on whichever
           // account was active before the staged switch.
           forgetAccount(pendingId);
+        } else {
+          switchedSession = rs.session;
         }
       } catch {
         forgetAccount(pendingId);
@@ -159,21 +170,45 @@ export async function initAuth() {
     }
   }
 
-  const { data } = await supa.auth.getSession();
-  if (data?.session) {
-    const profile = await loadProfile(data.session.user.id);
-    cachedUser = projectUser(data.session.user, profile);
-    if (cachedUser) rememberAccount({ user: cachedUser, session: data.session });
+  let session = switchedSession;
+  if (!session) {
+    const { data } = await supa.auth.getSession();
+    session = data?.session || null;
   }
-
-  supa.auth.onAuthStateChange(async (_event, session) => {
-    if (!session) { cachedUser = null; emit(); return; }
+  if (session) {
     const profile = await loadProfile(session.user.id);
     cachedUser = projectUser(session.user, profile);
-    // Persist the latest refresh_token — supabase-js rotates it on
-    // every refresh, and a stale one is useless for switchAccount.
     if (cachedUser) rememberAccount({ user: cachedUser, session });
-    emit();
+  }
+
+  supa.auth.onAuthStateChange(async (event, session) => {
+    if (!session) { cachedUser = null; emit(); return; }
+    // supabase-js fires INITIAL_SESSION the moment this subscriber
+    // attaches — right after initAuth() has already set cachedUser
+    // itself. Re-running loadProfile + emitting a duplicate onAuthChange
+    // just for that boot event kicks a cascade through every listener
+    // (clearInteractionsCache → refresh() → dispatch) while the first
+    // dispatch is still in flight, and the racing hydrates leave the
+    // view stuck on the loading skeleton. Skip when nothing actually
+    // changed (same user, same id).
+    if (event === 'INITIAL_SESSION' && cachedUser && cachedUser.id === session.user.id) {
+      // Still persist the (possibly rotated) refresh_token so a
+      // later switchAccount can use it.
+      rememberAccount({ user: cachedUser, session });
+      return;
+    }
+    const profile = await loadProfile(session.user.id);
+    const nextUser = projectUser(session.user, profile);
+    // Skip the emit when the projection didn't change — a TOKEN_REFRESHED
+    // event that leaves the user identical shouldn't ripple through the
+    // UI.
+    const same = cachedUser && nextUser && cachedUser.id === nextUser.id
+      && cachedUser.handle === nextUser.handle
+      && cachedUser.avatarImage === nextUser.avatarImage
+      && cachedUser.name === nextUser.name;
+    cachedUser = nextUser;
+    if (cachedUser) rememberAccount({ user: cachedUser, session });
+    if (!same) emit();
   });
 }
 
