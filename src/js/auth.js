@@ -53,7 +53,6 @@ function projectUser(authUser, profile) {
                        handle: profile.github_handle,
                        url: 'https://github.com/' + profile.github_handle,
                        verified: !!profile.github_verified,
-                       verifyToken: profile.github_verify_token || null,
                      }
                    : null,
     isPrivate:   !!profile.is_private,
@@ -117,6 +116,15 @@ async function refreshFromSession() {
   try { supa = await getClient(); } catch { cachedUser = null; emit(); return; }
   const { data } = await supa.auth.getSession();
   await adoptSession(data?.session || null);
+}
+
+// Public: re-pull the profile row for the current session and
+// re-emit. Used by the GitHub OAuth link/unlink paths so the UI
+// picks up the new github_handle / github_verified without needing
+// a full page reload. Safe no-op when there's no active session.
+export async function refreshProfile() {
+  await refreshFromSession();
+  return cachedUser;
 }
 
 export async function initAuth() {

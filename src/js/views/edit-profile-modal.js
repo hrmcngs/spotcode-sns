@@ -6,7 +6,7 @@ import { currentUser, updateProfile, updatePassword } from '../auth.js';
 import { icon }                       from '../icons.js';
 import { fileToAvatarDataUrl, renderAvatar } from '../avatar.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
-import { startVerification, confirmVerification, newRepoUrl, repoNameFor } from '../github-verify.js';
+import { linkGithub, unlinkGithub } from '../github-oauth.js';
 
 let rootEl = null;
 let stagedAvatarImage = undefined; // undefined = unchanged, '' = clear, 'data:...' = new
@@ -18,38 +18,41 @@ function attr(s) {
   }[c]));
 }
 
+// GitHub linking via Supabase's built-in OAuth provider (see
+// src/js/github-oauth.js + docs/github-oauth-setup.md). The button
+// starts a redirect to github.com; on return, main.js calls
+// syncGithubIdentity() which writes github_handle + github_verified
+// into the profile row. This modal just needs to expose "link" and
+// (when already linked) "unlink" affordances.
 function githubVerifyBlock(u) {
-  if (u.github?.verified) {
+  if (u.github?.verified && u.github?.handle) {
     return (
-      '<div class="verify-row verify-row--ok">' +
-        icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
-        '@' + attr(u.github.handle) + ' は本人確認済み ✓' +
+      '<div class="verify-row verify-row--ok" id="verify-row">' +
+        '<div class="verify-row__title">' +
+          icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
+          '@' + attr(u.github.handle) + ' と連携済み ✓' +
+        '</div>' +
+        '<div class="edit-actions">' +
+          '<button type="button" class="btn btn--ghost btn--sm" id="verify-unlink">連携を解除</button>' +
+          '<span class="verify-row__status" id="verify-status"></span>' +
+        '</div>' +
       '</div>'
     );
   }
-  const existing = u.github?.verifyToken || '';
-  const repoLink = existing ? newRepoUrl(existing) : '';
   return (
     '<div class="verify-row" id="verify-row">' +
       '<div class="verify-row__title">' +
         icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
-        'GitHub の本人確認' +
+        'GitHub と連携' +
       '</div>' +
       '<p class="verify-row__hint">' +
-        'コードを発行して、その名前のリポジトリを <a href="https://github.com/' + attr(u.github.handle) + '" target="_blank" rel="noopener">@' +
-        attr(u.github.handle) + '</a> に作ってください。空でも構いません。確認後にリポジトリは削除して OK です（Bio は触りません）。' +
+        'GitHub OAuth で連携します。<code>read:user</code> のみ要求するので、あなたのリポジトリには一切アクセスしません。連携後、プロフィールに GitHub アイコンと本人確認済みバッジが付きます。' +
       '</p>' +
-      '<div class="verify-row__token">' +
-        '<code id="verify-token">' + attr(existing) + '</code>' +
-        '<button type="button" class="btn btn--ghost btn--sm" id="verify-gen">' +
-          (existing ? '新しいコード' : 'コードを発行') +
-        '</button>' +
-      '</div>' +
       '<div class="edit-actions">' +
-        '<a class="btn btn--ghost btn--sm" id="verify-newrepo" target="_blank" rel="noopener" href="' +
-          attr(repoLink) + '"' + (existing ? '' : ' hidden') + '>GitHub でリポジトリを作る</a>' +
-        '<button type="button" class="btn btn--primary btn--sm" id="verify-confirm" ' +
-          (existing ? '' : 'disabled') + '>確認</button>' +
+        '<button type="button" class="btn btn--primary btn--sm" id="verify-link">' +
+          icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
+          ' GitHub で連携する' +
+        '</button>' +
         '<span class="verify-row__status" id="verify-status"></span>' +
       '</div>' +
     '</div>'
@@ -105,7 +108,7 @@ function template(u) {
             '<input name="instagram" maxlength="30" value="' + attr(u.instagram || '') + '" placeholder="hrmcngs">' +
           '</label>' +
 
-          (u.github?.handle ? githubVerifyBlock(u) : '') +
+          githubVerifyBlock(u) +
 
           '<div class="edit-actions">' +
             '<button type="button" class="btn btn--ghost" data-edit-close>Cancel</button>' +
@@ -202,46 +205,57 @@ export function openEditProfile() {
     });
   });
 
-  // GitHub repo-name verification flow
-  const vGen     = document.getElementById('verify-gen');
-  const vConfirm = document.getElementById('verify-confirm');
-  const vToken   = document.getElementById('verify-token');
-  const vStatus  = document.getElementById('verify-status');
-  const vNewRepo = document.getElementById('verify-newrepo');
-  function showVerify(msg, kind) {
-    if (!vStatus) return;
-    vStatus.textContent = msg || '';
-    vStatus.className = 'verify-row__status' + (kind ? ' is-' + kind : '');
-  }
-  vGen?.addEventListener('click', async () => {
-    vGen.disabled = true;
-    showVerify('発行中…');
-    try {
-      const t = await startVerification();
-      if (vToken) vToken.textContent = t;
-      if (vConfirm) vConfirm.disabled = false;
-      if (vNewRepo) {
-        vNewRepo.href = newRepoUrl(t);
-        vNewRepo.hidden = false;
+  // GitHub OAuth link / unlink. We wire the buttons once here, and
+  // re-wire them again after every state flip since we swap the
+  // #verify-row markup in place (link → linked, or vice-versa). No
+  // page reload needed — refreshProfile() inside github-oauth.js
+  // updates cachedUser, and we re-render just this section from the
+  // fresh currentUser().
+  function wireGithubButtons() {
+    const vLink   = document.getElementById('verify-link');
+    const vUnlink = document.getElementById('verify-unlink');
+    const vStatus = document.getElementById('verify-status');
+    function showVerify(msg, kind) {
+      if (!vStatus) return;
+      vStatus.textContent = msg || '';
+      vStatus.className = 'verify-row__status' + (kind ? ' is-' + kind : '');
+    }
+    vLink?.addEventListener('click', async () => {
+      vLink.disabled = true;
+      showVerify('GitHub に移動します…');
+      try {
+        // Redirects the browser away — after return, syncGithubIdentity()
+        // in main.js writes the profile row and refreshProfile() picks
+        // it up so the next modal open shows the linked state.
+        await linkGithub(window.location.href);
+      } catch (ex) {
+        showVerify(ex.message, 'bad');
+        vLink.disabled = false;
       }
-      vGen.textContent = '新しいコード';
-      showVerify('発行しました。「GitHub でリポジトリを作る」を押して、その名前のまま Create したら「確認」を押してください。', 'ok');
-    } catch (ex) { showVerify(ex.message, 'bad'); }
-    finally { vGen.disabled = false; }
-  });
-  vConfirm?.addEventListener('click', async () => {
-    const u = currentUser();
-    const handle = u?.github?.handle;
-    const token  = vToken?.textContent?.trim();
-    if (!handle || !token) { showVerify('コードを先に発行してください', 'bad'); return; }
-    vConfirm.disabled = true;
-    showVerify('@' + handle + '/' + repoNameFor(token) + ' を探しています…');
-    try {
-      await confirmVerification(handle, token);
-      showVerify('✓ 本人確認できました。閉じてリロードしてください。', 'ok');
-    } catch (ex) { showVerify(ex.message, 'bad'); }
-    finally { vConfirm.disabled = false; }
-  });
+    });
+    vUnlink?.addEventListener('click', async () => {
+      if (!confirm('GitHub との連携を解除しますか？ アイコンと本人確認済みバッジが消えます。')) return;
+      vUnlink.disabled = true;
+      showVerify('解除中…');
+      try {
+        await unlinkGithub();
+        // Swap the verify-row markup in place with the "not linked"
+        // variant, then re-wire the fresh buttons. Avoids the
+        // "reload to see change" UX.
+        const row = document.getElementById('verify-row');
+        if (row) {
+          const wrap = document.createElement('div');
+          wrap.innerHTML = githubVerifyBlock(currentUser() || {});
+          row.replaceWith(wrap.firstElementChild);
+          wireGithubButtons();
+        }
+      } catch (ex) {
+        showVerify(ex.message, 'bad');
+        vUnlink.disabled = false;
+      }
+    });
+  }
+  wireGithubButtons();
 
   // save
   const form = document.getElementById('edit-profile-form');

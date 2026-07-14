@@ -984,6 +984,17 @@ initThemeToggle(document.getElementById('theme-toggle'));
 // (Supabase down, no network) leave cachedUser null — the app still works
 // as a logged-out static site.
 try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
+// Post-redirect GitHub OAuth sync. If the user JUST returned from
+// linkGithub()'s redirect, the auth user carries a fresh `github`
+// identity that isn't mirrored into public.profiles yet — writing
+// it here lets the very first render show the verified badge + link
+// icon without needing another reload. Idempotent: a no-op when no
+// identity is linked or the profile row already matches.
+if (currentUser()) {
+  import('./github-oauth.js').then(({ syncGithubIdentity }) =>
+    syncGithubIdentity().catch((err) => console.warn('syncGithubIdentity', err)),
+  );
+}
 // Warm the official-account cache for admins / operators so the
 // brand-account row shows up the first time they open the account
 // menu instead of on the second open. Regular users skip the call —
