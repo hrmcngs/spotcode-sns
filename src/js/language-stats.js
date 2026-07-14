@@ -110,6 +110,17 @@ export function isRateLimited() {
   return Date.now() < rateLimitedUntil;
 }
 
+// Optional GitHub API access token (populated from
+// github-oauth.js#getGithubToken → main.js at boot). When present it
+// gets attached as a Bearer header so every GitHub API call goes
+// through the authenticated 5000/h ceiling instead of the anonymous
+// 60/h one; Search API rises from 10 → 30 req/min. Falls back to
+// anonymous the moment it goes missing (token refresh dropped it,
+// user unlinked, etc).
+let ghApiToken = null;
+export function setGithubApiToken(token) { ghApiToken = token || null; }
+export function hasGithubApiToken() { return !!ghApiToken; }
+
 // Exported so other GitHub-data views (e.g. /repos) share the same
 // rate-limit cooldown. When this helper trips RATE_LIMIT, every caller
 // in the app starts returning cached/empty for the next hour instead
@@ -118,10 +129,16 @@ export async function fetchJson(url, timeoutMs = 10000) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const r = await fetch(url, {
-      headers: { 'Accept': 'application/vnd.github+json' },
-      signal: ctl.signal,
-    });
+    const headers = { 'Accept': 'application/vnd.github+json' };
+    if (ghApiToken) headers['Authorization'] = 'Bearer ' + ghApiToken;
+    const r = await fetch(url, { headers, signal: ctl.signal });
+    // 401 with a token typically means the token expired / was
+    // revoked. Drop it so subsequent calls don't keep sending a
+    // known-bad credential (which GitHub eventually rate-limits
+    // separately from the anon budget).
+    if (r.status === 401 && ghApiToken) {
+      ghApiToken = null;
+    }
     if (r.status === 403) {
       rateLimitedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
       throw new Error('RATE_LIMIT');

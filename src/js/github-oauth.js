@@ -111,6 +111,24 @@ export async function syncGithubIdentity() {
   return { handle, avatarUrl: gd.avatar_url || null };
 }
 
+// Read the GitHub access token that Supabase captured during the
+// OAuth grant. Supabase exposes it as `session.provider_token`. Its
+// presence lifts GitHub API rate limits from 60 req/hr (unauth) to
+// 5000 req/hr, and Search API from 10 → 30 req/min — big win for
+// language-stats / repos / tasks fetchers.
+//
+// Caveat: Supabase does NOT guarantee the provider_token survives
+// token refresh. In practice it's there for the first ~1h after the
+// grant, and the caller MUST tolerate a null return (fall back to
+// unauthenticated calls). Getting the token again requires the user
+// to re-link (linkIdentity), which is a full-page redirect — so we
+// don't auto-refresh silently.
+export async function getGithubToken() {
+  const supa = await getClient();
+  const { data } = await supa.auth.getSession();
+  return data?.session?.provider_token || null;
+}
+
 // Detach the GitHub identity from the auth user and clear the profile
 // row. Two-step because unlinkIdentity is auth-service side and the
 // profile row is application side; both must succeed for the user's
@@ -129,5 +147,12 @@ export async function unlinkGithub() {
     .update({ github_handle: null, github_verified: false })
     .eq('id', user.id);
   if (error) throw new Error(error.message);
+  // Drop the cached API token so subsequent GitHub calls fall back
+  // to anonymous — sending an unlinked user's stale token would 401
+  // and eat into that token's rate-limit for no benefit.
+  try {
+    const ls = await import('./language-stats.js');
+    ls.setGithubApiToken(null);
+  } catch {}
   await refreshProfile();
 }

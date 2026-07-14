@@ -19,6 +19,7 @@ import { fetchContributions, cachedContributions } from '../github-activity.js';
 import { getLanguageStats, cachedLanguageStats, langColor, langAbbr, langTextColor } from '../language-stats.js';
 import { maskHandle, maskName } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
+import { fetchTasks, cachedTasks } from '../github-tasks.js';
 
 // (Previously a `let renderVersion = 0` lived here as the freshness
 //  flag for async hydrations. It's been replaced with path-based
@@ -199,6 +200,126 @@ function emptyGrid() {
   return out;
 }
 
+// Minimal markdown-ish escape for issue body previews rendered in
+// the tasks list. Only HTML metacharacters — the display is a plain
+// text excerpt, not a full markdown render.
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+// Format an issue's due-date badge. Returns HTML for a colour-coded
+// pill:
+//   • overdue → red (期限切れ)
+//   • within 3 days → amber (「あと N 日」/「今日」)
+//   • else → grey
+// null dueTs → empty string (no badge).
+function renderDueBadge(dueTs, hasTime) {
+  if (!dueTs) return '';
+  const now = Date.now();
+  const diffMs = dueTs - now;
+  const dayMs = 24 * 60 * 60 * 1000;
+  let state = 'later';
+  let label;
+  if (diffMs < 0) {
+    state = 'overdue';
+    const daysAgo = Math.floor(-diffMs / dayMs);
+    label = daysAgo === 0 ? '本日締切 (超過)' : (daysAgo + '日超過');
+  } else {
+    const daysLeft = Math.floor(diffMs / dayMs);
+    if (daysLeft <= 3) state = 'soon';
+    if (daysLeft === 0)      label = '今日中';
+    else if (daysLeft === 1) label = 'あと 1 日';
+    else                     label = 'あと ' + daysLeft + ' 日';
+  }
+  const d = new Date(dueTs);
+  const iso = d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0') +
+    (hasTime
+      ? ' ' + String(d.getHours()).padStart(2, '0') + ':' +
+              String(d.getMinutes()).padStart(2, '0')
+      : '');
+  return (
+    '<span class="profile-tasks__due profile-tasks__due--' + state + '" ' +
+      'title="' + escapeHtml(iso) + '">' +
+      escapeHtml(iso) + ' · ' + escapeHtml(label) +
+    '</span>'
+  );
+}
+
+// Render the profile "GitHub Tasks (Open Issues)" card. Called both
+// synchronously with whatever's cached (may be null → placeholder),
+// and re-rendered after `fetchTasks` resolves.
+function renderTasksCard(ghHandle, tasks) {
+  if (!ghHandle) return '';
+  if (!tasks) {
+    // First render + no cache — show a skeleton row so the layout
+    // doesn't jump when hydrateProfileTasks fills it in.
+    return (
+      '<div class="profile-tasks" id="profile-tasks-' + ghHandle + '" data-gh="' + escAttr(ghHandle) + '">' +
+        '<div class="profile-tasks__head">' +
+          icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
+          ' ' + t('profile.tasks.title') +
+          '<span class="profile-tasks__hint">' + t('profile.tasks.loading') + '</span>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+  const { totalCount, items } = tasks;
+  const shown = items || [];
+  const list = shown.length
+    ? '<ul class="profile-tasks__list">' +
+        shown.slice(0, 10).map((it) => {
+          const repoLabel = it.repo || '';
+          const body = it.body ? escapeHtml(it.body).slice(0, 160) : '';
+          const tail = it.body && it.body.length > 160 ? '…' : '';
+          const labels = (it.labels || []).slice(0, 3).map((n) =>
+            '<span class="profile-tasks__label">' + escapeHtml(n) + '</span>'
+          ).join('');
+          const due = renderDueBadge(it.dueTs, it.dueHasTime);
+          const rowCls = 'profile-tasks__row' +
+            (it.dueTs && it.dueTs < Date.now() ? ' profile-tasks__row--overdue' :
+             it.dueTs && it.dueTs - Date.now() < 3 * 24 * 60 * 60 * 1000 ? ' profile-tasks__row--soon' : '');
+          return (
+            '<li class="' + rowCls + '">' +
+              '<a class="profile-tasks__title" href="' + escAttr(it.url) + '" target="_blank" rel="noopener">' +
+                icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
+                ' ' + escapeHtml(it.title || '(no title)') +
+              '</a>' +
+              (repoLabel ? ' <span class="profile-tasks__repo">' + escapeHtml(repoLabel) + '</span>' : '') +
+              (labels ? ' ' + labels : '') +
+              (due ? ' ' + due : '') +
+              (body ? '<p class="profile-tasks__body">' + body + tail + '</p>' : '') +
+            '</li>'
+          );
+        }).join('') +
+      '</ul>'
+    : '<p class="profile-tasks__empty">' + t('profile.tasks.empty') + '</p>';
+
+  const overflow = totalCount > shown.length
+    ? '<a class="profile-tasks__more" ' +
+        'href="https://github.com/issues?q=' +
+          encodeURIComponent('is:issue is:open is:public author:' + ghHandle) +
+        '" target="_blank" rel="noopener">' +
+        t('profile.tasks.more').replace('{n}', String(totalCount)) +
+      '</a>'
+    : '';
+  return (
+    '<div class="profile-tasks" id="profile-tasks-' + ghHandle + '" data-gh="' + escAttr(ghHandle) + '">' +
+      '<div class="profile-tasks__head">' +
+        icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
+        ' ' + t('profile.tasks.title') +
+        ' <b class="profile-tasks__count">' + totalCount + '</b>' +
+        '<span class="profile-tasks__hint">' + t('profile.tasks.hint') + '</span>' +
+      '</div>' +
+      list +
+      overflow +
+    '</div>'
+  );
+}
+
 // In-memory current tab per profile view. Not in the URL — clicking a tab
 // stays on /<handle> but swaps the body via hydrateProfileBody().
 let activeTab = 'posts';
@@ -362,6 +483,10 @@ export function renderProfile(handle) {
             '</div>' +
           '</div>'
         : '') +
+      // Open-issue task list, painted from cache on first render and
+      // refilled by hydrateProfileTasks. Empty when the user hasn't
+      // linked GitHub.
+      (u.github?.handle ? renderTasksCard(u.github.handle, cachedTasks(u.github.handle)) : '') +
     '</header>'
   );
 
@@ -745,6 +870,34 @@ export async function hydrateProfileLanguages(handle) {
     medals.innerHTML = stats ? renderLangMedalStrip(stats.langs, stats.repoCounts) : '';
   } finally {
     if (medals.isConnected) delete medals.dataset.hydrating;
+  }
+}
+
+// Fill in the "GitHub Tasks (Open Issues)" card. On first render
+// the card paints from cache (may be null → shows a loading hint);
+// after fetchTasks resolves, we replace the card's outerHTML with
+// the fresh render. Cache-hit is instant on revisit.
+export async function hydrateProfileTasks(handle) {
+  const u = getUser(handle);
+  const gh = u?.github?.handle;
+  if (!gh) return;
+  const slot = document.getElementById('profile-tasks-' + gh);
+  if (!slot) return;
+  if (slot.dataset.hydrating === '1') return;
+  slot.dataset.hydrating = '1';
+  try {
+    const tasks = await fetchTasks(gh);
+    if (!tasks) return;
+    // Re-resolve the slot after the await — a re-render (e.g. from
+    // hydrateProfile's post-fetch re-paint) can replace the element
+    // while we were waiting on the network.
+    const live = document.getElementById('profile-tasks-' + gh);
+    if (!live) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = renderTasksCard(gh, tasks);
+    if (wrap.firstElementChild) live.replaceWith(wrap.firstElementChild);
+  } finally {
+    if (slot.isConnected) delete slot.dataset.hydrating;
   }
 }
 

@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
-import { renderProfile, hydrateProfileActivity, hydrateProfileLanguages, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
+import { renderProfile, hydrateProfileActivity, hydrateProfileLanguages, hydrateProfileTasks, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
 import { renderRepos, hydrateRepos } from './views/repos.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
@@ -628,6 +628,7 @@ function dispatch(path) {
     hydrateProfile(handle).then(() => {
       hydrateProfileActivity(handle);
       hydrateProfileLanguages(handle);
+      hydrateProfileTasks(handle);
     });
   } else {
     document.title = 'Not found / spotcode-sns';
@@ -990,10 +991,21 @@ try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
 // it here lets the very first render show the verified badge + link
 // icon without needing another reload. Idempotent: a no-op when no
 // identity is linked or the profile row already matches.
+//
+// Same boot hook also promotes the GitHub API calls (language-stats
+// / repos / tasks) from anonymous 60 req/h to authenticated 5000
+// req/h when the user has linked, by wiring the Supabase-captured
+// `provider_token` into fetchJson via setGithubApiToken.
 if (currentUser()) {
-  import('./github-oauth.js').then(({ syncGithubIdentity }) =>
-    syncGithubIdentity().catch((err) => console.warn('syncGithubIdentity', err)),
-  );
+  import('./github-oauth.js').then(({ syncGithubIdentity, getGithubToken }) => {
+    syncGithubIdentity().catch((err) => console.warn('syncGithubIdentity', err));
+    getGithubToken()
+      .then((token) => {
+        if (!token) return;
+        return import('./language-stats.js').then(({ setGithubApiToken }) => setGithubApiToken(token));
+      })
+      .catch(() => {});
+  });
 }
 // Warm the official-account cache for admins / operators so the
 // brand-account row shows up the first time they open the account
