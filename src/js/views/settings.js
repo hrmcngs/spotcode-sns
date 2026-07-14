@@ -1,7 +1,7 @@
 import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping, getClient } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
-import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode } from '../privacy-mode.js';
+import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode, maskHandle, maskName } from '../privacy-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
@@ -184,15 +184,24 @@ function accountsCard() {
     const active = acc.id === me.id;
     const u = { handle: acc.handle, name: acc.name, avatarImage: acc.avatarUrl,
                 avatarShape: acc.avatarShape, avatar: (acc.name[0] || '?').toUpperCase() };
+    const displayName   = maskName(acc.handle, acc.name);
+    const displayHandle = maskHandle(acc.handle);
+    // Emails are the single most identifying field on this card — no
+    // placeholder can preserve the visual weight without leaking the
+    // real address, so drop the "· email" segment entirely for
+    // non-self rows while privacy mode is on. The active row (= self)
+    // still shows the address because the operator is looking at
+    // their own inbox binding.
+    const showEmail = !isPrivacyMode() || active;
     return (
       '<div class="account-row' + (active ? ' is-active' : '') + '" data-account-id="' + attr(acc.id) + '">' +
         renderAvatar(u, { size: 'md' }) +
         '<div class="account-row__id">' +
-          '<div class="account-row__name">' + attr(acc.name) +
+          '<div class="account-row__name">' + attr(displayName) +
             (active ? ' <span class="account-row__badge">' + t('settings.accounts.current') + '</span>' : '') +
           '</div>' +
-          '<div class="account-row__handle">@' + attr(acc.handle) +
-            (acc.email ? ' · ' + attr(acc.email) : '') +
+          '<div class="account-row__handle">@' + attr(displayHandle) +
+            (showEmail && acc.email ? ' · ' + attr(acc.email) : '') +
           '</div>' +
         '</div>' +
         '<div class="account-row__actions">' +
