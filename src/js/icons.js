@@ -34,6 +34,7 @@ const PATHS = {
   arrow_right: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   building: '<rect x="4" y="3" width="16" height="18" rx="1"/><line x1="9" y1="7" x2="9.01" y2="7"/><line x1="15" y1="7" x2="15.01" y2="7"/><line x1="9" y1="11" x2="9.01" y2="11"/><line x1="15" y1="11" x2="15.01" y2="11"/><line x1="9" y1="15" x2="9.01" y2="15"/><line x1="15" y1="15" x2="15.01" y2="15"/>',
   users:    '<circle cx="9" cy="8" r="3.5"/><path d="M2 21v-1a7 7 0 0 1 14 0v1"/><path d="M16 4a3.5 3.5 0 0 1 0 7"/><path d="M22 21v-1a7 7 0 0 0-5-6.7"/>',
+  chevron_down: '<polyline points="6 9 12 15 18 9"/>',
 };
 
 export function icon(name, opts = {}) {

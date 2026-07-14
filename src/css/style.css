@@ -1526,9 +1526,9 @@ html[data-theme='light'] .profile-header--org .profile-cover {
 .profile-stats b { color: var(--text); margin-right: .25em; }
 
 /* Open-issue task list on profiles. Sits below the activity graph as
-   a compact card — count in the header, list of the newest N issues
-   under it, and a "See all on GitHub" fallback link when the total
-   overflows what we display inline. */
+   a compact card — each row is a single line by default with a
+   chevron toggle that reveals the markdown-rendered issue body on
+   click. Repo chips along the top filter the list. */
 .profile-tasks {
   margin: 1rem 1rem 0;
   padding: .6rem .75rem;
@@ -1544,32 +1544,111 @@ html[data-theme='light'] .profile-header--org .profile-cover {
 .profile-tasks__count { color: var(--text); font-weight: 700; margin: 0 .1em; }
 .profile-tasks__hint  { margin-left: auto; font-size: .75rem; }
 .profile-tasks__empty { color: var(--muted); font-size: .85rem; margin: 0; }
-.profile-tasks__list  { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
-.profile-tasks__row {
-  padding: .4rem .5rem; border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+.profile-tasks__list  { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .15rem; }
+
+/* Repo filter chips. Compact pills — one per repo with an issue count
+   badge. Active chip gets an accent border so it's visible without
+   colour reliance. Truncated repo name (basename only) to keep the
+   chip bar single-line on most viewports. */
+.profile-tasks__chips {
+  display: flex; flex-wrap: wrap; gap: .3rem;
+  padding-bottom: .5rem; border-bottom: 1px solid var(--border);
+  margin-bottom: .35rem;
 }
-.profile-tasks__title {
-  display: inline-flex; align-items: center; gap: .3em;
-  color: var(--text); text-decoration: none; font-weight: 600;
-  word-break: break-word;
-}
-.profile-tasks__title:hover { text-decoration: underline; }
-.profile-tasks__repo {
-  margin-left: .5rem; color: var(--muted); font-size: .8rem;
+.profile-tasks__chip {
+  padding: .12rem .55rem; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent;
+  font-size: .78rem; color: var(--muted); cursor: pointer;
+  display: inline-flex; align-items: center; gap: .35em;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+.profile-tasks__chip b { color: var(--text); font-weight: 700; }
+.profile-tasks__chip:hover { color: var(--text); border-color: var(--muted); }
+.profile-tasks__chip.is-active {
+  color: var(--text); border-color: var(--accent);
+  background: rgba(29, 155, 240, 0.08);
+}
+
+/* One row per issue. Single-line by default; body preview is hidden
+   until the chevron flips is-open. Uses grid so the row items align
+   on the baseline regardless of due-badge presence. */
+.profile-tasks__row {
+  padding: .35rem .5rem; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.profile-tasks__row:hover { background: rgba(255, 255, 255, 0.04); }
+.profile-tasks__line {
+  display: flex; align-items: center; gap: .4rem;
+  min-width: 0;
+}
+.profile-tasks__toggle {
+  flex: 0 0 auto;
+  width: 1.4rem; height: 1.4rem;
+  padding: 0; margin: 0;
+  border: none; background: transparent; cursor: pointer;
+  color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform .15s ease;
+}
+.profile-tasks__row.is-open .profile-tasks__toggle { transform: rotate(180deg); }
+.profile-tasks__title-wrap {
+  flex: 1 1 auto; min-width: 0;
+  color: var(--text); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.profile-tasks__row.is-open .profile-tasks__title-wrap {
+  white-space: normal; word-break: break-word;
+}
+.profile-tasks__repo {
+  flex: 0 0 auto;
+  padding: .05rem .45rem; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--muted); font-size: .72rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer; max-width: 12ch;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.profile-tasks__repo:hover { color: var(--text); border-color: var(--muted); }
+.profile-tasks__external {
+  flex: 0 0 auto;
+  color: var(--muted); display: inline-flex; align-items: center;
+}
+.profile-tasks__external:hover { color: var(--text); }
+.profile-tasks__labels {
+  margin: .2rem 0 0 1.8rem;
+  display: flex; flex-wrap: wrap; gap: .25rem;
+}
 .profile-tasks__label {
-  display: inline-block; margin-left: .3em; padding: 0 .4em;
+  padding: 0 .4em;
   border: 1px solid var(--border); border-radius: 999px;
   font-size: .7rem; color: var(--muted);
 }
 .profile-tasks__body {
-  margin: .35rem 0 0; color: var(--muted);
-  font-size: .85rem; white-space: pre-wrap;
-  overflow: hidden;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  margin: .5rem 0 .25rem 1.8rem;
+  padding: .5rem .65rem;
+  border-left: 2px solid var(--border);
+  color: var(--text);
+  font-size: .85rem;
+  line-height: 1.5;
+  overflow-x: auto;
 }
+.profile-tasks__body p { margin: 0 0 .5em; }
+.profile-tasks__body p:last-child { margin-bottom: 0; }
+.profile-tasks__body h1,
+.profile-tasks__body h2,
+.profile-tasks__body h3 {
+  font-size: 1em; margin: .5em 0 .25em; font-weight: 700;
+}
+.profile-tasks__body pre {
+  padding: .4em .6em; background: rgba(0, 0, 0, .2); border-radius: 6px;
+  overflow-x: auto; font-size: .8em;
+}
+.profile-tasks__body code {
+  padding: .05em .3em; background: rgba(0, 0, 0, .2); border-radius: 4px;
+  font-size: .85em;
+}
+.profile-tasks__body pre code { padding: 0; background: transparent; }
+.profile-tasks__body img { max-width: 100%; height: auto; }
 .profile-tasks__more {
   display: inline-block; margin-top: .5rem;
   color: var(--accent); font-size: .85rem; text-decoration: none;

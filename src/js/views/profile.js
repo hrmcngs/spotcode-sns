@@ -20,6 +20,7 @@ import { getLanguageStats, cachedLanguageStats, langColor, langAbbr, langTextCol
 import { maskHandle, maskName } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
 import { fetchTasks, cachedTasks } from '../github-tasks.js';
+import { renderMarkdown } from '../markdown.js';
 
 // (Previously a `let renderVersion = 0` lived here as the freshness
 //  flag for async hydrations. It's been replaced with path-based
@@ -252,11 +253,20 @@ function renderDueBadge(dueTs, hasTime) {
 // Render the profile "GitHub Tasks (Open Issues)" card. Called both
 // synchronously with whatever's cached (may be null → placeholder),
 // and re-rendered after `fetchTasks` resolves.
-function renderTasksCard(ghHandle, tasks) {
+//
+// Layout is compact by design: one row per issue, title + repo + due
+// badge on a single line, no inline body preview. Clicking the row
+// (anywhere except the external-link icon) toggles a `.is-open`
+// class that reveals the full markdown-rendered body. Repo chip
+// bar at the top filters the list to a single repo.
+//
+// `activeRepo` filters the list; null / '' means "all repos". This
+// state lives on the DOM (dataset on the container) rather than a
+// module-level variable so navigating between profiles doesn't
+// carry a stale filter.
+function renderTasksCard(ghHandle, tasks, activeRepo = '') {
   if (!ghHandle) return '';
   if (!tasks) {
-    // First render + no cache — show a skeleton row so the layout
-    // doesn't jump when hydrateProfileTasks fills it in.
     return (
       '<div class="profile-tasks" id="profile-tasks-' + ghHandle + '" data-gh="' + escAttr(ghHandle) + '">' +
         '<div class="profile-tasks__head">' +
@@ -268,13 +278,42 @@ function renderTasksCard(ghHandle, tasks) {
     );
   }
   const { totalCount, items } = tasks;
-  const shown = items || [];
+  const all = items || [];
+
+  // Repo filter chips — one per distinct repo, plus an "All" chip
+  // that clears the filter. Count is the number of issues in each
+  // repo so the user can see the distribution at a glance.
+  const repoCounts = new Map();
+  for (const it of all) {
+    if (!it.repo) continue;
+    repoCounts.set(it.repo, (repoCounts.get(it.repo) || 0) + 1);
+  }
+  const chips = [];
+  chips.push(
+    '<button type="button" class="profile-tasks__chip' + (activeRepo ? '' : ' is-active') + '" ' +
+      'data-tasks-filter="">All <b>' + all.length + '</b></button>'
+  );
+  Array.from(repoCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([repo, count]) => {
+      chips.push(
+        '<button type="button" class="profile-tasks__chip' +
+          (activeRepo === repo ? ' is-active' : '') + '" ' +
+          'data-tasks-filter="' + escAttr(repo) + '" ' +
+          'title="' + escAttr(repo) + '">' +
+          escapeHtml(repo.split('/')[1] || repo) + ' <b>' + count + '</b>' +
+        '</button>'
+      );
+    });
+  const chipBar = repoCounts.size > 1
+    ? '<div class="profile-tasks__chips">' + chips.join('') + '</div>'
+    : '';
+
+  const shown = activeRepo ? all.filter((it) => it.repo === activeRepo) : all;
   const list = shown.length
     ? '<ul class="profile-tasks__list">' +
-        shown.slice(0, 10).map((it) => {
+        shown.slice(0, 20).map((it, idx) => {
           const repoLabel = it.repo || '';
-          const body = it.body ? escapeHtml(it.body).slice(0, 160) : '';
-          const tail = it.body && it.body.length > 160 ? '…' : '';
           const labels = (it.labels || []).slice(0, 3).map((n) =>
             '<span class="profile-tasks__label">' + escapeHtml(n) + '</span>'
           ).join('');
@@ -282,23 +321,43 @@ function renderTasksCard(ghHandle, tasks) {
           const rowCls = 'profile-tasks__row' +
             (it.dueTs && it.dueTs < Date.now() ? ' profile-tasks__row--overdue' :
              it.dueTs && it.dueTs - Date.now() < 3 * 24 * 60 * 60 * 1000 ? ' profile-tasks__row--soon' : '');
+          const bodyRendered = it.body
+            ? renderMarkdown(escapeHtml(it.body), { editable: false })
+            : '';
           return (
-            '<li class="' + rowCls + '">' +
-              '<a class="profile-tasks__title" href="' + escAttr(it.url) + '" target="_blank" rel="noopener">' +
-                icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
-                ' ' + escapeHtml(it.title || '(no title)') +
-              '</a>' +
-              (repoLabel ? ' <span class="profile-tasks__repo">' + escapeHtml(repoLabel) + '</span>' : '') +
-              (labels ? ' ' + labels : '') +
-              (due ? ' ' + due : '') +
-              (body ? '<p class="profile-tasks__body">' + body + tail + '</p>' : '') +
+            '<li class="' + rowCls + '" data-tasks-row="' + idx + '">' +
+              '<div class="profile-tasks__line">' +
+                '<button type="button" class="profile-tasks__toggle" data-tasks-toggle="' + idx + '" ' +
+                  'aria-expanded="false" aria-label="' + escAttr(t('profile.tasks.expand')) + '">' +
+                  icon('chevron_down', { size: 12 }) +
+                '</button>' +
+                '<span class="profile-tasks__title-wrap">' +
+                  escapeHtml(it.title || '(no title)') +
+                '</span>' +
+                (repoLabel
+                  ? '<button type="button" class="profile-tasks__repo" ' +
+                      'data-tasks-filter="' + escAttr(repoLabel) + '" ' +
+                      'title="' + escAttr(repoLabel) + '">' +
+                      escapeHtml(repoLabel.split('/')[1] || repoLabel) +
+                    '</button>'
+                  : '') +
+                (due ? due : '') +
+                '<a class="profile-tasks__external" href="' + escAttr(it.url) + '" target="_blank" rel="noopener" ' +
+                  'title="GitHub で開く" aria-label="GitHub で開く">' +
+                  icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
+                '</a>' +
+              '</div>' +
+              (labels ? '<div class="profile-tasks__labels">' + labels + '</div>' : '') +
+              (bodyRendered
+                ? '<div class="profile-tasks__body" hidden>' + bodyRendered + '</div>'
+                : '') +
             '</li>'
           );
         }).join('') +
       '</ul>'
     : '<p class="profile-tasks__empty">' + t('profile.tasks.empty') + '</p>';
 
-  const overflow = totalCount > shown.length
+  const overflow = totalCount > shown.length && !activeRepo
     ? '<a class="profile-tasks__more" ' +
         'href="https://github.com/issues?q=' +
           encodeURIComponent('is:issue is:open is:public author:' + ghHandle) +
@@ -307,13 +366,15 @@ function renderTasksCard(ghHandle, tasks) {
       '</a>'
     : '';
   return (
-    '<div class="profile-tasks" id="profile-tasks-' + ghHandle + '" data-gh="' + escAttr(ghHandle) + '">' +
+    '<div class="profile-tasks" id="profile-tasks-' + ghHandle + '" ' +
+        'data-gh="' + escAttr(ghHandle) + '" data-active-repo="' + escAttr(activeRepo || '') + '">' +
       '<div class="profile-tasks__head">' +
         icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
         ' ' + t('profile.tasks.title') +
         ' <b class="profile-tasks__count">' + totalCount + '</b>' +
         '<span class="profile-tasks__hint">' + t('profile.tasks.hint') + '</span>' +
       '</div>' +
+      chipBar +
       list +
       overflow +
     '</div>'
@@ -871,6 +932,55 @@ export async function hydrateProfileLanguages(handle) {
   } finally {
     if (medals.isConnected) delete medals.dataset.hydrating;
   }
+}
+
+// Delegated click handler for the tasks card:
+//   - `[data-tasks-toggle]` chevron  → expand / collapse body preview
+//   - `[data-tasks-filter]` repo chip → re-render with that repo
+//                                        as the active filter
+// Returns true when the event was handled, false otherwise, so
+// main.js can early-out with the same shape as handleNotifAction.
+export function handleTasksClick(e) {
+  const toggle = e.target.closest('[data-tasks-toggle]');
+  if (toggle) {
+    e.preventDefault();
+    const row = toggle.closest('[data-tasks-row]');
+    if (!row) return true;
+    const body = row.querySelector('.profile-tasks__body');
+    if (!body) return true;
+    const open = body.hasAttribute('hidden');
+    if (open) {
+      body.removeAttribute('hidden');
+      toggle.setAttribute('aria-expanded', 'true');
+      row.classList.add('is-open');
+    } else {
+      body.setAttribute('hidden', '');
+      toggle.setAttribute('aria-expanded', 'false');
+      row.classList.remove('is-open');
+    }
+    return true;
+  }
+  const filterBtn = e.target.closest('[data-tasks-filter]');
+  if (filterBtn) {
+    e.preventDefault();
+    const card = filterBtn.closest('.profile-tasks');
+    if (!card) return true;
+    const gh = card.getAttribute('data-gh');
+    if (!gh) return true;
+    const requested = filterBtn.getAttribute('data-tasks-filter') || '';
+    // Clicking the currently-active chip clears the filter — same
+    // as clicking "All". Feels natural when the user is toggling
+    // repos on and off.
+    const current = card.getAttribute('data-active-repo') || '';
+    const next = (requested === current) ? '' : requested;
+    const tasks = cachedTasks(gh);
+    if (!tasks) return true;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = renderTasksCard(gh, tasks, next);
+    if (wrap.firstElementChild) card.replaceWith(wrap.firstElementChild);
+    return true;
+  }
+  return false;
 }
 
 // Fill in the "GitHub Tasks (Open Issues)" card. On first render

@@ -2,7 +2,7 @@ import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
-import { renderProfile, hydrateProfileActivity, hydrateProfileLanguages, hydrateProfileTasks, hydrateProfile, setProfileTab, openProfileMore } from './views/profile.js';
+import { renderProfile, hydrateProfileActivity, hydrateProfileLanguages, hydrateProfileTasks, hydrateProfile, setProfileTab, openProfileMore, handleTasksClick } from './views/profile.js';
 import { renderRepos, hydrateRepos } from './views/repos.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
 import { renderMap, hydrateMap }  from './views/map.js';
@@ -1267,6 +1267,9 @@ document.addEventListener('click', (e) => {
 
   // Inline Accept / Deny on the notifications view's follow-request rows.
   if (handleNotifAction(e)) return;
+
+  // Profile Tasks card: expand-body toggle + repo-chip filter.
+  if (handleTasksClick(e)) return;
 
   // Timeout / error stubs across follow-list and profile show a
   // small "再試行" button that re-runs the current route's hydrate
