@@ -17,6 +17,7 @@ import { icon }          from '../icons.js';
 import { relTime }       from '../data.js';
 import { t }             from '../i18n.js';
 import { maskHandle, maskName, maskMentionsInText } from '../privacy-mode.js';
+import { withTimeout } from '../net-utils.js';
 
 function escape(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -160,11 +161,16 @@ export async function hydrateNotifications() {
   }
 
   let items;
-  try { items = await notificationsForMe({ targetUserId }); }
+  try { items = await withTimeout(notificationsForMe({ targetUserId }), 15000, 'notifications'); }
   catch (err) {
     const r = live();
     if (!r) return;
-    r.innerHTML = '<div class="stub"><h2 class="stub__title">' + t('notif.error.title') + '</h2><p class="stub__sub">' + escape(err.message || '') + '</p></div>';
+    r.innerHTML =
+      '<div class="stub">' +
+        '<h2 class="stub__title">' + t('notif.error.title') + '</h2>' +
+        '<p class="stub__sub">' + escape(err.message || '') + '</p>' +
+        '<button class="btn btn--ghost btn--sm" data-notif-retry="1">再試行</button>' +
+      '</div>';
     return;
   }
   const r = live();
@@ -189,6 +195,16 @@ export async function hydrateNotifications() {
 // short-circuit every later click handler (Edit profile, Like,
 // Report, Delete, …). Do the actual network work fire-and-forget.
 export function handleNotifAction(e) {
+  // Retry button on the error stub — re-runs hydration without a
+  // full route re-dispatch (which would tear down / re-add the list).
+  const retry = e.target.closest('[data-notif-retry]');
+  if (retry) {
+    e.preventDefault();
+    const list = document.getElementById('notif-list');
+    if (list) list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('notif.loading') + '</p></div>';
+    hydrateNotifications();
+    return true;
+  }
   const accept = e.target.closest('[data-notif-accept]');
   const deny   = e.target.closest('[data-notif-deny]');
   if (!accept && !deny) return false;

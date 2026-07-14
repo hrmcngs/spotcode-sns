@@ -7,6 +7,8 @@ import { currentUser } from '../auth.js';
 import { renderAvatar } from '../avatar.js';
 import { url, currentPath } from '../router.js';
 import { t } from '../i18n.js';
+import { maskHandle, maskName, maskMentionsInText } from '../privacy-mode.js';
+import { withTimeout } from '../net-utils.js';
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -49,11 +51,18 @@ export async function hydrateFollowList(handle, kind) {
   if (!slot()) return;
   let users;
   try {
-    users = kind === 'followers' ? await followersOf(handle) : await followingOf(handle);
+    const p = kind === 'followers' ? followersOf(handle) : followingOf(handle);
+    users = await withTimeout(p, 15000, kind);
   } catch (err) {
     if (!stillHere()) return;
     const list = slot();
-    if (list) list.innerHTML = '<div class="stub"><p class="stub__sub">取得に失敗しました: ' + escape(err.message || '') + '</p></div>';
+    if (list) {
+      list.innerHTML =
+        '<div class="stub">' +
+          '<p class="stub__sub">取得に失敗しました: ' + escape(err.message || '') + '</p>' +
+          '<button class="btn btn--ghost btn--sm" data-follow-list-retry="1">再試行</button>' +
+        '</div>';
+    }
     return;
   }
   if (!stillHere()) return;
@@ -70,13 +79,15 @@ export async function hydrateFollowList(handle, kind) {
     users.map(u => {
       const followed = me && me.handle !== u.handle && isFollowing(me.handle, u.handle);
       const showBtn  = me && me.handle !== u.handle;
+      const displayName   = maskName(u.handle, u.name);
+      const displayHandle = maskHandle(u.handle);
       return (
         '<div class="followlist__row">' +
           renderAvatar(u, { tag: 'a', href: url('/' + u.handle), size: 'lg' }) +
           '<div class="followlist__text">' +
-            '<a class="followlist__name" href="' + url('/' + u.handle) + '">' + escape(u.name) + '</a>' +
-            '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + escape(u.handle) + '</a>' +
-            (u.bio ? '<div class="followlist__bio">' + escape(u.bio) + '</div>' : '') +
+            '<a class="followlist__name" href="' + url('/' + u.handle) + '">' + escape(displayName) + '</a>' +
+            '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + escape(displayHandle) + '</a>' +
+            (u.bio ? '<div class="followlist__bio">' + escape(maskMentionsInText(u.bio)) + '</div>' : '') +
           '</div>' +
           (showBtn
             ? '<button class="followlist__follow' + (followed ? ' is-following' : '') + '" data-target="' + escape(u.handle) + '">' +

@@ -1240,6 +1240,19 @@ document.addEventListener('click', (e) => {
 
   // Inline Accept / Deny on the notifications view's follow-request rows.
   if (handleNotifAction(e)) return;
+
+  // Timeout / error stubs across follow-list and profile show a
+  // small "再試行" button that re-runs the current route's hydrate
+  // by re-dispatching. refresh() is cheap: the top-level chrome is
+  // re-rendered and each view's own hydrate re-runs — same as
+  // navigating away and back, but without disturbing scroll or the
+  // URL.
+  if (e.target.closest('[data-follow-list-retry]') ||
+      e.target.closest('[data-profile-retry]')) {
+    e.preventDefault();
+    refresh();
+    return;
+  }
   if (e.target.closest('#edit-profile-btn')) {
     e.preventDefault();
     if (!currentUser()) return openAuth('login');

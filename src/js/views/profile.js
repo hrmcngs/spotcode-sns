@@ -18,6 +18,7 @@ import { renderGrass } from '../grass.js';
 import { fetchContributions, cachedContributions } from '../github-activity.js';
 import { getLanguageStats, cachedLanguageStats, langColor, langAbbr, langTextColor } from '../language-stats.js';
 import { maskHandle, maskName } from '../privacy-mode.js';
+import { withTimeout } from '../net-utils.js';
 
 // (Previously a `let renderVersion = 0` lived here as the freshness
 //  flag for async hydrations. It's been replaced with path-based
@@ -394,18 +395,29 @@ export function renderProfile(handle) {
 // even though another already had the data ready. By short-circuiting
 // to the in-flight Promise we guarantee at most one hydration per
 // handle and the user reliably sees the posts on first paint.
-const inFlight = new Map(); // handle → Promise
+//
+// Staleness guard: if the previous run for this handle has been in
+// flight for more than STALE_MS, treat it as dead and start a fresh
+// one. Without this, a stalled Supabase network call (auth-refresh
+// storm, hung fetch) would trap every future visit to the same
+// profile behind the same never-resolving promise — the "the page
+// only loads after reload" symptom users hit when clicking around
+// between profiles.
+const inFlight = new Map(); // handle → { at, p }
+const STALE_MS = 8000;
 
 export function hydrateProfile(handle) {
   const existing = inFlight.get(handle);
-  if (existing) return existing;
+  const now = Date.now();
+  if (existing && now - existing.at < STALE_MS) return existing.p;
   const p = doHydrateProfile(handle).finally(() => {
     // Only clear if THIS run is still the registered one — a follow-up
     // call after we'd resolved would have replaced the slot, and we
     // mustn't wipe its newer entry.
-    if (inFlight.get(handle) === p) inFlight.delete(handle);
+    const cur = inFlight.get(handle);
+    if (cur && cur.p === p) inFlight.delete(handle);
   });
-  inFlight.set(handle, p);
+  inFlight.set(handle, { at: now, p });
   return p;
 }
 
@@ -424,11 +436,16 @@ async function doHydrateProfile(handle) {
   // For your own profile, currentUser() is already the freshest source.
   if (!isMe) {
     let fetched;
-    try { fetched = await fetchProfileByHandle(handle); }
+    try { fetched = await withTimeout(fetchProfileByHandle(handle), 15000, 'profile:' + handle); }
     catch (err) {
       if (!stillHere()) return;
       const app = document.getElementById('app');
-      if (app) app.innerHTML = '<div class="stub"><h2 class="stub__title">読み込みに失敗しました</h2><p class="stub__sub">' + (err.message || '') + '</p></div>';
+      if (app) app.innerHTML =
+        '<div class="stub">' +
+          '<h2 class="stub__title">読み込みに失敗しました</h2>' +
+          '<p class="stub__sub">' + (err.message || '') + '</p>' +
+          '<button class="btn btn--ghost btn--sm" data-profile-retry="1">再試行</button>' +
+        '</div>';
       return;
     }
     if (!stillHere()) return;
@@ -438,7 +455,8 @@ async function doHydrateProfile(handle) {
       return;
     }
   }
-  await hydrateProfileFollow(handle);
+  try { await withTimeout(hydrateProfileFollow(handle), 15000, 'follow:' + handle); }
+  catch { /* follow counts are non-critical; fall through and let the body still render */ }
   if (!stillHere()) return;
   // Reset the tab to Posts whenever a fresh profile is opened so the new
   // page never inherits the active tab of the previous one.
@@ -525,14 +543,21 @@ async function hydrateProfileBody(handle) {
   const tab = activeTab;
   let posts;
   try {
-    if (tab === 'likes')      posts = await likedPostsByHandle(handle);
-    else if (tab === 'spots') posts = (await postsByHandle(handle)).filter(p => p.spot);
-    else                      posts = await postsByHandle(handle);
+    const p = tab === 'likes'      ? likedPostsByHandle(handle)
+            : tab === 'spots'      ? postsByHandle(handle).then(list => list.filter(p => p.spot))
+            :                        postsByHandle(handle);
+    posts = await withTimeout(p, 15000, 'profile:' + tab);
   } catch (err) {
     if (!stillHere()) return;
     console.error('hydrateProfileBody', err);
     const list = slot();
-    if (list) list.innerHTML = '<div class="stub"><p class="stub__sub">取得に失敗しました: ' + (err.message || '') + '</p></div>';
+    if (list) {
+      list.innerHTML =
+        '<div class="stub">' +
+          '<p class="stub__sub">取得に失敗しました: ' + (err.message || '') + '</p>' +
+          '<button class="btn btn--ghost btn--sm" data-profile-retry="1">再試行</button>' +
+        '</div>';
+    }
     return;
   }
   if (!stillHere()) return;
