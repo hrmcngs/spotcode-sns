@@ -339,15 +339,17 @@ function openAccountMenu(anchorRect) {
     } else {
       dataAttr = 'data-account-switch-to="' + acc.id + '"';
     }
+    const displayName   = maskName(acc.handle, acc.name);
+    const displayHandle = maskHandle(acc.handle);
     return (
       '<button type="button" class="account-menu__row' + (active ? ' is-active' : '') + '" ' +
         dataAttr + '>' +
         renderAvatar(u, { size: 'sm' }) +
         '<span class="account-menu__row-text">' +
-          '<span class="account-menu__row-name">' + escapeText(acc.name) +
+          '<span class="account-menu__row-name">' + escapeText(displayName) +
             (active ? ' <span class="account-menu__row-badge">' + escapeText(t('settings.accounts.current')) + '</span>' : '') +
           '</span>' +
-          '<span class="account-menu__row-handle">@' + escapeText(acc.handle) + '</span>' +
+          '<span class="account-menu__row-handle">@' + escapeText(displayHandle) + '</span>' +
         '</span>' +
       '</button>'
     );
@@ -367,17 +369,19 @@ function openAccountMenu(anchorRect) {
       avatar: (official.name[0] || '?').toUpperCase(),
     };
     const isActiveOverlay = asOfficial;
+    const officialDisplayName   = maskName(official.handle, official.name);
+    const officialDisplayHandle = maskHandle(official.handle);
     rows +=
       '<button type="button" class="account-menu__row account-menu__row--official' +
         (isActiveOverlay ? ' is-active' : '') + '" ' +
         'data-account-as-official="1">' +
         renderAvatar(ou, { size: 'sm' }) +
         '<span class="account-menu__row-text">' +
-          '<span class="account-menu__row-name">' + escapeText(official.name) +
+          '<span class="account-menu__row-name">' + escapeText(officialDisplayName) +
             ' <span class="account-menu__row-badge account-menu__row-badge--official">' + escapeText(t('account_menu.official')) + '</span>' +
             (isActiveOverlay ? ' <span class="account-menu__row-badge">' + escapeText(t('settings.accounts.current')) + '</span>' : '') +
           '</span>' +
-          '<span class="account-menu__row-handle">@' + escapeText(official.handle) + '</span>' +
+          '<span class="account-menu__row-handle">@' + escapeText(officialDisplayHandle) + '</span>' +
         '</span>' +
       '</button>';
   } else if (showOfficial) {
