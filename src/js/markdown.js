@@ -97,7 +97,16 @@ export function renderMarkdown(escaped, opts = {}) {
     if (/^\s*[-*]\s+/.test(line)) {
       const items = [];
       while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
-        const m = lines[i].match(/^\s*[-*]\s+(\[[ xX]\]\s+)?(.*)$/);
+        const m = lines[i].match(/^\s*[-*]\s+(\[[ xX]\]\s+)?([\s\S]*)$/);
+        // Safety net: the while test above uses a looser regex; if
+        // something makes the stricter capture form fail (e.g. odd
+        // Unicode whitespace, `.` not spanning CR), fall through to
+        // an inline-only render for this line rather than crashing.
+        if (!m) {
+          out.push('<li>' + inlinePass(lines[i]) + '</li>');
+          i++;
+          continue;
+        }
         const checked = m[1] ? /\[[xX]\]/.test(m[1]) : null;
         if (m[1] != null) {
           // Task list item — checkbox + label. data-task-idx lets the
