@@ -1,0 +1,65 @@
+version: 2
+
+# Dependabot config for spotcode-sns.
+#
+# Two ecosystems live in this repo:
+#   - npm: package.json (Electron + Capacitor + electron-builder deps
+#     used to bundle the desktop / iOS wrappers around the static
+#     src/ web app)
+#   - github-actions: pages.yml / release.yml / notify-charts.yml
+#     use third-party actions that occasionally ship security fixes
+#
+# Both are batched into a single weekly PR per ecosystem to keep the
+# review queue quiet — this is a one-person project and per-dep PRs
+# would swamp the notification tab. Security updates always come
+# through as separate PRs regardless (Dependabot's default).
+
+updates:
+  # ---- npm (Electron / Capacitor tooling; the browser app has no
+  #      runtime deps so this is a small tree) --------------------
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+    groups:
+      # Roll every non-major bump into one PR so the queue doesn't
+      # fill up with e.g. individual @capacitor/* patch releases.
+      # Major bumps still open separately (grouped only within same
+      # major) because they usually need code changes.
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+
+  # ---- GitHub Actions -------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      actions:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: chore(ci)
+      include: scope
