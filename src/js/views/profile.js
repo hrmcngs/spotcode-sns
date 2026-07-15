@@ -576,7 +576,15 @@ export function renderProfile(handle) {
       '<div class="profile-stats">' +
         '<a href="' + url('/' + u.handle + '/following') + '"><b>' + followingN + '</b> ' + t('profile.stat.following') + '</a>' +
         '<a href="' + url('/' + u.handle + '/followers') + '"><b>' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +
-        '<span><b id="profile-postcount">…</b> ' + t('profile.stat.posts') + '</span>' +
+        '<span><b id="profile-postcount">' +
+          // Seed from the localStorage posts cache so revisits show
+          // an immediate count instead of "…" until the fresh fetch
+          // resolves. Falls back to "…" on cache miss.
+          (() => {
+            const c = cachedPosts('handle:' + handle);
+            return (c && c.length != null) ? c.length : '…';
+          })() +
+        '</b> ' + t('profile.stat.posts') + '</span>' +
       '</div>' +
       renderOrgMembers(u) +
       (u.github?.handle
@@ -791,6 +799,11 @@ async function hydrateProfileBody(handle) {
           '<button class="btn btn--ghost btn--sm" data-profile-retry="1">再試行</button>' +
         '</div>';
     }
+    // Never leave the header count stuck on the "…" placeholder —
+    // replace with "?" so the user can tell something went wrong
+    // even without scrolling down to the error stub.
+    const countEl = document.getElementById('profile-postcount');
+    if (countEl && countEl.textContent === '…') countEl.textContent = '?';
     return;
   }
   if (!stillHere()) return;
