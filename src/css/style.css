@@ -357,6 +357,15 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   overflow: hidden;
   overflow: clip;
   min-width: 0;
+  /* Fill the viewport down to the bottom so short pages (a fresh
+     profile with no posts, /notifications with an empty inbox, …)
+     don't leave a strip of the darker body background exposed under
+     the card. Especially visible on iPad in tablet mode where the
+     right rail is hidden and .timeline is the only tall thing left.
+     `dvh` tracks the collapsing Safari toolbar; `vh` is the fallback
+     for browsers without dvh support. */
+  min-height: calc(100vh - var(--topbar-h));
+  min-height: calc(100dvh - var(--topbar-h));
 }
 .timeline__head {
   /* The sticky topbar grows by env(safe-area-inset-top) on notched
