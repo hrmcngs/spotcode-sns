@@ -9,6 +9,8 @@ import { url, currentPath } from '../router.js';
 import { t } from '../i18n.js';
 import { maskHandle, maskName, maskMentionsInText } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
+import { getUser } from '../data.js';
+import { icon } from '../icons.js';
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -21,9 +23,24 @@ export function renderFollowList(handle, kind) {
   const titleRight = kind === 'followers' ? t('profile.stat.following') : t('profile.stat.followers');
   const leftHref   = url('/' + handle + '/' + kind);
   const rightHref  = url('/' + handle + '/' + (kind === 'followers' ? 'following' : 'followers'));
+  // X (Twitter) 風のヘッダ: 戻る矢印 + 表示名 (上) + @handle (下)。
+  // getUser でローカルキャッシュから表示名を引く。cache miss ならハンドルを
+  // そのまま表示名として使う (プロフィール表示時に profiles テーブルから
+  // fetchProfileByHandle 経由で埋められる)。
+  const u = getUser(handle);
+  const rawName = (u && u.name) || handle;
+  const displayName   = maskName(handle, rawName);
+  const displayHandle = maskHandle(handle);
   return (
-    '<div class="follow-head">' +
-      '<a class="back-home" href="' + url('/' + handle) + '">← @' + escape(handle) + '</a>' +
+    '<div class="follow-head follow-head--x">' +
+      '<a class="follow-head__back" href="' + url('/' + handle) + '" ' +
+          'aria-label="' + escape(t('profile.back')) + '">' +
+        icon('arrow_right', { size: 20 }) +
+      '</a>' +
+      '<div class="follow-head__id">' +
+        '<div class="follow-head__name">' + escape(displayName) + '</div>' +
+        '<div class="follow-head__handle">@' + escape(displayHandle) + '</div>' +
+      '</div>' +
     '</div>' +
     '<div class="timeline__head">' +
       '<a class="tab is-active" href="' + leftHref + '">' + titleLeft + '</a>' +

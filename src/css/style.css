@@ -1741,12 +1741,59 @@ html[data-theme='light'] .profile-tasks__body {
 .profile-stats a { color: var(--muted); }
 .profile-stats a:hover { color: var(--text); text-decoration: underline; }
 
-/* Following / Followers list page */
+/* Following / Followers list page.
+   The header stack is:
+     .follow-head        (← @handle back link)
+     .timeline__head     (Following / Followers tabs)
+   Both are pinned so the user can flip tabs / go back at any scroll
+   depth. Stacked offsets: follow-head sits at the topbar edge, the
+   tab bar right below it. --follow-head-h is a rough measurement
+   (padding .9rem×2 + back-home ~1.35rem line-height + 1px border ≈
+   3.15rem ≈ 50.4px); anything within a few px is invisible thanks
+   to the matching backgrounds. */
+:root { --follow-head-h: 3.75rem; }
 .follow-head {
   padding: .9rem 1rem;
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+  z-index: 11;
+  background: var(--surface);
+}
+.follow-head + .timeline__head {
+  top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px) + var(--follow-head-h));
 }
 .follow-head .back-home { margin: 0; font-size: .9rem; }
+
+/* X (Twitter) 風のヘッダレイアウト:
+     [ ←(角丸ホバー) ]   display-name (bold)
+                        @handle       (muted)
+   戻り矢印は円形の hover 領域を持って左端に、右にネームスタック。 */
+.follow-head--x {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .55rem 1rem;
+}
+.follow-head__back {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 999px;
+  color: var(--text); text-decoration: none;
+  transition: background .12s ease;
+  /* icons.js の arrow_right を 180° 回転して "←" として使う。
+     dedicated arrow_left を icons.js に追加してもいいが、
+     transform で十分。 */
+}
+.follow-head__back:hover { background: var(--surface-2); }
+.follow-head__back .icon { transform: rotate(180deg); }
+.follow-head__id { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.follow-head__name {
+  font-weight: 700; font-size: 1.05rem; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.follow-head__handle {
+  color: var(--muted); font-size: .82rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .followlist--page {
   display: flex; flex-direction: column;
   padding: .25rem 0;
@@ -2957,6 +3004,7 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 }
 
 /* ---------- profile "More" popover ---------- */
+.profile-more-menu[hidden] { display: none !important; }
 .profile-more-menu {
   position: fixed;
   z-index: 1500;

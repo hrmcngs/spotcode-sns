@@ -1,6 +1,6 @@
 import { getUser, postsByHandle, likedPostsByHandle } from '../data.js';
 import { renderPost }              from '../post.js';
-import { url, currentPath }        from '../router.js';
+import { url, currentPath, onRoute } from '../router.js';
 import { currentUser }             from '../auth.js';
 import { isPostingAsOfficial } from '../posting-identity.js';
 import { OFFICIAL_HANDLE }         from '../official-account.js';
@@ -901,6 +901,12 @@ function closeMoreMenu() {
   const trigger = document.getElementById('profile-more-btn');
   if (trigger) trigger.setAttribute('aria-expanded', 'false');
 }
+
+// Fold the "More" popover on any route change so it doesn't linger
+// on the destination page (the outside-click closer usually catches
+// this, but navigation triggered by e.g. router.refresh() from
+// onAuthChange fires no click event).
+onRoute(() => closeMoreMenu());
 export function openProfileMore(handle, anchor) {
   const menu = ensureMoreMenu();
   menu.innerHTML =
