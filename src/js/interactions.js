@@ -6,6 +6,7 @@
 // optimistically before the round trip.
 
 import { getClient } from './supa.js';
+import { cacheHandleId, cachedHandleId } from './data.js';
 
 // post id  -> { count, mine }
 const likes = new Map();
@@ -111,9 +112,12 @@ export function isRequested(_myHandle, targetHandle) { return requestsMine.has(t
 export function myFollowingHandles() { return Array.from(followsMine); }
 
 async function userIdFromHandle(handle) {
+  const hit = cachedHandleId(handle);
+  if (hit) return hit;
   const supa = await getClient();
   const { data } = await supa.from('profiles').select('id').eq('handle', handle).maybeSingle();
-  return data?.id || null;
+  if (data?.id) { cacheHandleId(handle, data.id); return data.id; }
+  return null;
 }
 
 async function userMetaByHandle(handle) {

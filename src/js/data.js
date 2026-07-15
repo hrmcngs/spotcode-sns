@@ -27,6 +27,25 @@ export function getUser(handle) {
   return read(KEYS.users, {})[handle] || null;
 }
 
+// In-memory {handle → auth-user id} cache. Filled by any place that
+// already had to resolve a handle → id (fetchProfileByHandle sends id
+// through cacheHandleId; the auth flow primes it too). Consumers like
+// postsByHandle can skip the extra `profiles.select('id')` round trip
+// when a hit exists — cutting profile-page fetch latency roughly in
+// half, which matters a lot on flaky mobile networks that push the
+// original 2-hop query past the 15s timeout.
+const handleIdMap = new Map();
+export function cacheHandleId(handle, id) {
+  if (handle && id) handleIdMap.set(handle, id);
+}
+export function cachedHandleId(handle) {
+  if (!handle) return null;
+  // Own account: id is on cachedUser, always the freshest source.
+  const me = currentUser();
+  if (me && me.handle === handle && me.id) return me.id;
+  return handleIdMap.get(handle) || null;
+}
+
 // ----- posts (Supabase) -----
 
 // Pin the embed to the posts→profiles FK by its constraint name. Without
@@ -540,16 +559,25 @@ export async function followingPosts({ limit = 100 } = {}) {
 export async function postsByHandle(handle) {
   if (!handle) return [];
   const supa = await getClient();
-  const { data: prof, error: profErr } = await supa
-    .from('profiles')
-    .select('id')
-    .eq('handle', handle)
-    .maybeSingle();
-  if (profErr) throw new Error(profErr.message);
-  if (!prof) return [];
+  // Fast path: if a previous call (or the profile-view boot flow) has
+  // already resolved handle → id, skip the extra Supabase round trip.
+  // Cuts the wall-clock in half on slow networks — where two serial
+  // queries were pushing past the 15s timeout.
+  let userId = cachedHandleId(handle);
+  if (!userId) {
+    const { data: prof, error: profErr } = await supa
+      .from('profiles')
+      .select('id')
+      .eq('handle', handle)
+      .maybeSingle();
+    if (profErr) throw new Error(profErr.message);
+    if (!prof) return [];
+    userId = prof.id;
+    cacheHandleId(handle, userId);
+  }
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols)
-      .eq('author_id', prof.id)
+      .eq('author_id', userId)
       .order('created_at', { ascending: false })
   );
   if (error) throw new Error(error.message);
@@ -562,20 +590,25 @@ export async function postsByHandle(handle) {
 export async function likedPostsByHandle(handle) {
   if (!handle) return [];
   const supa = await getClient();
-  const { data: prof, error: profErr } = await supa
-    .from('profiles')
-    .select('id')
-    .eq('handle', handle)
-    .maybeSingle();
-  if (profErr) throw new Error(profErr.message);
-  if (!prof) return [];
+  let userId = cachedHandleId(handle);
+  if (!userId) {
+    const { data: prof, error: profErr } = await supa
+      .from('profiles')
+      .select('id')
+      .eq('handle', handle)
+      .maybeSingle();
+    if (profErr) throw new Error(profErr.message);
+    if (!prof) return [];
+    userId = prof.id;
+    cacheHandleId(handle, userId);
+  }
   // Embed the full post (with its author) under each like row. The FK
   // name hint is required for the same reason postCols() already pins
   // posts→profiles.
   const { data, error } = await withResilientCols((cols) =>
     supa.from('likes')
       .select('created_at, post:posts!likes_post_id_fkey(' + cols + ')')
-      .eq('user_id', prof.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
   );
   if (error) throw new Error(error.message);

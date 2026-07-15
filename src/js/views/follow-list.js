@@ -52,7 +52,7 @@ export async function hydrateFollowList(handle, kind) {
   let users;
   try {
     const p = kind === 'followers' ? followersOf(handle) : followingOf(handle);
-    users = await withTimeout(p, 15000, kind);
+    users = await withTimeout(p, 30000, kind);
   } catch (err) {
     if (!stillHere()) return;
     const list = slot();

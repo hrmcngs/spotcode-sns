@@ -7,6 +7,7 @@
 import { getClient } from './supa.js';
 import { KEYS, read, write } from './storage.js';
 import { expandQuery } from './jp-romaji.js';
+import { cacheHandleId } from './data.js';
 
 // Project a profiles row into the UI-friendly user shape that the rest of
 // the app uses (same fields as auth.js#projectUser, minus id/email).
@@ -73,7 +74,12 @@ export async function fetchProfileByHandle(handle) {
     .maybeSingle();
   if (error) { console.warn('fetchProfileByHandle', error); return null; }
   const profile = shapeProfile(data);
-  if (profile) cacheLocally(profile);
+  if (profile) {
+    cacheLocally(profile);
+    // Prime the handle→id lookup cache so postsByHandle /
+    // likedPostsByHandle can skip their extra profile-id round trip.
+    if (data && data.id) cacheHandleId(profile.handle, data.id);
+  }
   return profile;
 }
 

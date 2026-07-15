@@ -161,7 +161,7 @@ export async function hydrateNotifications() {
   }
 
   let items;
-  try { items = await withTimeout(notificationsForMe({ targetUserId }), 15000, 'notifications'); }
+  try { items = await withTimeout(notificationsForMe({ targetUserId }), 30000, 'notifications'); }
   catch (err) {
     const r = live();
     if (!r) return;

@@ -677,7 +677,7 @@ async function doHydrateProfile(handle) {
   // For your own profile, currentUser() is already the freshest source.
   if (!isMe) {
     let fetched;
-    try { fetched = await withTimeout(fetchProfileByHandle(handle), 15000, 'profile:' + handle); }
+    try { fetched = await withTimeout(fetchProfileByHandle(handle), 30000, 'profile:' + handle); }
     catch (err) {
       if (!stillHere()) return;
       const app = document.getElementById('app');
@@ -696,7 +696,7 @@ async function doHydrateProfile(handle) {
       return;
     }
   }
-  try { await withTimeout(hydrateProfileFollow(handle), 15000, 'follow:' + handle); }
+  try { await withTimeout(hydrateProfileFollow(handle), 30000, 'follow:' + handle); }
   catch { /* follow counts are non-critical; fall through and let the body still render */ }
   if (!stillHere()) return;
   // Reset the tab to Posts whenever a fresh profile is opened so the new
@@ -787,7 +787,7 @@ async function hydrateProfileBody(handle) {
     const p = tab === 'likes'      ? likedPostsByHandle(handle)
             : tab === 'spots'      ? postsByHandle(handle).then(list => list.filter(p => p.spot))
             :                        postsByHandle(handle);
-    posts = await withTimeout(p, 15000, 'profile:' + tab);
+    posts = await withTimeout(p, 30000, 'profile:' + tab);
   } catch (err) {
     if (!stillHere()) return;
     console.error('hydrateProfileBody', err);
