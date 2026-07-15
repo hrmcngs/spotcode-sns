@@ -5,7 +5,7 @@ import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode, maskHandle, maskName 
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
-import { badgesHidden, setBadgesHidden } from '../display-prefs.js';
+import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden } from '../display-prefs.js';
 import { isPostingAsOfficial, setPostingAsOfficial } from '../posting-identity.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
@@ -340,6 +340,7 @@ function privacySection() {
 function displaySection() {
   const lang = getLang();
   const hidden = badgesHidden();
+  const tHidden = tasksHidden();
   return (
     '<section class="settings-card">' +
       '<h2>' + t('settings.lang.title') + '</h2>' +
@@ -362,6 +363,20 @@ function displaySection() {
       '<div class="settings-form__actions">' +
         '<button type="button" class="btn btn--' + (hidden ? 'primary' : 'ghost') + '" id="badges-toggle">' +
           (hidden ? t('settings.display.badges.show') : t('settings.display.badges.hide')) +
+        '</button>' +
+      '</div>' +
+    '</section>' +
+    // Profile "Open issues (task)" card visibility. When hidden, the
+    // whole card doesn't render AND no GitHub API call is spent on
+    // fetching issues.
+    '<section class="settings-card">' +
+      '<h2>' + t('settings.display.tasks.title') +
+        ' <span class="settings-tag">' + (tHidden ? t('settings.display.tasks.off') : t('settings.display.tasks.on')) + '</span>' +
+      '</h2>' +
+      '<p class="settings__hint">' + t('settings.display.tasks.hint') + '</p>' +
+      '<div class="settings-form__actions">' +
+        '<button type="button" class="btn btn--' + (tHidden ? 'primary' : 'ghost') + '" id="tasks-toggle">' +
+          (tHidden ? t('settings.display.tasks.show') : t('settings.display.tasks.hide')) +
         '</button>' +
       '</div>' +
     '</section>' +
@@ -666,6 +681,15 @@ export function bindSettings() {
   document.getElementById('badges-toggle')?.addEventListener('click', () => {
     setBadgesHidden(!badgesHidden());
     // Re-render the Display tab in place so the new state is reflected.
+    const app = document.getElementById('app');
+    if (app) { app.innerHTML = renderSettings(); bindSettings(); }
+  });
+
+  // Tasks-visibility toggle — mirrors the badges toggle above, but
+  // targets the profile "Open issues (task)" card. Off state also
+  // suppresses the GitHub Search API call in hydrateProfileTasks.
+  document.getElementById('tasks-toggle')?.addEventListener('click', () => {
+    setTasksHidden(!tasksHidden());
     const app = document.getElementById('app');
     if (app) { app.innerHTML = renderSettings(); bindSettings(); }
   });

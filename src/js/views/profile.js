@@ -21,6 +21,7 @@ import { maskHandle, maskName } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
 import { fetchTasks, cachedTasks } from '../github-tasks.js';
 import { renderMarkdown } from '../markdown.js';
+import { tasksHidden } from '../display-prefs.js';
 
 // (Previously a `let renderVersion = 0` lived here as the freshness
 //  flag for async hydrations. It's been replaced with path-based
@@ -266,6 +267,9 @@ function renderDueBadge(dueTs, hasTime) {
 // carry a stale filter.
 function renderTasksCard(ghHandle, tasks, activeRepo = '') {
   if (!ghHandle) return '';
+  // Per-device display pref: user opted the whole card out from
+  // /settings → 表示 → タスク. Skip the render + skip the fetch.
+  if (tasksHidden()) return '';
   if (!tasks) {
     return (
       '<div class="profile-tasks" id="profile-tasks-' + ghHandle + '" data-gh="' + escAttr(ghHandle) + '">' +
@@ -373,6 +377,16 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '') {
         ' ' + t('profile.tasks.title') +
         ' <b class="profile-tasks__count">' + totalCount + '</b>' +
         '<span class="profile-tasks__hint">' + t('profile.tasks.hint') + '</span>' +
+        // Bulk collapse — folds every currently-expanded body row
+        // back to the compact single-line state. Handy after
+        // clicking through several tasks. Rendered only when there
+        // are rows to potentially fold.
+        (shown.length
+          ? '<button type="button" class="profile-tasks__collapse-all" ' +
+              'data-tasks-collapse-all="1">' +
+              t('profile.tasks.collapse_all') +
+            '</button>'
+          : '') +
       '</div>' +
       chipBar +
       list +
@@ -941,6 +955,23 @@ export async function hydrateProfileLanguages(handle) {
 // Returns true when the event was handled, false otherwise, so
 // main.js can early-out with the same shape as handleNotifAction.
 export function handleTasksClick(e) {
+  // Bulk collapse — fold every open row in the card back to the
+  // compact single-line state. Runs a single querySelectorAll pass
+  // so it's cheap even with 20 rows visible.
+  const collapseAll = e.target.closest('[data-tasks-collapse-all]');
+  if (collapseAll) {
+    e.preventDefault();
+    const card = collapseAll.closest('.profile-tasks');
+    if (!card) return true;
+    card.querySelectorAll('.profile-tasks__row.is-open').forEach((row) => {
+      row.classList.remove('is-open');
+      const body = row.querySelector('.profile-tasks__body');
+      if (body) body.setAttribute('hidden', '');
+      const btn = row.querySelector('.profile-tasks__toggle');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    });
+    return true;
+  }
   const toggle = e.target.closest('[data-tasks-toggle]');
   if (toggle) {
     e.preventDefault();
@@ -991,6 +1022,9 @@ export async function hydrateProfileTasks(handle) {
   const u = getUser(handle);
   const gh = u?.github?.handle;
   if (!gh) return;
+  // User hid the whole card in /settings → 表示. Skip fetch entirely
+  // so we don't spend rate-limit budget on data we won't display.
+  if (tasksHidden()) return;
   const slot = document.getElementById('profile-tasks-' + gh);
   if (!slot) return;
   if (slot.dataset.hydrating === '1') return;

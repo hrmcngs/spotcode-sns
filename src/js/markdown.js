@@ -127,15 +127,47 @@ export function renderMarkdown(escaped, opts = {}) {
       }
       out.push('</ul>');
       // Insert the opening <ul> in front of the items we just pushed.
-      // Cheaper than tracking a separate buffer.
-      const ulOpenIdx = out.lastIndexOf('</ul>') - items.length;
-      // (items.length tracking left for readability — the actual splice
-      // below is the source of truth.)
-      // Simpler: find the first <li> we just added and prepend <ul>.
-      // The block above pushed items in order so we walk backwards.
-      let firstLiIdx = out.length - 2; // last item before </ul>
-      while (firstLiIdx > 0 && /^<li/.test(out[firstLiIdx])) firstLiIdx--;
+      // Walk backwards from the last item (out.length - 2 = the item
+      // just before </ul>) as long as it's still an <li>. The `>= 0`
+      // bound is critical: `> 0` would leave a stray <li> at index 0
+      // uncovered when the list is the very first block in the body,
+      // and <ul> would end up spliced AFTER it, producing an empty
+      // <ul></ul>.
+      let firstLiIdx = out.length - 2;
+      while (firstLiIdx >= 0 && /^<li/.test(out[firstLiIdx])) firstLiIdx--;
       out.splice(firstLiIdx + 1, 0, '<ul class="md-list">');
+      continue;
+    }
+
+    // Ordered list — `1.` `2.` … Same block-consuming shape as the
+    // dash list above; wraps its collected items in an <ol> at the
+    // end. Individual item numbering is left to the browser's default
+    // (start=first parsed number so a mid-list "3." looks right).
+    const ordFirst = line.match(/^\s*(\d+)[.)]\s+([\s\S]*)$/);
+    if (ordFirst) {
+      const startNum = ordFirst[1];
+      const items = [];
+      while (i < lines.length) {
+        const m = lines[i].match(/^\s*\d+[.)]\s+([\s\S]*)$/);
+        if (!m) break;
+        items.push('<li>' + inlinePass(m[1]) + '</li>');
+        i++;
+      }
+      out.push('<ol class="md-list md-list--ord" start="' + startNum + '">' + items.join('') + '</ol>');
+      continue;
+    }
+
+    // Blockquote — one or more contiguous `>` lines merge into a
+    // single <blockquote>. Inner leading `>` is stripped; the
+    // resulting text goes through the inline pass so @mentions /
+    // links inside a quote still work.
+    if (/^\s*>\s?/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+        buf.push(lines[i].replace(/^\s*>\s?/, ''));
+        i++;
+      }
+      out.push('<blockquote class="md-quote">' + inlinePass(buf.join('\n')) + '</blockquote>');
       continue;
     }
 

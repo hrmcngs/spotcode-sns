@@ -1543,6 +1543,14 @@ html[data-theme='light'] .profile-header--org .profile-cover {
 }
 .profile-tasks__count { color: var(--text); font-weight: 700; margin: 0 .1em; }
 .profile-tasks__hint  { margin-left: auto; font-size: .75rem; }
+.profile-tasks__collapse-all {
+  margin-left: .5rem;
+  padding: .1rem .55rem;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font-size: .72rem;
+}
+.profile-tasks__collapse-all:hover { color: var(--text); border-color: var(--muted); }
 .profile-tasks__empty { color: var(--muted); font-size: .85rem; margin: 0; }
 .profile-tasks__list  { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .15rem; }
 
@@ -1624,31 +1632,58 @@ html[data-theme='light'] .profile-header--org .profile-cover {
   font-size: .7rem; color: var(--muted);
 }
 .profile-tasks__body {
-  margin: .5rem 0 .25rem 1.8rem;
-  padding: .5rem .65rem;
-  border-left: 2px solid var(--border);
+  margin: .5rem 0 .25rem 2rem;
+  padding: .7rem .9rem;
+  background: rgba(0, 0, 0, .22);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   color: var(--text);
   font-size: .85rem;
-  line-height: 1.5;
-  overflow-x: auto;
+  line-height: 1.55;
+  max-height: 320px;
+  overflow: auto;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
-.profile-tasks__body p { margin: 0 0 .5em; }
-.profile-tasks__body p:last-child { margin-bottom: 0; }
+html[data-theme='light'] .profile-tasks__body {
+  background: rgba(0, 0, 0, .04);
+}
+.profile-tasks__body > *:first-child { margin-top: 0; }
+.profile-tasks__body > *:last-child  { margin-bottom: 0; }
+.profile-tasks__body p { margin: 0 0 .5em; white-space: pre-wrap; }
 .profile-tasks__body h1,
 .profile-tasks__body h2,
-.profile-tasks__body h3 {
-  font-size: 1em; margin: .5em 0 .25em; font-weight: 700;
+.profile-tasks__body h3,
+.profile-tasks__body .md-h {
+  font-size: 1em; margin: .6em 0 .3em; font-weight: 700;
+}
+.profile-tasks__body ul,
+.profile-tasks__body ol {
+  margin: .3em 0; padding-left: 1.4em;
+}
+.profile-tasks__body li { margin: .15em 0; }
+.profile-tasks__body .md-task { list-style: none; margin-left: -1.2em; }
+.profile-tasks__body .md-task__box { margin-right: .35em; vertical-align: -.05em; }
+.profile-tasks__body blockquote,
+.profile-tasks__body .md-quote {
+  margin: .35em 0;
+  padding: .25em .75em;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+  background: rgba(0, 0, 0, .12);
+  border-radius: 0 6px 6px 0;
 }
 .profile-tasks__body pre {
-  padding: .4em .6em; background: rgba(0, 0, 0, .2); border-radius: 6px;
-  overflow-x: auto; font-size: .8em;
+  padding: .5em .7em; background: rgba(0, 0, 0, .28); border-radius: 6px;
+  overflow-x: auto; font-size: .8em; margin: .35em 0;
 }
 .profile-tasks__body code {
-  padding: .05em .3em; background: rgba(0, 0, 0, .2); border-radius: 4px;
+  padding: .05em .35em; background: rgba(0, 0, 0, .22); border-radius: 4px;
   font-size: .85em;
 }
 .profile-tasks__body pre code { padding: 0; background: transparent; }
-.profile-tasks__body img { max-width: 100%; height: auto; }
+.profile-tasks__body img { max-width: 100%; height: auto; border-radius: 6px; }
+.profile-tasks__body a { color: var(--accent); }
 .profile-tasks__more {
   display: inline-block; margin-top: .5rem;
   color: var(--accent); font-size: .85rem; text-decoration: none;
