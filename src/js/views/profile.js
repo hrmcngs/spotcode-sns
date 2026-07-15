@@ -401,23 +401,23 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '') {
         t('profile.tasks.more').replace('{n}', String(totalCount)) +
       '</a>'
     : '';
+  // Default state is fully collapsed — the whole list is hidden and
+  // the user opts in to browsing by pressing "リストを表示". Prevents
+  // the very long open-issue list from dominating every profile
+  // page. Toggle flips both the class AND the button label.
   return (
-    '<div class="profile-tasks" id="profile-tasks-' + ghHandle + '" ' +
+    '<div class="profile-tasks is-all-collapsed" id="profile-tasks-' + ghHandle + '" ' +
         'data-gh="' + escAttr(ghHandle) + '" data-active-repo="' + escAttr(activeRepo || '') + '">' +
       '<div class="profile-tasks__head">' +
         icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
         ' ' + t('profile.tasks.title') +
         ' <b class="profile-tasks__count">' + totalCount + '</b>' +
         '<span class="profile-tasks__hint">' + t('profile.tasks.hint') + '</span>' +
-        // Bulk collapse — folds every currently-expanded body row
-        // back to the compact single-line state. Handy after
-        // clicking through several tasks. Rendered only when there
-        // are rows to potentially fold.
         (shown.length
           ? '<button type="button" class="profile-tasks__collapse-all" ' +
               'data-tasks-collapse-all="1" ' +
               'onclick="try{window.__spotcodeToggleAllTasks(this)}catch(_){}">' +
-              t('profile.tasks.collapse_all') +
+              t('profile.tasks.expand_all') +
             '</button>'
           : '') +
       '</div>' +
