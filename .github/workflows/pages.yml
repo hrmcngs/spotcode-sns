@@ -35,7 +35,7 @@ jobs:
           sed -i "s/__BUILD_SHA__/${sha}/" src/sw.js
           grep '^const CACHE' src/sw.js
       - name: Upload static site artifact (src/)
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: src
       - name: Deploy
