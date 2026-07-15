@@ -19,10 +19,14 @@ function escape(s) {
 }
 
 export function renderFollowList(handle, kind) {
-  const titleLeft  = kind === 'followers' ? t('profile.stat.followers') : t('profile.stat.following');
-  const titleRight = kind === 'followers' ? t('profile.stat.following') : t('profile.stat.followers');
-  const leftHref   = url('/' + handle + '/' + kind);
-  const rightHref  = url('/' + handle + '/' + (kind === 'followers' ? 'following' : 'followers'));
+  // Tab order is fixed regardless of `kind`: Following on the left,
+  // Followers on the right (X style). The `kind` param only decides
+  // which tab is marked is-active. Switching the physical position
+  // based on `kind` (like the older code did) confused users because
+  // the same repo→tab spatial mapping changed under them.
+  const followingHref = url('/' + handle + '/following');
+  const followersHref = url('/' + handle + '/followers');
+  const followingActive = kind === 'following';
   // X (Twitter) 風のヘッダ: 戻る矢印 + 表示名 (上) + @handle (下)。
   // getUser でローカルキャッシュから表示名を引く。cache miss ならハンドルを
   // そのまま表示名として使う (プロフィール表示時に profiles テーブルから
@@ -43,8 +47,12 @@ export function renderFollowList(handle, kind) {
       '</div>' +
     '</div>' +
     '<div class="timeline__head">' +
-      '<a class="tab is-active" href="' + leftHref + '">' + titleLeft + '</a>' +
-      '<a class="tab" href="' + rightHref + '">' + titleRight + '</a>' +
+      '<a class="tab' + (followingActive ? ' is-active' : '') + '" href="' + followingHref + '">' +
+        t('profile.stat.following') +
+      '</a>' +
+      '<a class="tab' + (!followingActive ? ' is-active' : '') + '" href="' + followersHref + '">' +
+        t('profile.stat.followers') +
+      '</a>' +
     '</div>' +
     '<div id="follow-list">' +
       '<div class="stub"><p class="stub__sub">' + t('follow.loading') + '</p></div>' +
@@ -69,7 +77,10 @@ export async function hydrateFollowList(handle, kind) {
   let users;
   try {
     const p = kind === 'followers' ? followersOf(handle) : followingOf(handle);
-    users = await withTimeout(p, 30000, kind);
+    // Follow-list queries are simple (single follows→profiles join) so
+    // a 10s timeout is generous. Falling back to the error+retry stub
+    // faster is preferable to leaving the user staring at "読み込み中".
+    users = await withTimeout(p, 10000, kind);
   } catch (err) {
     if (!stillHere()) return;
     const list = slot();
