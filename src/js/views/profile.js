@@ -416,7 +416,7 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '') {
         (shown.length
           ? '<button type="button" class="profile-tasks__collapse-all" ' +
               'data-tasks-collapse-all="1" ' +
-              'onclick="try{window.__spotcodeCollapseAllTasks(this)}catch(_){}">' +
+              'onclick="try{window.__spotcodeToggleAllTasks(this)}catch(_){}">' +
               t('profile.tasks.collapse_all') +
             '</button>'
           : '') +
@@ -995,21 +995,11 @@ export function handleTasksClick(e) {
   if (collapseAll) {
     e.preventDefault();
     e.stopPropagation();
-    const card = collapseAll.closest('.profile-tasks');
-    if (!card) return true;
-    // Unconditionally close every row — don't filter by .is-open,
-    // because a race between the toggle handler's class-add and this
-    // handler's read can leave stale rows visually expanded even
-    // though the class isn't set yet.
-    card.querySelectorAll('.profile-tasks__row').forEach((row) => {
-      row.classList.remove('is-open');
-    });
-    card.querySelectorAll('.profile-tasks__body').forEach((body) => {
-      body.setAttribute('hidden', '');
-    });
-    card.querySelectorAll('.profile-tasks__toggle').forEach((btn) => {
-      btn.setAttribute('aria-expanded', 'false');
-    });
+    // Delegate to the same global function the button's inline
+    // onclick uses, so both paths produce identical state.
+    if (typeof window !== 'undefined' && window.__spotcodeToggleAllTasks) {
+      window.__spotcodeToggleAllTasks(collapseAll);
+    }
     return true;
   }
   const toggle = e.target.closest('[data-tasks-toggle]');
@@ -1069,20 +1059,39 @@ document.addEventListener('click', (e) => {
   if (handleTasksClick(e)) e.stopPropagation();
 }, true);
 
-// Fallback: expose the collapse-all action on `window` so the button
-// can trigger it via an inline `onclick` attribute, bypassing every
+// Fallback: expose the toggle-all-tasks action on `window` so the
+// button can trigger it via an inline `onclick`, bypassing every
 // document-level listener entirely. Belt-and-suspenders in case the
-// delegated path is being swallowed by something outside our control
-// (browser extension, iframe boundary, etc.).
+// delegated path is being swallowed by something outside our
+// control (browser extension, iframe boundary, etc.).
+//
+// Behaviour: toggles a `.is-all-collapsed` class on the card. When
+// on, CSS hides both the row list AND any expanded body — the user
+// sees just the count + hint header + chips, super compact. Click
+// again to unfold everything back to normal. Also resets any per-
+// row `.is-open` state so the "unfold" click doesn't reveal stale
+// bodies.
 if (typeof window !== 'undefined') {
-  window.__spotcodeCollapseAllTasks = function (btn) {
+  window.__spotcodeToggleAllTasks = function (btn) {
     if (!btn) return;
     const card = btn.closest('.profile-tasks');
     if (!card) return;
+    const nowCollapsed = !card.classList.contains('is-all-collapsed');
+    card.classList.toggle('is-all-collapsed', nowCollapsed);
+    // Always fold any expanded row bodies so unfolding the card
+    // doesn't dump the user into a page full of open previews.
     card.querySelectorAll('.profile-tasks__row').forEach((row) => row.classList.remove('is-open'));
     card.querySelectorAll('.profile-tasks__body').forEach((body) => body.setAttribute('hidden', ''));
     card.querySelectorAll('.profile-tasks__toggle').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+    // Update the button label so the user knows what the next
+    // click will do. i18n keys are looked up at call time.
+    btn.textContent = nowCollapsed
+      ? t('profile.tasks.expand_all')
+      : t('profile.tasks.collapse_all');
   };
+  // Keep the previous name as an alias so any stale rendered markup
+  // (before this deploy) still finds a callable function.
+  window.__spotcodeCollapseAllTasks = window.__spotcodeToggleAllTasks;
 }
 
 export async function hydrateProfileTasks(handle) {

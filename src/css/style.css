@@ -1551,6 +1551,16 @@ html[data-theme='light'] .profile-header--org .profile-cover {
   font-size: .72rem;
 }
 .profile-tasks__collapse-all:hover { color: var(--text); border-color: var(--muted); }
+
+/* All-collapsed state: hides the row list AND the overflow link so
+   the card shrinks to just the header (title + count + chips + the
+   toggle button itself). Chip bar stays visible because that's a
+   useful summary of the counts even in "collapsed" mode. */
+.profile-tasks.is-all-collapsed .profile-tasks__list,
+.profile-tasks.is-all-collapsed .profile-tasks__more,
+.profile-tasks.is-all-collapsed .profile-tasks__empty {
+  display: none;
+}
 .profile-tasks__empty { color: var(--muted); font-size: .85rem; margin: 0; }
 .profile-tasks__list  { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .15rem; }
 
