@@ -1057,6 +1057,17 @@ export function handleTasksClick(e) {
 // the card paints from cache (may be null → shows a loading hint);
 // after fetchTasks resolves, we replace the card's outerHTML with
 // the fresh render. Cache-hit is instant on revisit.
+// Capture-phase document listener — runs BEFORE any other handler
+// (main.js's bubble-phase delegated listener, any element-level
+// binding). Guarantees the tasks card's own clicks (collapse-all,
+// filter chip, chevron toggle) always get their handler invoked,
+// even if a downstream stopPropagation would otherwise swallow it.
+// Registered once at module load; the module is imported by main.js
+// so it evaluates on boot.
+document.addEventListener('click', (e) => {
+  if (handleTasksClick(e)) e.stopPropagation();
+}, true);
+
 export async function hydrateProfileTasks(handle) {
   const u = getUser(handle);
   const gh = u?.github?.handle;
