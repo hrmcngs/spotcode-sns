@@ -415,7 +415,8 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '') {
         // are rows to potentially fold.
         (shown.length
           ? '<button type="button" class="profile-tasks__collapse-all" ' +
-              'data-tasks-collapse-all="1">' +
+              'data-tasks-collapse-all="1" ' +
+              'onclick="try{window.__spotcodeCollapseAllTasks(this)}catch(_){}">' +
               t('profile.tasks.collapse_all') +
             '</button>'
           : '') +
@@ -1067,6 +1068,22 @@ export function handleTasksClick(e) {
 document.addEventListener('click', (e) => {
   if (handleTasksClick(e)) e.stopPropagation();
 }, true);
+
+// Fallback: expose the collapse-all action on `window` so the button
+// can trigger it via an inline `onclick` attribute, bypassing every
+// document-level listener entirely. Belt-and-suspenders in case the
+// delegated path is being swallowed by something outside our control
+// (browser extension, iframe boundary, etc.).
+if (typeof window !== 'undefined') {
+  window.__spotcodeCollapseAllTasks = function (btn) {
+    if (!btn) return;
+    const card = btn.closest('.profile-tasks');
+    if (!card) return;
+    card.querySelectorAll('.profile-tasks__row').forEach((row) => row.classList.remove('is-open'));
+    card.querySelectorAll('.profile-tasks__body').forEach((body) => body.setAttribute('hidden', ''));
+    card.querySelectorAll('.profile-tasks__toggle').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  };
+}
 
 export async function hydrateProfileTasks(handle) {
   const u = getUser(handle);
