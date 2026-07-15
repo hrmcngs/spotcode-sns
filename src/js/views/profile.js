@@ -211,6 +211,37 @@ function escapeHtml(s) {
   }[c]));
 }
 
+// Strip raw HTML fragments and HTML comments from an issue body
+// BEFORE it goes through escape → markdown. GitHub's Discussion
+// "op-text" mirrors, `<img>` embeds, `<details>` accordions, and
+// auto-generated `<!-- ... -->` boilerplate all render as literal
+// `<div ...>` gunk in our preview otherwise.
+//
+// We intentionally drop the tags entirely rather than pass them
+// through — this is a compact preview, not a full rendition, and
+// screen-reader-invisible HTML noise isn't worth the space.
+function stripHtmlForPreview(raw) {
+  if (!raw) return '';
+  return String(raw)
+    // HTML comments (including multi-line + GitHub's op-text markers).
+    .replace(/<!--[\s\S]*?-->/g, '')
+    // Any element with an explicit close tag — strips the tags but
+    // keeps the inner text intact so a `<sup>note</sup>` becomes
+    // just "note".
+    .replace(/<([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>([\s\S]*?)<\/\1>/g, '$2')
+    // Self-closing / void tags (img, br, hr, meta, etc). Drop them
+    // outright — no text to preserve.
+    .replace(/<[a-zA-Z][^>]*\/?>/g, '')
+    // Orphaned closing tag (paired open was on a line stripped above,
+    // or the source was malformed). Drop it.
+    .replace(/<\/[a-zA-Z][^>]*>/g, '')
+    // Collapse the runs of blank lines the strip leaves behind so
+    // the markdown pass doesn't grow the preview with vertical
+    // whitespace.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // Format an issue's due-date badge. Returns HTML for a colour-coded
 // pill:
 //   • overdue → red (期限切れ)
@@ -325,8 +356,9 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '') {
           const rowCls = 'profile-tasks__row' +
             (it.dueTs && it.dueTs < Date.now() ? ' profile-tasks__row--overdue' :
              it.dueTs && it.dueTs - Date.now() < 3 * 24 * 60 * 60 * 1000 ? ' profile-tasks__row--soon' : '');
-          const bodyRendered = it.body
-            ? renderMarkdown(escapeHtml(it.body), { editable: false })
+          const cleanedBody = stripHtmlForPreview(it.body);
+          const bodyRendered = cleanedBody
+            ? renderMarkdown(escapeHtml(cleanedBody), { editable: false })
             : '';
           return (
             '<li class="' + rowCls + '" data-tasks-row="' + idx + '">' +
@@ -961,14 +993,21 @@ export function handleTasksClick(e) {
   const collapseAll = e.target.closest('[data-tasks-collapse-all]');
   if (collapseAll) {
     e.preventDefault();
+    e.stopPropagation();
     const card = collapseAll.closest('.profile-tasks');
     if (!card) return true;
-    card.querySelectorAll('.profile-tasks__row.is-open').forEach((row) => {
+    // Unconditionally close every row — don't filter by .is-open,
+    // because a race between the toggle handler's class-add and this
+    // handler's read can leave stale rows visually expanded even
+    // though the class isn't set yet.
+    card.querySelectorAll('.profile-tasks__row').forEach((row) => {
       row.classList.remove('is-open');
-      const body = row.querySelector('.profile-tasks__body');
-      if (body) body.setAttribute('hidden', '');
-      const btn = row.querySelector('.profile-tasks__toggle');
-      if (btn) btn.setAttribute('aria-expanded', 'false');
+    });
+    card.querySelectorAll('.profile-tasks__body').forEach((body) => {
+      body.setAttribute('hidden', '');
+    });
+    card.querySelectorAll('.profile-tasks__toggle').forEach((btn) => {
+      btn.setAttribute('aria-expanded', 'false');
     });
     return true;
   }
