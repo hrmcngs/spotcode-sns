@@ -39,7 +39,11 @@ updates:
           - minor
           - patch
     commit-message:
-      prefix: chore(deps)
+      # Setting `include: scope` makes Dependabot append its own
+      # scope (deps / deps-dev / etc.), so use just `chore` as the
+      # prefix — the final title reads e.g. `chore(deps-dev): bump …`
+      # instead of the doubled-up `chore(deps)(deps-dev):`.
+      prefix: chore
       include: scope
 
   # ---- GitHub Actions -------------------------------------------
@@ -61,5 +65,8 @@ updates:
           - minor
           - patch
     commit-message:
+      # No `include: scope` here — actions have no useful sub-scope
+      # (Dependabot would just append `(deps)`, making the title
+      # `chore(ci)(deps):` which reads badly). Keep it flat as
+      # `chore(ci): bump actions/foo …`.
       prefix: chore(ci)
-      include: scope
