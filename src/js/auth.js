@@ -22,6 +22,26 @@ const subscribers = new Set();
 let cachedUser = null;
 let initialized = false;
 
+// Authentication must never hold the whole application shell hostage.
+// CDN loading, Web Locks inside supabase-js, or a stale refresh token can
+// occasionally leave getClient/getSession/profile reads pending forever.
+// The UI can still render as a guest and let the user sign in again, so use
+// a boot-only deadline instead of leaving #app blank indefinitely.
+const AUTH_BOOT_TIMEOUT_MS = 8000;
+
+function withBootTimeout(promise, label) {
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error('AUTH_BOOT_TIMEOUT:' + label)),
+        AUTH_BOOT_TIMEOUT_MS,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 // Re-export the public list-view directly so view code can import from
 // './auth.js' without having to know about saved-accounts.js. The
 // refresh-token-bearing helpers (rememberAccount / getRefreshToken)
@@ -131,7 +151,7 @@ export async function initAuth() {
   if (initialized) return;
   initialized = true;
   let supa;
-  try { supa = await getClient(); }
+  try { supa = await withBootTimeout(getClient(), 'client'); }
   catch { cachedUser = null; return; }
 
   // Process a staged account switch BEFORE we attach the
@@ -172,13 +192,22 @@ export async function initAuth() {
 
   let session = switchedSession;
   if (!session) {
-    const { data } = await supa.auth.getSession();
-    session = data?.session || null;
+    try {
+      const { data } = await withBootTimeout(supa.auth.getSession(), 'session');
+      session = data?.session || null;
+    } catch {
+      // A stale browser-side auth lock must not prevent guest rendering.
+      session = null;
+    }
   }
   if (session) {
-    const profile = await loadProfile(session.user.id);
-    cachedUser = projectUser(session.user, profile);
-    if (cachedUser) rememberAccount({ user: cachedUser, session });
+    try {
+      const profile = await withBootTimeout(loadProfile(session.user.id), 'profile');
+      cachedUser = projectUser(session.user, profile);
+      if (cachedUser) rememberAccount({ user: cachedUser, session });
+    } catch {
+      cachedUser = null;
+    }
   }
 
   supa.auth.onAuthStateChange(async (event, session) => {
