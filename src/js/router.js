@@ -19,6 +19,15 @@ const BASE = (() => {
   return u.pathname.replace(/js\/router\.js.*$/, '');
 })();
 
+// Asset-derived project prefix, also available in hash mode where BASE is
+// intentionally ''. Older links and the first hash-routing deploy produced
+// `#/spotcode-sns/settings`; normalize that duplicated project segment.
+const PROJECT_PREFIX = (() => {
+  const u = new URL(import.meta.url);
+  const p = u.pathname.replace(/js\/router\.js.*$/, '').replace(/\/$/, '');
+  return p && p !== '/' ? p : '';
+})();
+
 export function base() { return BASE; }
 
 export function url(path) {
@@ -31,6 +40,9 @@ export function currentPath() {
   if (HASH_MODE) {
     const h = location.hash.replace(/^#/, '');
     p = h ? (h.startsWith('/') ? h : '/' + h) : '/';
+    if (PROJECT_PREFIX && (p === PROJECT_PREFIX || p.startsWith(PROJECT_PREFIX + '/'))) {
+      p = p.slice(PROJECT_PREFIX.length) || '/';
+    }
   } else {
     p = location.pathname;
     if (p.startsWith(BASE)) p = p.slice(BASE.length);

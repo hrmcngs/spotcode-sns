@@ -208,7 +208,9 @@ export async function followersOf(handle) {
     .eq('status', 'accepted')
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
-  return (data || []).map(r => r.user).filter(Boolean).map(shapeProfile);
+  const users = (data || []).map(r => r.user).filter(Boolean).map(shapeProfile);
+  followListCache.set('followers:' + handle, { at: Date.now(), users });
+  return users;
 }
 
 // Fetch the list of profiles that `handle` follows (i.e. handle's following).
@@ -223,7 +225,16 @@ export async function followingOf(handle) {
     .eq('status', 'accepted')
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
-  return (data || []).map(r => r.user).filter(Boolean).map(shapeProfile);
+  const users = (data || []).map(r => r.user).filter(Boolean).map(shapeProfile);
+  followListCache.set('following:' + handle, { at: Date.now(), users });
+  return users;
+}
+
+const followListCache = new Map();
+const FOLLOW_LIST_CACHE_MS = 5 * 60 * 1000;
+export function cachedFollowList(handle, kind) {
+  const entry = followListCache.get(kind + ':' + handle);
+  return entry && Date.now() - entry.at < FOLLOW_LIST_CACHE_MS ? entry.users : null;
 }
 
 function shapeProfile(p) {
@@ -399,7 +410,7 @@ export async function denyFollowRequest(followerHandle) {
 // follows / mentions while the staffer is still authed as their
 // own account. All the source tables (likes, comments, follows,
 // posts) are publicly readable, so no extra RLS is needed.
-export async function notificationsForMe({ limit = 80, targetUserId } = {}) {
+export async function notificationsForMe({ limit = 40, targetUserId } = {}) {
   let supa; try { supa = await getClient(); } catch { return []; }
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return [];

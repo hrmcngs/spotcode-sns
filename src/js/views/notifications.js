@@ -19,6 +19,8 @@ import { t }             from '../i18n.js';
 import { maskHandle, maskName, maskMentionsInText } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
 
+const notificationCache = new Map();
+
 function escape(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -149,6 +151,9 @@ export async function hydrateNotifications() {
     return;
   }
 
+  const initialCache = notificationCache.get(me.id);
+  if (initialCache) paintNotifications(live(), initialCache);
+
   // While the "posting as official" overlay is on, show notifications
   // addressed to the brand account instead of the staffer's own —
   // the staffer is acting as the official, so their inbox should
@@ -161,10 +166,11 @@ export async function hydrateNotifications() {
   }
 
   let items;
-  try { items = await withTimeout(notificationsForMe({ targetUserId }), 30000, 'notifications'); }
+  try { items = await withTimeout(notificationsForMe({ targetUserId }), 12000, 'notifications'); }
   catch (err) {
     const r = live();
     if (!r) return;
+    if (initialCache) return; // a refresh failure must not erase cached rows
     r.innerHTML =
       '<div class="stub">' +
         '<h2 class="stub__title">' + t('notif.error.title') + '</h2>' +
@@ -176,6 +182,12 @@ export async function hydrateNotifications() {
   const r = live();
   if (!r) return;
 
+  notificationCache.set(targetUserId || me.id, items);
+  paintNotifications(r, items);
+}
+
+function paintNotifications(r, items) {
+  if (!r) return;
   if (!items.length) {
     r.innerHTML =
       '<div class="stub">' +

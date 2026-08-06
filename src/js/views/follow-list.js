@@ -2,7 +2,7 @@
 // Same DOM shape as the right-rail Who-to-follow card so the existing
 // follow/unfollow event delegation in main.js still applies.
 
-import { followersOf, followingOf, isFollowing } from '../interactions.js';
+import { followersOf, followingOf, isFollowing, cachedFollowList } from '../interactions.js';
 import { currentUser } from '../auth.js';
 import { renderAvatar } from '../avatar.js';
 import { url, currentPath } from '../router.js';
@@ -74,15 +74,18 @@ export async function hydrateFollowList(handle, kind) {
   const slot = () => document.getElementById('follow-list');
 
   if (!slot()) return;
+  const cached = cachedFollowList(handle, kind);
+  if (cached) paintFollowUsers(slot(), cached, kind);
   let users;
   try {
     const p = kind === 'followers' ? followersOf(handle) : followingOf(handle);
     // Follow-list queries are simple (single follows→profiles join) so
     // a 10s timeout is generous. Falling back to the error+retry stub
     // faster is preferable to leaving the user staring at "読み込み中".
-    users = await withTimeout(p, 10000, kind);
+    users = await withTimeout(p, 8000, kind);
   } catch (err) {
     if (!stillHere()) return;
+    if (cached) return; // keep the usable stale-while-refresh list visible
     const list = slot();
     if (list) {
       list.innerHTML =
@@ -95,6 +98,11 @@ export async function hydrateFollowList(handle, kind) {
   }
   if (!stillHere()) return;
   const list = slot();
+  if (!list) return;
+  paintFollowUsers(list, users, kind);
+}
+
+function paintFollowUsers(list, users, kind) {
   if (!list) return;
   if (!users.length) {
     list.innerHTML = '<div class="stub"><p class="stub__sub">' +

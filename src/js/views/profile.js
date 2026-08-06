@@ -574,8 +574,8 @@ export function renderProfile(handle) {
       '</div>' +
       renderProfileLinks(u) +
       '<div class="profile-stats">' +
-        '<a href="' + url('/' + u.handle + '/following') + '"><b>' + followingN + '</b> ' + t('profile.stat.following') + '</a>' +
-        '<a href="' + url('/' + u.handle + '/followers') + '"><b>' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +
+        '<a href="' + url('/' + u.handle + '/following') + '"><b id="profile-following-count">' + followingN + '</b> ' + t('profile.stat.following') + '</a>' +
+        '<a href="' + url('/' + u.handle + '/followers') + '"><b id="profile-followers-count">' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +
         '<span><b id="profile-postcount">' +
           // Seed from the localStorage posts cache so revisits show
           // an immediate count instead of "…" until the fresh fetch
@@ -675,9 +675,9 @@ async function doHydrateProfile(handle) {
   // Always go to Supabase for other users' profiles so their avatar /
   // bio / shape changes propagate without waiting for a session reset.
   // For your own profile, currentUser() is already the freshest source.
-  if (!isMe) {
+  if (!isMe && !getUser(handle)) {
     let fetched;
-    try { fetched = await withTimeout(fetchProfileByHandle(handle), 30000, 'profile:' + handle); }
+    try { fetched = await withTimeout(fetchProfileByHandle(handle), 12000, 'profile:' + handle); }
     catch (err) {
       if (!stillHere()) return;
       const app = document.getElementById('app');
@@ -696,16 +696,31 @@ async function doHydrateProfile(handle) {
       return;
     }
   }
-  try { await withTimeout(hydrateProfileFollow(handle), 30000, 'follow:' + handle); }
-  catch { /* follow counts are non-critical; fall through and let the body still render */ }
-  if (!stillHere()) return;
   // Reset the tab to Posts whenever a fresh profile is opened so the new
   // page never inherits the active tab of the previous one.
   activeTab = 'posts';
   const app = document.getElementById('app');
   if (app) app.innerHTML = renderProfile(handle);
+  // GitHub panels are independent of Supabase posts/follow counts. Start
+  // them as soon as the profile shell exists; main.js's later calls are
+  // harmless because each hydrator already dedupes on its live DOM slot.
+  hydrateProfileActivity(handle).catch(() => {});
+  hydrateProfileLanguages(handle).catch(() => {});
+  hydrateProfileTasks(handle).catch(() => {});
   hydrateOrgMembers(handle).catch(() => {});
-  await hydrateProfileBody(handle);
+  // Posts are the primary content. Start them immediately; profile refresh
+  // and follow counts are secondary and must not block the timeline.
+  const bodyPromise = hydrateProfileBody(handle);
+  const followPromise = withTimeout(hydrateProfileFollow(handle), 10000, 'follow:' + handle)
+    .catch(() => null);
+  if (!isMe) fetchProfileByHandle(handle).catch(() => {});
+  await Promise.all([bodyPromise, followPromise]);
+  if (stillHere()) {
+    const followingEl = document.getElementById('profile-following-count');
+    const followersEl = document.getElementById('profile-followers-count');
+    if (followingEl) followingEl.textContent = String(followingCount(handle));
+    if (followersEl) followersEl.textContent = String(followerCount(handle));
+  }
 }
 
 // For org accounts: members are listed by handle only; fetch the full
@@ -787,7 +802,7 @@ async function hydrateProfileBody(handle) {
     const p = tab === 'likes'      ? likedPostsByHandle(handle)
             : tab === 'spots'      ? postsByHandle(handle).then(list => list.filter(p => p.spot))
             :                        postsByHandle(handle);
-    posts = await withTimeout(p, 30000, 'profile:' + tab);
+    posts = await withTimeout(p, 15000, 'profile:' + tab);
   } catch (err) {
     if (!stillHere()) return;
     console.error('hydrateProfileBody', err);

@@ -101,7 +101,9 @@ export function cachedTasks(ghHandle) {
   const all = readCache();
   const entry = all[ghHandle.toLowerCase()];
   if (!entry) return null;
-  if (Date.now() - entry.at > TTL_MS) return null;
+  // Stale-while-revalidate: an older issue snapshot is much more useful
+  // than a loading card while GitHub Search is slow. fetchTasks() still
+  // refreshes it in the background on every profile hydration.
   return entry;
 }
 
@@ -126,7 +128,7 @@ export async function fetchTasks(ghHandle) {
   const url = 'https://api.github.com/search/issues?q=' + q +
               '&sort=created&order=desc&per_page=' + MAX_ITEMS;
   let raw;
-  try { raw = await fetchJson(url); }
+  try { raw = await fetchJson(url, 6000); }
   catch { return cachedTasks(ghHandle); }
   if (!raw) return cachedTasks(ghHandle);
 
