@@ -145,7 +145,7 @@ function refreshRailData() {
     try { await recommendedProfiles({ limit: 5, excludeHandles }); } catch {}
     // Trending reads cachedPosts('home'); if nothing has filled it yet
     // (first visit, landing on a non-home route) do one fetch here.
-    if (!cachedPosts('home')) { try { await allPosts({ limit: 100 }); } catch {} }
+    if (!cachedPosts('home')) { try { await allPosts({ limit: 40 }); } catch {} }
     railFetchedAt = Date.now();
     railFetching  = false;
     repaintRail();

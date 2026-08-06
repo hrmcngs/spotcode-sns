@@ -1,0 +1,27 @@
+name: Supabase keep alive
+
+on:
+  schedule:
+    # GitHub Actions cron is UTC. Runs at 12:23 JST every three days.
+    - cron: '23 3 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keep-alive
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Post as the dev account and remove the previous automatic post
+        env:
+          SUPABASE_URL: https://vkwdthjiyxrhskdlgexq.supabase.co
+          SUPABASE_ANON_KEY: sb_publishable_xdAZG7yOOFKPXmugjhDWdQ_HJ7sGHIq
+          DEV_ACCOUNT_PASSWORD: ${{ secrets.DEV_ACCOUNT_PASSWORD }}
+        run: node scripts/keep-supabase-active.mjs

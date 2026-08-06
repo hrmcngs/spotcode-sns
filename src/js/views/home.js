@@ -8,6 +8,12 @@ import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePoll
 import { t }              from '../i18n.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { timelineTabs } from './timeline-tabs.js';
+import { withTimeout } from '../net-utils.js';
+
+// Covers SDK loading, auth refresh queues, and the PostgREST request itself.
+// Without a deadline any of those can leave the initial skeleton on screen
+// forever when a paused Supabase project is waking up.
+const TIMELINE_TIMEOUT_MS = 15 * 1000;
 
 // Monotonic counter incremented on every renderHome() so async hydrations
 // can detect when they've been superseded by a newer navigation / refresh
@@ -112,13 +118,17 @@ export async function hydrateHome(tab = 'foryou') {
   // stay imageless after a quick reload.
   const usedFreshCache = !!(posts && posts.length && !posts.some(p => p && p.photosStripped));
   if (!usedFreshCache) {
-    // Phones get a smaller page: post rows can carry base64 photos
-    // (80–180KB each), so 100 rows is potentially a multi-MB download
-    // + parse + render on exactly the devices least able to afford it.
-    const limit = (typeof matchMedia === 'function' &&
-                   matchMedia('(max-width: 640px)').matches) ? 40 : 100;
+    // Post rows can carry base64 photos (80–180KB each). The old desktop
+    // limit of 100 made the web build download and parse a multi-MB response,
+    // while mobile (40 rows) loaded correctly. Keep the initial page bounded
+    // on every viewport; newest posts, including the keep-alive post, remain
+    // visible without making desktop wait for 2.5x more data.
+    const limit = 40;
     try {
-      posts = tab === 'following' ? await followingPosts({ limit }) : await allPosts({ limit });
+      const request = tab === 'following'
+        ? followingPosts({ limit })
+        : allPosts({ limit });
+      posts = await withTimeout(request, TIMELINE_TIMEOUT_MS, 'タイムライン取得');
     } catch (err) {
       if (myVersion !== renderVersion) return;
       console.error('hydrateHome: fetch failed', err);

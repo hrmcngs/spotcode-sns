@@ -55,3 +55,14 @@ docs/       ← 設計メモ
    - コンポーザーに「@spotcode_official として投稿します — 自分に戻る」バナーが出る
    - 次の投稿は `@spotcode_official` の author で保存される（RLS が再確認）
    - 自分の行 or バナーの「自分に戻る」で解除
+
+## Supabase の自動稼働確認
+
+`.github/workflows/supabase-keep-alive.yml` は3日ごと（日本時間 12:23）に
+`@spotcode_dev` で稼働確認投稿を作成します。新しい投稿が正常に作成された後、
+専用の接頭辞が付いた過去の自動投稿だけを削除するため、自動投稿は常に1件だけ残ります。
+devアカウントから手動で作成した通常の投稿は削除しません。
+
+利用前に、GitHub リポジトリの **Settings → Secrets and variables → Actions** で
+Repository secret `DEV_ACCOUNT_PASSWORD` にdevテストアカウントのパスワードを登録してください。
+登録後は **Actions → Supabase keep alive → Run workflow** で手動実行し、初回の動作を確認できます。
