@@ -20,6 +20,28 @@ import { maskHandle, maskName, maskMentionsInText } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
 
 const notificationCache = new Map();
+const NOTIF_SESSION_PREFIX = 'spotcode:notif-cache:v1:';
+
+function readNotificationCache(id) {
+  if (!id) return null;
+  if (notificationCache.has(id)) return notificationCache.get(id);
+  try {
+    const entry = JSON.parse(sessionStorage.getItem(NOTIF_SESSION_PREFIX + id) || 'null');
+    if (entry && Array.isArray(entry.items) && Date.now() - entry.at < 5 * 60 * 1000) {
+      notificationCache.set(id, entry.items);
+      return entry.items;
+    }
+  } catch {}
+  return null;
+}
+
+function writeNotificationCache(id, items) {
+  if (!id) return;
+  notificationCache.set(id, items);
+  try {
+    sessionStorage.setItem(NOTIF_SESSION_PREFIX + id, JSON.stringify({ at: Date.now(), items }));
+  } catch {}
+}
 
 function escape(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -151,7 +173,8 @@ export async function hydrateNotifications() {
     return;
   }
 
-  const initialCache = notificationCache.get(me.id);
+  let cacheKey = me.id;
+  let initialCache = readNotificationCache(cacheKey);
   if (initialCache) paintNotifications(live(), initialCache);
 
   // While the "posting as official" overlay is on, show notifications
@@ -159,14 +182,30 @@ export async function hydrateNotifications() {
   // the staffer is acting as the official, so their inbox should
   // reflect that. Resolve the official id (await once on cache miss).
   let targetUserId;
+  let targetHandle = me.handle;
   if (isPostingAsOfficial()) {
     let official = cachedOfficialAccount();
     if (!official) { try { official = await getOfficialAccount(); } catch {} }
-    if (official) targetUserId = official.id;
+    if (official) {
+      targetUserId = official.id;
+      targetHandle = official.handle;
+      cacheKey = official.id;
+      const officialCache = readNotificationCache(cacheKey);
+      if (officialCache) {
+        initialCache = officialCache;
+        paintNotifications(live(), officialCache);
+      }
+    }
   }
 
   let items;
-  try { items = await withTimeout(notificationsForMe({ targetUserId }), 12000, 'notifications'); }
+  try {
+    items = await withTimeout(
+      notificationsForMe({ targetUserId, targetHandle }),
+      10000,
+      'notifications',
+    );
+  }
   catch (err) {
     const r = live();
     if (!r) return;
@@ -182,7 +221,7 @@ export async function hydrateNotifications() {
   const r = live();
   if (!r) return;
 
-  notificationCache.set(targetUserId || me.id, items);
+  writeNotificationCache(cacheKey, items);
   paintNotifications(r, items);
 }
 

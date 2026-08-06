@@ -410,20 +410,48 @@ export async function denyFollowRequest(followerHandle) {
 // follows / mentions while the staffer is still authed as their
 // own account. All the source tables (likes, comments, follows,
 // posts) are publicly readable, so no extra RLS is needed.
-export async function notificationsForMe({ limit = 40, targetUserId } = {}) {
+export async function notificationsForMe({ limit = 30, targetUserId, targetHandle } = {}) {
   let supa; try { supa = await getClient(); } catch { return []; }
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return [];
   const effectiveId = targetUserId || user.id;
 
+  // Start the independent follow query immediately. Previously it was not
+  // even created until posts + profile-handle lookups had completed.
+  const followsPromise = (async () => {
+    const { data, error } = await supa.from('follows')
+      .select('status, created_at, follower:profiles!follows_follower_id_fkey(handle, name, avatar_url, avatar_shape, bio, is_private)')
+      .eq('target_id', effectiveId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) { console.warn('notif follows', error); return []; }
+    return (data || [])
+      .filter(r => r.follower?.handle)
+      .map(r => ({
+        type: r.status === 'pending' ? 'follow_request' : 'follow',
+        actor: shapeProfile(r.follower),
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+        status: r.status,
+      }));
+  })();
+
   // First grab the target's post ids — every author-side event needs
-  // them. Capped at 200 so the IN-list stays small (Postgres /
-  // PostgREST handle bigger but the round trip gets chunky).
-  const { data: myPosts, error: myPostsErr } = await supa
-    .from('posts').select('id, body, created_at')
+  // them. Notifications only display 30 rows, so scanning the latest 60
+  // posts is enough and keeps the subsequent IN filters compact.
+  // Resolve the mention handle in parallel (or use the caller's cached
+  // profile handle and skip that query entirely).
+  const postsPromise = supa.from('posts').select('id, body, created_at')
     .eq('author_id', effectiveId)
     .order('created_at', { ascending: false })
-    .limit(200);
+    .limit(60);
+  const handlePromise = targetHandle
+    ? Promise.resolve(targetHandle)
+    : supa.from('profiles').select('handle').eq('id', effectiveId).maybeSingle()
+        .then(({ data }) => data?.handle || null);
+  const [{ data: myPosts, error: myPostsErr }, myHandle] = await Promise.all([
+    postsPromise,
+    handlePromise,
+  ]);
   if (myPostsErr) console.warn('notificationsForMe: myPosts', myPostsErr);
   const myPostIds = (myPosts || []).map(p => p.id);
   const postById = new Map();
@@ -436,7 +464,7 @@ export async function notificationsForMe({ limit = 40, targetUserId } = {}) {
 
   // Build one promise per source. Each handles its own errors so a
   // missing optional table / column doesn't kill the whole page.
-  const tasks = [];
+  const tasks = [followsPromise];
 
   // --- LIKES on my posts ---
   if (myPostIds.length) tasks.push((async () => {
@@ -485,11 +513,8 @@ export async function notificationsForMe({ limit = 40, targetUserId } = {}) {
   // --- MENTIONS of me in any post body (someone else's post with
   //     "@<myHandle>" in it). Uses ilike for a coarse server-side filter
   //     and a strict word-boundary regex on the client so @aya doesn't
-  //     match @aya526dev. Requires we know my own handle; pulled from
-  //     the profiles table since the auth user only carries the id. ---
-  const { data: meProfile } = await supa
-    .from('profiles').select('handle').eq('id', effectiveId).maybeSingle();
-  const myHandle = meProfile?.handle;
+  //     match @aya526dev. The caller normally supplies the already-cached
+  //     handle, avoiding another Supabase round trip. ---
   if (myHandle) {
     const mentionRe = new RegExp(
       '(^|[^A-Za-z0-9_@-])@' + myHandle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9_-])',
@@ -534,24 +559,6 @@ export async function notificationsForMe({ limit = 40, targetUserId } = {}) {
         }));
     })());
   }
-
-  // --- FOLLOWS + FOLLOW REQUESTS targeting me ---
-  tasks.push((async () => {
-    const { data, error } = await supa.from('follows')
-      .select('status, created_at, follower:profiles!follows_follower_id_fkey(handle, name, avatar_url, avatar_shape, bio, is_private)')
-      .eq('target_id', effectiveId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) { console.warn('notif follows', error); return []; }
-    return (data || [])
-      .filter(r => r.follower?.handle)
-      .map(r => ({
-        type: r.status === 'pending' ? 'follow_request' : 'follow',
-        actor: shapeProfile(r.follower),
-        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
-        status: r.status,
-      }));
-  })());
 
   const groups = await Promise.all(tasks);
   const merged = [].concat(...groups);
