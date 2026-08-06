@@ -19,7 +19,7 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, allPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
+import { allUsers, allPosts, cachedPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
          markPendingDelete, unmarkPendingDelete } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_HANDLE } from './official-account.js';
@@ -58,9 +58,13 @@ function escape(s) {
 // Aggregate the actual posts by city (市区町村) for the right-rail
 // "Trending spots" card. A post contributes when its spot includes
 // `addressDetails.city`. Posts without a location are skipped.
-async function computeTrendingCities() {
+// Reads the localStorage home-timeline cache synchronously — it used
+// to fire its own 200-row Supabase query on every navigation, which
+// was a major source of per-page lag. The cache is refilled by the
+// home view's own fetch and by refreshRailData() below.
+function computeTrendingCities() {
   const byCity = new Map(); // city -> { city, prefecture, count }
-  const posts = await allPosts({ limit: 200 });
+  const posts = cachedPosts('home') || [];
   for (const p of posts) {
     const det = p?.spot?.addressDetails;
     const city = det?.city;
@@ -94,40 +98,70 @@ document.querySelectorAll('.side-nav__item').forEach(el => {
   if (name) el.insertAdjacentHTML('afterbegin', '<span class="side-nav__icon">' + icon(name, { size: 22 }) + '</span>');
 });
 
-async function renderRail() {
+// ----- right rail -----
+// The rail used to await two Supabase round trips (recommended
+// profiles + a 200-row post fetch for Trending) on EVERY route change
+// before painting anything — the single biggest source of navigation
+// lag. Now the rail paints synchronously from local caches on every
+// nav, and the underlying data refreshes in the background at most
+// once per RAIL_REFRESH_MS, repainting only if the HTML changed.
+const RAIL_REFRESH_MS = 5 * 60 * 1000;
+let railFetchedAt = 0;
+let railFetching  = false;
+let lastRailHtml  = null;
+
+// The overlay identity to exclude from Who-to-follow (so
+// @spotcode_official doesn't show up as a "follow me" suggestion to
+// its own admin while they're posting as it).
+function railOverlayHandle(me) {
+  if (!me || !isPostingAsOfficial()) return null;
+  const overlay = displayUser(me);
+  return (overlay && overlay.handle !== me.handle) ? overlay.handle : OFFICIAL_HANDLE;
+}
+
+function repaintRail() {
+  const html = buildRailHtml();
+  if (html === lastRailHtml) return; // skip DOM churn when nothing changed
+  lastRailHtml = html;
+  rail.innerHTML = html;
+}
+
+// Background refresh of the rail's network-backed data (my follows,
+// recommended profiles, and — first boot only — the home timeline
+// that Trending reads from). Throttled; never blocks a paint.
+function refreshRailData() {
+  if (railFetching || Date.now() - railFetchedAt < RAIL_REFRESH_MS) return;
+  railFetching = true;
+  (async () => {
+    try { await hydrateMyFollows(); } catch {}
+    const me = currentUser();
+    const overlayHandle = railOverlayHandle(me);
+    const excludeHandles = [];
+    if (me) {
+      excludeHandles.push(me.handle);
+      if (overlayHandle) excludeHandles.push(overlayHandle);
+      try { excludeHandles.push(...myFollowingHandles()); } catch {}
+    }
+    try { await recommendedProfiles({ limit: 5, excludeHandles }); } catch {}
+    // Trending reads cachedPosts('home'); if nothing has filled it yet
+    // (first visit, landing on a non-home route) do one fetch here.
+    if (!cachedPosts('home')) { try { await allPosts({ limit: 100 }); } catch {} }
+    railFetchedAt = Date.now();
+    railFetching  = false;
+    repaintRail();
+  })();
+}
+
+function buildRailHtml() {
   const me = currentUser();
-  // Make sure followsMine is filled before deciding who to suggest, so the
-  // "Who to follow" list never re-suggests someone you already follow.
-  try { await hydrateMyFollows(); } catch {}
-  // Pull fresh suggestions from Supabase so the card isn't empty when
-  // the local user cache only knows about the viewer themselves.
-  // Excludes the viewer + the handles they already follow + the
-  // overlay identity (so @spotcode_official doesn't show up as a
-  // "follow me" suggestion to its own admin while they're posting
-  // as it). Silent on failure → fall through to the local cache.
-  const overlay = me ? displayUser(me) : null;
-  // Use displayUser's overlay when available, otherwise fall back to
-  // the hardcoded OFFICIAL_HANDLE so the brand account is excluded
-  // even before cachedOfficialAccount() has populated.
-  const overlayHandle = (me && isPostingAsOfficial())
-    ? ((overlay && overlay.handle !== me.handle) ? overlay.handle : OFFICIAL_HANDLE)
-    : null;
-  const excludeHandles = [];
-  if (me) {
-    excludeHandles.push(me.handle);
-    if (overlayHandle) excludeHandles.push(overlayHandle);
-    try { excludeHandles.push(...myFollowingHandles()); } catch {}
-  }
-  try {
-    await recommendedProfiles({ limit: 5, excludeHandles });
-  } catch {}
+  const overlayHandle = railOverlayHandle(me);
   const others = Object.values(allUsers()).filter(u => {
     if (!me) return true; // guest: don't hide anyone
     if (u.handle === me.handle) return false;
     if (overlayHandle && u.handle === overlayHandle) return false;
     return !isFollowing(me.handle, u.handle);
   });
-  const trending = await computeTrendingCities();
+  const trending = computeTrendingCities();
 
   // Pull the viewer's real GitHub contributions for the activity heatmap.
   // If they're not logged in, or haven't linked a github_handle, fall back
@@ -135,8 +169,9 @@ async function renderRail() {
   const gh = me?.github?.handle;
   const myCounts = gh ? (cachedContributions(gh) || emptyCounts) : emptyCounts;
   if (gh && !cachedContributions(gh)) {
-    // Fetch in the background and re-render once it lands.
-    fetchContributions(gh).then((c) => { if (c) refresh(); });
+    // Fetch in the background and repaint the rail once it lands
+    // (rail only — a full refresh() re-renders the whole view).
+    fetchContributions(gh).then((c) => { if (c) repaintRail(); });
   }
 
   const parts = [
@@ -660,7 +695,8 @@ function dispatch(path) {
       '</div>' +
       quickNavLinks();
   }
-  renderRail().then((html) => { rail.innerHTML = html; });
+  repaintRail();
+  refreshRailData();
   setActiveNav(path);
 }
 
@@ -1187,6 +1223,9 @@ onAuthChange(() => {
   // right `auth.uid()` context, then warm the new user's follows.
   clearInteractionsCache();
   hydrateMyFollows();
+  // New identity → the Who-to-follow exclusions changed; let the next
+  // dispatch refetch rail data instead of serving the old user's.
+  railFetchedAt = 0;
   // If the new identity isn't admin / operator, drop the
   // "posting as official" overlay so a regular user can't inherit it
   // by signing in on the same device.
@@ -2105,10 +2144,18 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then((reg) => {
       // SPA navigation is client-side (pushState + dispatch), so the
       // browser never re-fetches HTML and never notices when a new
-      // sw.js is deployed. Poll for an update on every in-app route
-      // change so a fresh deploy takes effect on the next tab focus
-      // without needing a hard reload.
-      onRoute(() => { reg.update().catch(() => {}); });
+      // sw.js is deployed. Poll for an update on route changes so a
+      // fresh deploy takes effect without a hard reload — but throttle
+      // to once per 10 minutes: reg.update() is a real network fetch
+      // of sw.js, and firing it on every single navigation added
+      // per-page lag on slow connections.
+      const SW_CHECK_MS = 10 * 60 * 1000;
+      let lastSwCheck = Date.now(); // register() itself just checked
+      onRoute(() => {
+        if (Date.now() - lastSwCheck < SW_CHECK_MS) return;
+        lastSwCheck = Date.now();
+        reg.update().catch(() => {});
+      });
       // When a NEW SW takes over (fresh cache), reload once so the
       // page runs against the code it was compiled with. Guard with
       // sessionStorage so the reload can't loop.

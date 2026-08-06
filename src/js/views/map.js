@@ -6,11 +6,11 @@
 // "come within Xm to read this idea".
 
 import { loadMaps } from '../gmap.js';
-import { allPosts } from '../data.js';
+import { postsWithSpots, cachedPosts } from '../data.js';
 import { t }        from '../i18n.js';
 import { icon }     from '../icons.js';
 import { getMyLocation, isNearSpotSync, getRadius, permissionDenied,
-         cachedLocation, getApproxLocationViaIP } from '../geo-gate.js';
+         cachedLocation, cachedApproxLocation, getApproxLocationViaIP } from '../geo-gate.js';
 import { currentUser } from '../auth.js';
 import { timelineTabs } from './timeline-tabs.js';
 
@@ -75,14 +75,32 @@ export async function hydrateMap(city) {
   const status = document.getElementById('map-status');
   if (!canvas) return;
 
-  // Split the three awaits so a partial failure doesn't break the
-  // whole map. On mobile, ANY of these can fail individually:
-  //   - loadMaps()      → CDN slow / WKWebView CSP / offline
-  //   - allPosts()      → Supabase RLS / schema cache miss
-  //   - getMyLocation() → already resolves null on denial, but
-  //                       defend in depth in case that changes
-  // We only NEED Leaflet to render anything; posts and location are
-  // both nice-to-have and degrade to empty.
+  // Free any prior Leaflet instance BEFORE we potentially recreate
+  // one. Otherwise a return-visit to /spots leaves the old map bound
+  // to a detached #map-canvas and Leaflet quietly leaks tile
+  // requests + DOM handlers on every hydrate.
+  if (mapInst) { try { mapInst.remove(); } catch {} mapInst = null; }
+  markerLayer = null;
+
+  // Kick off all three network calls in parallel — Leaflet load,
+  // posts, and (only when we don't already have a real GPS fix)
+  // an IP-based coarse location. The previous serial `await` chain
+  // stacked ~1-2s of Supabase + ~500ms of ipwho.is on top of the
+  // Leaflet CDN round-trip; parallelising them cuts total wall-clock
+  // to the slowest single leg.
+  const cachedForPaint = cachedPosts('spots') || [];
+  const postsPromise = postsWithSpots({ limit: 200 }).catch((err) => {
+    console.warn('hydrateMap: postsWithSpots failed, using cache', err);
+    return cachedForPaint;
+  });
+  const herePromise = getMyLocation().catch(() => null);
+  // Coarse IP fix only when the exact fix isn't already sitting in
+  // the module-level cache. Fires in parallel so it's ready by the
+  // time we know `here` is null.
+  const approxPromise = cachedLocation()
+    ? Promise.resolve(null)
+    : getApproxLocationViaIP().catch(() => null);
+
   let L;
   try {
     L = await loadMaps();
@@ -94,26 +112,13 @@ export async function hydrateMap(city) {
   }
   if (myVersion !== renderVersion) return;
 
-  // 500 was overkill — for a small SNS there's no point shoving 500
-  // markers into the canvas, and the heavier Supabase round trip was
-  // the single biggest contributor to "/spots feels slow". 200 still
-  // covers every realistic case and shaves load time noticeably.
-  const posts = await allPosts({ limit: 200 }).catch((err) => {
-    console.warn('hydrateMap: allPosts failed, rendering empty map', err);
-    return [];
-  });
-  // EXACT location via browser geolocation — used both for centering
-  // AND for the unlock-ring + "you are here" pin. In Electron under
-  // file:// (and any other context without a geolocation permission
-  // UI) this resolves to null.
-  const here = await getMyLocation().catch(() => null);
-  // APPROXIMATE location via IP geolocation — used ONLY for centering
-  // when we couldn't get an exact fix. Accuracy is city-level so it
-  // can't drive the 100m unlock gate, but it's enough to open the
-  // map near the viewer instead of defaulting to Tokyo.
-  const approxIp = here ? null : await getApproxLocationViaIP().catch(() => null);
+  const [posts, here, approxIp] = await Promise.all([
+    postsPromise, herePromise, approxPromise,
+  ]);
   if (myVersion !== renderVersion) return;
 
+  // `postsWithSpots` already filters server-side (`spot is not null`)
+  // so this defensive re-filter only catches lat/lng shape drift.
   const allSpotted = (posts || []).filter(p => p?.spot?.lat != null && p?.spot?.lng != null);
   // City-scoped view (e.g. /spots/世田谷区 from the Trending card): drop
   // pins outside the city so the canvas only shows that 市区町村's ideas
@@ -242,7 +247,13 @@ export async function hydrateMap(city) {
       mapInst.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
   };
-  [60, 250, 600, 1500].forEach(ms => setTimeout(recompute, ms));
+  // Two size re-checks are enough: one right after paint (60ms) for
+  // the initial-mount 0×0 case, one after the URL bar likely settled
+  // (400ms). The old 4-step staircase kept firing after the map had
+  // long since settled — extra work on a page already flagged as
+  // "重い". ResizeObserver still catches genuine viewport changes
+  // (orientation flip, keyboard).
+  [60, 400].forEach(ms => setTimeout(recompute, ms));
   if (typeof ResizeObserver !== 'undefined') {
     const ro = new ResizeObserver(() => mapInst && mapInst.invalidateSize());
     ro.observe(canvas);

@@ -451,12 +451,15 @@ export function prependToTimelineCaches(post) {
 // for this scope or the entry is older than TTL. In-flight deletes
 // are filtered out here too so a navigation-triggered re-render
 // during the round-trip doesn't paint a row the user just removed.
-export function cachedPosts(scope) {
+// `maxAgeMs` lets a caller ask for a stricter freshness bound than the
+// default paint TTL — e.g. hydrateHome treats a <60s-old cache as
+// "fresh enough to skip the refetch entirely".
+export function cachedPosts(scope, maxAgeMs = POSTS_CACHE_TTL_MS) {
   try {
     const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
     const e = all[scope];
     if (!e || !e.posts) return null;
-    if (Date.now() - (e.at || 0) > POSTS_CACHE_TTL_MS) return null;
+    if (Date.now() - (e.at || 0) > maxAgeMs) return null;
     return pendingDeletes.size
       ? e.posts.filter((p) => !pendingDeletes.has(p.id))
       : e.posts;
@@ -536,6 +539,24 @@ export async function allPosts({ limit = 100 } = {}) {
   if (error) throw new Error(error.message);
   const shaped = mergeOptimistic((data || []).map(shapePost), 'home');
   savePostsCache('home', shaped);
+  return shaped;
+}
+
+// Posts with a spot attached, for the /spots map. Filters
+// server-side via `spot is not null` so we don't transfer the ~90%
+// of posts that have no location — the biggest single win for
+// "/spots feels heavy". Same shape as allPosts otherwise.
+export async function postsWithSpots({ limit = 200 } = {}) {
+  const supa = await getClient();
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').select(cols)
+      .not('spot', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+  );
+  if (error) throw new Error(error.message);
+  const shaped = mergeOptimistic((data || []).map(shapePost), 'spots');
+  savePostsCache('spots', shaped);
   return shaped;
 }
 

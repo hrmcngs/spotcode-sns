@@ -100,14 +100,23 @@ export async function hydrateHome(tab = 'foryou') {
     return;
   }
 
-  let posts;
-  try {
-    posts = tab === 'following' ? await followingPosts() : await allPosts();
-  } catch (err) {
-    if (myVersion !== renderVersion) return;
-    console.error('hydrateHome: fetch failed', err);
-    list.innerHTML = errorTimeline(err.message || '通信エラー');
-    return;
+  // Fresh-cache fast path: when this tab's timeline was fetched less
+  // than a minute ago (typically: the user bounced to another page
+  // and came right back), reuse it instead of re-downloading ~100
+  // rows on every single visit. The likes/reposts/quotes hydration
+  // below still runs, so counts and toggle state stay accurate.
+  const FRESH_MS = 60 * 1000;
+  let posts = cachedPosts(SCOPE[tab] || 'home', FRESH_MS);
+  const usedFreshCache = !!(posts && posts.length);
+  if (!usedFreshCache) {
+    try {
+      posts = tab === 'following' ? await followingPosts() : await allPosts();
+    } catch (err) {
+      if (myVersion !== renderVersion) return;
+      console.error('hydrateHome: fetch failed', err);
+      list.innerHTML = errorTimeline(err.message || '通信エラー');
+      return;
+    }
   }
   if (myVersion !== renderVersion) return;
 
@@ -115,7 +124,12 @@ export async function hydrateHome(tab = 'foryou') {
     list.innerHTML = emptyTimeline(tab, !!me);
     return;
   }
-  list.innerHTML = posts.map(renderPost).join('');
+  // Skip the pre-hydration paint when the fresh-cache path was taken
+  // AND renderHome already painted the exact same cached posts — the
+  // post-hydration re-render below still lands the accurate counts.
+  if (!(usedFreshCache && document.getElementById('timeline-list-cached'))) {
+    list.innerHTML = posts.map(renderPost).join('');
+  }
 
   const ids = posts.map(p => p.id);
   try {
