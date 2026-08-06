@@ -391,6 +391,7 @@ function displaySection() {
     '<section class="settings-card">' +
       '<h2>' + t('settings.about.title') + '</h2>' +
       '<p class="settings__hint">' + t('settings.about.body') + '</p>' +
+      '<p><a href="privacy.html" target="_blank" rel="noopener">' + t('settings.about.privacy') + '</a></p>' +
     '</section>'
   );
 }
