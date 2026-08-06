@@ -1,6 +1,6 @@
 import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
-import { onRoute, url, refresh, navigate } from './router.js';
+import { onRoute, url, refresh, navigate, currentPath } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
 import { renderProfile, hydrateProfileActivity, hydrateProfileLanguages, hydrateProfileTasks, hydrateProfile, setProfileTab, openProfileMore, handleTasksClick } from './views/profile.js';
 import { renderRepos, hydrateRepos } from './views/repos.js';
@@ -44,6 +44,7 @@ import { recommendedProfiles } from './profiles.js';
 import { saveDraft, loadDraft, clearDraft, debounce } from './drafts.js';
 import { quickNavLinks } from './quick-nav.js';
 import { initMentionAutocomplete } from './mention-autocomplete.js';
+import { parseConnpassUrl } from './connpass.js';
 
 const app  = document.getElementById('app');
 const rail = document.getElementById('rail');
@@ -548,6 +549,7 @@ function dispatch(path) {
   const analyticsMatch = path.match(/^\/post\/([0-9a-fA-F-]{36})\/analytics\/?$/);
   const postMatch      = path.match(/^\/post\/([0-9a-fA-F-]{36})\/?$/);
   const followMatch    = path.match(/^\/([A-Za-z0-9_][A-Za-z0-9_-]*)\/(following|followers)\/?$/);
+  const eventMatch     = path.match(/^\/event\/(\d+)\/?$/);
   const userMatch      = path.match(/^\/([A-Za-z0-9_][A-Za-z0-9_-]*)\/?$/);
 
   if (path === '/' || path === '') {
@@ -618,6 +620,25 @@ function dispatch(path) {
     document.title = 'Repos / spotcode-sns';
     app.innerHTML = renderRepos();
     hydrateRepos();
+  } else if (eventMatch) {
+    const eid = eventMatch[1];
+    document.title = 'event #' + eid + ' / spotcode-sns';
+    // Lazy-load — the /event/<id> code path (fetches connpass API,
+    // renders event head) isn't needed on any hot path so it stays
+    // out of the initial main.js bundle. First-time visitor pays a
+    // ~10ms import cost; every subsequent visit is instant.
+    app.innerHTML = '<div class="stub"><p class="stub__sub">読み込み中…</p></div>';
+    import('./views/event.js').then(({ renderEvent, hydrateEvent }) => {
+      // Guard against a rapid navigation away — dispatch may have
+      // fired again for a different route by the time the import
+      // resolves.
+      if (currentPath() !== '/event/' + eid) return;
+      app.innerHTML = renderEvent(eid);
+      hydrateEvent(eid);
+    }).catch((err) => {
+      console.warn('event view load', err);
+      app.innerHTML = '<div class="stub"><p class="stub__sub">読み込みに失敗しました</p></div>';
+    });
   } else if (userMatch) {
     const handle = userMatch[1];
     document.title = '@' + handle + ' / spotcode-sns';
@@ -750,9 +771,11 @@ function readComposerState() {
   if (!form) return null;
   const ta   = form.querySelector('textarea[name="text"]');
   const gh   = form.querySelector('input[name="github"]');
+  const ev   = form.querySelector('input[name="event"]');
   return {
     body:       ta ? ta.value : '',
     githubLink: gh ? gh.value : '',
+    eventUrl:   ev ? ev.value : '',
     spot:       pendingSpot,
     kind:       pendingKind,
     visibility: pendingVisibility,
@@ -771,10 +794,16 @@ function clearComposerUI() {
   }
   const gh = form.querySelector('input[name="github"]');
   if (gh) gh.value = '';
+  const ev = form.querySelector('input[name="event"]');
+  if (ev) ev.value = '';
   const row = document.getElementById('compose-link-row');
   if (row) row.hidden = true;
+  const eventRow = document.getElementById('compose-event-row');
+  if (eventRow) eventRow.hidden = true;
   const linkToggle = document.getElementById('compose-link-toggle');
   if (linkToggle) linkToggle.setAttribute('aria-expanded', 'false');
+  const eventToggle = document.getElementById('compose-event-toggle');
+  if (eventToggle) eventToggle.setAttribute('aria-expanded', 'false');
   pendingSpot = null;
   syncSpotChip(null);
   pendingPhotos = [];
@@ -959,6 +988,14 @@ function restoreComposerDraft() {
     if (row) row.hidden = false;
     const linkToggle = document.getElementById('compose-link-toggle');
     if (linkToggle) linkToggle.setAttribute('aria-expanded', 'true');
+  }
+  if (d.eventUrl) {
+    const ev = form.querySelector('input[name="event"]');
+    if (ev) ev.value = d.eventUrl;
+    const evRow = document.getElementById('compose-event-row');
+    if (evRow) evRow.hidden = false;
+    const evToggle = document.getElementById('compose-event-toggle');
+    if (evToggle) evToggle.setAttribute('aria-expanded', 'true');
   }
   if (d.spot && d.spot.lat != null && d.spot.lng != null) {
     pendingSpot = d.spot;
@@ -1667,6 +1704,18 @@ document.addEventListener('click', (e) => {
     if (willOpen) row.querySelector('input')?.focus();
     return;
   }
+  // Same toggle shape for the connpass event URL input.
+  const eventToggle = e.target.closest('#compose-event-toggle');
+  if (eventToggle) {
+    e.preventDefault();
+    const row = document.getElementById('compose-event-row');
+    if (!row) return;
+    const willOpen = row.hidden;
+    row.hidden = !willOpen;
+    eventToggle.setAttribute('aria-expanded', String(willOpen));
+    if (willOpen) row.querySelector('input')?.focus();
+    return;
+  }
 
   // Clear the picked spot (the small × next to the chip).
   if (e.target.closest('#compose-spot-clear')) {
@@ -1945,6 +1994,17 @@ document.addEventListener('submit', (e) => {
   ta.classList.remove('is-error');
   const ghInput = form.querySelector('input[name="github"]');
   const gh = ghInput ? ghInput.value.trim() : '';
+  // Event URL: accept any connpass URL form (with/without trailing
+  // slash, /event/<id>/ or the older /event/<id>/participants/), and
+  // normalise to the canonical /event/<id>/ before saving so all
+  // rows sharing the same event group cleanly.
+  const evInput = form.querySelector('input[name="event"]');
+  const evRaw = evInput ? evInput.value.trim() : '';
+  let eventUrl = '';
+  if (evRaw) {
+    const parsed = parseConnpassUrl(evRaw);
+    if (parsed) eventUrl = parsed.url;
+  }
   const spotValue = pendingSpot
     ? {
         lat: pendingSpot.lat,
@@ -1957,6 +2017,7 @@ document.addEventListener('submit', (e) => {
   const post = {
     body: text,
     githubLink: gh || undefined,
+    eventUrl:  eventUrl || undefined,
     status: 'wip',
   };
   if (spotValue) post.spot = spotValue;
@@ -2041,6 +2102,26 @@ document.addEventListener('keydown', (e) => {
 // Register only on http(s); file:// (Electron) doesn't support SW.
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      // SPA navigation is client-side (pushState + dispatch), so the
+      // browser never re-fetches HTML and never notices when a new
+      // sw.js is deployed. Poll for an update on every in-app route
+      // change so a fresh deploy takes effect on the next tab focus
+      // without needing a hard reload.
+      onRoute(() => { reg.update().catch(() => {}); });
+      // When a NEW SW takes over (fresh cache), reload once so the
+      // page runs against the code it was compiled with. Guard with
+      // sessionStorage so the reload can't loop.
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloaded) return;
+        reloaded = true;
+        try {
+          if (sessionStorage.getItem('spotcode:sw-reloaded') === '1') return;
+          sessionStorage.setItem('spotcode:sw-reloaded', '1');
+        } catch {}
+        location.reload();
+      });
+    }).catch(() => {});
   });
 }

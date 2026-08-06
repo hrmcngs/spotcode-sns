@@ -52,6 +52,13 @@ export function renderIdeaForm({ user = null } = {}) {
             icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
             '<span>' + t('home.composer.add_url') + '</span>' +
           '</button>' +
+          // Event link toggle — collapses the connpass URL input just
+          // like the github link toggle. Distinct button so the two
+          // categories don't fight for the same textbox.
+          '<button type="button" class="compose-link-toggle" id="compose-event-toggle" aria-expanded="false">' +
+            icon('calendar', { size: 12, className: 'icon--inline' }) +
+            '<span>' + t('home.composer.add_event') + '</span>' +
+          '</button>' +
           // Idea tag toggle. Active = post will be saved with kind="idea"
           // and rendered with an idea badge. Off = regular note.
           '<button type="button" class="compose-kind-toggle" id="compose-kind-toggle" aria-pressed="false" data-kind="off">' +
@@ -81,6 +88,10 @@ export function renderIdeaForm({ user = null } = {}) {
         '<div class="compose-link" id="compose-link-row" hidden>' +
           '<label class="compose-link__label" for="compose-github-input">' + t('home.composer.url') + '</label>' +
           '<input name="github" id="compose-github-input" type="url" placeholder="https://github.com/owner/repo/blob/...">' +
+        '</div>' +
+        '<div class="compose-link" id="compose-event-row" hidden>' +
+          '<label class="compose-link__label" for="compose-event-input">' + t('home.composer.event_url') + '</label>' +
+          '<input name="event" id="compose-event-input" type="url" placeholder="https://connpass.com/event/000000/">' +
         '</div>' +
         // Photo attachments preview row. Populated by main.js when the
         // user picks files via the image tool; thumbnails carry an x

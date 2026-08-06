@@ -89,6 +89,7 @@ let hasVisibility     = true;
 let hasCloseFriends   = true;
 let hasOrganization   = true;
 let hasRepoFullName   = true;
+let hasEventUrl       = true;
 
 (function loadSchemaCache() {
   try {
@@ -108,6 +109,7 @@ let hasRepoFullName   = true;
     if (v.hasCloseFriends   === false) hasCloseFriends   = false;
     if (v.hasOrganization   === false) hasOrganization   = false;
     if (v.hasRepoFullName   === false) hasRepoFullName   = false;
+    if (v.hasEventUrl       === false) hasEventUrl       = false;
   } catch {}
 })();
 function persistSchemaCache() {
@@ -116,7 +118,7 @@ function persistSchemaCache() {
       at: Date.now(),
       hasCommentsCount, hasRepostsCount, hasBookmarksCount, hasQuotesCount, hasQuoteOf,
       hasPhotos, hasPoll, hasKind, hasVisibility, hasCloseFriends, hasOrganization,
-      hasRepoFullName,
+      hasRepoFullName, hasEventUrl,
     }));
   } catch {}
 }
@@ -133,6 +135,7 @@ function postCols() {
   if (hasKind)           extras.push('kind');
   if (hasVisibility)     extras.push('visibility');
   if (hasRepoFullName)   extras.push('repo_full_name');
+  if (hasEventUrl)       extras.push('event_url');
   const head =
     'id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
@@ -160,6 +163,7 @@ const OPTIONAL = [
   { needle: 'close_friends',    off: () => { if (hasCloseFriends)   { console.warn('profiles.close_friends missing — run Stage 16 SQL.'); hasCloseFriends = false; return true; } return false; } },
   { needle: 'organization',     off: () => { if (hasOrganization)   { console.warn('profiles.organization missing — run Stage 16 SQL.'); hasOrganization = false; return true; } return false; } },
   { needle: 'repo_full_name',   off: () => { if (hasRepoFullName)   { console.warn('posts.repo_full_name missing — run Stage 30 SQL.'); hasRepoFullName = false; return true; } return false; } },
+  { needle: 'event_url',        off: () => { if (hasEventUrl)       { console.warn('posts.event_url missing — run Stage 31 SQL.');     hasEventUrl     = false; return true; } return false; } },
 ];
 function isMissingOptionalColumn(error) {
   const msg = String(error?.message || '').toLowerCase();
@@ -250,6 +254,10 @@ function shapePost(row) {
     // Used by /repos to group posts under each repository card.
     // Null when the column is missing or the post isn't tagged.
     repoFullName:  row.repo_full_name || null,
+    // connpass event this post is "about" (Stage 31). Normalised
+    // canonical form (https://connpass.com/event/<id>/), so a click
+    // from any card goes to a consistent /event/<id> route.
+    eventUrl:      row.event_url || null,
     actions: {
       replies:   row.comments_count   || 0,
       forks:     row.reposts_count    || 0,  // fork icon repurposed as リポスト
@@ -275,6 +283,7 @@ export async function addQuote(post, quotedPostId) {
     status:      post.status || 'wip',
   };
   if (hasQuoteOf && quotedPostId) row.quote_of_post_id = quotedPostId;
+  if (hasEventUrl && post.eventUrl) row.event_url = post.eventUrl;
   let res = await withResilientCols((cols) =>
     supa.from('posts').insert(row).select(cols).single()
   );
@@ -618,6 +627,31 @@ export async function likedPostsByHandle(handle) {
     .map(shapePost);
 }
 
+// Every post tagged with the given connpass event URL. The
+// stored event_url is normalised to https://connpass.com/event/<id>/
+// on insert, so we match by exact string. Falls back to `.ilike`
+// with the id fragment if the exact form varies (older rows saved
+// without the trailing slash).
+export async function postsByEventId(eventId) {
+  if (!eventId) return [];
+  if (!hasEventUrl) return [];  // schema not migrated yet
+  const supa = await getClient();
+  const canonical = 'https://connpass.com/event/' + eventId + '/';
+  const { data, error } = await withResilientCols((cols) =>
+    supa.from('posts').select(cols)
+      .or('event_url.eq.' + canonical +
+          ',event_url.ilike.%/event/' + eventId + '/%')
+      .order('created_at', { ascending: false })
+  );
+  if (error) {
+    if (/event_url/i.test(error.message)) return [];
+    throw new Error(error.message);
+  }
+  const shaped = mergeOptimistic((data || []).map(shapePost), 'event:' + eventId);
+  savePostsCache('event:' + eventId, shaped);
+  return shaped;
+}
+
 export async function postsByCity(city) {
   if (!city) return [];
   const supa = await getClient();
@@ -731,6 +765,7 @@ export async function addPost(post) {
   };
   if (wantsPhotos) row.photos = post.photos;
   if (post.kind === 'idea' && hasKind) row.kind = 'idea';
+  if (hasEventUrl && post.eventUrl) row.event_url = post.eventUrl;
   if (hasVisibility && typeof post.visibility === 'string' &&
       ['mutuals','following','friends','org','restricted'].includes(post.visibility)) {
     row.visibility = post.visibility;
@@ -797,6 +832,12 @@ export async function updatePost(postId, fields) {
   if (Object.prototype.hasOwnProperty.call(fields, 'githubLink')) {
     const v = fields.githubLink;
     patch.github_link = (v && String(v).trim()) || null;
+  }
+  // `eventUrl` — same optional shape as githubLink. Only writes when
+  // the column exists (Stage 31 migration applied).
+  if (hasEventUrl && Object.prototype.hasOwnProperty.call(fields, 'eventUrl')) {
+    const v = fields.eventUrl;
+    patch.event_url = (v && String(v).trim()) || null;
   }
   if (!Object.keys(patch).length) return null;
   const { data, error } = await withResilientCols((cols) =>

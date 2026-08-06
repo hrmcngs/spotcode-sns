@@ -9,6 +9,7 @@ import { currentUser }      from './auth.js';
 import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
 import { isDevMode, isOperator } from './dev-mode.js';
+import { parseConnpassUrl, cachedEventMeta, formatEventStart } from './connpass.js';
 import { maskHandle, maskName, maskMentionsInText } from './privacy-mode.js';
 import { t }                from './i18n.js';
 import { safeLinkUrl, safeImageUrl } from './safe-url.js';
@@ -287,6 +288,24 @@ export function renderPost(p) {
               if (!safe) return '';
               return '<div class="post__meta"><a class="post__link" href="' + escape(safe) + '" target="_blank" rel="noopener noreferrer">' +
                 icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(safe) + '</a></div>';
+            })()) +
+            // connpass event chip. The link points at the in-app
+            // /event/<id> page (so a click aggregates all posts about
+            // the same event); a small ↗ label + the fetched title
+            // (cached via connpass API) is shown when available.
+            ((() => {
+              const parsed = parseConnpassUrl(p.eventUrl);
+              if (!parsed) return '';
+              const meta = cachedEventMeta(parsed.id);
+              const label = meta && meta.title ? meta.title : ('connpass #' + parsed.id);
+              const when  = meta && meta.startedAt ? formatEventStart(meta.startedAt) : '';
+              return '<div class="post__meta">' +
+                '<a class="post__link post__link--event" href="' + url('/event/' + parsed.id) + '">' +
+                  icon('calendar', { size: 14, className: 'icon--inline' }) +
+                  escape(label) +
+                  (when ? ' <span class="post__link-when">· ' + escape(when) + '</span>' : '') +
+                '</a>' +
+              '</div>';
             })()) +
             photos(p.photos) +
             poll(p.poll) +

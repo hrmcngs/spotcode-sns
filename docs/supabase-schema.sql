@@ -1460,3 +1460,28 @@ alter table public.posts
 create index if not exists posts_repo_full_name_idx
   on public.posts (lower(repo_full_name))
   where repo_full_name is not null;
+
+-- ===================================================================
+-- Stage 31 — posts.event_url (connpass event tagging)
+-- ===================================================================
+-- Backs the /event/<connpass-id> view. When a post is "about" a
+-- particular connpass event, we store the canonical URL
+-- (https://connpass.com/event/<id>/) so /event/<id> can aggregate
+-- every post that references the same event and connpass metadata
+-- (title / date / venue) can be fetched from the public API at
+-- render time.
+--
+-- Nullable — pre-existing posts have no event tag and the compose UI
+-- only sets this when the user opens the "+ イベントを追加" input and
+-- pastes a connpass URL. Client-side parseConnpassUrl() normalises
+-- the URL before insert so grouping by exact string match works.
+--
+-- A partial index on `event_url is not null` keeps the /event/<id>
+-- lookup O(log n) without indexing the tail of untagged rows.
+
+alter table public.posts
+  add column if not exists event_url text;
+
+create index if not exists posts_event_url_idx
+  on public.posts (event_url)
+  where event_url is not null;

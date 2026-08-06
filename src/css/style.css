@@ -3003,6 +3003,41 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   opacity: .85;
 }
 
+/* ---------- /event/<connpass-id> page ---------- */
+.event-head {
+  padding: 1rem 1rem .75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.event-head__row {
+  display: flex; align-items: center; gap: .5rem;
+  flex-wrap: wrap;
+}
+.event-head__title {
+  flex: 1 1 auto;
+  font-size: 1.05rem; font-weight: 700; color: var(--text);
+  margin: 0; word-break: break-word;
+}
+.event-head__ext {
+  color: var(--muted); text-decoration: none; font-size: .95rem;
+}
+.event-head__ext:hover { color: var(--text); }
+.event-head__meta {
+  display: flex; flex-wrap: wrap; gap: .75rem;
+  padding-top: .35rem;
+  color: var(--muted); font-size: .82rem;
+}
+.event-head__catch {
+  margin: .35rem 0 0;
+  color: var(--muted); font-size: .85rem;
+  white-space: pre-wrap;
+}
+
+/* Event chip embedded in post__meta — shares the base .post__link
+   shape but adds the "when" span. */
+.post__link--event { display: inline-flex; align-items: center; gap: .35em; }
+.post__link-when   { color: var(--muted); font-size: .82em; }
+
 /* ---------- profile "More" popover ---------- */
 .profile-more-menu[hidden] { display: none !important; }
 .profile-more-menu {
