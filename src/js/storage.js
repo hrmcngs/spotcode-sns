@@ -11,18 +11,34 @@ export const KEYS = {
   lang:     'spotcode:lang',
 };
 
+// Per-key memo of the parsed value. The users map carries base64
+// avatar images (tens of KB per user), and read() gets called per
+// post render for author lookups — re-JSON.parse-ing a potentially
+// multi-hundred-KB blob dozens of times per paint was a real CPU cost
+// on mobile. All writers of these keys go through write()/remove()
+// below, which keep the memo coherent. (Cross-tab writes won't be
+// picked up until reload — same behavior localStorage reads had in
+// practice, since callers cache results themselves anyway.)
+const memo = new Map();
+
 export function read(key, fallback) {
+  if (memo.has(key)) return memo.get(key);
+  let v;
   try {
-    const v = localStorage.getItem(key);
-    return v == null ? fallback : JSON.parse(v);
-  } catch { return fallback; }
+    const raw = localStorage.getItem(key);
+    v = raw == null ? fallback : JSON.parse(raw);
+  } catch { v = fallback; }
+  memo.set(key, v);
+  return v;
 }
 
 export function write(key, value) {
+  memo.set(key, value);
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
 export function remove(key) {
+  memo.delete(key);
   try { localStorage.removeItem(key); } catch {}
 }
 

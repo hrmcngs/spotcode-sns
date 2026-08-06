@@ -915,6 +915,13 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   padding: 1rem;
   border-bottom: 1px solid var(--border);
   transition: background .12s;
+  /* Skip layout + paint for cards that are off-screen — the timeline
+     can hold dozens of cards with base64 photos, and this is the
+     single biggest scroll/render win on mobile. The intrinsic-size
+     hint approximates a card so the scrollbar doesn't jump. Browsers
+     without content-visibility just ignore both lines. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
   /* Whole card is a click target (→ /post/<id>); explicit pointer
      cursor makes it discoverable. The .post__body opt-out below
      restores the text I-beam so users can still select-to-copy

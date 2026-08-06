@@ -27,6 +27,18 @@ export function getUser(handle) {
   return read(KEYS.users, {})[handle] || null;
 }
 
+// Debounced persistence of the users map. shapePost merges authors
+// into the memoized map on every fetched row; one trailing write
+// flushes the batch to localStorage.
+let usersPersistTimer = null;
+function scheduleUsersPersist() {
+  if (usersPersistTimer) return;
+  usersPersistTimer = setTimeout(() => {
+    usersPersistTimer = null;
+    write(KEYS.users, read(KEYS.users, {}));
+  }, 250);
+}
+
 // In-memory {handle → auth-user id} cache. Filled by any place that
 // already had to resolve a handle → id (fetchProfileByHandle sends id
 // through cacheHandleId; the auth flow primes it too). Consumers like
@@ -211,7 +223,12 @@ function shapePost(row) {
       ...author,
       _fetched: Date.now(),
     };
-    write(KEYS.users, users);
+    // Mutating the object read() returned updates the in-memory memo
+    // immediately (so sync getUser() sees the author right away);
+    // persisting is batched because shapePost runs once per fetched
+    // row and stringifying the whole avatar-laden map per row was
+    // measurable jank on mobile.
+    scheduleUsersPersist();
   }
   return {
     id:            row.id,
@@ -331,15 +348,52 @@ const POSTS_CACHE_KEY = 'spotcode:posts-cache:v1';
 const POSTS_CACHE_MAX = 30;          // don't bloat localStorage
 const POSTS_CACHE_TTL_MS = 6 * 3600 * 1000; // 6 hours
 
-function savePostsCache(scope, posts) {
+// In-memory mirror of the posts cache. Post photos are stored as
+// 80–180KB base64 data URLs inside each row, so the serialized blob
+// can reach several MB — JSON.parse-ing it on every render and
+// re-stringifying the whole map on every fetch was the dominant CPU
+// cost on mobile. The runtime now reads/writes this in-memory map
+// only; localStorage receives a PHOTO-STRIPPED copy (so the next cold
+// boot still paints text content instantly — photos pop in when the
+// live fetch lands). In-session repaints keep full photos because
+// they read the memory copy.
+let postsCacheMem = null;
+function postsCacheAll() {
+  if (postsCacheMem) return postsCacheMem;
+  try { postsCacheMem = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}'); }
+  catch { postsCacheMem = {}; }
+  if (!postsCacheMem || typeof postsCacheMem !== 'object') postsCacheMem = {};
+  return postsCacheMem;
+}
+function persistPostsCache(all) {
   try {
-    const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
-    all[scope] = {
-      at: Date.now(),
-      posts: posts.slice(0, POSTS_CACHE_MAX),
-    };
-    localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(all));
+    const slim = {};
+    for (const scope of Object.keys(all)) {
+      const e = all[scope];
+      if (!e || !Array.isArray(e.posts)) continue;
+      slim[scope] = {
+        at: e.at,
+        // photosStripped marks the row as an incomplete snapshot so
+        // freshness-based fetch-skipping (hydrateHome) never treats a
+        // photo-less cold-boot cache as the real thing.
+        posts: e.posts.map((p) =>
+          (p && Array.isArray(p.photos) && p.photos.length)
+            ? { ...p, photos: [], photosStripped: true }
+            : p
+        ),
+      };
+    }
+    localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(slim));
   } catch {}
+}
+
+function savePostsCache(scope, posts) {
+  const all = postsCacheAll();
+  all[scope] = {
+    at: Date.now(),
+    posts: posts.slice(0, POSTS_CACHE_MAX),
+  };
+  persistPostsCache(all);
 }
 
 // Module-level map of just-inserted post id → shaped post, kept in
@@ -431,19 +485,17 @@ export function prependToTimelineCaches(post) {
   }
   const city = post.spot && post.spot.addressDetails && post.spot.addressDetails.city;
   if (city) scopes.push('city:' + city);
-  try {
-    const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
-    for (const scope of scopes) {
-      const e = all[scope];
-      const prev = (e && Array.isArray(e.posts)) ? e.posts : [];
-      // Dedupe by id — addPost re-running (e.g. on a retry) would
-      // otherwise queue the same row twice.
-      const next = [post, ...prev.filter((p) => p.id !== post.id)]
-        .slice(0, POSTS_CACHE_MAX);
-      all[scope] = { at: Date.now(), posts: next };
-    }
-    localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(all));
-  } catch {}
+  const all = postsCacheAll();
+  for (const scope of scopes) {
+    const e = all[scope];
+    const prev = (e && Array.isArray(e.posts)) ? e.posts : [];
+    // Dedupe by id — addPost re-running (e.g. on a retry) would
+    // otherwise queue the same row twice.
+    const next = [post, ...prev.filter((p) => p.id !== post.id)]
+      .slice(0, POSTS_CACHE_MAX);
+    all[scope] = { at: Date.now(), posts: next };
+  }
+  persistPostsCache(all);
 }
 
 // Returns the cached posts array (already in the same shape as
@@ -456,8 +508,7 @@ export function prependToTimelineCaches(post) {
 // "fresh enough to skip the refetch entirely".
 export function cachedPosts(scope, maxAgeMs = POSTS_CACHE_TTL_MS) {
   try {
-    const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
-    const e = all[scope];
+    const e = postsCacheAll()[scope];
     if (!e || !e.posts) return null;
     if (Date.now() - (e.at || 0) > maxAgeMs) return null;
     return pendingDeletes.size
@@ -918,21 +969,16 @@ export function removeFromTimelineCaches(id) {
   const key = String(id);
   pendingDeletes.delete(key);
   optimisticPosts.delete(key);
-  try {
-    const all = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}');
-    let dirty = false;
-    for (const scope of Object.keys(all)) {
-      const e = all[scope];
-      if (!e || !Array.isArray(e.posts)) continue;
-      const before = e.posts.length;
-      e.posts = e.posts.filter((p) => p.id !== key);
-      if (e.posts.length !== before) {
-        dirty = true;
-        all[scope] = { at: e.at, posts: e.posts };
-      }
-    }
-    if (dirty) localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(all));
-  } catch {}
+  const all = postsCacheAll();
+  let dirty = false;
+  for (const scope of Object.keys(all)) {
+    const e = all[scope];
+    if (!e || !Array.isArray(e.posts)) continue;
+    const before = e.posts.length;
+    e.posts = e.posts.filter((p) => p.id !== key);
+    if (e.posts.length !== before) dirty = true;
+  }
+  if (dirty) persistPostsCache(all);
 }
 
 // ----------------------------------------------------------------------

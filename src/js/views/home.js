@@ -107,10 +107,18 @@ export async function hydrateHome(tab = 'foryou') {
   // below still runs, so counts and toggle state stay accurate.
   const FRESH_MS = 60 * 1000;
   let posts = cachedPosts(SCOPE[tab] || 'home', FRESH_MS);
-  const usedFreshCache = !!(posts && posts.length);
+  // A cache restored from localStorage has its photos stripped
+  // (photosStripped) — never fetch-skip on that, or photo posts would
+  // stay imageless after a quick reload.
+  const usedFreshCache = !!(posts && posts.length && !posts.some(p => p && p.photosStripped));
   if (!usedFreshCache) {
+    // Phones get a smaller page: post rows can carry base64 photos
+    // (80–180KB each), so 100 rows is potentially a multi-MB download
+    // + parse + render on exactly the devices least able to afford it.
+    const limit = (typeof matchMedia === 'function' &&
+                   matchMedia('(max-width: 640px)').matches) ? 40 : 100;
     try {
-      posts = tab === 'following' ? await followingPosts() : await allPosts();
+      posts = tab === 'following' ? await followingPosts({ limit }) : await allPosts({ limit });
     } catch (err) {
       if (myVersion !== renderVersion) return;
       console.error('hydrateHome: fetch failed', err);
