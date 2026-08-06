@@ -10,6 +10,7 @@ import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
 import { isDevMode, isOperator } from './dev-mode.js';
 import { parseConnpassUrl, cachedEventMeta, formatEventStart } from './connpass.js';
+import { parseGithubLink } from './gh-link.js';
 import { maskHandle, maskName, maskMentionsInText } from './privacy-mode.js';
 import { t }                from './i18n.js';
 import { safeLinkUrl, safeImageUrl } from './safe-url.js';
@@ -283,11 +284,29 @@ export function renderPost(p) {
             spotAddress(p.spot) +
             // Author-supplied URL — validated against the safeLinkUrl
             // allowlist so a `javascript:` scheme can't slip past.
+            // Render the LABEL as a compact `owner/repo` / `owner/repo :
+            // <path>` string parsed from the URL rather than the raw
+            // URL. Long GitHub links used to eat two full lines of the
+            // card; the tooltip still carries the full URL for
+            // copy-paste. Non-GitHub links (rare — the input is
+            // labelled "GitHub link") fall back to the URL's host +
+            // pathname without the scheme.
             ((() => {
               const safe = safeLinkUrl(p.githubLink);
               if (!safe) return '';
-              return '<div class="post__meta"><a class="post__link" href="' + escape(safe) + '" target="_blank" rel="noopener noreferrer">' +
-                icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(safe) + '</a></div>';
+              let label = safe;
+              const gh = parseGithubLink(safe);
+              if (gh) {
+                label = gh.owner + '/' + gh.repo;
+                if (gh.path) label += ' : ' + gh.path;
+              } else {
+                try {
+                  const u = new URL(safe);
+                  label = (u.host + u.pathname).replace(/\/$/, '');
+                } catch {}
+              }
+              return '<div class="post__meta"><a class="post__link" href="' + escape(safe) + '" target="_blank" rel="noopener noreferrer" title="' + escape(safe) + '">' +
+                icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(label) + '</a></div>';
             })()) +
             // connpass event chip. The link points at the in-app
             // /event/<id> page (so a click aggregates all posts about
