@@ -12,6 +12,9 @@ import { icon }                         from '../icons.js';
 import { getComments, addComment, removeComment,
          hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls } from '../interactions.js';
 import { relTime }                      from '../data.js';
+import { withTimeout }                  from '../net-utils.js';
+
+const DETAIL_TIMEOUT_MS = 15 * 1000;
 
 let renderVersion = 0;
 let currentPostId = null;
@@ -88,7 +91,7 @@ export async function hydratePostDetail(id) {
   if (!root) return;
 
   let post;
-  try { post = await getPost(id); }
+  try { post = await withTimeout(getPost(id), DETAIL_TIMEOUT_MS, '投稿取得'); }
   catch (err) {
     if (myVersion !== renderVersion) return;
     root.innerHTML = '<div class="stub"><h2 class="stub__title">読み込みに失敗</h2><p class="stub__sub">' + escape(err.message || String(err)) + '</p><a class="back-home" href="/">← Home</a></div>';
@@ -108,38 +111,41 @@ export async function hydratePostDetail(id) {
       '</a>'
     : '';
 
-  // Warm caches for the single post so the action buttons reflect
-  // mine-state correctly + quote card embeds.
-  try {
-    await Promise.all([
+  // Paint the post as soon as its single-row query resolves. Reaction
+  // state and comments are secondary data; waiting for all of them used
+  // to keep the entire page on「読み込み中」for several serial round trips.
+  root.innerHTML =
+    '<a class="back-home" href="/">' + icon('reply', { size: 14, className: 'icon--inline' }) + 'Home に戻る</a>' +
+    '<div id="post-detail-card">' + renderPost(post) + '</div>' +
+    (analyticsLink ? '<div class="post-detail__bar">' + analyticsLink + '</div>' : '') +
+    '<div class="comment-list-head"><h3>コメント</h3></div>' +
+    commentComposer(me) +
+    '<div class="comment-list" id="comment-list"><div class="stub"><p class="stub__sub">コメントを読み込み中…</p></div></div>';
+  bindCommentForm(post);
+
+  // Fetch independent secondary data in parallel. Each branch has a
+  // deadline so a stalled auth-refresh queue cannot hold the detail page.
+  const reactionsPromise = withTimeout(Promise.all([
       hydratePostLikes([post.id]),
       hydrateRepostsMine([post.id]),
       hydrateBookmarksMine([post.id]),
       hydrateQuotedPosts([post]),
-    ]);
-  } catch {}
+    ]), DETAIL_TIMEOUT_MS, 'リアクション取得').catch(() => null);
+  const commentsPromise = withTimeout(getComments(id), DETAIL_TIMEOUT_MS, 'コメント取得')
+    .catch((err) => { console.warn('getComments', err); return []; });
   hydratePolls([post]).catch(() => {});
+  const [, comments] = await Promise.all([reactionsPromise, commentsPromise]);
   if (myVersion !== renderVersion) return;
 
-  let comments = [];
-  try { comments = await getComments(id); } catch (err) { console.warn('getComments', err); }
-  if (myVersion !== renderVersion) return;
-
-  root.innerHTML =
-    '<a class="back-home" href="/">' + icon('reply', { size: 14, className: 'icon--inline' }) + 'Home に戻る</a>' +
-    renderPost(post) +
-    (analyticsLink ? '<div class="post-detail__bar">' + analyticsLink + '</div>' : '') +
-    '<div class="comment-list-head">' +
-      '<h3>コメント <span class="dim">(' + comments.length + ')</span></h3>' +
-    '</div>' +
-    commentComposer(me) +
-    '<div class="comment-list" id="comment-list">' +
+  const card = document.getElementById('post-detail-card');
+  if (card) card.innerHTML = renderPost(post);
+  const head = root.querySelector('.comment-list-head');
+  if (head) head.innerHTML = '<h3>コメント <span class="dim">(' + comments.length + ')</span></h3>';
+  const list = document.getElementById('comment-list');
+  if (list) list.innerHTML =
       (comments.length
         ? comments.map(c => renderComment(c, me)).join('')
-        : '<div class="stub"><p class="stub__sub">まだコメントはありません。最初のひとことを。</p></div>') +
-    '</div>';
-
-  bindCommentForm(post);
+        : '<div class="stub"><p class="stub__sub">まだコメントはありません。最初のひとことを。</p></div>');
 }
 
 function bindCommentForm(post) {

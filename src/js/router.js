@@ -6,7 +6,11 @@
 const HASH_MODE = (
   location.protocol === 'file:' ||
   location.protocol === 'app:' ||
-  location.protocol === 'capacitor:'
+  location.protocol === 'capacitor:' ||
+  // GitHub Pages has no SPA fallback: a direct /repos or /post/:id
+  // request is an HTTP 404. Hash routes always request the deployed
+  // index document and therefore work on direct visits and reloads.
+  location.hostname.endsWith('.github.io')
 );
 
 const BASE = (() => {

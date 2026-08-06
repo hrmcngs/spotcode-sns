@@ -34,10 +34,12 @@ import { parseGithubLink } from '../gh-link.js';
 import { icon }              from '../icons.js';
 import { t }                 from '../i18n.js';
 import { currentPath }       from '../router.js';
+import { withTimeout }       from '../net-utils.js';
 
 const REPOS_CACHE_KEY = 'spotcode:gh-repos-cache:v1';
 const REPOS_TTL_MS    = 60 * 60 * 1000;       // 1 h
 const MAX_REPOS_PER_USER = 12;
+const REPOS_TIMEOUT_MS = 10 * 1000;
 
 function escape(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -302,15 +304,42 @@ export async function hydrateRepos() {
     return;
   }
 
+  // The signed-in user's GitHub handle is already in currentUser(). Paint
+  // their cached repos immediately, or start that public GitHub request now,
+  // instead of blocking the whole page behind two Supabase lookups for the
+  // follow graph and linked handles.
+  postsByFullName = new Map();
+  postsLoaded = false;
+  const ownGhHandle = me.github?.handle || null;
+  if (ownGhHandle) {
+    const ownCached = cachedUserRepos(ownGhHandle);
+    if (ownCached?.length) {
+      paintListNow(list, ownCached.slice().sort((a, b) => b.pushedAt - a.pushedAt));
+    } else {
+      fetchUserRepos(ownGhHandle).then((repos) => {
+        if (stillHere() && repos.length) {
+          paintListNow(list, repos.slice().sort((a, b) => b.pushedAt - a.pushedAt));
+        }
+      }).catch(() => {});
+    }
+  }
+
   // Warm followsMine before reading it. Cheap no-op if it already ran
   // for this user since the last cache clear.
-  try { await hydrateMyFollows(); } catch {}
+  try { await withTimeout(hydrateMyFollows(), REPOS_TIMEOUT_MS, 'フォロー取得'); } catch {}
   if (!stillHere()) return;
 
   // Self + people you follow. Self is always first in the lookup so
   // their repos sort naturally with everyone else's by pushed_at.
   const appHandles = Array.from(new Set([me.handle, ...myFollowingHandles()].filter(Boolean)));
-  const ghMap = await ghHandlesForUsers(appHandles);
+  let ghMap = {};
+  try {
+    ghMap = await withTimeout(ghHandlesForUsers(appHandles), REPOS_TIMEOUT_MS, 'GitHub連携取得');
+  } catch {
+    // Own GitHub handle is already present in the authenticated profile,
+    // so /repos can still show the user's repositories when Supabase is slow.
+  }
+  if (me.github?.handle) ghMap[me.handle] = me.github.handle;
   if (!stillHere()) return;
 
   const ghHandles = appHandles

@@ -20,9 +20,18 @@
     (function () {
       var l = window.location;
       var segmentCount = (l.pathname.indexOf('/spotcode-sns/') === 0) ? 1 : 0;
+      var base = l.pathname.split('/').slice(0, 1 + segmentCount).join('/') + '/';
+      var route = '/' + l.pathname.slice(1).split('/').slice(segmentCount).join('/');
+      // GitHub Pages cannot serve History API routes. Redirect its 404
+      // directly to the hash route so /repos and /post/:id survive a
+      // direct visit/reload without relying on the query-string shim.
+      if (l.hostname.slice(-10) === '.github.io') {
+        l.replace(l.protocol + '//' + l.host + base + '#' + route + l.search + l.hash);
+        return;
+      }
       l.replace(
         l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-        l.pathname.split('/').slice(0, 1 + segmentCount).join('/') + '/?/' +
+        base + '?/' +
         l.pathname.slice(1).split('/').slice(segmentCount).join('/').replace(/&/g, '~and~') +
         (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
         l.hash
