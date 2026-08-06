@@ -880,6 +880,13 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   color: #febc2e;
   border: 1px solid color-mix(in srgb, #febc2e 40%, transparent);
 }
+/* `display: flex` below is an AUTHOR rule, so it beats the UA
+   stylesheet's `[hidden] { display: none }` no matter the
+   specificity — without this line the collapsed link / event rows
+   render permanently expanded even though the JS sets `.hidden`.
+   Must stay ahead of the base rule so a later same-specificity
+   declaration can't quietly win. */
+.compose-link[hidden] { display: none; }
 .compose-link {
   display: flex; flex-direction: column; gap: .25rem;
   padding: .3rem 0;
@@ -887,14 +894,17 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 .compose-link__label {
   font-size: .75rem; color: var(--muted); font-weight: 600;
 }
-.compose-link input[name="github"] {
+/* Scoped to the container, not `input[name="github"]` — the event
+   URL row shares this markup and was falling back to the browser's
+   default (white) input chrome on a dark surface. */
+.compose-link input {
   width: 100%;
   background: var(--bg); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px;
   padding: .45em .65em; font: inherit;
   font-family: var(--mono); font-size: .85rem;
 }
-.compose-link input[name="github"]:focus {
+.compose-link input:focus {
   outline: 0; border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
