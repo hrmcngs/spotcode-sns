@@ -24,6 +24,8 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIRequiresPersistentWiFi</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>投稿用にその場で撮った写真を添付するためカメラを使用します。</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

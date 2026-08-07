@@ -8,6 +8,32 @@ actor SupabaseService {
         let value = JSONDecoder()
         return value
     }()
+    private let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.allowsCellularAccess = true
+        configuration.allowsExpensiveNetworkAccess = true
+        configuration.allowsConstrainedNetworkAccess = true
+        configuration.waitsForConnectivity = true
+        configuration.timeoutIntervalForRequest = 35
+        configuration.timeoutIntervalForResource = 60
+        configuration.requestCachePolicy = .reloadRevalidatingCacheData
+        return URLSession(configuration: configuration)
+    }()
+
+    private func data(for request: URLRequest, retryable: Bool) async throws -> (Data, URLResponse) {
+        do {
+            return try await session.data(for: request)
+        } catch let error as URLError where retryable && Self.transientErrors.contains(error.code) {
+            try await Task.sleep(nanoseconds: 600_000_000)
+            return try await session.data(for: request)
+        }
+    }
+
+    private static let transientErrors: Set<URLError.Code> = [
+        .timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
+        .networkConnectionLost, .notConnectedToInternet, .internationalRoamingOff,
+        .dataNotAllowed
+    ]
 
     private func request<T: Decodable>(
         _ path: String,
@@ -19,13 +45,13 @@ actor SupabaseService {
         guard let endpoint = URL(string: path, relativeTo: baseURL) else { throw URLError(.badURL) }
         var request = URLRequest(url: endpoint)
         request.httpMethod = method
-        request.timeoutInterval = 15
+        request.timeoutInterval = 35
         request.httpBody = body
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(token ?? anonKey)", forHTTPHeaderField: "Authorization")
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         if preferRepresentation { request.setValue("return=representation", forHTTPHeaderField: "Prefer") }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await data(for: request, retryable: method == "GET" || method == "HEAD")
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let message = String(data: data, encoding: .utf8) ?? "通信エラー"
             throw NSError(domain: "Supabase", code: (response as? HTTPURLResponse)?.statusCode ?? -1,
@@ -79,9 +105,9 @@ actor SupabaseService {
         var components = URLComponents(string: "https://api.github.com/users/\(handle)/repos")!
         components.queryItems = [.init(name: "sort", value: "pushed"), .init(name: "type", value: "owner"), .init(name: "per_page", value: "30")]
         var request = URLRequest(url: components.url!)
-        request.timeoutInterval = 12
+        request.timeoutInterval = 35
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await data(for: request, retryable: true)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
         return try decoder.decode([Repository].self, from: data)
     }
@@ -104,11 +130,11 @@ actor SupabaseService {
         guard let endpoint = URL(string: path, relativeTo: baseURL) else { throw URLError(.badURL) }
         var value = URLRequest(url: endpoint)
         value.httpMethod = "HEAD"
-        value.timeoutInterval = 12
+        value.timeoutInterval = 35
         value.setValue(anonKey, forHTTPHeaderField: "apikey")
         value.setValue("Bearer \(token ?? anonKey)", forHTTPHeaderField: "Authorization")
         value.setValue("count=exact", forHTTPHeaderField: "Prefer")
-        let (_, response) = try await URLSession.shared.data(for: value)
+        let (_, response) = try await data(for: value, retryable: true)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
         let range = http.value(forHTTPHeaderField: "Content-Range") ?? "*/0"
         return Int(range.split(separator: "/").last ?? "0") ?? 0
