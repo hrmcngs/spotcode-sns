@@ -36,19 +36,28 @@ struct RootView: View {
     @State private var drawerOpen = false
     @State private var showLogin = false
     @State private var composing = false
+    @State private var showAccounts = false
 
     var body: some View {
         ZStack(alignment: .leading) {
             SpotcodeTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                TopBar(drawerOpen: $drawerOpen, section: $section)
+                TopBar(drawerOpen: $drawerOpen, section: $section, showAccounts: $showAccounts)
                 NavigationView { sectionView }
                     .navigationViewStyle(.stack)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
+                    .padding(8)
             }
             if drawerOpen {
                 Color.black.opacity(0.55).ignoresSafeArea().onTapGesture { withAnimation { drawerOpen = false } }
                 SideDrawer(section: $section, open: $drawerOpen, composing: $composing)
                     .transition(.move(edge: .leading))
+            }
+            if showAccounts {
+                Color.black.opacity(0.72).ignoresSafeArea().onTapGesture { showAccounts = false }
+                AccountSwitcher(isPresented: $showAccounts, showLogin: $showLogin)
+                    .padding(.horizontal, 15)
             }
         }
         .preferredColorScheme(.dark)
@@ -77,6 +86,7 @@ private struct TopBar: View {
     @EnvironmentObject private var model: AppModel
     @Binding var drawerOpen: Bool
     @Binding var section: AppSection
+    @Binding var showAccounts: Bool
     @State private var query = ""
 
     var body: some View {
@@ -98,7 +108,7 @@ private struct TopBar: View {
             .background(SpotcodeTheme.background)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
             Button { section = .settings } label: { Image(systemName: "gearshape") }.spotcodeIconButton()
-            Button { section = .profile } label: { AvatarView(profile: model.me, size: 34) }
+            Button { showAccounts = true } label: { AvatarView(profile: model.me, size: 34) }
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(SpotcodeTheme.surface)
@@ -114,11 +124,6 @@ private struct SideDrawer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
-                GitHubMark().fill(SpotcodeTheme.text).frame(width: 24, height: 24)
-                Text("spotcode").bold(); Text("/").foregroundColor(SpotcodeTheme.muted)
-                Text("sns").foregroundColor(SpotcodeTheme.accent)
-            }.font(.title3).padding(.bottom, 20)
             ForEach(AppSection.allCases, id: \.self) { item in
                 Button {
                     section = item
@@ -146,10 +151,35 @@ private struct SideDrawer: View {
                 }
             }
         }
-        .padding(.horizontal, 16).padding(.top, 20).padding(.bottom, 12)
-        .frame(width: 278).frame(maxHeight: .infinity)
+        .padding(.horizontal, 24).padding(.top, 32).padding(.bottom, 12)
+        .frame(width: 260).frame(maxHeight: .infinity)
         .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
         .overlay(alignment: .trailing) { Rectangle().fill(SpotcodeTheme.border).frame(width: 1) }
+    }
+}
+
+private struct AccountSwitcher: View {
+    @EnvironmentObject private var model: AppModel
+    @Binding var isPresented: Bool
+    @Binding var showLogin: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack { Text("アカウント").font(.title3).fontWeight(.bold); Spacer(); Button { isPresented = false } label: { Image(systemName: "xmark").font(.title3) } }
+            if let me = model.me {
+                HStack(spacing: 12) {
+                    AvatarView(profile: me, size: 44)
+                    VStack(alignment: .leading, spacing: 3) { HStack { Text(me.name).fontWeight(.bold); Text("現在").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent).padding(4).background(SpotcodeTheme.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }; Text("@\(me.handle)").foregroundColor(SpotcodeTheme.muted) }
+                }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Color(red: 23/255, green: 40/255, blue: 54/255)).clipShape(RoundedRectangle(cornerRadius: 9))
+            }
+            HStack(spacing: 12) {
+                ZStack { LinearGradient(colors: [SpotcodeTheme.accent, .green], startPoint: .topLeading, endPoint: .bottomTrailing); Text("S").font(.title2).fontWeight(.bold) }.frame(width: 44, height: 44).clipShape(Circle())
+                VStack(alignment: .leading) { HStack { Text("spotcode").fontWeight(.bold); Text("公式").font(.caption.weight(.bold)).foregroundColor(.yellow).padding(4).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }; Text("@spotcode_official").foregroundColor(SpotcodeTheme.muted) }
+            }.padding(.horizontal, 12)
+            Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
+            Button { model.signOut(); isPresented = false; showLogin = true } label: { Label("Log out", systemImage: "arrow.right").foregroundColor(Color(red: 248/255, green: 81/255, blue: 73/255)).font(.title3) }
+        }
+        .padding(15).background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(SpotcodeTheme.border)).clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -449,12 +479,13 @@ struct ProfileView: View {
     @State private var profilePosts: [Post] = []
     @State private var counts = (following: 0, followers: 0, posts: 0)
     @State private var selectedTab = 0
+    @State private var repositories: [Repository] = []
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 if let profile {
                     VStack(spacing: 0) {
-                        ProfileHero(profile: profile, counts: counts)
+                        ProfileHero(profile: profile, counts: counts, repositories: repositories)
                         HStack(spacing: 0) {
                             ForEach(["Posts", "Spots", "Likes"].indices, id: \.self) { index in
                                 Button { selectedTab = index } label: {
@@ -485,12 +516,16 @@ struct ProfileView: View {
         async let stats = try? SupabaseService.shared.profileCounts(userID: id, token: model.session?.accessToken)
         profilePosts = await posts ?? []
         if let value = await stats { counts = value }
+        if let handle = profile?.githubHandle {
+            repositories = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []
+        }
     }
 }
 
 private struct ProfileHero: View {
     let profile: Profile
     let counts: (following: Int, followers: Int, posts: Int)
+    let repositories: [Repository]
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             LinearGradient(colors: [Color(red: 8/255, green: 70/255, blue: 111/255), Color(red: 30/255, green: 116/255, blue: 77/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -518,9 +553,49 @@ private struct ProfileHero: View {
                     ProfileCount(value: counts.followers, label: "Followers")
                     ProfileCount(value: counts.posts, label: "Posts")
                 }.padding(.top, 5)
+                if profile.githubHandle != nil {
+                    GitHubActivity(repositories: repositories)
+                    OpenIssuesCard(repositories: repositories)
+                }
             }.padding(.horizontal, 18).padding(.bottom, 20)
         }.overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
     }
+}
+
+private struct GitHubActivity: View {
+    let repositories: [Repository]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) { GitHubMark().fill(SpotcodeTheme.text).frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
+            HStack(alignment: .bottom, spacing: 3) {
+                ForEach(0..<26, id: \.self) { column in
+                    VStack(spacing: 3) {
+                        ForEach(0..<7, id: \.self) { row in
+                            let level = (column * 7 + row + repositories.count * 3) % 6
+                            RoundedRectangle(cornerRadius: 2).fill(level < 2 ? SpotcodeTheme.surface2 : Color.green.opacity(0.3 + Double(level) * 0.12)).frame(width: 9, height: 9)
+                        }
+                    }
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading).clipped()
+        }.padding(.top, 8)
+    }
+}
+
+private struct OpenIssuesCard: View {
+    let repositories: [Repository]
+    private var total: Int { repositories.reduce(0) { $0 + $1.openIssues } }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack { GitHubMark().fill(SpotcodeTheme.muted).frame(width: 13, height: 13); Text("Open issues"); Text("\(total)").fontWeight(.bold); Text("公開リポの未クローズ issue (task)").font(.caption).foregroundColor(SpotcodeTheme.muted); Spacer() }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack { Text("All \(total)").issuePill(); ForEach(repositories.prefix(5)) { repo in Text("\(repo.name) \(repo.openIssues)").issuePill() } }
+            }
+        }.padding(12).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border)).padding(.top, 8)
+    }
+}
+
+private extension Text {
+    func issuePill() -> some View { self.font(.caption).padding(.horizontal, 9).padding(.vertical, 5).overlay(Capsule().stroke(SpotcodeTheme.border)) }
 }
 
 private struct ProfileCount: View {
@@ -530,21 +605,97 @@ private struct ProfileCount: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var tab = 0
     var body: some View {
-        VStack(spacing: 0) {
-            PageHeader(title: "Settings")
-            VStack(spacing: 0) {
-                if let me = model.me { SettingRow(label: "Handle", value: "@\(me.handle)") }
-                SettingRow(label: "UI", value: "SwiftUI Native")
-                Button("ログアウト", role: .destructive) { model.signOut() }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
-            }; Spacer()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Settings").font(.title2).fontWeight(.bold)
+                HStack(spacing: 0) {
+                    SettingsTab(title: "アカウント", icon: "person", selected: tab == 0) { tab = 0 }
+                    SettingsTab(title: "プライバシー", icon: "lock", selected: tab == 1) { tab = 1 }
+                    SettingsTab(title: "表示", icon: "gearshape", selected: tab == 2) { tab = 2 }
+                }
+                if tab == 0 { AccountSettings() }
+                else if tab == 1 { PrivacySettings() }
+                else { DisplaySettings() }
+            }.padding(16)
         }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
     }
 }
 
-private struct SettingRow: View {
-    let label: String; let value: String
-    var body: some View { HStack { Text(label); Spacer(); Text(value).foregroundColor(SpotcodeTheme.muted) }.padding(16).overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) } }
+private struct SettingsTab: View {
+    let title: String; let icon: String; let selected: Bool; let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 10) {
+                Label(title, systemImage: icon).font(.caption.weight(.semibold))
+                Rectangle().fill(selected ? SpotcodeTheme.accent : SpotcodeTheme.muted).frame(height: selected ? 3 : 1)
+            }.frame(maxWidth: .infinity)
+        }.foregroundColor(selected ? SpotcodeTheme.accent : SpotcodeTheme.muted)
+    }
+}
+
+private struct SettingsCard<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+    init(_ title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) { Text(title).font(.headline); content }
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
+    }
+}
+
+private struct AccountSettings: View {
+    @EnvironmentObject private var model: AppModel
+    var body: some View {
+        VStack(spacing: 18) {
+            SettingsCard("アカウント") {
+                Text("この端末にログイン済みのアカウントを切り替えられます。アカウント自体は削除されません。").foregroundColor(SpotcodeTheme.muted)
+                if let me = model.me {
+                    HStack { AvatarView(profile: me, size: 42); VStack(alignment: .leading) { Text(me.name).fontWeight(.bold); Text("@\(me.handle) · 現在").font(.caption).foregroundColor(SpotcodeTheme.muted) }; Spacer(); Image(systemName: "xmark").foregroundColor(SpotcodeTheme.muted) }
+                        .padding(12).background(Color(red: 23/255, green: 40/255, blue: 54/255)).clipShape(RoundedRectangle(cornerRadius: 9))
+                }
+                Button("＋ 別のアカウントを追加") { }.buttonStyle(OutlineButtonStyle())
+            }
+            SettingsCard("役割") {
+                Label("管理者", systemImage: "sparkles").foregroundColor(SpotcodeTheme.accent)
+                Text("すべての権限を持ちます。運営者の追加・解除、投稿削除、通報対応、ピンの自由配置、Supabase設定。").foregroundColor(SpotcodeTheme.muted)
+            }
+            SettingsCard("アカウントの種類") {
+                Text("個人アカウント").fontWeight(.semibold)
+                Text("プロフィール表示が変わるだけで、投稿の公開範囲やフォローの挙動は変わりません。").foregroundColor(SpotcodeTheme.muted)
+                Button("▦ 組織アカウントに切り替え") { }.buttonStyle(OutlineButtonStyle(filled: true))
+            }
+        }
+    }
+}
+
+private struct PrivacySettings: View {
+    @State private var privateAccount = false
+    @State private var locationEnabled = true
+    var body: some View { VStack(spacing: 18) {
+        SettingsCard("アカウントの公開範囲") { Toggle("非公開アカウント", isOn: $privateAccount); Text("承認したフォロワーだけが投稿を表示できます。").foregroundColor(SpotcodeTheme.muted) }
+        SettingsCard("位置情報") { Toggle("スポット機能を使用", isOn: $locationEnabled); Text("投稿への場所追加と近くのスポット表示に利用します。").foregroundColor(SpotcodeTheme.muted) }
+    }}
+}
+
+private struct DisplaySettings: View {
+    @State private var compact = false
+    var body: some View { VStack(spacing: 18) {
+        SettingsCard("テーマ") { Label("ダーク", systemImage: "moon.fill"); Text("Webモバイル版と同じGitHubダークテーマです。").foregroundColor(SpotcodeTheme.muted) }
+        SettingsCard("タイムライン") { Toggle("コンパクト表示", isOn: $compact) }
+    }}
+}
+
+private struct OutlineButtonStyle: ButtonStyle {
+    var filled = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(.body.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 9)
+            .foregroundColor(filled ? SpotcodeTheme.background : SpotcodeTheme.text)
+            .background(filled ? SpotcodeTheme.text : Color.clear).clipShape(Capsule())
+            .overlay(Capsule().stroke(SpotcodeTheme.border)).opacity(configuration.isPressed ? 0.7 : 1)
+    }
 }
 
 private struct PageHeader: View {

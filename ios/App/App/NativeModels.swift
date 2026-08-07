@@ -63,12 +63,14 @@ struct Repository: Codable, Identifiable, Hashable {
     let htmlURL: URL
     let language: String?
     let stars: Int
+    let openIssues: Int
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, language
         case fullName = "full_name"
         case htmlURL = "html_url"
         case stars = "stargazers_count"
+        case openIssues = "open_issues_count"
     }
 }
 
