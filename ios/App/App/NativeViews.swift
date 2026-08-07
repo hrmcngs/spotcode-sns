@@ -32,6 +32,7 @@ private enum AppSection: String, CaseIterable {
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var section: AppSection = .home
     @State private var drawerOpen = false
     @State private var showLogin = false
@@ -43,11 +44,16 @@ struct RootView: View {
             SpotcodeTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 TopBar(drawerOpen: $drawerOpen, section: $section, showAccounts: $showAccounts)
-                NavigationView { sectionView }
-                    .navigationViewStyle(.stack)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
-                    .padding(8)
+                HStack(spacing: 0) {
+                    Spacer(minLength: horizontalSizeClass == .regular ? 24 : 0)
+                    NavigationView { sectionView }
+                        .navigationViewStyle(.stack)
+                        .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
+                        .padding(8)
+                    Spacer(minLength: horizontalSizeClass == .regular ? 24 : 0)
+                }
             }
             if drawerOpen {
                 Color.black.opacity(0.55).ignoresSafeArea().onTapGesture { withAnimation { drawerOpen = false } }
@@ -105,8 +111,10 @@ private struct TopBar: View {
                 TextField("Search…", text: $query).foregroundColor(SpotcodeTheme.text)
             }
             .padding(.horizontal, 10).frame(height: 34)
+            .frame(maxWidth: 520)
             .background(SpotcodeTheme.background)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
+            Spacer(minLength: 0)
             Button { section = .settings } label: { Image(systemName: "gearshape") }.spotcodeIconButton()
             Button { showAccounts = true } label: { AvatarView(profile: model.me, size: 34) }
         }
