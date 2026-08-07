@@ -13,6 +13,7 @@ import { getMyLocation, isNearSpotSync, getRadius, permissionDenied,
          cachedLocation, cachedApproxLocation, getApproxLocationViaIP } from '../geo-gate.js';
 import { currentUser } from '../auth.js';
 import { timelineTabs } from './timeline-tabs.js';
+import { withTimeout } from '../net-utils.js';
 
 let renderVersion = 0;
 let mapInst = null;
@@ -89,17 +90,17 @@ export async function hydrateMap(city) {
   // Leaflet CDN round-trip; parallelising them cuts total wall-clock
   // to the slowest single leg.
   const cachedForPaint = cachedPosts('spots') || [];
-  const postsPromise = postsWithSpots({ limit: 200 }).catch((err) => {
+  const postsPromise = withTimeout(postsWithSpots({ limit: 120 }), 10000, '地図投稿取得').catch((err) => {
     console.warn('hydrateMap: postsWithSpots failed, using cache', err);
     return cachedForPaint;
   });
-  const herePromise = getMyLocation().catch(() => null);
+  const herePromise = withTimeout(getMyLocation(), 8000, '現在地取得').catch(() => null);
   // Coarse IP fix only when the exact fix isn't already sitting in
   // the module-level cache. Fires in parallel so it's ready by the
   // time we know `here` is null.
   const approxPromise = cachedLocation()
     ? Promise.resolve(null)
-    : getApproxLocationViaIP().catch(() => null);
+    : withTimeout(getApproxLocationViaIP(), 6000, '推定位置取得').catch(() => null);
 
   let L;
   try {
@@ -151,6 +152,11 @@ export async function hydrateMap(city) {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
     maxZoom: 19,
   });
+  const gsiStandard = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>',
+    maxZoom: 18,
+    maxNativeZoom: 18,
+  });
   const gsiAerial = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
     attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院 シームレス空中写真</a>',
     maxZoom: 18,
@@ -162,10 +168,25 @@ export async function hydrateMap(city) {
   });
   osm.addTo(mapInst);
   L.control.layers(
-    { '地図': osm, '航空写真 (日本)': gsiAerial, '航空写真 (世界)': esriAerial },
+    { '地図 (OSM)': osm, '地図 (国土地理院)': gsiStandard, '航空写真 (日本)': gsiAerial, '航空写真 (世界)': esriAerial },
     null,
     { position: 'topright', collapsed: true }
   ).addTo(mapInst);
+
+  // Some Japanese mobile carriers/proxies intermittently fail OSM tile
+  // requests even though the app and Supabase are reachable. After three
+  // failed tiles, automatically switch to GSI's Japan-wide standard map.
+  // The layer control still lets the user switch back manually.
+  let osmTileErrors = 0;
+  let usingFallbackTiles = false;
+  osm.on('tileerror', () => {
+    osmTileErrors++;
+    if (usingFallbackTiles || osmTileErrors < 3 || !mapInst) return;
+    usingFallbackTiles = true;
+    try { mapInst.removeLayer(osm); } catch {}
+    gsiStandard.addTo(mapInst);
+    if (status) status.textContent = 'モバイル回線向けの代替地図に切り替えました';
+  });
 
   if (here) {
     // User position + unlock-radius ring. fitBounds() to the ring so

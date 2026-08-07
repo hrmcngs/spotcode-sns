@@ -1129,7 +1129,10 @@ probeSchema();
 // On a successful fix we refresh() the current route so the in-flight
 // timeline re-renders with the now-warm geo state.
 import('./geo-gate.js').then(({ getMyLocation }) => {
-  getMyLocation().then((fix) => { if (fix) refresh(); }).catch(() => {});
+  // A GPS fix used to re-dispatch the active screen shortly after boot,
+  // which looked exactly like a spontaneous reload on mobile. Warm the
+  // cache only; hydrateMap performs its own location-aware render.
+  getMyLocation().catch(() => {});
 });
 initIosZoomGuard();
 
@@ -2156,18 +2159,11 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
         lastSwCheck = Date.now();
         reg.update().catch(() => {});
       });
-      // When a NEW SW takes over (fresh cache), reload once so the
-      // page runs against the code it was compiled with. Guard with
-      // sessionStorage so the reload can't loop.
-      let reloaded = false;
+      // Do not force-reload an active mobile session when a deploy lands.
+      // Existing modules remain valid; the new worker will serve the fresh
+      // shell on the user's next normal launch/navigation.
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (reloaded) return;
-        reloaded = true;
-        try {
-          if (sessionStorage.getItem('spotcode:sw-reloaded') === '1') return;
-          sessionStorage.setItem('spotcode:sw-reloaded', '1');
-        } catch {}
-        location.reload();
+        try { sessionStorage.setItem('spotcode:sw-updated', '1'); } catch {}
       });
     }).catch(() => {});
   });

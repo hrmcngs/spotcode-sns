@@ -15,7 +15,7 @@ const LOCK_VP = 'width=device-width, initial-scale=1, maximum-scale=1, viewport-
 
 let pending = false;
 
-function resetZoom() {
+export function resetZoom() {
   // Only intervene when we're actually zoomed in. If the user is at scale
   // 1 we'd be needlessly disabling pinch zoom for the next 300 ms.
   const vv = window.visualViewport;
@@ -36,16 +36,33 @@ export function initIosZoomGuard() {
   // listener, so skip the no-op cost there.
   if (!/iPad|iPhone|iPod/.test(navigator.userAgent)) return;
 
+  // Visible escape hatch for a viewport that got stuck zoomed. It only
+  // appears while scale > 1, so it does not occupy normal mobile UI.
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.className = 'zoom-reset-btn';
+  resetBtn.textContent = '表示倍率を戻す';
+  resetBtn.hidden = true;
+  resetBtn.addEventListener('click', resetZoom);
+  document.body.appendChild(resetBtn);
+
+  const syncResetButton = () => {
+    const scale = window.visualViewport?.scale || 1;
+    resetBtn.hidden = scale <= 1.02;
+  };
+  window.visualViewport?.addEventListener('resize', syncResetButton);
+  window.visualViewport?.addEventListener('scroll', syncResetButton);
+
   // After an input blurs, iOS often leaves the page zoomed.
   document.addEventListener('focusout', (e) => {
     const t = e.target;
     if (t && t.matches && t.matches('input, textarea, select')) {
       // Delay one frame so the keyboard hide animation doesn't fight us.
-      requestAnimationFrame(resetZoom);
+    requestAnimationFrame(() => { resetZoom(); syncResetButton(); });
     }
   });
 
   // Cover the case where the user comes back from a different tab /
   // background and the WKWebView restored a zoomed state.
-  window.addEventListener('pageshow', resetZoom);
+  window.addEventListener('pageshow', () => { resetZoom(); syncResetButton(); });
 }
