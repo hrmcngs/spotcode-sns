@@ -257,7 +257,8 @@ private struct InlineComposer: View {
     @State private var showEvent = false
     @State private var isIdea = false
     @State private var visibility = "public"
-    @StateObject private var location = ComposerLocationProvider()
+    @State private var selectedSpot: Spot?
+    @State private var showLocationPicker = false
     @State private var showDraftNotice = true
     @State private var editorFocused = false
     var body: some View {
@@ -303,6 +304,9 @@ private struct InlineComposer: View {
          .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
          .onAppear { applyRepositoryRequest(repositoryComposeURL) }
          .onChange(of: repositoryComposeURL) { applyRepositoryRequest($0) }
+         .sheet(isPresented: $showLocationPicker) {
+             LocationPickerSheet(spot: $selectedSpot, isPresented: $showLocationPicker)
+         }
     }
 
     @ViewBuilder private var composerChips: some View {
@@ -318,10 +322,8 @@ private struct InlineComposer: View {
     }
 
     private var locationChip: some View {
-        Button {
-            if location.spot == nil { location.request() } else { location.clear() }
-        } label: {
-            ComposerChip(icon: "mappin", title: location.spot?.label ?? "場所を追加", active: location.spot != nil)
+        Button { showLocationPicker = true } label: {
+            ComposerChip(icon: "mappin", title: selectedSpot?.label ?? "場所を追加", active: selectedSpot != nil)
         }
     }
     private var linkChip: some View { Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加", active: showLink) } }
@@ -359,9 +361,9 @@ private struct InlineComposer: View {
     private func publish() {
         sending = true
         Task {
-            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, eventURL: eventURL.isEmpty ? nil : eventURL, spot: location.spot, kind: isIdea ? "idea" : nil, visibility: visibility) {
+            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, eventURL: eventURL.isEmpty ? nil : eventURL, spot: selectedSpot, kind: isIdea ? "idea" : nil, visibility: visibility) {
                 draft = ""; githubLink = ""; eventURL = ""; showLink = false; showEvent = false
-                isIdea = false; visibility = "public"; location.clear()
+                isIdea = false; visibility = "public"; selectedSpot = nil
             }
             sending = false
         }
@@ -409,7 +411,9 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
     }
     func request() {
         manager.requestWhenInUseAuthorization()
-        manager.requestLocation()
+        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            manager.requestLocation()
+        }
     }
     func clear() { spot = nil }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
@@ -417,6 +421,132 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
         spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude, label: "現在地", address: nil)
     }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            manager.requestLocation()
+        }
+    }
+}
+
+private struct LocationPickerSheet: View {
+    @Binding var spot: Spot?
+    @Binding var isPresented: Bool
+    @StateObject private var location = ComposerLocationProvider()
+    @State private var coordinate: CLLocationCoordinate2D?
+    @State private var label = ""
+    @State private var address = "地図をタップして取得…"
+    @State private var locating = false
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Button {
+                        locating = true
+                        location.request()
+                    } label: { Label("現在地を使う", systemImage: "location") }
+                        .font(.subheadline.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 9)
+                        .overlay(Capsule().stroke(SpotcodeTheme.border))
+                    TextField("ラベル（任意・建物名や店名）", text: $label).spotcodeURLField()
+                }.padding(14)
+                HStack(spacing: 8) {
+                    Image(systemName: "mappin.and.ellipse")
+                    Text(statusText).font(.caption)
+                    Spacer()
+                }.foregroundColor(coordinate == nil ? SpotcodeTheme.muted : SpotcodeTheme.accent)
+                    .padding(.horizontal, 16).padding(.vertical, 10).background(SpotcodeTheme.surface2)
+                TappableLocationMap(coordinate: $coordinate)
+                HStack(spacing: 12) {
+                    HStack(spacing: 7) {
+                        Text("住所").font(.caption).foregroundColor(SpotcodeTheme.muted)
+                        Text(address).font(.caption).lineLimit(1)
+                    }.padding(11).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(SpotcodeTheme.background).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
+                    Button("削除") { spot = nil; isPresented = false }.foregroundColor(.red).disabled(spot == nil)
+                }.padding(14)
+            }
+            .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+            .navigationTitle("場所を選ぶ").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Confirm") { confirm() }.disabled(coordinate == nil)
+                }
+            }
+            .onAppear {
+                coordinate = spot?.coordinate
+                label = spot?.label ?? ""
+                address = spot?.address ?? "地図をタップして取得…"
+            }
+            .onChange(of: location.spot) { value in
+                guard let value else { return }
+                coordinate = value.coordinate
+                locating = false
+                reverseGeocode(value.coordinate)
+            }
+            .onChange(of: coordinate?.latitude) { _ in
+                if let coordinate { reverseGeocode(coordinate) }
+            }
+        }.preferredColorScheme(.dark)
+    }
+
+    private var statusText: String {
+        if locating { return "現在地を取得中… 取れるまで投稿はできません。" }
+        if coordinate != nil { return "選択した場所を投稿に追加します。地図をタップして変更できます。" }
+        return "現在地を使うか、地図をタップして場所を選んでください。"
+    }
+    private func confirm() {
+        guard let coordinate else { return }
+        let resolvedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude,
+                    label: resolvedLabel.isEmpty ? "選択した場所" : resolvedLabel,
+                    address: address == "地図をタップして取得…" ? nil : address)
+        isPresented = false
+    }
+    private func reverseGeocode(_ coordinate: CLLocationCoordinate2D) {
+        CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)) { places, _ in
+            guard let place = places?.first else { return }
+            address = [place.postalCode, place.administrativeArea, place.locality, place.subLocality, place.thoroughfare, place.subThoroughfare]
+                .compactMap { $0 }.joined(separator: " ")
+        }
+    }
+}
+
+private struct TappableLocationMap: UIViewRepresentable {
+    @Binding var coordinate: CLLocationCoordinate2D?
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView()
+        map.showsUserLocation = true
+        map.isZoomEnabled = true
+        map.isScrollEnabled = true
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
+        map.addGestureRecognizer(tap)
+        context.coordinator.map = map
+        return map
+    }
+    func updateUIView(_ map: MKMapView, context: Context) {
+        context.coordinator.parent = self
+        map.removeAnnotations(map.annotations.filter { !($0 is MKUserLocation) })
+        if let coordinate {
+            let pin = MKPointAnnotation(); pin.coordinate = coordinate
+            map.addAnnotation(pin)
+            if !context.coordinator.hasCentered {
+                map.setRegion(.init(center: coordinate, span: .init(latitudeDelta: 0.02, longitudeDelta: 0.02)), animated: false)
+                context.coordinator.hasCentered = true
+            }
+        }
+    }
+    final class Coordinator: NSObject {
+        var parent: TappableLocationMap
+        weak var map: MKMapView?
+        var hasCentered = false
+        init(_ parent: TappableLocationMap) { self.parent = parent }
+        @objc func tapped(_ gesture: UITapGestureRecognizer) {
+            guard let map else { return }
+            parent.coordinate = map.convert(gesture.location(in: map), toCoordinateFrom: map)
+        }
+    }
 }
 
 // TextEditor keeps an opaque system background on some iOS 15 builds even
