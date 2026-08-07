@@ -45,30 +45,30 @@ actor SupabaseService {
     }
 
     func profile(id: UUID, token: String) async throws -> Profile? {
-        let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle", token: token)
+        let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape", token: token)
         return rows.first
     }
 
     func profile(handle: String, token: String?) async throws -> Profile? {
         let escaped = handle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? handle
-        let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle", token: token)
+        let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape", token: token)
         return rows.first
     }
 
     func posts(limit: Int = 40, authorID: UUID? = nil, token: String? = nil) async throws -> [Post] {
-        var path = "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle)&order=created_at.desc&limit=\(limit)"
+        var path = "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=\(limit)"
         if let authorID { path += "&author_id=eq.\(authorID.uuidString)" }
         return try await request(path, token: token)
     }
 
     func spottedPosts(token: String?) async throws -> [Post] {
-        try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle)&order=created_at.desc&limit=120", token: token)
+        try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=120", token: token)
     }
 
     func createPost(_ draft: PostDraft, token: String) async throws -> Post {
         let body = try JSONEncoder().encode(draft)
         let rows: [Post] = try await request(
-            "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle)",
+            "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
             method: "POST", token: token, body: body, preferRepresentation: true
         )
         guard let post = rows.first else { throw NSError(domain: "Supabase", code: -2, userInfo: [NSLocalizedDescriptionKey: "投稿結果が空です"]) }
@@ -91,5 +91,26 @@ actor SupabaseService {
             "rest/v1/follows?target_id=eq.\(userID.uuidString)&select=status,created_at,follower:profiles!follows_follower_id_fkey(id,handle,name,avatar_url,bio,location,github_handle)&order=created_at.desc&limit=30",
             token: token
         )
+    }
+
+    func profileCounts(userID: UUID, token: String?) async throws -> (following: Int, followers: Int, posts: Int) {
+        async let following = count("rest/v1/follows?follower_id=eq.\(userID.uuidString)&status=eq.accepted&select=id", token: token)
+        async let followers = count("rest/v1/follows?target_id=eq.\(userID.uuidString)&status=eq.accepted&select=id", token: token)
+        async let posts = count("rest/v1/posts?author_id=eq.\(userID.uuidString)&select=id", token: token)
+        return try await (following, followers, posts)
+    }
+
+    private func count(_ path: String, token: String?) async throws -> Int {
+        guard let endpoint = URL(string: path, relativeTo: baseURL) else { throw URLError(.badURL) }
+        var value = URLRequest(url: endpoint)
+        value.httpMethod = "HEAD"
+        value.timeoutInterval = 12
+        value.setValue(anonKey, forHTTPHeaderField: "apikey")
+        value.setValue("Bearer \(token ?? anonKey)", forHTTPHeaderField: "Authorization")
+        value.setValue("count=exact", forHTTPHeaderField: "Prefer")
+        let (_, response) = try await URLSession.shared.data(for: value)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+        let range = http.value(forHTTPHeaderField: "Content-Range") ?? "*/0"
+        return Int(range.split(separator: "/").last ?? "0") ?? 0
     }
 }

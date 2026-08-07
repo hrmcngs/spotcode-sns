@@ -9,11 +9,15 @@ struct Profile: Codable, Identifiable, Hashable {
     let bio: String?
     let location: String?
     let githubHandle: String?
+    let createdAt: String?
+    let avatarShape: String?
 
     enum CodingKeys: String, CodingKey {
         case id, handle, name, bio, location
         case avatarURL = "avatar_url"
         case githubHandle = "github_handle"
+        case createdAt = "created_at"
+        case avatarShape = "avatar_shape"
     }
 }
 
@@ -35,12 +39,19 @@ struct Post: Codable, Identifiable, Hashable {
     let status: String?
     let createdAt: String?
     let author: Profile?
+    let commentsCount: Int?
+    let repostsCount: Int?
+    let bookmarksCount: Int?
+    let photos: [String]?
 
     enum CodingKeys: String, CodingKey {
-        case id, body, spot, status, author
+        case id, body, spot, status, author, photos
         case authorID = "author_id"
         case githubLink = "github_link"
         case createdAt = "created_at"
+        case commentsCount = "comments_count"
+        case repostsCount = "reposts_count"
+        case bookmarksCount = "bookmarks_count"
     }
 }
 

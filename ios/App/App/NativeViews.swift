@@ -74,6 +74,7 @@ struct RootView: View {
 }
 
 private struct TopBar: View {
+    @EnvironmentObject private var model: AppModel
     @Binding var drawerOpen: Bool
     @Binding var section: AppSection
     @State private var query = ""
@@ -85,7 +86,7 @@ private struct TopBar: View {
             }.spotcodeIconButton()
             Button { section = .home } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    GitHubMark().fill(SpotcodeTheme.text).frame(width: 25, height: 25)
                     Text("spotcode").fontWeight(.bold)
                 }.foregroundColor(SpotcodeTheme.text)
             }
@@ -97,6 +98,7 @@ private struct TopBar: View {
             .background(SpotcodeTheme.background)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
             Button { section = .settings } label: { Image(systemName: "gearshape") }.spotcodeIconButton()
+            Button { section = .profile } label: { AvatarView(profile: model.me, size: 34) }
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(SpotcodeTheme.surface)
@@ -113,7 +115,7 @@ private struct SideDrawer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
-                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                GitHubMark().fill(SpotcodeTheme.text).frame(width: 24, height: 24)
                 Text("spotcode").bold(); Text("/").foregroundColor(SpotcodeTheme.muted)
                 Text("sns").foregroundColor(SpotcodeTheme.accent)
             }.font(.title3).padding(.bottom, 20)
@@ -166,7 +168,7 @@ struct TimelineView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ComposerPrompt { composing = true }
+                        InlineComposer()
                         ForEach(model.posts) { post in
                             NavigationLink(destination: PostDetailView(post: post)) { PostRow(post: post) }
                                 .buttonStyle(.plain)
@@ -198,21 +200,69 @@ private struct TimelineTabs: View {
     }
 }
 
-private struct ComposerPrompt: View {
+private struct InlineComposer: View {
     @EnvironmentObject private var model: AppModel
-    let action: () -> Void
+    @AppStorage("spotcode.native.draft") private var draft = ""
+    @State private var githubLink = ""
+    @State private var sending = false
+    @State private var showLink = false
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
-                AvatarView(profile: model.me, size: 42)
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Share an idea…").font(.title3).foregroundColor(SpotcodeTheme.muted)
-                    HStack { Image(systemName: "link"); Image(systemName: "mappin"); Spacer(); Text("Post").bold().padding(.horizontal, 18).padding(.vertical, 8).background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule()) }
-                        .foregroundColor(SpotcodeTheme.accent)
+        HStack(alignment: .top, spacing: 12) {
+            AvatarView(profile: model.me, size: 42)
+            VStack(alignment: .leading, spacing: 12) {
+                ZStack(alignment: .topLeading) {
+                    if draft.isEmpty { Text("いまどうしてる？").font(.title3).foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 14).padding(.vertical, 17) }
+                    TextEditor(text: $draft).font(.title3).padding(8).frame(minHeight: 108)
+                        .background(Color.clear).foregroundColor(SpotcodeTheme.text)
                 }
-            }.padding(16)
-        }.buttonStyle(.plain).disabled(model.session == nil)
+                .background(SpotcodeTheme.surface2)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 74/255, green: 85/255, blue: 104/255), lineWidth: 2))
+                HStack(spacing: 8) {
+                    ComposerChip(icon: "mappin", title: "場所を追加")
+                    Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加") }
+                }
+                HStack(spacing: 8) {
+                    ComposerChip(icon: "calendar", title: "イベントを追加")
+                    ComposerChip(icon: "sparkles", title: "アイデア")
+                    ComposerChip(icon: "globe", title: "全員")
+                }
+                if showLink {
+                    TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeField()
+                }
+                HStack(spacing: 24) {
+                    Image(systemName: "photo"); Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    Image(systemName: "mappin.circle"); Image(systemName: "chart.bar")
+                }.font(.title3).foregroundColor(SpotcodeTheme.accent)
+                HStack {
+                    Button("下書き保存") { UserDefaults.standard.set(draft, forKey: "spotcode.native.draft") }
+                        .font(.body.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, 10)
+                        .overlay(Capsule().stroke(SpotcodeTheme.border))
+                    Button(sending ? "送信中…" : "Push") { publish() }
+                        .font(.body.weight(.bold)).padding(.horizontal, 28).padding(.vertical, 11)
+                        .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
+                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending || model.session == nil)
+                }
+            }
+        }.padding(16)
          .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+    }
+
+    private func publish() {
+        sending = true
+        Task {
+            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink) {
+                draft = ""; githubLink = ""; showLink = false
+            }
+            sending = false
+        }
+    }
+}
+
+private struct ComposerChip: View {
+    let icon: String; let title: String
+    var body: some View {
+        Label(title, systemImage: icon).font(.caption.weight(.semibold)).foregroundColor(SpotcodeTheme.muted)
+            .padding(.horizontal, 10).padding(.vertical, 7).overlay(Capsule().stroke(SpotcodeTheme.border, style: StrokeStyle(lineWidth: 1, dash: [5])))
     }
 }
 
@@ -225,6 +275,12 @@ struct PostRow: View {
                 HStack(spacing: 5) {
                     Text(post.author?.name ?? "User").fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
                     Text("@\(post.author?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
+                    Text("· \(relativeTime(post.createdAt))").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
+                    Spacer(minLength: 2)
+                    Text((post.status ?? "wip").uppercased()).font(.caption.weight(.bold))
+                        .foregroundColor((post.status ?? "wip") == "active" ? .black : SpotcodeTheme.text)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background((post.status ?? "wip") == "active" ? Color.cyan : SpotcodeTheme.warning).clipShape(Capsule())
                 }
                 Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 if let label = post.spot?.label {
@@ -237,7 +293,12 @@ struct PostRow: View {
                             .background(SpotcodeTheme.background).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
-                HStack { Image(systemName: "bubble.left"); Spacer(); Image(systemName: "arrow.2.squarepath"); Spacer(); Image(systemName: "heart"); Spacer(); Image(systemName: "bookmark") }
+                HStack {
+                    Label("\(post.commentsCount ?? 0)", systemImage: "bubble.left"); Spacer()
+                    Label("\(post.repostsCount ?? 0)", systemImage: "arrow.2.squarepath"); Spacer()
+                    Label("\(post.bookmarksCount ?? 0)", systemImage: "star"); Spacer()
+                    Label("0", systemImage: "heart"); Spacer(); Image(systemName: "square.and.arrow.up")
+                }
                     .font(.caption).foregroundColor(SpotcodeTheme.muted).padding(.top, 4).padding(.trailing, 24)
             }
         }
@@ -383,23 +444,88 @@ struct NotificationsView: View {
 }
 
 struct ProfileView: View {
+    @EnvironmentObject private var model: AppModel
     let profile: Profile?
+    @State private var profilePosts: [Post] = []
+    @State private var counts = (following: 0, followers: 0, posts: 0)
+    @State private var selectedTab = 0
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "Profile")
             ScrollView {
                 if let profile {
-                    VStack(alignment: .leading, spacing: 12) {
-                        AvatarView(profile: profile, size: 78)
-                        Text(profile.name).font(.title2).fontWeight(.bold)
-                        Text("@\(profile.handle)").foregroundColor(SpotcodeTheme.muted)
-                        if let bio = profile.bio { Text(bio) }
-                        if let location = profile.location { Label(location, systemImage: "mappin").foregroundColor(SpotcodeTheme.muted) }
-                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(spacing: 0) {
+                        ProfileHero(profile: profile, counts: counts)
+                        HStack(spacing: 0) {
+                            ForEach(["Posts", "Spots", "Likes"].indices, id: \.self) { index in
+                                Button { selectedTab = index } label: {
+                                    VStack(spacing: 13) {
+                                        Text(["Posts", "Spots", "Likes"][index]).font(.title3)
+                                        Capsule().fill(selectedTab == index ? SpotcodeTheme.accent : .clear).frame(width: 58, height: 4)
+                                    }.frame(maxWidth: .infinity).padding(.top, 15)
+                                }.foregroundColor(selectedTab == index ? SpotcodeTheme.text : SpotcodeTheme.muted)
+                            }
+                        }.overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+                        if selectedTab == 0 {
+                            LazyVStack(spacing: 0) { ForEach(profilePosts) { post in PostRow(post: post) } }
+                        } else if selectedTab == 1 {
+                            LazyVStack(spacing: 0) { ForEach(profilePosts.filter { $0.spot != nil }) { post in PostRow(post: post) } }
+                        } else {
+                            ContentUnavailableViewCompat(title: "いいねした投稿はありません", icon: "heart")
+                        }
+                    }
                 } else { ContentUnavailableViewCompat(title: "ログインしてください", icon: "person.crop.circle") }
             }
         }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
+         .task { await loadProfile() }
     }
+
+    private func loadProfile() async {
+        guard let id = profile?.id else { return }
+        async let posts = try? SupabaseService.shared.posts(limit: 80, authorID: id, token: model.session?.accessToken)
+        async let stats = try? SupabaseService.shared.profileCounts(userID: id, token: model.session?.accessToken)
+        profilePosts = await posts ?? []
+        if let value = await stats { counts = value }
+    }
+}
+
+private struct ProfileHero: View {
+    let profile: Profile
+    let counts: (following: Int, followers: Int, posts: Int)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            LinearGradient(colors: [Color(red: 8/255, green: 70/255, blue: 111/255), Color(red: 30/255, green: 116/255, blue: 77/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .frame(height: 176)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top) {
+                    AvatarView(profile: profile, size: 104).padding(5).background(SpotcodeTheme.surface).clipShape(Circle()).offset(y: -63)
+                    Spacer()
+                    Button("Edit profile") { }.font(.body.weight(.bold)).foregroundColor(SpotcodeTheme.background)
+                        .padding(.horizontal, 20).padding(.vertical, 11).background(SpotcodeTheme.text).clipShape(Capsule()).padding(.top, 14)
+                }.frame(height: 63)
+                HStack(spacing: 8) {
+                    Text(profile.name).font(.title).fontWeight(.bold)
+                    Text("{ }").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent)
+                        .padding(.horizontal, 8).padding(.vertical, 3).overlay(Capsule().stroke(SpotcodeTheme.accent))
+                }
+                Text("@\(profile.handle)").font(.title3).foregroundColor(SpotcodeTheme.muted)
+                if let bio = profile.bio, !bio.isEmpty { Text(bio) }
+                HStack(spacing: 14) {
+                    if let location = profile.location, !location.isEmpty { Label(location, systemImage: "mappin") }
+                    if let joined = profile.createdAt { Label("Joined \(String(joined.prefix(7)))", systemImage: "calendar") }
+                }.foregroundColor(SpotcodeTheme.muted)
+                HStack(spacing: 22) {
+                    ProfileCount(value: counts.following, label: "Following")
+                    ProfileCount(value: counts.followers, label: "Followers")
+                    ProfileCount(value: counts.posts, label: "Posts")
+                }.padding(.top, 5)
+            }.padding(.horizontal, 18).padding(.bottom, 20)
+        }.overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
+    }
+}
+
+private struct ProfileCount: View {
+    let value: Int; let label: String
+    var body: some View { HStack(spacing: 5) { Text("\(value)").fontWeight(.bold).foregroundColor(SpotcodeTheme.text); Text(label).foregroundColor(SpotcodeTheme.muted) } }
 }
 
 struct SettingsView: View {
@@ -459,4 +585,36 @@ private extension View {
     func spotcodeField() -> some View {
         self.padding(12).background(SpotcodeTheme.background).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
     }
+}
+
+private struct GitHubMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let s = min(rect.width, rect.height)
+        let x = rect.midX, y = rect.midY
+        path.addEllipse(in: CGRect(x: x - s/2, y: y - s/2, width: s, height: s))
+        path.addRoundedRect(in: CGRect(x: x - s * 0.27, y: y - s * 0.13, width: s * 0.54, height: s * 0.48), cornerSize: CGSize(width: s * 0.18, height: s * 0.18))
+        path.move(to: CGPoint(x: x - s * 0.22, y: y - s * 0.07))
+        path.addLine(to: CGPoint(x: x - s * 0.31, y: y - s * 0.28))
+        path.addLine(to: CGPoint(x: x - s * 0.08, y: y - s * 0.18))
+        path.closeSubpath()
+        path.move(to: CGPoint(x: x + s * 0.22, y: y - s * 0.07))
+        path.addLine(to: CGPoint(x: x + s * 0.31, y: y - s * 0.28))
+        path.addLine(to: CGPoint(x: x + s * 0.08, y: y - s * 0.18))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private func relativeTime(_ value: String?) -> String {
+    guard let value else { return "" }
+    let parser = ISO8601DateFormatter()
+    parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let date = parser.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    guard let date else { return "" }
+    let seconds = max(0, Int(Date().timeIntervalSince(date)))
+    if seconds < 60 { return "\(seconds)s" }
+    if seconds < 3_600 { return "\(seconds / 60)m" }
+    if seconds < 86_400 { return "\(seconds / 3_600)h" }
+    return "\(seconds / 86_400)d"
 }
