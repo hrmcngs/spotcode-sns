@@ -252,9 +252,14 @@ private struct InlineComposer: View {
             AvatarView(profile: model.me, size: 42)
             VStack(alignment: .leading, spacing: 12) {
                 ZStack(alignment: .topLeading) {
-                    if draft.isEmpty { Text("いまどうしてる？").font(.title3).foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 14).padding(.vertical, 17) }
                     TextEditor(text: $draft).font(.title3).padding(8).frame(minHeight: 108)
                         .background(Color.clear).foregroundColor(SpotcodeTheme.text).focused($editorFocused)
+                    if draft.isEmpty {
+                        Text("いまどうしてる？")
+                            .font(.title3).foregroundColor(SpotcodeTheme.muted)
+                            .padding(.horizontal, 14).padding(.vertical, 17)
+                            .allowsHitTesting(false)
+                    }
                 }
                 .background(SpotcodeTheme.surface2)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : Color(red: 74/255, green: 85/255, blue: 104/255), lineWidth: editorFocused ? 3 : 2))
