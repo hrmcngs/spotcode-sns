@@ -36,6 +36,9 @@ struct Post: Codable, Identifiable, Hashable {
     let body: String
     let githubLink: String?
     let repoFullName: String?
+    let eventURL: String?
+    let kind: String?
+    let visibility: String?
     let spot: Spot?
     let status: String?
     let createdAt: String?
@@ -46,10 +49,11 @@ struct Post: Codable, Identifiable, Hashable {
     let photos: [String]?
 
     enum CodingKeys: String, CodingKey {
-        case id, body, spot, status, author, photos
+        case id, body, spot, status, author, photos, kind, visibility
         case authorID = "author_id"
         case githubLink = "github_link"
         case repoFullName = "repo_full_name"
+        case eventURL = "event_url"
         case createdAt = "created_at"
         case commentsCount = "comments_count"
         case repostsCount = "reposts_count"
@@ -98,12 +102,17 @@ struct PostDraft: Encodable {
     let authorID: UUID
     let body: String
     let githubLink: String?
+    let eventURL: String?
+    let spot: Spot?
+    let kind: String?
+    let visibility: String
     let status: String
 
     enum CodingKeys: String, CodingKey {
-        case body, status
+        case body, status, spot, kind, visibility
         case authorID = "author_id"
         case githubLink = "github_link"
+        case eventURL = "event_url"
     }
 }
 

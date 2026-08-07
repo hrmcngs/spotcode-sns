@@ -4,6 +4,7 @@ actor SupabaseService {
     static let shared = SupabaseService()
     private let baseURL = URL(string: "https://vkwdthjiyxrhskdlgexq.supabase.co")!
     private let anonKey = "sb_publishable_xdAZG7yOOFKPXmugjhDWdQ_HJ7sGHIq"
+    private var supportedPostMetadata = ["repo_full_name", "kind", "visibility", "event_url"]
     private let decoder: JSONDecoder = {
         let value = JSONDecoder()
         return value
@@ -83,13 +84,16 @@ actor SupabaseService {
 
     func posts(limit: Int = 40, authorID: UUID? = nil, token: String? = nil) async throws -> [Post] {
         let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
-        var path = "rest/v1/posts?select=\(common),repo_full_name&order=created_at.desc&limit=\(limit)"
-        if let authorID { path += "&author_id=eq.\(authorID.uuidString)" }
-        do { return try await request(path, token: token) }
-        catch {
-            var fallback = "rest/v1/posts?select=\(common)&order=created_at.desc&limit=\(limit)"
-            if let authorID { fallback += "&author_id=eq.\(authorID.uuidString)" }
-            return try await request(fallback, token: token)
+        while true {
+            let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
+            var path = "rest/v1/posts?select=\(common)\(extras)&order=created_at.desc&limit=\(limit)"
+            if let authorID { path += "&author_id=eq.\(authorID.uuidString)" }
+            do { return try await request(path, token: token) }
+            catch {
+                let message = error.localizedDescription.lowercased()
+                guard let missing = supportedPostMetadata.first(where: { message.contains($0) }) else { throw error }
+                supportedPostMetadata.removeAll { $0 == missing }
+            }
         }
     }
 
@@ -98,9 +102,15 @@ actor SupabaseService {
     }
 
     func createPost(_ draft: PostDraft, token: String) async throws -> Post {
-        let body = try JSONEncoder().encode(draft)
+        let encoded = try JSONEncoder().encode(draft)
+        var payload = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] ?? [:]
+        for column in ["repo_full_name", "kind", "visibility", "event_url"] where !supportedPostMetadata.contains(column) {
+            payload.removeValue(forKey: column)
+        }
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
         let rows: [Post] = try await request(
-            "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+            "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
             method: "POST", token: token, body: body, preferRepresentation: true
         )
         guard let post = rows.first else { throw NSError(domain: "Supabase", code: -2, userInfo: [NSLocalizedDescriptionKey: "投稿結果が空です"]) }

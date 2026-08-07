@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import CoreLocation
 
 private enum SpotcodeTheme {
     static let background = Color(red: 13/255, green: 17/255, blue: 23/255)
@@ -250,8 +251,13 @@ private struct InlineComposer: View {
     @Binding var repositoryComposeURL: String?
     @AppStorage("spotcode.native.draft") private var draft = ""
     @State private var githubLink = ""
+    @State private var eventURL = ""
     @State private var sending = false
     @State private var showLink = false
+    @State private var showEvent = false
+    @State private var isIdea = false
+    @State private var visibility = "public"
+    @StateObject private var location = ComposerLocationProvider()
     @State private var showDraftNotice = true
     @State private var editorFocused = false
     var body: some View {
@@ -273,6 +279,9 @@ private struct InlineComposer: View {
                 composerChips
                 if showLink {
                     TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
+                }
+                if showEvent {
+                    TextField("https://connpass.com/event/…", text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
                 }
                 if horizontalSizeClass == .regular {
                     HStack { composerTools; Spacer(); composerActions }
@@ -308,11 +317,25 @@ private struct InlineComposer: View {
         }
     }
 
-    private var locationChip: some View { ComposerChip(icon: "mappin", title: "場所を追加") }
-    private var linkChip: some View { Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加") } }
-    private var eventChip: some View { ComposerChip(icon: "calendar", title: "イベントを追加") }
-    private var ideaChip: some View { ComposerChip(icon: "sparkles", title: "アイデア") }
-    private var audienceChip: some View { ComposerChip(icon: "globe", title: "全員", strong: true) }
+    private var locationChip: some View {
+        Button {
+            if location.spot == nil { location.request() } else { location.clear() }
+        } label: {
+            ComposerChip(icon: "mappin", title: location.spot?.label ?? "場所を追加", active: location.spot != nil)
+        }
+    }
+    private var linkChip: some View { Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加", active: showLink) } }
+    private var eventChip: some View { Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: "イベントを追加", active: showEvent) } }
+    private var ideaChip: some View { Button { isIdea.toggle() } label: { ComposerChip(icon: "sparkles", title: "アイデア", active: isIdea) } }
+    private var audienceChip: some View {
+        Menu {
+            audienceButton("全員", value: "public")
+            audienceButton("相互フォロー", value: "mutuals")
+            audienceButton("フォロー中", value: "following")
+            audienceButton("親しい友達", value: "friends")
+            audienceButton("同じ組織", value: "org")
+        } label: { ComposerChip(icon: visibilityIcon, title: visibilityLabel, strong: true, active: visibility != "public") }
+    }
 
     private var composerTools: some View {
         HStack(spacing: 24) {
@@ -336,11 +359,22 @@ private struct InlineComposer: View {
     private func publish() {
         sending = true
         Task {
-            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink) {
-                draft = ""; githubLink = ""; showLink = false
+            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, eventURL: eventURL.isEmpty ? nil : eventURL, spot: location.spot, kind: isIdea ? "idea" : nil, visibility: visibility) {
+                draft = ""; githubLink = ""; eventURL = ""; showLink = false; showEvent = false
+                isIdea = false; visibility = "public"; location.clear()
             }
             sending = false
         }
+    }
+
+    private func audienceButton(_ title: String, value: String) -> some View {
+        Button { visibility = value } label: { if visibility == value { Label(title, systemImage: "checkmark") } else { Text(title) } }
+    }
+    private var visibilityLabel: String {
+        ["public":"全員", "mutuals":"相互フォロー", "following":"フォロー中", "friends":"親しい友達", "org":"同じ組織"][visibility] ?? "全員"
+    }
+    private var visibilityIcon: String {
+        ["public":"globe", "mutuals":"arrow.2.squarepath", "following":"person.badge.plus", "friends":"heart", "org":"building.2"][visibility] ?? "globe"
     }
 
     private func applyRepositoryRequest(_ value: String?) {
@@ -355,10 +389,34 @@ private struct InlineComposer: View {
 private struct ComposerChip: View {
     let icon: String; let title: String
     var strong = false
+    var active = false
     var body: some View {
-        Label(title, systemImage: icon).font(.caption.weight(.semibold)).foregroundColor(strong ? SpotcodeTheme.text : SpotcodeTheme.muted)
-            .padding(.horizontal, 10).padding(.vertical, 7).overlay(Capsule().stroke(SpotcodeTheme.border, style: StrokeStyle(lineWidth: 1, dash: [5])))
+        Label(title, systemImage: icon).font(.caption.weight(.semibold)).foregroundColor(active ? SpotcodeTheme.accent : (strong ? SpotcodeTheme.text : SpotcodeTheme.muted))
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .background(active ? SpotcodeTheme.accent.opacity(0.12) : Color.clear).clipShape(Capsule())
+            .overlay(Capsule().stroke(active ? SpotcodeTheme.accent : SpotcodeTheme.border, style: StrokeStyle(lineWidth: 1, dash: active ? [] : [5])))
     }
+}
+
+private final class ComposerLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published var spot: Spot?
+    private let manager = CLLocationManager()
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+    func request() {
+        manager.requestWhenInUseAuthorization()
+        manager.requestLocation()
+    }
+    func clear() { spot = nil }
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let coordinate = locations.last?.coordinate else { return }
+        spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude, label: "現在地", address: nil)
+    }
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 }
 
 // TextEditor keeps an opaque system background on some iOS 15 builds even
@@ -416,16 +474,30 @@ struct PostRow: View {
                         .padding(.horizontal, 9).padding(.vertical, 4)
                         .background((post.status ?? "wip") == "active" ? Color.cyan : SpotcodeTheme.warning).clipShape(Capsule())
                 }
-                Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                if let label = post.spot?.label {
-                    Label(label, systemImage: "mappin").font(.caption).foregroundColor(SpotcodeTheme.warning)
+                if post.spot != nil || post.kind == "idea" || (post.visibility ?? "public") != "public" {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            if let label = post.spot?.label { PostMetadataBadge(icon: "mappin", text: label, color: SpotcodeTheme.accent) }
+                            if post.kind == "idea" { PostMetadataBadge(icon: "sparkles", text: "アイデア", color: SpotcodeTheme.warning) }
+                            if let visibility = post.visibility, visibility != "public" {
+                                PostMetadataBadge(icon: visibilityBadge(visibility).icon, text: visibilityBadge(visibility).text, color: SpotcodeTheme.muted)
+                            }
+                        }
+                    }
                 }
+                Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 if let link = post.githubLink, let url = URL(string: link) {
                     Link(destination: url) {
                         HStack(spacing: 5) {
                             Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13)
                             Text(githubLinkLabel(link)).lineLimit(1)
                         }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
+                    }.foregroundColor(SpotcodeTheme.accent)
+                }
+                if let link = post.eventURL, let url = URL(string: link) {
+                    Link(destination: url) {
+                        Label("イベントを開く", systemImage: "calendar")
+                            .font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
                 HStack {
@@ -439,6 +511,27 @@ struct PostRow: View {
         }
         .padding(16).background(SpotcodeTheme.surface)
         .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+    }
+
+    private func visibilityBadge(_ value: String) -> (icon: String, text: String) {
+        switch value {
+        case "mutuals": return ("arrow.2.squarepath", "相互フォロー")
+        case "following": return ("person.badge.plus", "フォロー中")
+        case "friends": return ("heart", "親しい友達")
+        case "org": return ("building.2", "同じ組織")
+        default: return ("lock", "限定公開")
+        }
+    }
+}
+
+private struct PostMetadataBadge: View {
+    let icon: String
+    let text: String
+    let color: Color
+    var body: some View {
+        Label(text, systemImage: icon).font(.caption2.weight(.semibold)).foregroundColor(color)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(color.opacity(0.12)).overlay(Capsule().stroke(color.opacity(0.55))).clipShape(Capsule())
     }
 }
 
