@@ -82,9 +82,15 @@ actor SupabaseService {
     }
 
     func posts(limit: Int = 40, authorID: UUID? = nil, token: String? = nil) async throws -> [Post] {
-        var path = "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=\(limit)"
+        let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
+        var path = "rest/v1/posts?select=\(common),repo_full_name&order=created_at.desc&limit=\(limit)"
         if let authorID { path += "&author_id=eq.\(authorID.uuidString)" }
-        return try await request(path, token: token)
+        do { return try await request(path, token: token) }
+        catch {
+            var fallback = "rest/v1/posts?select=\(common)&order=created_at.desc&limit=\(limit)"
+            if let authorID { fallback += "&author_id=eq.\(authorID.uuidString)" }
+            return try await request(fallback, token: token)
+        }
     }
 
     func spottedPosts(token: String?) async throws -> [Post] {
@@ -110,6 +116,14 @@ actor SupabaseService {
         let (data, response) = try await data(for: request, retryable: true)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
         return try decoder.decode([Repository].self, from: data)
+    }
+
+    func followingProfiles(userID: UUID, token: String) async throws -> [Profile] {
+        let rows: [FollowingProfile] = try await request(
+            "rest/v1/follows?follower_id=eq.\(userID.uuidString)&status=eq.accepted&select=target:profiles!follows_target_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+            token: token
+        )
+        return rows.map(\.target)
     }
 
     func followNotifications(userID: UUID, token: String) async throws -> [FollowEvent] {

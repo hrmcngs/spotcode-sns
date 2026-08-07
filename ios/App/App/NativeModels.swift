@@ -35,6 +35,7 @@ struct Post: Codable, Identifiable, Hashable {
     let authorID: UUID
     let body: String
     let githubLink: String?
+    let repoFullName: String?
     let spot: Spot?
     let status: String?
     let createdAt: String?
@@ -48,6 +49,7 @@ struct Post: Codable, Identifiable, Hashable {
         case id, body, spot, status, author, photos
         case authorID = "author_id"
         case githubLink = "github_link"
+        case repoFullName = "repo_full_name"
         case createdAt = "created_at"
         case commentsCount = "comments_count"
         case repostsCount = "reposts_count"
@@ -64,6 +66,7 @@ struct Repository: Codable, Identifiable, Hashable {
     let language: String?
     let stars: Int
     let openIssues: Int
+    let pushedAt: String?
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, language
@@ -71,6 +74,7 @@ struct Repository: Codable, Identifiable, Hashable {
         case htmlURL = "html_url"
         case stars = "stargazers_count"
         case openIssues = "open_issues_count"
+        case pushedAt = "pushed_at"
     }
 }
 
@@ -113,4 +117,8 @@ struct FollowEvent: Codable, Identifiable {
         case status, follower
         case createdAt = "created_at"
     }
+}
+
+struct FollowingProfile: Codable {
+    let target: Profile
 }

@@ -458,6 +458,11 @@ struct ComposeView: View {
     @State private var sending = false
     @State private var editorFocused = false
 
+    init(isPresented: Binding<Bool>, initialGitHubLink: String = "") {
+        _isPresented = isPresented
+        _githubLink = State(initialValue: initialGitHubLink)
+    }
+
     var body: some View {
         NavigationView {
             VStack(spacing: 16) {
@@ -506,32 +511,122 @@ struct NativeMapView: View {
 struct RepositoriesView: View {
     @EnvironmentObject private var model: AppModel
     @State private var repositories: [Repository] = []
+    @State private var relatedPosts: [Post] = []
     @State private var loading = false
+    @State private var selectedRepository: Repository?
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "Repositories")
-            if loading && repositories.isEmpty { Spacer(); ProgressView("Repositories…"); Spacer() }
+            ScrollView {
+                VStack(spacing: 6) {
+                    Image(systemName: "shippingbox").font(.title2).foregroundColor(SpotcodeTheme.accent)
+                    Text("Repos").font(.title3).fontWeight(.bold)
+                    Text("GitHub と紐づくリポジトリ単位で動きを見る。")
+                        .font(.subheadline).foregroundColor(SpotcodeTheme.muted)
+                }.frame(maxWidth: .infinity).padding(.vertical, 22)
+                if loading && repositories.isEmpty { ProgressView("リポジトリを読み込み中…").padding(.top, 50) }
             else if model.me?.githubHandle == nil { Spacer(); ContentUnavailableViewCompat(title: "GitHubをプロフィールに連携してください", icon: "link"); Spacer() }
             else {
-                ScrollView { LazyVStack(spacing: 0) {
+                LazyVStack(spacing: 12) {
                     ForEach(repositories) { repo in
-                        Link(destination: repo.htmlURL) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(repo.fullName).fontWeight(.bold).foregroundColor(SpotcodeTheme.accent)
-                                if let description = repo.description { Text(description).foregroundColor(SpotcodeTheme.text) }
-                                HStack { if let language = repo.language { Text(language) }; Label("\(repo.stars)", systemImage: "star") }.font(.caption).foregroundColor(SpotcodeTheme.muted)
-                            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                             .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+                        repositoryCard(repo)
+                    }
+                }.padding(.horizontal, 10).padding(.bottom, 20)
+            }
+            }.refreshable { await load() }
+        }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task { await load() }
+        .sheet(item: $selectedRepository) { repo in
+            ComposeView(isPresented: Binding(get: { selectedRepository != nil }, set: { if !$0 { selectedRepository = nil } }), initialGitHubLink: repo.htmlURL.absoluteString)
+                .environmentObject(model)
+        }
+    }
+
+    @ViewBuilder private func repositoryCard(_ repo: Repository) -> some View {
+        let posts = relatedPosts.filter { repositoryName(for: $0)?.caseInsensitiveCompare(repo.fullName) == .orderedSame }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                Link(destination: repo.htmlURL) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "shippingbox").font(.caption)
+                        Text(repo.fullName.split(separator: "/").first.map(String.init) ?? "")
+                            .foregroundColor(SpotcodeTheme.muted)
+                        Text("/").foregroundColor(SpotcodeTheme.muted)
+                        Text(repo.name).fontWeight(.bold)
+                    }.foregroundColor(SpotcodeTheme.accent)
+                }
+                Spacer(minLength: 8)
+                Button { selectedRepository = repo } label: {
+                    Label("このリポで投稿", systemImage: "plus")
+                        .font(.caption).padding(.horizontal, 10).padding(.vertical, 5)
+                        .foregroundColor(SpotcodeTheme.accent)
+                        .overlay(Capsule().stroke(SpotcodeTheme.accent.opacity(0.55)))
+                }
+            }
+            if let description = repo.description, !description.isEmpty {
+                Text(description).font(.subheadline)
+            }
+            HStack(spacing: 12) {
+                if let language = repo.language {
+                    HStack(spacing: 5) { Circle().fill(languageColor(language)).frame(width: 10, height: 10); Text(language) }
+                }
+                if repo.stars > 0 { Label("\(repo.stars)", systemImage: "star") }
+                if let pushedAt = repo.pushedAt { Text(relativeTime(pushedAt)) }
+            }.font(.caption).foregroundColor(SpotcodeTheme.muted)
+            Divider().overlay(SpotcodeTheme.border)
+            if posts.isEmpty {
+                Text("関連投稿はありません").font(.caption).foregroundColor(SpotcodeTheme.muted)
+            } else {
+                Text("関連投稿 \(posts.count)件").font(.caption).fontWeight(.semibold).foregroundColor(SpotcodeTheme.muted)
+                ForEach(posts.prefix(4)) { post in
+                    NavigationLink(destination: PostDetailView(post: post)) {
+                        HStack(spacing: 8) {
+                            AvatarView(profile: post.author, size: 24)
+                            Text(post.body).font(.caption).lineLimit(1).foregroundColor(SpotcodeTheme.text)
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption2).foregroundColor(SpotcodeTheme.muted)
                         }
                     }
-                }}.refreshable { await load() }
+                }
             }
-        }.background(SpotcodeTheme.surface).navigationBarHidden(true).task { await load() }
+        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .background(SpotcodeTheme.surface)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
     }
+
     private func load() async {
         guard let handle = model.me?.githubHandle else { return }
         loading = true; defer { loading = false }
-        repositories = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []
+        var handles = [handle]
+        if let session = model.session, let userID = model.me?.id,
+           let following = try? await SupabaseService.shared.followingProfiles(userID: userID, token: session.accessToken) {
+            handles += following.compactMap(\.githubHandle)
+        }
+        var loaded: [Repository] = []
+        await withTaskGroup(of: [Repository].self) { group in
+            for value in Array(Set(handles)) { group.addTask { (try? await SupabaseService.shared.repositories(handle: value)) ?? [] } }
+            for await values in group { loaded += values }
+        }
+        repositories = Dictionary(grouping: loaded, by: \.fullName).compactMap(\.value.first)
+            .sorted { ($0.pushedAt ?? "") > ($1.pushedAt ?? "") }
+        relatedPosts = (try? await SupabaseService.shared.posts(limit: 200, token: model.session?.accessToken)) ?? []
+    }
+
+    private func repositoryName(for post: Post) -> String? {
+        if let value = post.repoFullName, !value.isEmpty { return value }
+        guard let raw = post.githubLink, let url = URL(string: raw), url.host?.lowercased() == "github.com" else { return nil }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count >= 2 else { return nil }
+        return "\(parts[0])/\(parts[1].replacingOccurrences(of: ".git", with: ""))"
+    }
+
+    private func languageColor(_ language: String) -> Color {
+        switch language.lowercased() {
+        case "javascript": return .yellow
+        case "typescript": return .blue
+        case "swift", "java": return .orange
+        case "python": return Color(red: 0.25, green: 0.48, blue: 0.72)
+        case "shell": return .green
+        default: return SpotcodeTheme.muted
+        }
     }
 }
 
