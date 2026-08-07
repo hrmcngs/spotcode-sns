@@ -96,7 +96,7 @@ private struct TopBar: View {
             }.spotcodeIconButton()
             Button { section = .home } label: {
                 HStack(spacing: 7) {
-                    GitHubMark().fill(SpotcodeTheme.text).frame(width: 25, height: 25)
+                    Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 25, height: 25)
                     Text("spotcode").fontWeight(.bold)
                 }.foregroundColor(SpotcodeTheme.text)
             }
@@ -601,7 +601,7 @@ private struct GitHubActivity: View {
     let repositories: [Repository]
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 5) { GitHubMark().fill(SpotcodeTheme.text).frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
+            HStack(spacing: 5) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(0..<26, id: \.self) { column in
                     VStack(spacing: 3) {
@@ -621,7 +621,7 @@ private struct OpenIssuesCard: View {
     private var total: Int { repositories.reduce(0) { $0 + $1.openIssues } }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack { GitHubMark().fill(SpotcodeTheme.muted).frame(width: 13, height: 13); Text("Open issues"); Text("\(total)").fontWeight(.bold); Text("公開リポの未クローズ issue (task)").font(.caption).foregroundColor(SpotcodeTheme.muted); Spacer() }
+            HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues"); Text("\(total)").fontWeight(.bold); Text("公開リポの未クローズ issue (task)").font(.caption).foregroundColor(SpotcodeTheme.muted); Spacer() }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack { Text("All \(total)").issuePill(); ForEach(repositories.prefix(5)) { repo in Text("\(repo.name) \(repo.openIssues)").issuePill() } }
             }
@@ -770,30 +770,6 @@ private extension View {
     }
     func spotcodeField() -> some View {
         self.padding(12).background(SpotcodeTheme.background).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
-    }
-}
-
-private struct GitHubMark: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let s = min(rect.width, rect.height)
-        let x = rect.midX, y = rect.midY
-        path.addEllipse(in: CGRect(x: x - s * 0.29, y: y - s * 0.25, width: s * 0.58, height: s * 0.55))
-        path.addRoundedRect(in: CGRect(x: x - s * 0.21, y: y + s * 0.10, width: s * 0.42, height: s * 0.38), cornerSize: CGSize(width: s * 0.15, height: s * 0.15))
-        path.move(to: CGPoint(x: x - s * 0.24, y: y - s * 0.12))
-        path.addLine(to: CGPoint(x: x - s * 0.31, y: y - s * 0.36))
-        path.addLine(to: CGPoint(x: x - s * 0.05, y: y - s * 0.25))
-        path.closeSubpath()
-        path.move(to: CGPoint(x: x + s * 0.24, y: y - s * 0.12))
-        path.addLine(to: CGPoint(x: x + s * 0.31, y: y - s * 0.36))
-        path.addLine(to: CGPoint(x: x + s * 0.05, y: y - s * 0.25))
-        path.closeSubpath()
-        path.move(to: CGPoint(x: x - s * 0.18, y: y + s * 0.20))
-        path.addCurve(to: CGPoint(x: x - s * 0.46, y: y + s * 0.02), control1: CGPoint(x: x - s * 0.34, y: y + s * 0.24), control2: CGPoint(x: x - s * 0.31, y: y + s * 0.02))
-        path.addCurve(to: CGPoint(x: x - s * 0.34, y: y - s * 0.02), control1: CGPoint(x: x - s * 0.43, y: y - s * 0.04), control2: CGPoint(x: x - s * 0.37, y: y - s * 0.04))
-        path.addCurve(to: CGPoint(x: x - s * 0.15, y: y + s * 0.13), control1: CGPoint(x: x - s * 0.30, y: y + s * 0.03), control2: CGPoint(x: x - s * 0.26, y: y + s * 0.12))
-        path.closeSubpath()
-        return path
     }
 }
 
