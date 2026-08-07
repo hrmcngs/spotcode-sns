@@ -232,10 +232,13 @@ private struct TimelineTabs: View {
 
 private struct InlineComposer: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("spotcode.native.draft") private var draft = ""
     @State private var githubLink = ""
     @State private var sending = false
     @State private var showLink = false
+    @State private var showDraftNotice = true
+    @FocusState private var editorFocused: Bool
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             AvatarView(profile: model.me, size: 42)
@@ -243,38 +246,69 @@ private struct InlineComposer: View {
                 ZStack(alignment: .topLeading) {
                     if draft.isEmpty { Text("いまどうしてる？").font(.title3).foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 14).padding(.vertical, 17) }
                     TextEditor(text: $draft).font(.title3).padding(8).frame(minHeight: 108)
-                        .background(Color.clear).foregroundColor(SpotcodeTheme.text)
+                        .background(Color.clear).foregroundColor(SpotcodeTheme.text).focused($editorFocused)
                 }
                 .background(SpotcodeTheme.surface2)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 74/255, green: 85/255, blue: 104/255), lineWidth: 2))
-                HStack(spacing: 8) {
-                    ComposerChip(icon: "mappin", title: "場所を追加")
-                    Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加") }
-                }
-                HStack(spacing: 8) {
-                    ComposerChip(icon: "calendar", title: "イベントを追加")
-                    ComposerChip(icon: "sparkles", title: "アイデア")
-                    ComposerChip(icon: "globe", title: "全員")
-                }
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : Color(red: 74/255, green: 85/255, blue: 104/255), lineWidth: editorFocused ? 3 : 2))
+                composerChips
                 if showLink {
                     TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeField()
                 }
-                HStack(spacing: 24) {
-                    Image(systemName: "photo"); Image(systemName: "chevron.left.forwardslash.chevron.right")
-                    Image(systemName: "mappin.circle"); Image(systemName: "chart.bar")
-                }.font(.title3).foregroundColor(SpotcodeTheme.accent)
-                HStack {
-                    Button("下書き保存") { UserDefaults.standard.set(draft, forKey: "spotcode.native.draft") }
-                        .font(.body.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, 10)
-                        .overlay(Capsule().stroke(SpotcodeTheme.border))
-                    Button(sending ? "送信中…" : "Push") { publish() }
-                        .font(.body.weight(.bold)).padding(.horizontal, 28).padding(.vertical, 11)
-                        .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
-                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending || model.session == nil)
+                if horizontalSizeClass == .regular {
+                    HStack { composerTools; Spacer(); composerActions }
+                } else {
+                    composerTools
+                    HStack { Spacer(); composerActions; Spacer() }
+                }
+                if !draft.isEmpty && showDraftNotice {
+                    HStack {
+                        Text("下書きを復元しました")
+                        Spacer()
+                        Button("破棄") { draft = ""; showDraftNotice = false }.foregroundColor(SpotcodeTheme.muted)
+                    }.padding(.horizontal, 12).padding(.vertical, 11)
+                     .background(Color(red: 18/255, green: 42/255, blue: 58/255))
+                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.accent.opacity(0.45)))
                 }
             }
         }.padding(16)
          .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+    }
+
+    @ViewBuilder private var composerChips: some View {
+        if horizontalSizeClass == .regular {
+            HStack(spacing: 8) { locationChip; linkChip; eventChip; ideaChip; audienceChip }
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) { locationChip; linkChip }
+                HStack(spacing: 8) { eventChip; ideaChip }
+                audienceChip
+            }
+        }
+    }
+
+    private var locationChip: some View { ComposerChip(icon: "mappin", title: "場所を追加") }
+    private var linkChip: some View { Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加") } }
+    private var eventChip: some View { ComposerChip(icon: "calendar", title: "イベントを追加") }
+    private var ideaChip: some View { ComposerChip(icon: "sparkles", title: "アイデア") }
+    private var audienceChip: some View { ComposerChip(icon: "globe", title: "全員", strong: true) }
+
+    private var composerTools: some View {
+        HStack(spacing: 24) {
+            Image(systemName: "photo"); Image(systemName: "chevron.left.forwardslash.chevron.right")
+            Image(systemName: "mappin.circle"); Image(systemName: "chart.bar")
+        }.font(.title3).foregroundColor(SpotcodeTheme.accent)
+    }
+
+    private var composerActions: some View {
+        HStack(spacing: 10) {
+            Button("下書き保存") { showDraftNotice = true }
+                .font(.body.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, 10)
+                .overlay(Capsule().stroke(SpotcodeTheme.border))
+            Button(sending ? "送信中…" : "Push") { publish() }
+                .font(.body.weight(.bold)).padding(.horizontal, 28).padding(.vertical, 11)
+                .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending || model.session == nil)
+        }
     }
 
     private func publish() {
@@ -290,8 +324,9 @@ private struct InlineComposer: View {
 
 private struct ComposerChip: View {
     let icon: String; let title: String
+    var strong = false
     var body: some View {
-        Label(title, systemImage: icon).font(.caption.weight(.semibold)).foregroundColor(SpotcodeTheme.muted)
+        Label(title, systemImage: icon).font(.caption.weight(.semibold)).foregroundColor(strong ? SpotcodeTheme.text : SpotcodeTheme.muted)
             .padding(.horizontal, 10).padding(.vertical, 7).overlay(Capsule().stroke(SpotcodeTheme.border, style: StrokeStyle(lineWidth: 1, dash: [5])))
     }
 }
