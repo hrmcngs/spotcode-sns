@@ -266,7 +266,7 @@ private struct InlineComposer: View {
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : Color(red: 74/255, green: 85/255, blue: 104/255), lineWidth: editorFocused ? 3 : 2))
                 composerChips
                 if showLink {
-                    TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeField()
+                    TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
                 }
                 if horizontalSizeClass == .regular {
                     HStack { composerTools; Spacer(); composerActions }
@@ -367,9 +367,10 @@ struct PostRow: View {
                 }
                 if let link = post.githubLink, let url = URL(string: link) {
                     Link(destination: url) {
-                        HStack { Image(systemName: "link"); Text(link).lineLimit(1) }
-                            .font(.caption).padding(9).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(SpotcodeTheme.background).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
+                        HStack(spacing: 5) {
+                            Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13)
+                            Text(githubLinkLabel(link)).lineLimit(1)
+                        }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
                 HStack {
@@ -425,8 +426,8 @@ struct ComposeView: View {
                     TextEditor(text: $bodyText).font(.title3).padding(8).frame(minHeight: 160)
                         .background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border, lineWidth: 2))
                 }
-                HStack { Image(systemName: "link"); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
-                    .padding(11).background(SpotcodeTheme.background).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
+                HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
+                    .padding(11).background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
                 Spacer()
             }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
              .navigationTitle("New idea").navigationBarTitleDisplayMode(.inline)
@@ -785,6 +786,9 @@ private extension View {
     func spotcodeField() -> some View {
         self.padding(12).background(SpotcodeTheme.background).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
     }
+    func spotcodeURLField() -> some View {
+        self.padding(12).background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
+    }
 }
 
 private func relativeTime(_ value: String?) -> String {
@@ -798,4 +802,13 @@ private func relativeTime(_ value: String?) -> String {
     if seconds < 3_600 { return "\(seconds / 60)m" }
     if seconds < 86_400 { return "\(seconds / 3_600)h" }
     return "\(seconds / 86_400)d"
+}
+
+private func githubLinkLabel(_ value: String) -> String {
+    guard let url = URL(string: value),
+          let host = url.host?.lowercased(), host == "github.com" || host == "www.github.com" else {
+        return value
+    }
+    let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    return path.isEmpty ? "github.com" : path
 }
