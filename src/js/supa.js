@@ -28,6 +28,9 @@ const SDK_URLS = [
 let sdkPromise = null;
 let cachedClient = null;
 let cachedConfigKey = '';
+let clientPromise = null;
+let clientPromiseConfigKey = '';
+let clientGeneration = 0;
 
 // Per-user override stored in localStorage (empty unless they used /settings).
 export function getOverride() {
@@ -71,8 +74,11 @@ export function setConfig({ url, anonKey }) {
 }
 
 function resetClient() {
+  clientGeneration++;
   cachedClient = null;
   cachedConfigKey = '';
+  clientPromise = null;
+  clientPromiseConfigKey = '';
 }
 
 export async function loadSdk() {
@@ -103,13 +109,37 @@ export async function getClient() {
   if (!url || !anonKey) throw new Error('NO_CONFIG');
   const configKey = url + ' ' + anonKey;
   if (cachedClient && cachedConfigKey === configKey) return cachedClient;
+  // Do not only memoise the completed client: initAuth, schema probing,
+  // follows and the first timeline fetch all call getClient during boot.
+  // They used to pass the cachedClient check together, await the same SDK,
+  // and then each create their own GoTrueClient with the same storage key.
+  if (clientPromise && clientPromiseConfigKey === configKey) return clientPromise;
 
-  const sdk = await loadSdk();
-  cachedClient = sdk.createClient(url, anonKey, {
-    auth: { persistSession: true, autoRefreshToken: true },
-  });
-  cachedConfigKey = configKey;
-  return cachedClient;
+  const generation = clientGeneration;
+  const pending = (async () => {
+    const sdk = await loadSdk();
+    // setConfig/resetClient may have run while the CDN import was pending.
+    // Never publish a client created for stale credentials.
+    if (generation !== clientGeneration) throw new Error('CLIENT_RESET');
+    const client = sdk.createClient(url, anonKey, {
+      auth: { persistSession: true, autoRefreshToken: true },
+    });
+    cachedClient = client;
+    cachedConfigKey = configKey;
+    return client;
+  })();
+  clientPromise = pending;
+  clientPromiseConfigKey = configKey;
+  try {
+    return await pending;
+  } finally {
+    // Only clear our own slot. A config reset may already have installed a
+    // newer promise, which this older request must not erase.
+    if (clientPromise === pending) {
+      clientPromise = null;
+      clientPromiseConfigKey = '';
+    }
+  }
 }
 
 // Light connection probe — confirms the URL responds and the anon key is
