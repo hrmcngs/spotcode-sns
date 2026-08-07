@@ -10,10 +10,11 @@ import { renderTimelineSkeleton } from '../skeleton.js';
 import { timelineTabs } from './timeline-tabs.js';
 import { withTimeout } from '../net-utils.js';
 
-// Covers SDK loading, auth refresh queues, and the PostgREST request itself.
-// Without a deadline any of those can leave the initial skeleton on screen
-// forever when a paused Supabase project is waking up.
-const TIMELINE_TIMEOUT_MS = 15 * 1000;
+// Covers SDK loading, auth refresh queues, a cold Supabase wake-up, and the
+// PostgREST request itself. 15 seconds was too aggressive on cellular and
+// showed an error while a valid request was still finishing in the
+// background. Keep a deadline, but leave enough room for slow mobile links.
+const TIMELINE_TIMEOUT_MS = 45 * 1000;
 
 // Monotonic counter incremented on every renderHome() so async hydrations
 // can detect when they've been superseded by a newer navigation / refresh
