@@ -1053,6 +1053,20 @@ function restoreComposerDraft() {
 
 initThemeToggle(document.getElementById('theme-toggle'));
 
+// Bind auth CTAs BEFORE waiting for initAuth(). On a cold CDN / cellular
+// connection initAuth can legitimately consume its full boot timeout; the
+// old listener lived much later in this module, so every Log in click during
+// those first seconds was silently discarded and users had to tap 5–6 times.
+document.addEventListener('click', (e) => {
+  const auth = e.target.closest('[data-auth]');
+  if (!auth) return;
+  e.preventDefault();
+  // The main delegated click handler is registered later. Keep this auth
+  // action single-shot while allowing all non-auth clicks to flow normally.
+  e.stopImmediatePropagation();
+  openAuth(auth.dataset.auth === 'register' ? 'register' : 'login');
+});
+
 // Restore the Supabase session (if any) before the first render so the
 // app doesn't flash a logged-out state to a returning user. Failures here
 // (Supabase down, no network) leave cachedUser null — the app still works
@@ -1314,13 +1328,6 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('click', (e) => {
-  const auth = e.target.closest('[data-auth]');
-  if (auth) {
-    e.preventDefault();
-    openAuth(auth.dataset.auth === 'register' ? 'register' : 'login');
-    return;
-  }
-
   // Profile-page tabs (Posts / Spots / Likes). They keep the URL on
   // /<handle> and only swap the body — no navigation, no scroll jump.
   const profileTab = e.target.closest('[data-profile-tab]');

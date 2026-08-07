@@ -182,6 +182,7 @@ function bindEvents() {
   rootEl.querySelector('[data-pane="login"]').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
+    if (form.dataset.busy === '1') return;
     setError(form, '');
     const fd = new FormData(form);
     const rawEmail = fd.get('email');
@@ -192,12 +193,21 @@ function bindEvents() {
       setError(form, BARE_EMAIL_REJECTED);
       return;
     }
+    const submit = form.querySelector('button[type="submit"]');
+    const originalLabel = submit?.textContent || 'Log in';
+    form.dataset.busy = '1';
+    if (submit) { submit.disabled = true; submit.textContent = 'ログイン中…'; }
     try {
       // Expand internal bare identifiers (e.g. dev.test.account →
       // dev.test.account@spotcode-sns.local) before calling Supabase.
       await login({ email: resolveLoginEmail(rawEmail), password: fd.get('password') });
       close();
-    } catch (err) { setError(form, err.message || String(err)); }
+    } catch (err) {
+      setError(form, err.message || String(err));
+    } finally {
+      delete form.dataset.busy;
+      if (submit) { submit.disabled = false; submit.textContent = originalLabel; }
+    }
   });
 
   // Register submit
