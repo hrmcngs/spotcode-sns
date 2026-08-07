@@ -5,6 +5,7 @@ private enum SpotcodeTheme {
     static let background = Color(red: 13/255, green: 17/255, blue: 23/255)
     static let surface = Color(red: 22/255, green: 27/255, blue: 34/255)
     static let surface2 = Color(red: 33/255, green: 38/255, blue: 45/255)
+    static let inputSurface = Color(red: 38/255, green: 44/255, blue: 53/255)
     static let border = Color(red: 48/255, green: 54/255, blue: 61/255)
     static let text = Color(red: 230/255, green: 237/255, blue: 243/255)
     static let muted = Color(red: 125/255, green: 133/255, blue: 144/255)
@@ -261,7 +262,7 @@ private struct InlineComposer: View {
                             .allowsHitTesting(false)
                     }
                 }
-                .background(SpotcodeTheme.surface2)
+                .background(SpotcodeTheme.inputSurface)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : Color(red: 74/255, green: 85/255, blue: 104/255), lineWidth: editorFocused ? 3 : 2))
                 composerChips
                 if showLink {
@@ -422,7 +423,7 @@ struct ComposeView: View {
                 HStack(alignment: .top, spacing: 12) {
                     AvatarView(profile: model.me, size: 42)
                     TextEditor(text: $bodyText).font(.title3).padding(8).frame(minHeight: 160)
-                        .background(SpotcodeTheme.surface2).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border, lineWidth: 2))
+                        .background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border, lineWidth: 2))
                 }
                 HStack { Image(systemName: "link"); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
                     .padding(11).background(SpotcodeTheme.background).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
