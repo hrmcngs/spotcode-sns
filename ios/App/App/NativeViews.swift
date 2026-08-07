@@ -605,16 +605,106 @@ struct NativeMapView: View {
     @EnvironmentObject private var model: AppModel
     @State private var posts: [Post] = []
     @State private var region = MKCoordinateRegion(center: .init(latitude: 35.681236, longitude: 139.767125), span: .init(latitudeDelta: 0.12, longitudeDelta: 0.12))
+    @State private var selectedPost: Post?
+    @State private var loading = false
     var body: some View {
-        Map(coordinateRegion: $region, annotationItems: posts.filter { $0.spot != nil }) { post in
-            MapAnnotation(coordinate: post.spot!.coordinate) {
-                NavigationLink(destination: PostDetailView(post: post)) { Image(systemName: "mappin.circle.fill").font(.title).foregroundColor(SpotcodeTheme.accent) }
+        ZStack(alignment: .trailing) {
+            ClusteredPostMap(posts: posts, region: $region, selectedPost: $selectedPost)
+            VStack(spacing: 8) {
+                mapButton("plus") { zoom(0.5) }
+                mapButton("minus") { zoom(2) }
+                mapButton("arrow.counterclockwise") { resetMap() }
             }
+            .padding(.trailing, 12)
+            if loading { ProgressView().padding(10).background(.ultraThinMaterial).clipShape(Circle()) }
         }.task {
+            guard posts.isEmpty else { return }
+            loading = true; defer { loading = false }
             posts = (try? await SupabaseService.shared.spottedPosts(token: model.session?.accessToken)) ?? []
             if let coordinate = posts.first?.spot?.coordinate { region.center = coordinate }
         }
+        .sheet(item: $selectedPost) { post in
+            NavigationView { PostDetailView(post: post) }
+        }
     }
+
+    private func zoom(_ multiplier: Double) {
+        region.span.latitudeDelta = min(max(region.span.latitudeDelta * multiplier, 0.002), 120)
+        region.span.longitudeDelta = min(max(region.span.longitudeDelta * multiplier, 0.002), 120)
+    }
+    private func resetMap() {
+        if let coordinate = posts.first?.spot?.coordinate { region.center = coordinate }
+        region.span = .init(latitudeDelta: 0.12, longitudeDelta: 0.12)
+    }
+    private func mapButton(_ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: icon).frame(width: 38, height: 38) }
+            .background(SpotcodeTheme.surface.opacity(0.94)).foregroundColor(SpotcodeTheme.accent)
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(SpotcodeTheme.border)).clipShape(RoundedRectangle(cornerRadius: 9))
+    }
+}
+
+private struct ClusteredPostMap: UIViewRepresentable {
+    let posts: [Post]
+    @Binding var region: MKCoordinateRegion
+    @Binding var selectedPost: Post?
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView()
+        map.delegate = context.coordinator
+        map.isZoomEnabled = true
+        map.isScrollEnabled = true
+        map.isRotateEnabled = true
+        map.isPitchEnabled = false
+        map.showsUserLocation = true
+        map.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "post")
+        map.setRegion(region, animated: false)
+        return map
+    }
+    func updateUIView(_ map: MKMapView, context: Context) {
+        context.coordinator.parent = self
+        let wanted = Set(posts.map { $0.id.uuidString })
+        let current = Set(map.annotations.compactMap { ($0 as? PostMapAnnotation)?.post.id.uuidString })
+        if wanted != current {
+            map.removeAnnotations(map.annotations.filter { !($0 is MKUserLocation) })
+            map.addAnnotations(posts.compactMap { post in
+                guard let coordinate = post.spot?.coordinate else { return nil }
+                return PostMapAnnotation(post: post, coordinate: coordinate)
+            })
+        }
+        let latitudeChanged = abs(map.region.span.latitudeDelta - region.span.latitudeDelta) > 0.0001
+        let centerChanged = abs(map.region.center.latitude - region.center.latitude) > 0.0001 || abs(map.region.center.longitude - region.center.longitude) > 0.0001
+        if latitudeChanged || centerChanged { map.setRegion(region, animated: true) }
+    }
+
+    final class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: ClusteredPostMap
+        init(_ parent: ClusteredPostMap) { self.parent = parent }
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            guard let postAnnotation = annotation as? PostMapAnnotation else { return nil }
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: "post", for: postAnnotation) as! MKMarkerAnnotationView
+            view.markerTintColor = UIColor(red: 29/255, green: 155/255, blue: 240/255, alpha: 1)
+            view.glyphImage = UIImage(systemName: "lightbulb.fill")
+            view.clusteringIdentifier = "spotcode-post"
+            view.canShowCallout = true
+            view.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
+            return view
+        }
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            parent.region = mapView.region
+        }
+        func mapView(_ mapView: MKMapView, annotationView view: MKAnnotationView, calloutAccessoryControlTapped control: UIControl) {
+            if let annotation = view.annotation as? PostMapAnnotation { parent.selectedPost = annotation.post }
+        }
+    }
+}
+
+private final class PostMapAnnotation: NSObject, MKAnnotation {
+    let post: Post
+    let coordinate: CLLocationCoordinate2D
+    var title: String? { post.spot?.label ?? post.author?.name ?? "Spot" }
+    var subtitle: String? { post.body }
+    init(post: Post, coordinate: CLLocationCoordinate2D) { self.post = post; self.coordinate = coordinate }
 }
 
 struct RepositoriesView: View {
