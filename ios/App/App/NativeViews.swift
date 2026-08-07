@@ -39,6 +39,7 @@ struct RootView: View {
     @State private var showLogin = false
     @State private var composing = false
     @State private var showAccounts = false
+    @State private var repositoryComposeURL: String?
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -80,8 +81,11 @@ struct RootView: View {
 
     @ViewBuilder private var sectionView: some View {
         switch section {
-        case .home: TimelineView()
-        case .repos: RepositoriesView()
+        case .home: TimelineView(repositoryComposeURL: $repositoryComposeURL)
+        case .repos: RepositoriesView { url in
+            repositoryComposeURL = url.absoluteString
+            section = .home
+        }
         case .notifications: NotificationsView()
         case .profile: ProfileView(profile: model.me)
         case .settings: SettingsView()
@@ -194,6 +198,7 @@ private struct AccountSwitcher: View {
 
 struct TimelineView: View {
     @EnvironmentObject private var model: AppModel
+    @Binding var repositoryComposeURL: String?
     @State private var selectedTab = 0
     @State private var composing = false
 
@@ -207,7 +212,7 @@ struct TimelineView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        InlineComposer()
+                        InlineComposer(repositoryComposeURL: $repositoryComposeURL)
                         ForEach(model.posts) { post in
                             NavigationLink(destination: PostDetailView(post: post)) { PostRow(post: post) }
                                 .buttonStyle(.plain)
@@ -242,6 +247,7 @@ private struct TimelineTabs: View {
 private struct InlineComposer: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Binding var repositoryComposeURL: String?
     @AppStorage("spotcode.native.draft") private var draft = ""
     @State private var githubLink = ""
     @State private var sending = false
@@ -286,6 +292,8 @@ private struct InlineComposer: View {
             }
         }.padding(16)
          .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+         .onAppear { applyRepositoryRequest(repositoryComposeURL) }
+         .onChange(of: repositoryComposeURL) { applyRepositoryRequest($0) }
     }
 
     @ViewBuilder private var composerChips: some View {
@@ -333,6 +341,14 @@ private struct InlineComposer: View {
             }
             sending = false
         }
+    }
+
+    private func applyRepositoryRequest(_ value: String?) {
+        guard let value, !value.isEmpty else { return }
+        githubLink = value
+        showLink = true
+        editorFocused = true
+        repositoryComposeURL = nil
     }
 }
 
@@ -510,10 +526,10 @@ struct NativeMapView: View {
 
 struct RepositoriesView: View {
     @EnvironmentObject private var model: AppModel
+    let onCompose: (URL) -> Void
     @State private var repositories: [Repository] = []
     @State private var relatedPosts: [Post] = []
     @State private var loading = false
-    @State private var selectedRepository: Repository?
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -534,10 +550,6 @@ struct RepositoriesView: View {
             }
             }.refreshable { await load() }
         }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task { await load() }
-        .sheet(item: $selectedRepository) { repo in
-            ComposeView(isPresented: Binding(get: { selectedRepository != nil }, set: { if !$0 { selectedRepository = nil } }), initialGitHubLink: repo.htmlURL.absoluteString)
-                .environmentObject(model)
-        }
     }
 
     @ViewBuilder private func repositoryCard(_ repo: Repository) -> some View {
@@ -554,7 +566,7 @@ struct RepositoriesView: View {
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
                 Spacer(minLength: 8)
-                Button { selectedRepository = repo } label: {
+                Button { onCompose(repo.htmlURL) } label: {
                     Label("このリポで投稿", systemImage: "plus")
                         .font(.caption).padding(.horizontal, 10).padding(.vertical, 5)
                         .foregroundColor(SpotcodeTheme.accent)
