@@ -5,7 +5,7 @@ private enum SpotcodeTheme {
     static let background = Color(red: 13/255, green: 17/255, blue: 23/255)
     static let surface = Color(red: 22/255, green: 27/255, blue: 34/255)
     static let surface2 = Color(red: 33/255, green: 38/255, blue: 45/255)
-    static let inputSurface = Color(red: 38/255, green: 44/255, blue: 53/255)
+    static let inputSurface = Color(red: 33/255, green: 38/255, blue: 45/255)
     static let border = Color(red: 48/255, green: 54/255, blue: 61/255)
     static let text = Color(red: 230/255, green: 237/255, blue: 243/255)
     static let muted = Color(red: 125/255, green: 133/255, blue: 144/255)
@@ -247,14 +247,14 @@ private struct InlineComposer: View {
     @State private var sending = false
     @State private var showLink = false
     @State private var showDraftNotice = true
-    @FocusState private var editorFocused: Bool
+    @State private var editorFocused = false
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             AvatarView(profile: model.me, size: 42)
             VStack(alignment: .leading, spacing: 12) {
                 ZStack(alignment: .topLeading) {
-                    TextEditor(text: $draft).font(.title3).padding(8).frame(minHeight: 108)
-                        .background(Color.clear).foregroundColor(SpotcodeTheme.text).focused($editorFocused)
+                    ComposerTextView(text: $draft, isFocused: $editorFocused)
+                        .frame(minHeight: 108)
                     if draft.isEmpty {
                         Text("いまどうしてる？")
                             .font(.title3).foregroundColor(SpotcodeTheme.muted)
@@ -345,6 +345,45 @@ private struct ComposerChip: View {
     }
 }
 
+// TextEditor keeps an opaque system background on some iOS 15 builds even
+// when SwiftUI's outer background is set. A native UITextView lets us apply
+// the exact web composer surface (#21262d) to the actual editable layer.
+private struct ComposerTextView: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.delegate = context.coordinator
+        view.backgroundColor = UIColor(red: 33/255, green: 38/255, blue: 45/255, alpha: 1)
+        view.textColor = UIColor(red: 230/255, green: 237/255, blue: 243/255, alpha: 1)
+        view.tintColor = UIColor(red: 29/255, green: 155/255, blue: 240/255, alpha: 1)
+        view.font = .preferredFont(forTextStyle: .title3)
+        view.adjustsFontForContentSizeCategory = true
+        view.textContainerInset = UIEdgeInsets(top: 13, left: 10, bottom: 13, right: 10)
+        view.textContainer.lineFragmentPadding = 0
+        view.keyboardDismissMode = .interactive
+        view.layer.cornerRadius = 10
+        view.clipsToBounds = true
+        return view
+    }
+
+    func updateUIView(_ view: UITextView, context: Context) {
+        if view.text != text { view.text = text }
+        context.coordinator.parent = self
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: ComposerTextView
+        init(_ parent: ComposerTextView) { self.parent = parent }
+        func textViewDidChange(_ textView: UITextView) { parent.text = textView.text }
+        func textViewDidBeginEditing(_ textView: UITextView) { parent.isFocused = true }
+        func textViewDidEndEditing(_ textView: UITextView) { parent.isFocused = false }
+    }
+}
+
 struct PostRow: View {
     let post: Post
     var body: some View {
@@ -417,14 +456,15 @@ struct ComposeView: View {
     @State private var bodyText = ""
     @State private var githubLink = ""
     @State private var sending = false
+    @State private var editorFocused = false
 
     var body: some View {
         NavigationView {
             VStack(spacing: 16) {
                 HStack(alignment: .top, spacing: 12) {
                     AvatarView(profile: model.me, size: 42)
-                    TextEditor(text: $bodyText).font(.title3).padding(8).frame(minHeight: 160)
-                        .background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border, lineWidth: 2))
+                    ComposerTextView(text: $bodyText, isFocused: $editorFocused).frame(minHeight: 160)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : SpotcodeTheme.border, lineWidth: 2))
                 }
                 HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
                     .padding(11).background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
