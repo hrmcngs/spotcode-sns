@@ -436,6 +436,7 @@ private struct LocationPickerSheet: View {
     @State private var label = ""
     @State private var address = "現在地を取得すると表示されます"
     @State private var locating = false
+    @State private var mapRegion = MKCoordinateRegion(center: .init(latitude: 35.681236, longitude: 139.767125), span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
 
     var body: some View {
         NavigationView {
@@ -455,7 +456,14 @@ private struct LocationPickerSheet: View {
                     Spacer()
                 }.foregroundColor(coordinate == nil ? SpotcodeTheme.muted : SpotcodeTheme.accent)
                     .padding(.horizontal, 16).padding(.vertical, 10).background(SpotcodeTheme.surface2)
-                CurrentLocationMap(coordinate: $coordinate)
+                ZStack(alignment: .trailing) {
+                    CurrentLocationMap(coordinate: $coordinate, region: $mapRegion)
+                    VStack(spacing: 8) {
+                        pickerMapButton("plus") { pickerZoom(0.5) }
+                        pickerMapButton("minus") { pickerZoom(2) }
+                        pickerMapButton("location") { centerPickerMap() }
+                    }.padding(.trailing, 12)
+                }
                 HStack(spacing: 12) {
                     HStack(spacing: 7) {
                         Text("住所").font(.caption).foregroundColor(SpotcodeTheme.muted)
@@ -475,12 +483,16 @@ private struct LocationPickerSheet: View {
             }
             .onAppear {
                 coordinate = spot?.coordinate
+                if let coordinate = spot?.coordinate {
+                    mapRegion = .init(center: coordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
+                }
                 label = spot?.label ?? ""
                 address = spot?.address ?? "現在地を取得すると表示されます"
             }
             .onChange(of: location.spot) { value in
                 guard let value else { return }
                 coordinate = value.coordinate
+                mapRegion = .init(center: value.coordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
                 locating = false
                 reverseGeocode(value.coordinate)
             }
@@ -507,31 +519,54 @@ private struct LocationPickerSheet: View {
                 .compactMap { $0 }.joined(separator: " ")
         }
     }
+    private func pickerZoom(_ multiplier: Double) {
+        mapRegion.span.latitudeDelta = min(max(mapRegion.span.latitudeDelta * multiplier, 0.0005), 120)
+        mapRegion.span.longitudeDelta = min(max(mapRegion.span.longitudeDelta * multiplier, 0.0005), 120)
+    }
+    private func centerPickerMap() {
+        guard let coordinate else { location.request(); locating = true; return }
+        mapRegion = .init(center: coordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
+    }
+    private func pickerMapButton(_ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: icon).frame(width: 38, height: 38) }
+            .background(SpotcodeTheme.surface.opacity(0.94)).foregroundColor(SpotcodeTheme.accent)
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(SpotcodeTheme.border)).clipShape(RoundedRectangle(cornerRadius: 9))
+    }
 }
 
 private struct CurrentLocationMap: UIViewRepresentable {
     @Binding var coordinate: CLLocationCoordinate2D?
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    @Binding var region: MKCoordinateRegion
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
         map.showsUserLocation = true
         map.isZoomEnabled = true
         map.isScrollEnabled = true
+        map.delegate = context.coordinator
+        map.setRegion(region, animated: false)
         return map
     }
     func updateUIView(_ map: MKMapView, context: Context) {
+        context.coordinator.parent = self
         map.removeAnnotations(map.annotations.filter { !($0 is MKUserLocation) })
         if let coordinate {
             let pin = MKPointAnnotation(); pin.coordinate = coordinate
             map.addAnnotation(pin)
-            if !context.coordinator.hasCentered {
-                map.setRegion(.init(center: coordinate, span: .init(latitudeDelta: 0.02, longitudeDelta: 0.02)), animated: false)
-                context.coordinator.hasCentered = true
-            }
         }
+        let spanChanged = abs(map.region.span.latitudeDelta - region.span.latitudeDelta) > 0.0001
+        let centerChanged = abs(map.region.center.latitude - region.center.latitude) > 0.0001 || abs(map.region.center.longitude - region.center.longitude) > 0.0001
+        if !context.coordinator.isInteracting && (spanChanged || centerChanged) { map.setRegion(region, animated: true) }
     }
-    final class Coordinator: NSObject {
-        var hasCentered = false
+    final class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: CurrentLocationMap
+        var isInteracting = false
+        init(_ parent: CurrentLocationMap) { self.parent = parent }
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) { isInteracting = true }
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            parent.region = mapView.region
+            DispatchQueue.main.async { self.isInteracting = false }
+        }
     }
 }
 
