@@ -434,7 +434,7 @@ private struct LocationPickerSheet: View {
     @StateObject private var location = ComposerLocationProvider()
     @State private var coordinate: CLLocationCoordinate2D?
     @State private var label = ""
-    @State private var address = "地図をタップして取得…"
+    @State private var address = "現在地を取得すると表示されます"
     @State private var locating = false
 
     var body: some View {
@@ -455,7 +455,7 @@ private struct LocationPickerSheet: View {
                     Spacer()
                 }.foregroundColor(coordinate == nil ? SpotcodeTheme.muted : SpotcodeTheme.accent)
                     .padding(.horizontal, 16).padding(.vertical, 10).background(SpotcodeTheme.surface2)
-                TappableLocationMap(coordinate: $coordinate)
+                CurrentLocationMap(coordinate: $coordinate)
                 HStack(spacing: 12) {
                     HStack(spacing: 7) {
                         Text("住所").font(.caption).foregroundColor(SpotcodeTheme.muted)
@@ -476,7 +476,7 @@ private struct LocationPickerSheet: View {
             .onAppear {
                 coordinate = spot?.coordinate
                 label = spot?.label ?? ""
-                address = spot?.address ?? "地図をタップして取得…"
+                address = spot?.address ?? "現在地を取得すると表示されます"
             }
             .onChange(of: location.spot) { value in
                 guard let value else { return }
@@ -484,23 +484,20 @@ private struct LocationPickerSheet: View {
                 locating = false
                 reverseGeocode(value.coordinate)
             }
-            .onChange(of: coordinate?.latitude) { _ in
-                if let coordinate { reverseGeocode(coordinate) }
-            }
         }.preferredColorScheme(.dark)
     }
 
     private var statusText: String {
         if locating { return "現在地を取得中… 取れるまで投稿はできません。" }
-        if coordinate != nil { return "選択した場所を投稿に追加します。地図をタップして変更できます。" }
-        return "現在地を使うか、地図をタップして場所を選んでください。"
+        if coordinate != nil { return "現在地を投稿に追加します。ピンを立てられるのは現在地のみです。" }
+        return "「現在地を使う」を押して場所を取得してください。"
     }
     private func confirm() {
         guard let coordinate else { return }
         let resolvedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
         spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude,
                     label: resolvedLabel.isEmpty ? "選択した場所" : resolvedLabel,
-                    address: address == "地図をタップして取得…" ? nil : address)
+                    address: address == "現在地を取得すると表示されます" ? nil : address)
         isPresented = false
     }
     private func reverseGeocode(_ coordinate: CLLocationCoordinate2D) {
@@ -512,21 +509,17 @@ private struct LocationPickerSheet: View {
     }
 }
 
-private struct TappableLocationMap: UIViewRepresentable {
+private struct CurrentLocationMap: UIViewRepresentable {
     @Binding var coordinate: CLLocationCoordinate2D?
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
         map.showsUserLocation = true
         map.isZoomEnabled = true
         map.isScrollEnabled = true
-        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
-        map.addGestureRecognizer(tap)
-        context.coordinator.map = map
         return map
     }
     func updateUIView(_ map: MKMapView, context: Context) {
-        context.coordinator.parent = self
         map.removeAnnotations(map.annotations.filter { !($0 is MKUserLocation) })
         if let coordinate {
             let pin = MKPointAnnotation(); pin.coordinate = coordinate
@@ -538,14 +531,7 @@ private struct TappableLocationMap: UIViewRepresentable {
         }
     }
     final class Coordinator: NSObject {
-        var parent: TappableLocationMap
-        weak var map: MKMapView?
         var hasCentered = false
-        init(_ parent: TappableLocationMap) { self.parent = parent }
-        @objc func tapped(_ gesture: UITapGestureRecognizer) {
-            guard let map else { return }
-            parent.coordinate = map.convert(gesture.location(in: map), toCoordinateFrom: map)
-        }
     }
 }
 
@@ -734,9 +720,10 @@ struct ComposeView: View {
 struct NativeMapView: View {
     @EnvironmentObject private var model: AppModel
     @State private var posts: [Post] = []
-    @State private var region = MKCoordinateRegion(center: .init(latitude: 35.681236, longitude: 139.767125), span: .init(latitudeDelta: 0.12, longitudeDelta: 0.12))
+    @State private var region = MKCoordinateRegion(center: .init(latitude: 35.681236, longitude: 139.767125), span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
     @State private var selectedPost: Post?
     @State private var loading = false
+    @StateObject private var location = ComposerLocationProvider()
     var body: some View {
         ZStack(alignment: .trailing) {
             ClusteredPostMap(posts: posts, region: $region, selectedPost: $selectedPost)
@@ -749,9 +736,13 @@ struct NativeMapView: View {
             if loading { ProgressView().padding(10).background(.ultraThinMaterial).clipShape(Circle()) }
         }.task {
             guard posts.isEmpty else { return }
+            location.request()
             loading = true; defer { loading = false }
             posts = (try? await SupabaseService.shared.spottedPosts(token: model.session?.accessToken)) ?? []
-            if let coordinate = posts.first?.spot?.coordinate { region.center = coordinate }
+        }
+        .onChange(of: location.spot) { value in
+            guard let coordinate = value?.coordinate else { return }
+            region = .init(center: coordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
         }
         .sheet(item: $selectedPost) { post in
             NavigationView { PostDetailView(post: post) }
@@ -763,8 +754,9 @@ struct NativeMapView: View {
         region.span.longitudeDelta = min(max(region.span.longitudeDelta * multiplier, 0.002), 120)
     }
     private func resetMap() {
-        if let coordinate = posts.first?.spot?.coordinate { region.center = coordinate }
-        region.span = .init(latitudeDelta: 0.12, longitudeDelta: 0.12)
+        if let coordinate = location.spot?.coordinate { region.center = coordinate }
+        else { location.request() }
+        region.span = .init(latitudeDelta: 0.006, longitudeDelta: 0.006)
     }
     private func mapButton(_ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: icon).frame(width: 38, height: 38) }
@@ -804,11 +796,12 @@ private struct ClusteredPostMap: UIViewRepresentable {
         }
         let latitudeChanged = abs(map.region.span.latitudeDelta - region.span.latitudeDelta) > 0.0001
         let centerChanged = abs(map.region.center.latitude - region.center.latitude) > 0.0001 || abs(map.region.center.longitude - region.center.longitude) > 0.0001
-        if latitudeChanged || centerChanged { map.setRegion(region, animated: true) }
+        if !context.coordinator.isInteracting && (latitudeChanged || centerChanged) { map.setRegion(region, animated: true) }
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: ClusteredPostMap
+        var isInteracting = false
         init(_ parent: ClusteredPostMap) { self.parent = parent }
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard let postAnnotation = annotation as? PostMapAnnotation else { return nil }
@@ -820,8 +813,12 @@ private struct ClusteredPostMap: UIViewRepresentable {
             view.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
             return view
         }
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            isInteracting = true
+        }
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.region = mapView.region
+            DispatchQueue.main.async { self.isInteracting = false }
         }
         func mapView(_ mapView: MKMapView, annotationView view: MKAnnotationView, calloutAccessoryControlTapped control: UIControl) {
             if let annotation = view.annotation as? PostMapAnnotation { parent.selectedPost = annotation.post }
