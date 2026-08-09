@@ -19,10 +19,7 @@ final class AppModel: ObservableObject {
     }
 
     func bootstrap() async {
-        guard var current = session else {
-            await loadTimeline()
-            return
-        }
+        guard var current = session else { return }
         if let expiry = current.expiresAt, expiry < Int(Date().timeIntervalSince1970) + 60,
            let refreshed = try? await SupabaseService.shared.refresh(current.refreshToken) {
             current = refreshed
@@ -40,7 +37,7 @@ final class AppModel: ObservableObject {
             let value = try await SupabaseService.shared.login(email: email, password: password)
             persist(value)
             me = try await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken)
-            await loadTimeline()
+            Task { await loadTimeline() }
         } catch { errorMessage = error.localizedDescription }
     }
 

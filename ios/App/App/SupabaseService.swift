@@ -14,20 +14,25 @@ actor SupabaseService {
         configuration.allowsCellularAccess = true
         configuration.allowsExpensiveNetworkAccess = true
         configuration.allowsConstrainedNetworkAccess = true
-        configuration.waitsForConnectivity = true
-        configuration.timeoutIntervalForRequest = 35
-        configuration.timeoutIntervalForResource = 60
+        configuration.waitsForConnectivity = false
+        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForResource = 35
         configuration.requestCachePolicy = .reloadRevalidatingCacheData
         return URLSession(configuration: configuration)
     }()
 
     private func data(for request: URLRequest, retryable: Bool) async throws -> (Data, URLResponse) {
-        do {
-            return try await session.data(for: request)
-        } catch let error as URLError where retryable && Self.transientErrors.contains(error.code) {
-            try await Task.sleep(nanoseconds: 600_000_000)
-            return try await session.data(for: request)
+        var lastError: Error?
+        let attempts = retryable ? 3 : 1
+        for attempt in 0..<attempts {
+            do { return try await session.data(for: request) }
+            catch let error as URLError where Self.transientErrors.contains(error.code) {
+                lastError = error
+                guard attempt + 1 < attempts else { break }
+                try await Task.sleep(nanoseconds: UInt64(400_000_000 * (attempt + 1)))
+            }
         }
+        throw lastError ?? URLError(.unknown)
     }
 
     private static let transientErrors: Set<URLError.Code> = [
@@ -46,13 +51,14 @@ actor SupabaseService {
         guard let endpoint = URL(string: path, relativeTo: baseURL) else { throw URLError(.badURL) }
         var request = URLRequest(url: endpoint)
         request.httpMethod = method
-        request.timeoutInterval = 35
+        request.timeoutInterval = 20
         request.httpBody = body
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(token ?? anonKey)", forHTTPHeaderField: "Authorization")
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         if preferRepresentation { request.setValue("return=representation", forHTTPHeaderField: "Prefer") }
-        let (data, response) = try await data(for: request, retryable: method == "GET" || method == "HEAD")
+        let isAuthRequest = path.hasPrefix("auth/v1/")
+        let (data, response) = try await data(for: request, retryable: method == "GET" || method == "HEAD" || isAuthRequest)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let message = String(data: data, encoding: .utf8) ?? "通信エラー"
             throw NSError(domain: "Supabase", code: (response as? HTTPURLResponse)?.statusCode ?? -1,
@@ -82,8 +88,9 @@ actor SupabaseService {
         return rows.first
     }
 
-    func posts(limit: Int = 40, authorID: UUID? = nil, token: String? = nil) async throws -> [Post] {
-        let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
+    func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = false) async throws -> [Post] {
+        let photoColumn = includePhotos ? ",photos" : ""
+        let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count\(photoColumn),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
         while true {
             let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
             var path = "rest/v1/posts?select=\(common)\(extras)&order=created_at.desc&limit=\(limit)"
@@ -98,7 +105,7 @@ actor SupabaseService {
     }
 
     func spottedPosts(token: String?) async throws -> [Post] {
-        try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=60", token: token)
+        try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=60", token: token)
     }
 
     func createPost(_ draft: PostDraft, token: String) async throws -> Post {

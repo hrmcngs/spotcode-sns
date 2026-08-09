@@ -72,7 +72,10 @@ struct RootView: View {
         }
         .preferredColorScheme(.dark)
         .tint(SpotcodeTheme.accent)
-        .task { await model.bootstrap(); showLogin = model.session == nil }
+        .task {
+            if model.session == nil { showLogin = true }
+            await model.bootstrap()
+        }
         .sheet(isPresented: $showLogin) { LoginView(isPresented: $showLogin) }
         .sheet(isPresented: $composing) { ComposeView(isPresented: $composing) }
         .alert("エラー", isPresented: Binding(
