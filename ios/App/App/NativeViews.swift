@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import PhotosUI
 
 private enum SpotcodeTheme {
     static let background = Color(red: 13/255, green: 17/255, blue: 23/255)
@@ -257,6 +258,10 @@ private struct InlineComposer: View {
     @State private var showEvent = false
     @State private var isIdea = false
     @State private var visibility = "public"
+    @State private var photos: [String] = []
+    @State private var poll: PostPoll?
+    @State private var showPhotoPicker = false
+    @State private var showPollEditor = false
     @State private var selectedSpot: Spot?
     @State private var showLocationPicker = false
     @State private var showDraftNotice = true
@@ -284,6 +289,17 @@ private struct InlineComposer: View {
                 if showEvent {
                     TextField("https://connpass.com/event/…", text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
                 }
+                if !photos.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack { ForEach(Array(photos.enumerated()), id: \.offset) { index, value in
+                            ZStack(alignment: .topTrailing) {
+                                DataURLImage(value: value).frame(width: 82, height: 82).clipShape(RoundedRectangle(cornerRadius: 9))
+                                Button { photos.remove(at: index) } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).background(Color.black.clipShape(Circle())) }
+                            }
+                        }}
+                    }
+                }
+                if let poll { Label("投票: \(poll.question)", systemImage: "chart.bar").font(.caption).foregroundColor(SpotcodeTheme.accent) }
                 if horizontalSizeClass == .regular {
                     HStack { composerTools; Spacer(); composerActions }
                 } else {
@@ -307,6 +323,8 @@ private struct InlineComposer: View {
          .sheet(isPresented: $showLocationPicker) {
              LocationPickerSheet(spot: $selectedSpot, isPresented: $showLocationPicker)
          }
+         .sheet(isPresented: $showPhotoPicker) { PhotoLibraryPicker(images: $photos) }
+         .sheet(isPresented: $showPollEditor) { PollEditorSheet(poll: $poll, isPresented: $showPollEditor) }
     }
 
     @ViewBuilder private var composerChips: some View {
@@ -341,8 +359,10 @@ private struct InlineComposer: View {
 
     private var composerTools: some View {
         HStack(spacing: 24) {
-            Image(systemName: "photo"); Image(systemName: "chevron.left.forwardslash.chevron.right")
-            Image(systemName: "mappin.circle"); Image(systemName: "chart.bar")
+            Button { showPhotoPicker = true } label: { Image(systemName: "photo") }
+            Button { insertCodeBlock() } label: { Image(systemName: "chevron.left.forwardslash.chevron.right") }
+            Button { showLocationPicker = true } label: { Image(systemName: "mappin.circle") }
+            Button { showPollEditor = true } label: { Image(systemName: "chart.bar") }
         }.font(.title3).foregroundColor(SpotcodeTheme.accent)
     }
 
@@ -361,12 +381,18 @@ private struct InlineComposer: View {
     private func publish() {
         sending = true
         Task {
-            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, eventURL: eventURL.isEmpty ? nil : eventURL, spot: selectedSpot, kind: isIdea ? "idea" : nil, visibility: visibility) {
+            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, eventURL: eventURL.isEmpty ? nil : eventURL, spot: selectedSpot, kind: isIdea ? "idea" : nil, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
                 draft = ""; githubLink = ""; eventURL = ""; showLink = false; showEvent = false
                 isIdea = false; visibility = "public"; selectedSpot = nil
+                photos = []; poll = nil
             }
             sending = false
         }
+    }
+    private func insertCodeBlock() {
+        if !draft.isEmpty && !draft.hasSuffix("\n") { draft += "\n" }
+        draft += "```\nコードを入力\n```\n"
+        editorFocused = true
     }
 
     private func audienceButton(_ title: String, value: String) -> some View {
@@ -428,15 +454,103 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
     }
 }
 
+private struct PhotoLibraryPicker: UIViewControllerRepresentable {
+    @Binding var images: [String]
+    @Environment(\.dismiss) private var dismiss
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var configuration = PHPickerConfiguration(photoLibrary: .shared())
+        configuration.filter = .images
+        configuration.selectionLimit = max(1, 4 - images.count)
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        var parent: PhotoLibraryPicker
+        init(_ parent: PhotoLibraryPicker) { self.parent = parent }
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard !results.isEmpty else { parent.dismiss(); return }
+            let group = DispatchGroup()
+            var loaded: [(Int, String)] = []
+            let lock = NSLock()
+            for (index, result) in results.enumerated() where result.itemProvider.canLoadObject(ofClass: UIImage.self) {
+                group.enter()
+                result.itemProvider.loadObject(ofClass: UIImage.self) { object, _ in
+                    defer { group.leave() }
+                    guard let image = object as? UIImage, let data = image.resizedForPost().jpegData(compressionQuality: 0.72) else { return }
+                    lock.lock(); loaded.append((index, "data:image/jpeg;base64," + data.base64EncodedString())); lock.unlock()
+                }
+            }
+            group.notify(queue: .main) {
+                self.parent.images.append(contentsOf: loaded.sorted { $0.0 < $1.0 }.map(\.1))
+                self.parent.images = Array(self.parent.images.prefix(4))
+                self.parent.dismiss()
+            }
+        }
+    }
+}
+
+private struct DataURLImage: View {
+    let value: String
+    var body: some View {
+        Group {
+            if let comma = value.firstIndex(of: ","), let data = Data(base64Encoded: String(value[value.index(after: comma)...])), let image = UIImage(data: data) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else { Color(white: 0.15).overlay(Image(systemName: "photo")) }
+        }
+    }
+}
+
+private extension UIImage {
+    func resizedForPost(maxSide: CGFloat = 1080) -> UIImage {
+        let scale = min(1, maxSide / max(size.width, size.height))
+        guard scale < 1 else { return self }
+        let target = CGSize(width: size.width * scale, height: size.height * scale)
+        return UIGraphicsImageRenderer(size: target).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
+    }
+}
+
+private struct PollEditorSheet: View {
+    @Binding var poll: PostPoll?
+    @Binding var isPresented: Bool
+    @State private var question = ""
+    @State private var first = ""
+    @State private var second = ""
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 14) {
+                TextField("質問", text: $question).spotcodeField()
+                TextField("選択肢 1", text: $first).spotcodeField()
+                TextField("選択肢 2", text: $second).spotcodeField()
+                if poll != nil { Button("投票を削除", role: .destructive) { poll = nil; isPresented = false } }
+                Spacer()
+            }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+                .navigationTitle("投票を作成").navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Confirm") { poll = .init(question: question, options: [first, second]); isPresented = false }
+                            .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || second.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .onAppear { question = poll?.question ?? ""; first = poll?.options.first ?? ""; second = poll?.options.dropFirst().first ?? "" }
+        }.preferredColorScheme(.dark)
+    }
+}
+
 private struct LocationPickerSheet: View {
     @Binding var spot: Spot?
     @Binding var isPresented: Bool
     @StateObject private var location = ComposerLocationProvider()
     @State private var coordinate: CLLocationCoordinate2D?
+    @State private var currentCoordinate: CLLocationCoordinate2D?
     @State private var label = ""
     @State private var address = "現在地を取得すると表示されます"
     @State private var locating = false
     @State private var mapRegion = MKCoordinateRegion(center: .init(latitude: 35.681236, longitude: 139.767125), span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
+    @State private var adjustmentDenied = false
 
     var body: some View {
         NavigationView {
@@ -457,7 +571,7 @@ private struct LocationPickerSheet: View {
                 }.foregroundColor(coordinate == nil ? SpotcodeTheme.muted : SpotcodeTheme.accent)
                     .padding(.horizontal, 16).padding(.vertical, 10).background(SpotcodeTheme.surface2)
                 ZStack(alignment: .trailing) {
-                    CurrentLocationMap(coordinate: $coordinate, region: $mapRegion)
+                    CurrentLocationMap(coordinate: $coordinate, currentCoordinate: currentCoordinate, region: $mapRegion, adjustmentDenied: $adjustmentDenied)
                     VStack(spacing: 8) {
                         pickerMapButton("plus") { pickerZoom(0.5) }
                         pickerMapButton("minus") { pickerZoom(2) }
@@ -488,20 +602,27 @@ private struct LocationPickerSheet: View {
                 }
                 label = spot?.label ?? ""
                 address = spot?.address ?? "現在地を取得すると表示されます"
+                locating = true
+                location.request()
             }
             .onChange(of: location.spot) { value in
                 guard let value else { return }
                 coordinate = value.coordinate
+                currentCoordinate = value.coordinate
                 mapRegion = .init(center: value.coordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
                 locating = false
                 reverseGeocode(value.coordinate)
+            }
+            .onChange(of: coordinate.map { "\($0.latitude),\($0.longitude)" }) { _ in
+                if let coordinate { reverseGeocode(coordinate) }
             }
         }.preferredColorScheme(.dark)
     }
 
     private var statusText: String {
         if locating { return "現在地を取得中… 取れるまで投稿はできません。" }
-        if coordinate != nil { return "現在地を投稿に追加します。ピンを立てられるのは現在地のみです。" }
+        if adjustmentDenied { return "現在地から300mを超えています。半径300m以内を選んでください。" }
+        if coordinate != nil { return "現在地を基準に、地図タップで半径300m以内のポイントを調整できます。" }
         return "「現在地を使う」を押して場所を取得してください。"
     }
     private func confirm() {
@@ -536,7 +657,9 @@ private struct LocationPickerSheet: View {
 
 private struct CurrentLocationMap: UIViewRepresentable {
     @Binding var coordinate: CLLocationCoordinate2D?
+    let currentCoordinate: CLLocationCoordinate2D?
     @Binding var region: MKCoordinateRegion
+    @Binding var adjustmentDenied: Bool
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
@@ -545,6 +668,10 @@ private struct CurrentLocationMap: UIViewRepresentable {
         map.isScrollEnabled = true
         map.delegate = context.coordinator
         map.setRegion(region, animated: false)
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
+        tap.cancelsTouchesInView = false
+        map.addGestureRecognizer(tap)
+        context.coordinator.map = map
         return map
     }
     func updateUIView(_ map: MKMapView, context: Context) {
@@ -560,12 +687,25 @@ private struct CurrentLocationMap: UIViewRepresentable {
     }
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: CurrentLocationMap
+        weak var map: MKMapView?
         var isInteracting = false
         init(_ parent: CurrentLocationMap) { self.parent = parent }
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) { isInteracting = true }
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.region = mapView.region
             DispatchQueue.main.async { self.isInteracting = false }
+        }
+        @objc func tapped(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, let map, let origin = parent.currentCoordinate else { return }
+            let picked = map.convert(gesture.location(in: map), toCoordinateFrom: map)
+            let distance = CLLocation(latitude: origin.latitude, longitude: origin.longitude)
+                .distance(from: CLLocation(latitude: picked.latitude, longitude: picked.longitude))
+            if distance <= 300 {
+                parent.coordinate = picked
+                parent.adjustmentDenied = false
+            } else {
+                parent.adjustmentDenied = true
+            }
         }
     }
 }
@@ -637,6 +777,20 @@ struct PostRow: View {
                     }
                 }
                 Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                if let photos = post.photos, !photos.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) { ForEach(photos, id: \.self) { DataURLImage(value: $0).frame(width: 180, height: 140).clipShape(RoundedRectangle(cornerRadius: 10)) } }
+                    }
+                }
+                if let poll = post.poll {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(poll.question, systemImage: "chart.bar").font(.subheadline.weight(.bold))
+                        ForEach(poll.options, id: \.self) { option in
+                            Text(option).padding(.horizontal, 12).padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
+                        }
+                    }.padding(10).background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 10))
+                }
                 if let link = post.githubLink, let url = URL(string: link) {
                     Link(destination: url) {
                         HStack(spacing: 5) {

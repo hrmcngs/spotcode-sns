@@ -47,9 +47,10 @@ struct Post: Codable, Identifiable, Hashable {
     let repostsCount: Int?
     let bookmarksCount: Int?
     let photos: [String]?
+    let poll: PostPoll?
 
     enum CodingKeys: String, CodingKey {
-        case id, body, spot, status, author, photos, kind, visibility
+        case id, body, spot, status, author, photos, poll, kind, visibility
         case authorID = "author_id"
         case githubLink = "github_link"
         case repoFullName = "repo_full_name"
@@ -106,14 +107,21 @@ struct PostDraft: Encodable {
     let spot: Spot?
     let kind: String?
     let visibility: String
+    let photos: [String]?
+    let poll: PostPoll?
     let status: String
 
     enum CodingKeys: String, CodingKey {
-        case body, status, spot, kind, visibility
+        case body, status, spot, kind, visibility, photos, poll
         case authorID = "author_id"
         case githubLink = "github_link"
         case eventURL = "event_url"
     }
+}
+
+struct PostPoll: Codable, Hashable {
+    let question: String
+    let options: [String]
 }
 
 struct FollowEvent: Codable, Identifiable {

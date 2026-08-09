@@ -57,11 +57,11 @@ final class AppModel: ObservableObject {
         catch { errorMessage = error.localizedDescription }
     }
 
-    func publish(body: String, githubLink: String?, eventURL: String? = nil, spot: Spot? = nil, kind: String? = nil, visibility: String = "public") async -> Bool {
+    func publish(body: String, githubLink: String?, eventURL: String? = nil, spot: Spot? = nil, kind: String? = nil, visibility: String = "public", photos: [String]? = nil, poll: PostPoll? = nil) async -> Bool {
         guard let session, let meID = me?.id else { return false }
         do {
             let post = try await SupabaseService.shared.createPost(
-                .init(authorID: meID, body: body, githubLink: githubLink, eventURL: eventURL, spot: spot, kind: kind, visibility: visibility, status: "wip"),
+                .init(authorID: meID, body: body, githubLink: githubLink, eventURL: eventURL, spot: spot, kind: kind, visibility: visibility, photos: photos, poll: poll, status: "wip"),
                 token: session.accessToken
             )
             posts.insert(post, at: 0)

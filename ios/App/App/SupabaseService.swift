@@ -4,7 +4,7 @@ actor SupabaseService {
     static let shared = SupabaseService()
     private let baseURL = URL(string: "https://vkwdthjiyxrhskdlgexq.supabase.co")!
     private let anonKey = "sb_publishable_xdAZG7yOOFKPXmugjhDWdQ_HJ7sGHIq"
-    private var supportedPostMetadata = ["repo_full_name", "kind", "visibility", "event_url"]
+    private var supportedPostMetadata = ["repo_full_name", "kind", "visibility", "event_url", "poll"]
     private let decoder: JSONDecoder = {
         let value = JSONDecoder()
         return value
@@ -104,7 +104,7 @@ actor SupabaseService {
     func createPost(_ draft: PostDraft, token: String) async throws -> Post {
         let encoded = try JSONEncoder().encode(draft)
         var payload = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] ?? [:]
-        for column in ["repo_full_name", "kind", "visibility", "event_url"] where !supportedPostMetadata.contains(column) {
+        for column in ["repo_full_name", "kind", "visibility", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
             payload.removeValue(forKey: column)
         }
         let body = try JSONSerialization.data(withJSONObject: payload)
