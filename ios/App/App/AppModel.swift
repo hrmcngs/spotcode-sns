@@ -51,6 +51,8 @@ final class AppModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do { posts = try await SupabaseService.shared.posts(token: session?.accessToken) }
+        catch is CancellationError { return }
+        catch let error as URLError where error.code == .cancelled { return }
         catch { errorMessage = error.localizedDescription }
     }
 

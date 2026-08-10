@@ -648,8 +648,8 @@ private struct LocationPickerSheet: View {
         mapRegion.span.longitudeDelta = min(max(mapRegion.span.longitudeDelta * multiplier, 0.0005), 120)
     }
     private func centerPickerMap() {
-        guard let coordinate else { location.request(); locating = true; return }
-        mapRegion = .init(center: coordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
+        guard let currentCoordinate else { location.request(); locating = true; return }
+        mapRegion = .init(center: currentCoordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
     }
     private func pickerMapButton(_ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: icon).frame(width: 38, height: 38) }
@@ -686,17 +686,15 @@ private struct CurrentLocationMap: UIViewRepresentable {
         }
         let spanChanged = abs(map.region.span.latitudeDelta - region.span.latitudeDelta) > 0.0001
         let centerChanged = abs(map.region.center.latitude - region.center.latitude) > 0.0001 || abs(map.region.center.longitude - region.center.longitude) > 0.0001
-        if !context.coordinator.isInteracting && (spanChanged || centerChanged) { map.setRegion(region, animated: true) }
+        let userIsTouchingMap = map.gestureRecognizers?.contains(where: { $0.state == .began || $0.state == .changed }) == true
+        if !userIsTouchingMap && (spanChanged || centerChanged) { map.setRegion(region, animated: true) }
     }
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: CurrentLocationMap
         weak var map: MKMapView?
-        var isInteracting = false
         init(_ parent: CurrentLocationMap) { self.parent = parent }
-        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) { isInteracting = true }
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.region = mapView.region
-            DispatchQueue.main.async { self.isInteracting = false }
         }
         @objc func tapped(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended, let map, let origin = parent.currentCoordinate else { return }
@@ -988,12 +986,12 @@ private struct ClusteredPostMap: UIViewRepresentable {
         }
         let latitudeChanged = abs(map.region.span.latitudeDelta - region.span.latitudeDelta) > 0.0001
         let centerChanged = abs(map.region.center.latitude - region.center.latitude) > 0.0001 || abs(map.region.center.longitude - region.center.longitude) > 0.0001
-        if !context.coordinator.isInteracting && (latitudeChanged || centerChanged) { map.setRegion(region, animated: true) }
+        let userIsTouchingMap = map.gestureRecognizers?.contains(where: { $0.state == .began || $0.state == .changed }) == true
+        if !userIsTouchingMap && (latitudeChanged || centerChanged) { map.setRegion(region, animated: true) }
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: ClusteredPostMap
-        var isInteracting = false
         init(_ parent: ClusteredPostMap) { self.parent = parent }
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard let postAnnotation = annotation as? PostMapAnnotation else { return nil }
@@ -1005,12 +1003,8 @@ private struct ClusteredPostMap: UIViewRepresentable {
             view.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
             return view
         }
-        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-            isInteracting = true
-        }
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.region = mapView.region
-            DispatchQueue.main.async { self.isInteracting = false }
         }
         func mapView(_ mapView: MKMapView, annotationView view: MKAnnotationView, calloutAccessoryControlTapped control: UIControl) {
             if let annotation = view.annotation as? PostMapAnnotation { parent.selectedPost = annotation.post }
