@@ -47,7 +47,7 @@ struct RootView: View {
         ZStack(alignment: .leading) {
             SpotcodeTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                TopBar(drawerOpen: $drawerOpen, section: $section, showAccounts: $showAccounts)
+                TopBar(drawerOpen: $drawerOpen, section: $section, showAccounts: $showAccounts, showLogin: $showLogin)
                 HStack(spacing: 0) {
                     Spacer(minLength: horizontalSizeClass == .regular ? 24 : 0)
                     NavigationView { sectionView }
@@ -103,6 +103,7 @@ private struct TopBar: View {
     @Binding var drawerOpen: Bool
     @Binding var section: AppSection
     @Binding var showAccounts: Bool
+    @Binding var showLogin: Bool
     @State private var query = ""
 
     var body: some View {
@@ -126,7 +127,9 @@ private struct TopBar: View {
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
             Spacer(minLength: 0)
             Button { section = .settings } label: { Image(systemName: "gearshape") }.spotcodeIconButton()
-            Button { showAccounts = true } label: { AvatarView(profile: model.me, size: 34) }
+            Button {
+                if model.session == nil { showLogin = true } else { showAccounts = true }
+            } label: { AvatarView(profile: model.me, size: 34) }
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(SpotcodeTheme.surface)
@@ -189,10 +192,12 @@ private struct AccountSwitcher: View {
                     VStack(alignment: .leading, spacing: 3) { HStack { Text(me.name).fontWeight(.bold); Text("現在").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent).padding(4).background(SpotcodeTheme.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }; Text("@\(me.handle)").foregroundColor(SpotcodeTheme.muted) }
                 }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Color(red: 23/255, green: 40/255, blue: 54/255)).clipShape(RoundedRectangle(cornerRadius: 9))
             }
-            HStack(spacing: 12) {
-                ZStack { LinearGradient(colors: [SpotcodeTheme.accent, .green], startPoint: .topLeading, endPoint: .bottomTrailing); Text("S").font(.title2).fontWeight(.bold) }.frame(width: 44, height: 44).clipShape(Circle())
-                VStack(alignment: .leading) { HStack { Text("spotcode").fontWeight(.bold); Text("公式").font(.caption.weight(.bold)).foregroundColor(.yellow).padding(4).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }; Text("@spotcode_official").foregroundColor(SpotcodeTheme.muted) }
-            }.padding(.horizontal, 12)
+            if model.session != nil && (model.me?.isAdmin == true || model.me?.isOperator == true) {
+                HStack(spacing: 12) {
+                    ZStack { LinearGradient(colors: [SpotcodeTheme.accent, .green], startPoint: .topLeading, endPoint: .bottomTrailing); Text("S").font(.title2).fontWeight(.bold) }.frame(width: 44, height: 44).clipShape(Circle())
+                    VStack(alignment: .leading) { HStack { Text("spotcode").fontWeight(.bold); Text("公式").font(.caption.weight(.bold)).foregroundColor(.yellow).padding(4).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }; Text("@spotcode_official").foregroundColor(SpotcodeTheme.muted) }
+                }.padding(.horizontal, 12)
+            }
             Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
             Button { model.signOut(); isPresented = false; showLogin = true } label: { Label("Log out", systemImage: "arrow.right").foregroundColor(Color(red: 248/255, green: 81/255, blue: 73/255)).font(.title3) }
         }
@@ -1401,16 +1406,22 @@ struct LoginView: View {
     @Binding var isPresented: Bool
     @State private var email = ""
     @State private var password = ""
+    @State private var signing = false
     var body: some View {
         NavigationView {
             VStack(spacing: 14) {
                 Image(systemName: "chevron.left.forwardslash.chevron.right").font(.largeTitle)
                 TextField("メールまたはログイン名", text: $email).textInputAutocapitalization(.never).keyboardType(.emailAddress).spotcodeField()
                 SecureField("パスワード", text: $password).spotcodeField()
-                Button(model.isLoading ? "ログイン中…" : "ログイン") {
-                    Task { await model.signIn(emailOrAlias: email, password: password); if model.session != nil { isPresented = false } }
+                Button(signing ? "ログイン中…" : "ログイン") {
+                    signing = true
+                    Task {
+                        let succeeded = await model.signIn(emailOrAlias: email, password: password)
+                        signing = false
+                        if succeeded { isPresented = false }
+                    }
                 }.font(.body.weight(.bold)).frame(maxWidth: .infinity).padding(13).background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
-                 .disabled(email.isEmpty || password.isEmpty || model.isLoading)
+                 .disabled(email.isEmpty || password.isEmpty || signing)
                 Spacer()
             }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("spotcodeへログイン")
         }.preferredColorScheme(.dark)

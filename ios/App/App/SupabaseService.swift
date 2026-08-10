@@ -78,14 +78,24 @@ actor SupabaseService {
     }
 
     func profile(id: UUID, token: String) async throws -> Profile? {
-        let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape", token: token)
-        return rows.first
+        do {
+            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape,is_admin,is_operator", token: token)
+            return rows.first
+        } catch {
+            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape", token: token)
+            return rows.first
+        }
     }
 
     func profile(handle: String, token: String?) async throws -> Profile? {
         let escaped = handle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? handle
-        let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape", token: token)
-        return rows.first
+        do {
+            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape,is_admin,is_operator", token: token)
+            return rows.first
+        } catch {
+            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape", token: token)
+            return rows.first
+        }
     }
 
     func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = false) async throws -> [Post] {

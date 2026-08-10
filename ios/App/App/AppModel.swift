@@ -29,16 +29,18 @@ final class AppModel: ObservableObject {
         await loadTimeline()
     }
 
-    func signIn(emailOrAlias: String, password: String) async {
-        isLoading = true
-        defer { isLoading = false }
+    func signIn(emailOrAlias: String, password: String) async -> Bool {
         let email = emailOrAlias.contains("@") ? emailOrAlias : emailOrAlias + "@spotcode-sns.local"
         do {
             let value = try await SupabaseService.shared.login(email: email, password: password)
             persist(value)
-            me = try await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken)
+            me = try? await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken)
             Task { await loadTimeline() }
-        } catch { errorMessage = error.localizedDescription }
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 
     func signOut() {

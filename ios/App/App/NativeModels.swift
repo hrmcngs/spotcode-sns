@@ -11,6 +11,8 @@ struct Profile: Codable, Identifiable, Hashable {
     let githubHandle: String?
     let createdAt: String?
     let avatarShape: String?
+    let isAdmin: Bool?
+    let isOperator: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, handle, name, bio, location
@@ -18,6 +20,8 @@ struct Profile: Codable, Identifiable, Hashable {
         case githubHandle = "github_handle"
         case createdAt = "created_at"
         case avatarShape = "avatar_shape"
+        case isAdmin = "is_admin"
+        case isOperator = "is_operator"
     }
 }
 
