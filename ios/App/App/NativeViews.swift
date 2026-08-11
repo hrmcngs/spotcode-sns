@@ -224,8 +224,7 @@ struct TimelineView: View {
                     LazyVStack(spacing: 0) {
                         InlineComposer(repositoryComposeURL: $repositoryComposeURL)
                         ForEach(model.posts) { post in
-                            NavigationLink(destination: PostDetailView(post: post)) { PostRow(post: post) }
-                                .buttonStyle(.plain)
+                            PostRow(post: post)
                         }
                     }
                 }.refreshable { await model.loadTimeline() }
@@ -759,11 +758,17 @@ struct PostRow: View {
     let post: Post
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            AvatarView(profile: post.author, size: 42)
+            NavigationLink(destination: ProfileLookupView(handle: post.author?.handle ?? "")) {
+                AvatarView(profile: post.author, size: 42)
+            }.buttonStyle(.plain).disabled(post.author?.handle == nil)
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 5) {
-                    Text(post.author?.name ?? "User").fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
-                    Text("@\(post.author?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
+                    NavigationLink(destination: ProfileLookupView(handle: post.author?.handle ?? "")) {
+                        HStack(spacing: 5) {
+                            Text(post.author?.name ?? "User").fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
+                            Text("@\(post.author?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
+                        }
+                    }.buttonStyle(.plain).disabled(post.author?.handle == nil)
                     Text("· \(relativeTime(post.createdAt))").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
                     Spacer(minLength: 2)
                     Text((post.status ?? "wip").uppercased()).font(.caption.weight(.bold))
@@ -1171,6 +1176,27 @@ struct NotificationsView: View {
     }
 }
 
+private struct ProfileLookupView: View {
+    @EnvironmentObject private var model: AppModel
+    let handle: String
+    @State private var profile: Profile?
+    @State private var loading = true
+    var body: some View {
+        Group {
+            if let profile { ProfileView(profile: profile) }
+            else if loading { ProgressView("プロフィールを読み込み中…") }
+            else { ContentUnavailableViewCompat(title: "プロフィールを取得できませんでした", icon: "person.crop.circle.badge.exclamationmark") }
+        }
+        .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+        .task {
+            guard !handle.isEmpty else { loading = false; return }
+            if model.me?.handle.caseInsensitiveCompare(handle) == .orderedSame { profile = model.me }
+            else { profile = try? await SupabaseService.shared.profile(handle: handle, token: model.session?.accessToken) }
+            loading = false
+        }
+    }
+}
+
 struct ProfileView: View {
     @EnvironmentObject private var model: AppModel
     let profile: Profile?
@@ -1183,7 +1209,7 @@ struct ProfileView: View {
             ScrollView {
                 if let profile {
                     VStack(spacing: 0) {
-                        ProfileHero(profile: profile, counts: counts, repositories: repositories)
+                        ProfileHero(profile: profile, counts: counts, repositories: repositories, isOwn: profile.id == model.me?.id)
                         HStack(spacing: 0) {
                             ForEach(["Posts", "Spots", "Likes"].indices, id: \.self) { index in
                                 Button { selectedTab = index } label: {
@@ -1224,6 +1250,7 @@ private struct ProfileHero: View {
     let profile: Profile
     let counts: (following: Int, followers: Int, posts: Int)
     let repositories: [Repository]
+    let isOwn: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             LinearGradient(colors: [Color(red: 8/255, green: 70/255, blue: 111/255), Color(red: 30/255, green: 116/255, blue: 77/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -1232,8 +1259,10 @@ private struct ProfileHero: View {
                 HStack(alignment: .top) {
                     AvatarView(profile: profile, size: 104).padding(5).background(SpotcodeTheme.surface).clipShape(Circle()).offset(y: -63)
                     Spacer()
-                    Button("Edit profile") { }.font(.body.weight(.bold)).foregroundColor(SpotcodeTheme.background)
-                        .padding(.horizontal, 20).padding(.vertical, 11).background(SpotcodeTheme.text).clipShape(Capsule()).padding(.top, 14)
+                    if isOwn {
+                        Button("Edit profile") { }.font(.body.weight(.bold)).foregroundColor(SpotcodeTheme.background)
+                            .padding(.horizontal, 20).padding(.vertical, 11).background(SpotcodeTheme.text).clipShape(Capsule()).padding(.top, 14)
+                    }
                 }.frame(height: 63)
                 HStack(spacing: 8) {
                     Text(profile.name).font(.title).fontWeight(.bold)

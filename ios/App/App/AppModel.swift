@@ -10,12 +10,16 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let sessionAccount = "supabase-session"
+    private let cachedProfileKey = "spotcode.native.cached-profile"
+    private let cachedPostsKey = "spotcode.native.cached-posts"
 
     init() {
         if let data = KeychainStore.load(account: sessionAccount),
            let saved = try? JSONDecoder().decode(AuthSession.self, from: data) {
             session = saved
         }
+        if let data = UserDefaults.standard.data(forKey: cachedProfileKey) { me = try? JSONDecoder().decode(Profile.self, from: data) }
+        if let data = UserDefaults.standard.data(forKey: cachedPostsKey) { posts = (try? JSONDecoder().decode([Post].self, from: data)) ?? [] }
     }
 
     func bootstrap() async {
@@ -25,7 +29,7 @@ final class AppModel: ObservableObject {
             current = refreshed
             persist(current)
         }
-        me = try? await SupabaseService.shared.profile(id: current.user.id, token: current.accessToken)
+        if let profile = try? await SupabaseService.shared.profile(id: current.user.id, token: current.accessToken) { me = profile; cacheProfile(profile) }
         await loadTimeline()
     }
 
@@ -34,7 +38,7 @@ final class AppModel: ObservableObject {
         do {
             let value = try await SupabaseService.shared.login(email: email, password: password)
             persist(value)
-            me = try? await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken)
+            if let profile = try? await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) { me = profile; cacheProfile(profile) }
             Task { await loadTimeline() }
             return true
         } catch {
@@ -46,15 +50,22 @@ final class AppModel: ObservableObject {
     func signOut() {
         session = nil
         me = nil
+        posts = []
         KeychainStore.delete(account: sessionAccount)
+        UserDefaults.standard.removeObject(forKey: cachedProfileKey)
+        UserDefaults.standard.removeObject(forKey: cachedPostsKey)
     }
 
     func loadTimeline() async {
         isLoading = true
         defer { isLoading = false }
-        do { posts = try await SupabaseService.shared.posts(token: session?.accessToken) }
+        do {
+            posts = try await SupabaseService.shared.posts(token: session?.accessToken)
+            if let data = try? JSONEncoder().encode(posts) { UserDefaults.standard.set(data, forKey: cachedPostsKey) }
+        }
         catch is CancellationError { return }
         catch let error as URLError where error.code == .cancelled { return }
+        catch let error as URLError where Self.isTransientNetworkError(error) { return }
         catch { errorMessage = error.localizedDescription }
     }
 
@@ -76,5 +87,13 @@ final class AppModel: ObservableObject {
     private func persist(_ value: AuthSession) {
         session = value
         if let data = try? JSONEncoder().encode(value) { try? KeychainStore.save(data, account: sessionAccount) }
+    }
+
+    private func cacheProfile(_ profile: Profile) {
+        if let data = try? JSONEncoder().encode(profile) { UserDefaults.standard.set(data, forKey: cachedProfileKey) }
+    }
+
+    private static func isTransientNetworkError(_ error: URLError) -> Bool {
+        [.cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost, .notConnectedToInternet, .timedOut, .dataNotAllowed].contains(error.code)
     }
 }
