@@ -19,7 +19,7 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, allPosts, cachedPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
+import { allUsers, getUser, allPosts, cachedPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
          markPendingDelete, unmarkPendingDelete } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_HANDLE } from './official-account.js';
@@ -1381,7 +1381,8 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('#edit-profile-btn')) {
     e.preventDefault();
     if (!currentUser()) return openAuth('login');
-    openEditProfile();
+    const handle = e.target.closest('#edit-profile-btn').getAttribute('data-edit-profile-handle');
+    openEditProfile(handle ? getUser(handle) : null);
     return;
   }
 

@@ -468,8 +468,7 @@ export function renderProfile(handle) {
   //   overlay OFF + viewing /hrmcngs           → self (Edit)
   //   overlay OFF + viewing /spotcode_official → other (Follow)
   //   overlay ON  + viewing /hrmcngs           → other (Follow) ← user asked
-  //   overlay ON  + viewing /spotcode_official → self (no Follow,
-  //                                              no Edit — RLS blocks)
+  //   overlay ON  + viewing /spotcode_official → self (Edit for staff)
   //
   // `canEdit` only fires for the real auth user when the overlay is
   // OFF (Edit submits a profiles UPDATE that RLS would reject
@@ -477,7 +476,10 @@ export function renderProfile(handle) {
   // gate — overlay flips its target from your real handle to the
   // brand handle.
   const overlayOn = !!(me && isPostingAsOfficial());
-  const canEdit = !!(me && !overlayOn && me.handle === u.handle);
+  const canEdit = !!(me && (
+    (!overlayOn && me.handle === u.handle) ||
+    (overlayOn && u.handle === OFFICIAL_HANDLE)
+  ));
   const viewingSelfRow = overlayOn
     ? u.handle === OFFICIAL_HANDLE
     : !!(me && me.handle === u.handle);
@@ -523,7 +525,7 @@ export function renderProfile(handle) {
           // Everyone else gets Follow + More — clicks execute as
           // the auth user (overlay doesn't affect follow inserts).
           (canEdit
-            ? '<button class="btn btn--primary" id="edit-profile-btn">' + t('profile.btn.edit') + '</button>'
+            ? '<button class="btn btn--primary" id="edit-profile-btn" data-edit-profile-handle="' + u.handle + '">' + t('profile.btn.edit') + '</button>'
             : (viewingSelfRow || (overlayOn && me && me.handle === u.handle))
               ? ''
               : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +

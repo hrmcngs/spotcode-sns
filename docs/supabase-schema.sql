@@ -1485,3 +1485,35 @@ alter table public.posts
 create index if not exists posts_event_url_idx
   on public.posts (event_url)
   where event_url is not null;
+
+-- ===================================================================
+-- Stage 32 — staff may edit the shared official profile
+-- ===================================================================
+-- The normal owner policy remains unchanged. This narrowly permits an
+-- authenticated admin/operator to update only @spotcode_official; it does
+-- not grant staff blanket write access to other users' profiles.
+
+drop policy if exists "staff can update official profile" on public.profiles;
+create or replace function public.can_manage_official_profile()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and (is_admin = true or is_operator = true)
+  );
+$$;
+revoke execute on function public.can_manage_official_profile() from public, anon;
+grant execute on function public.can_manage_official_profile() to authenticated;
+
+create policy "staff can update official profile"
+  on public.profiles for update
+  using (
+    handle = 'spotcode_official'
+    and public.can_manage_official_profile()
+  )
+  with check (handle = 'spotcode_official');

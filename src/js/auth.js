@@ -434,18 +434,20 @@ function parseMissingCol(error) {
 
 export async function updateProfile(patch) {
   if (!cachedUser) throw new Error('ログインしていません');
-  // Refuse to write while the "posting as official" overlay is on —
-  // the user is viewing settings as @spotcode_official but their
-  // auth.uid() is still the real staffer, so the RLS update would
-  // either silently rewrite the wrong row or 403. Surface a clear
-  // message instead.
   let postingAsOfficial = false;
   try {
     const { isPostingAsOfficial } = await import('./posting-identity.js');
     postingAsOfficial = !!isPostingAsOfficial();
   } catch {}
+  let targetId = cachedUser.id;
   if (postingAsOfficial) {
-    throw new Error('公式モード中は自分のプロフィールを編集できません。アバターメニューで自分に戻ってから保存してください。');
+    const [{ isAdmin, isOperator }, { getOfficialAccount }] = await Promise.all([
+      import('./dev-mode.js'), import('./official-account.js'),
+    ]);
+    if (!isAdmin() && !isOperator()) throw new Error('公式プロフィールは管理者・運営者のみ編集できます');
+    const official = await getOfficialAccount();
+    if (!official?.id) throw new Error('公式プロフィールを取得できませんでした');
+    targetId = official.id;
   }
   const supa = await getClient();
   const db = {};
@@ -481,7 +483,7 @@ export async function updateProfile(patch) {
     // user data on a typo / RLS bug).
     let lastErrorMsg = '';
     for (let i = 0; i < 5; i++) {
-      const { error } = await supa.from('profiles').update(db).eq('id', cachedUser.id);
+      const { error } = await supa.from('profiles').update(db).eq('id', targetId);
       if (!error) break;
       lastErrorMsg = error.message || '';
       const col = parseMissingCol(error);
@@ -497,6 +499,17 @@ export async function updateProfile(patch) {
         '。docs/supabase-schema.sql の該当 Stage を Supabase で実行してください。'
       );
     }
+  }
+  if (postingAsOfficial) {
+    const { data: row, error } = await supa.from('profiles').select('*').eq('id', targetId).maybeSingle();
+    if (error || !row) throw new Error(error?.message || '公式プロフィールを再取得できませんでした');
+    const updated = projectUser({ id: row.id, email: '' }, row);
+    const { setCachedOfficialAccount } = await import('./official-account.js');
+    setCachedOfficialAccount({
+      id: row.id, handle: row.handle, name: row.name,
+      avatar_url: row.avatar_url, avatar_shape: row.avatar_shape,
+    });
+    return updated;
   }
   await refreshFromSession();
   return cachedUser;

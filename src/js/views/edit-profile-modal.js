@@ -7,6 +7,7 @@ import { icon }                       from '../icons.js';
 import { fileToAvatarDataUrl, renderAvatar } from '../avatar.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
 import { linkGithub, unlinkGithub } from '../github-oauth.js';
+import { isPostingAsOfficial } from '../posting-identity.js';
 
 let rootEl = null;
 let stagedAvatarImage = undefined; // undefined = unchanged, '' = clear, 'data:...' = new
@@ -59,7 +60,7 @@ function githubVerifyBlock(u) {
   );
 }
 
-function template(u) {
+function template(u, editingOfficial) {
   return (
     '<div class="modal" id="edit-profile-modal" hidden>' +
       '<div class="modal__backdrop" data-edit-close></div>' +
@@ -108,7 +109,7 @@ function template(u) {
             '<input name="instagram" maxlength="30" value="' + attr(u.instagram || '') + '" placeholder="hrmcngs">' +
           '</label>' +
 
-          githubVerifyBlock(u) +
+          (editingOfficial ? '' : githubVerifyBlock(u)) +
 
           '<div class="edit-actions">' +
             '<button type="button" class="btn btn--ghost" data-edit-close>Cancel</button>' +
@@ -120,7 +121,7 @@ function template(u) {
         // Password change — separate form so Save above stays a
         // single-purpose profile-fields write. Empty input + Save
         // does nothing; non-empty hits Supabase auth.updateUser.
-        '<form class="auth-form" id="edit-password-form">' +
+        (editingOfficial ? '' : '<form class="auth-form" id="edit-password-form">' +
           '<label>パスワード変更 <span class="hint">(8 文字以上、変更しないなら空のまま)</span>' +
             '<input name="newPassword" type="password" minlength="8" ' +
               'autocomplete="new-password" placeholder="新しいパスワード">' +
@@ -129,7 +130,7 @@ function template(u) {
             '<button type="submit" class="btn btn--ghost btn--sm">パスワードを更新</button>' +
             '<span class="verify-row__status" data-password-status></span>' +
           '</div>' +
-        '</form>' +
+        '</form>') +
       '</div>' +
     '</div>'
   );
@@ -146,8 +147,9 @@ function setPreview(userLike) {
   if (slot) slot.innerHTML = renderAvatar(userLike, { size: 'xl' });
 }
 
-export function openEditProfile() {
-  const u = currentUser();
+export function openEditProfile(profile) {
+  const editingOfficial = isPostingAsOfficial();
+  const u = editingOfficial ? profile : currentUser();
   if (!u) return;
 
   stagedAvatarImage = undefined;
@@ -155,7 +157,7 @@ export function openEditProfile() {
 
   if (rootEl) rootEl.remove();
   const host = document.createElement('div');
-  host.innerHTML = template(u);
+  host.innerHTML = template(u, editingOfficial);
   document.body.appendChild(host.firstElementChild);
   rootEl = document.getElementById('edit-profile-modal');
 
@@ -279,6 +281,7 @@ export function openEditProfile() {
       if (stagedAvatarImage !== undefined) patch.avatarImage = stagedAvatarImage;
       await updateProfile(patch);
       close();
+      if (editingOfficial) location.reload();
     } catch (ex) {
       err.textContent = ex.message || String(ex);
       if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }

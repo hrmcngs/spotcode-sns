@@ -52,6 +52,13 @@ export function cachedOfficialAccount() {
   return cached && cached.value ? cached.value : null;
 }
 
+// Refresh the synchronous display identity immediately after an authorised
+// profile edit instead of leaving the topbar/avatar on the six-hour cache.
+export function setCachedOfficialAccount(value) {
+  if (!value) return;
+  cached = { ts: Date.now(), value };
+}
+
 // Async accessor — returns cached when fresh, otherwise re-probes.
 // Concurrent callers share the in-flight promise.
 export async function getOfficialAccount() {
