@@ -681,11 +681,9 @@ function dispatch(path) {
     // Fetch from Supabase if we don't have the user locally, then
     // pull the GitHub contribution graph once we know the
     // github_handle on the profile.
-    hydrateProfile(handle).then(() => {
-      hydrateProfileActivity(handle);
-      hydrateProfileLanguages(handle);
-      hydrateProfileTasks(handle);
-    });
+    // hydrateProfile starts the independent GitHub panels itself. Calling
+    // them again here doubled work on every profile navigation.
+    hydrateProfile(handle);
   } else {
     document.title = 'Not found / spotcode-sns';
     app.innerHTML =

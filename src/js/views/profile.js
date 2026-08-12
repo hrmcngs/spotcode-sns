@@ -800,15 +800,38 @@ async function hydrateProfileBody(handle) {
   }
 
   const tab = activeTab;
+  const cacheScope = tab === 'posts' || tab === 'spots' ? 'handle:' + handle : null;
+  const cachedForTab = cacheScope ? cachedPosts(cacheScope) : null;
+  const visibleCache = tab === 'spots' && cachedForTab
+    ? cachedForTab.filter(p => p.spot)
+    : cachedForTab;
+  // A revisit must feel instant even on a poor connection. Keep cached rows
+  // on screen while the fresh request runs.
+  if (visibleCache) {
+    const list = slot();
+    if (list) {
+      list.innerHTML = visibleCache.length
+        ? visibleCache.map(renderPost).join('')
+        : '<div class="stub"><p class="stub__sub">' +
+            (tab === 'spots' ? t('profile.empty.spots') : t('profile.empty.posts')) +
+          '</p></div>';
+    }
+    if (tab === 'posts') {
+      const countEl = document.getElementById('profile-postcount');
+      if (countEl) countEl.textContent = String(visibleCache.length);
+    }
+  }
   let posts;
   try {
     const p = tab === 'likes'      ? likedPostsByHandle(handle)
             : tab === 'spots'      ? postsByHandle(handle).then(list => list.filter(p => p.spot))
             :                        postsByHandle(handle);
-    posts = await withTimeout(p, 15000, 'profile:' + tab);
+    posts = await withTimeout(p, 30000, 'profile:' + tab);
   } catch (err) {
     if (!stillHere()) return;
     console.error('hydrateProfileBody', err);
+    // A background refresh failure must not erase usable cached content.
+    if (visibleCache) return;
     const list = slot();
     if (list) {
       list.innerHTML =
