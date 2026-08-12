@@ -6,7 +6,7 @@ import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
 import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, hiddenTaskRepos, setTaskRepoVisible, privateTasksEnabled, setPrivateTasksEnabled } from '../display-prefs.js';
-import { linkGithubForPrivateIssues, getGithubToken } from '../github-oauth.js';
+import { linkGithubForPrivateIssues, getGithubToken, githubTokenCanReadPrivateRepos } from '../github-oauth.js';
 import { cachedTasks, fetchTasks } from '../github-tasks.js';
 import { setGithubApiToken } from '../language-stats.js';
 import { isPostingAsOfficial, setPostingAsOfficial } from '../posting-identity.js';
@@ -24,6 +24,7 @@ import { isPushEnabled, setPushEnabled, browserPermissionState, requestBrowserPe
 // from currentUser(); each edit immediately POSTs via updateProfile.
 const audienceState = { closeFriends: [], orgMembers: [] };
 const hydratedTaskSettings = new Set();
+let privateIssueAuthError = '';
 
 function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
@@ -355,6 +356,8 @@ function displaySection() {
           (hiddenRepos.has(repo) ? '' : ' checked') + '> <span>' + attr(repo) + '</span></label>'
       ).join('') + '</div>'
     : '<p class="settings__hint">Issue取得後に、ここで表示するリポジトリを選べます。</p>';
+  const privateStatus = privateIssueAuthError
+    ? '<p class="settings-status is-bad">' + attr(privateIssueAuthError) + '</p>' : '';
   return (
     '<section class="settings-card">' +
       '<h2>' + t('settings.lang.title') + '</h2>' +
@@ -397,6 +400,7 @@ function displaySection() {
       '<div class="settings-form__actions"><button type="button" class="btn btn--ghost" id="private-tasks-toggle">' +
         (privateTasksEnabled() ? '非公開Issue表示をOFF' : '非公開Issueを表示する（GitHub再認証）') +
       '</button></div>' +
+      privateStatus +
     '</section>' +
     '<section class="settings-card">' +
       '<h2>' + t('settings.map.title') + '</h2>' +
@@ -582,8 +586,19 @@ export function bindSettings() {
     if (!hydratedTaskSettings.has(hydrationKey)) {
       hydratedTaskSettings.add(hydrationKey);
       (async () => {
-        if (includePrivate) setGithubApiToken(await getGithubToken());
-        await fetchTasks(settingsGh, includePrivate);
+        if (includePrivate) {
+          const token = await getGithubToken();
+          if (!token || !(await githubTokenCanReadPrivateRepos(token))) {
+            privateIssueAuthError = 'GitHubの非公開Repo権限を確認できません。OFFにしてから再認証してください。';
+          } else {
+            setGithubApiToken(token);
+            const tasks = await fetchTasks(settingsGh, true);
+            if (!tasks) privateIssueAuthError = '非公開Issueを取得できません。GitHub再認証でrepo権限を許可してください。';
+            else privateIssueAuthError = '';
+          }
+        } else {
+          await fetchTasks(settingsGh, false);
+        }
         const app = document.getElementById('app');
         if (app && currentSettingsTab() === 'display') { app.innerHTML = renderSettings(); bindSettings(); }
       })().catch(() => hydratedTaskSettings.delete(hydrationKey));
@@ -739,6 +754,7 @@ export function bindSettings() {
   document.getElementById('private-tasks-toggle')?.addEventListener('click', async () => {
     if (privateTasksEnabled()) {
       setPrivateTasksEnabled(false);
+      privateIssueAuthError = '';
       const app = document.getElementById('app');
       if (app) { app.innerHTML = renderSettings(); bindSettings(); }
       return;

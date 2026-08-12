@@ -142,6 +142,19 @@ export async function getGithubToken() {
   return data?.session?.provider_token || null;
 }
 
+export async function githubTokenCanReadPrivateRepos(token) {
+  if (!token) return false;
+  try {
+    const response = await fetch('https://api.github.com/user', {
+      headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + token },
+    });
+    if (!response.ok) return false;
+    const scopes = String(response.headers.get('x-oauth-scopes') || '')
+      .split(',').map((value) => value.trim().toLowerCase());
+    return scopes.includes('repo');
+  } catch { return false; }
+}
+
 // Detach the GitHub identity from the auth user and clear the profile
 // row. Two-step because unlinkIdentity is auth-service side and the
 // profile row is application side; both must succeed for the user's

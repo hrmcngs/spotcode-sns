@@ -10,9 +10,9 @@
 // Cache aggressively (1h TTL) and share the app-wide cooldown flag
 // with language-stats.js so a 403 in one place backs off the other.
 
-import { fetchJson, isRateLimited } from './language-stats.js';
+import { fetchJson, isRateLimited, hasGithubApiToken } from './language-stats.js';
 
-const CACHE_KEY = 'spotcode:gh-tasks:v1';
+const CACHE_KEY = 'spotcode:gh-tasks:v2';
 const TTL_MS    = 60 * 60 * 1000;   // 1 h
 const MAX_ITEMS = 30;                // hard cap so a mega-issuer doesn't blow storage
 
@@ -119,6 +119,10 @@ export function cachedTasks(ghHandle, includePrivate = false) {
 // card degrades gracefully rather than showing an error every render.
 export async function fetchTasks(ghHandle, includePrivate = false) {
   if (!ghHandle) return null;
+  // Never populate the private cache through an anonymous request.
+  // GitHub would return 200 with public-only results, making Settings
+  // look successfully enabled while private repos stayed invisible.
+  if (includePrivate && !hasGithubApiToken()) return null;
   if (isRateLimited()) return cachedTasks(ghHandle, includePrivate);
 
   // Search qualifiers:
