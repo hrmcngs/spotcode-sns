@@ -84,10 +84,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func updateProfile(name: String, bio: String, location: String) async -> Bool {
+    func updateProfile(name: String, bio: String, location: String, avatarURL: String?, avatarShape: String) async -> Bool {
         guard let session, let id = me?.id else { return false }
         do {
-            let profile = try await SupabaseService.shared.updateProfile(id: id, name: name, bio: bio, location: location, token: session.accessToken)
+            let profile = try await SupabaseService.shared.updateProfile(id: id, name: name, bio: bio, location: location, avatarURL: avatarURL, avatarShape: avatarShape, token: session.accessToken)
             me = profile
             cacheProfile(profile)
             return true

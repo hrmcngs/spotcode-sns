@@ -519,6 +519,47 @@ private struct DataURLImage: View {
     }
 }
 
+private func decodedDataURLImage(_ value: String?) -> UIImage? {
+    guard let value, value.lowercased().hasPrefix("data:image/"),
+          let comma = value.firstIndex(of: ","),
+          let data = Data(base64Encoded: String(value[value.index(after: comma)...])) else { return nil }
+    return UIImage(data: data)
+}
+
+private struct ProfileImagePicker: UIViewControllerRepresentable {
+    @Binding var image: String?
+    @Environment(\.dismiss) private var dismiss
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var configuration = PHPickerConfiguration(photoLibrary: .shared())
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        var parent: ProfileImagePicker
+        init(_ parent: ProfileImagePicker) { self.parent = parent }
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
+                parent.dismiss(); return
+            }
+            provider.loadObject(ofClass: UIImage.self) { object, _ in
+                guard let source = object as? UIImage,
+                      let data = source.resizedForPost(maxSide: 256).jpegData(compressionQuality: 0.85) else {
+                    DispatchQueue.main.async { self.parent.dismiss() }; return
+                }
+                DispatchQueue.main.async {
+                    self.parent.image = "data:image/jpeg;base64," + data.base64EncodedString()
+                    self.parent.dismiss()
+                }
+            }
+        }
+    }
+}
+
 private extension UIImage {
     func resizedForPost(maxSide: CGFloat = 1080) -> UIImage {
         let scale = min(1, maxSide / max(size.width, size.height))
@@ -867,15 +908,25 @@ struct AvatarView: View {
     let profile: Profile?
     var size: CGFloat = 42
     var body: some View {
-        AsyncImage(url: profile?.avatarURL.flatMap(URL.init(string:))) { phase in
-            if let image = phase.image { image.resizable().scaledToFill() }
-            else {
-                ZStack {
-                    LinearGradient(colors: [SpotcodeTheme.accent, Color(red: 46/255, green: 160/255, blue: 67/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    Text(String(profile?.name.first ?? "?")).foregroundColor(.white).fontWeight(.bold)
+        Group {
+            if let image = decodedDataURLImage(profile?.avatarURL) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else if let url = profile?.avatarURL.flatMap(URL.init(string:)), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { avatarFallback }
                 }
-            }
-        }.frame(width: size, height: size).clipShape(Circle())
+            } else { avatarFallback }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: profile?.avatarShape == "square" ? size * 0.2 : size / 2))
+    }
+
+    private var avatarFallback: some View {
+        ZStack {
+            LinearGradient(colors: [SpotcodeTheme.accent, Color(red: 46/255, green: 160/255, blue: 67/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            Text(String(profile?.name.first ?? "?")).foregroundColor(.white).fontWeight(.bold)
+        }
     }
 }
 
@@ -1365,24 +1416,42 @@ private struct EditProfileView: View {
     @State private var name = ""
     @State private var bio = ""
     @State private var location = ""
+    @State private var avatarURL: String?
+    @State private var avatarShape = "round"
+    @State private var showingImagePicker = false
     @State private var saving = false
     var body: some View {
         NavigationView {
-            VStack(spacing: 14) {
+            ScrollView {
+              VStack(spacing: 14) {
+                AvatarView(profile: previewProfile, size: 92)
+                HStack {
+                    Button("画像をアップロード") { showingImagePicker = true }.buttonStyle(OutlineButtonStyle())
+                    if avatarURL != nil { Button("画像を消す") { avatarURL = nil }.buttonStyle(OutlineButtonStyle()) }
+                }
+                Picker("アイコンの形", selection: $avatarShape) {
+                    Text("● 円").tag("round")
+                    Text("■ 角丸").tag("square")
+                }.pickerStyle(.segmented)
                 TextField("表示名", text: $name).spotcodeField()
                 TextField("自己紹介", text: $bio).spotcodeField()
                 TextField("場所", text: $location).spotcodeField()
-                Spacer()
-            }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+              }.padding()
+            }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
                 .navigationTitle("Edit profile").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(saving ? "保存中…" : "保存") { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving)
+                        Button(saving ? "保存中…" : "保存") { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location, avatarURL: avatarURL, avatarShape: avatarShape) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving)
                     }
                 }
-                .onAppear { name = profile.name; bio = profile.bio ?? ""; location = profile.location ?? "" }
+                .onAppear { name = profile.name; bio = profile.bio ?? ""; location = profile.location ?? ""; avatarURL = profile.avatarURL; avatarShape = profile.avatarShape ?? "round" }
+                .sheet(isPresented: $showingImagePicker) { ProfileImagePicker(image: $avatarURL) }
         }.preferredColorScheme(.dark)
+    }
+
+    private var previewProfile: Profile {
+        Profile(id: profile.id, handle: profile.handle, name: name.isEmpty ? profile.name : name, avatarURL: avatarURL, bio: profile.bio, location: profile.location, githubHandle: profile.githubHandle, createdAt: profile.createdAt, avatarShape: avatarShape, isAdmin: profile.isAdmin, isOperator: profile.isOperator)
     }
 }
 

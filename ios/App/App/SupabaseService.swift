@@ -103,8 +103,11 @@ actor SupabaseService {
         return try await request("rest/v1/profiles?or=(handle.ilike.*\(escaped)*,name.ilike.*\(escaped)*)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape&limit=12", token: token)
     }
 
-    func updateProfile(id: UUID, name: String, bio: String, location: String, token: String) async throws -> Profile {
-        let body = try JSONSerialization.data(withJSONObject: ["name": name, "bio": bio, "location": location])
+    func updateProfile(id: UUID, name: String, bio: String, location: String, avatarURL: String?, avatarShape: String, token: String) async throws -> Profile {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "name": name, "bio": bio, "location": location,
+            "avatar_url": avatarURL ?? NSNull(), "avatar_shape": avatarShape
+        ])
         let rows: [Profile] = try await request(
             "rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape",
             method: "PATCH", token: token, body: body, preferRepresentation: true
