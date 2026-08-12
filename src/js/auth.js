@@ -483,8 +483,19 @@ export async function updateProfile(patch) {
     // user data on a typo / RLS bug).
     let lastErrorMsg = '';
     for (let i = 0; i < 5; i++) {
-      const { error } = await supa.from('profiles').update(db).eq('id', targetId);
-      if (!error) break;
+      const query = supa.from('profiles').update(db).eq('id', targetId);
+      // PostgREST returns 200 + [] when UPDATE is hidden by RLS. Ask for the
+      // row while editing the official account so that case is distinguishable
+      // from a successful save.
+      const { data: updatedRows, error } = postingAsOfficial
+        ? await query.select('id')
+        : await query;
+      if (!error) {
+        if (postingAsOfficial && Array.isArray(updatedRows) && updatedRows.length === 0) {
+          throw new Error('公式プロフィールを保存できません。Supabase SQL Editorで Stage 32 を実行してください。');
+        }
+        break;
+      }
       lastErrorMsg = error.message || '';
       const col = parseMissingCol(error);
       if (!col || !OPTIONAL_PROFILE_COLS.has(col) || !(col in db)) throw new Error(lastErrorMsg);

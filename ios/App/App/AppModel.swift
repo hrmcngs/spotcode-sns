@@ -188,7 +188,14 @@ final class AppModel: ObservableObject {
                 rememberAccount(session: session, profile: profile)
             }
             return true
-        } catch { errorMessage = error.localizedDescription; return false }
+        } catch {
+            if editingOfficial {
+                errorMessage = "公式プロフィールを保存できませんでした。Supabase SQL Editorで docs/supabase-schema.sql の Stage 32 を実行してください。\n\(error.localizedDescription)"
+            } else {
+                errorMessage = error.localizedDescription
+            }
+            return false
+        }
     }
 
     private func persist(_ value: AuthSession) {
