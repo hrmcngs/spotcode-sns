@@ -5,7 +5,8 @@ import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode, maskHandle, maskName 
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
-import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden } from '../display-prefs.js';
+import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, hiddenTaskRepos, setTaskRepoVisible } from '../display-prefs.js';
+import { cachedTasks } from '../github-tasks.js';
 import { isPostingAsOfficial, setPostingAsOfficial } from '../posting-identity.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
@@ -341,6 +342,16 @@ function displaySection() {
   const lang = getLang();
   const hidden = badgesHidden();
   const tHidden = tasksHidden();
+  const me = currentUser();
+  const taskItems = cachedTasks(me?.github?.handle)?.items || [];
+  const taskRepos = [...new Set(taskItems.map((item) => item.repo).filter(Boolean))].sort();
+  const hiddenRepos = new Set(hiddenTaskRepos());
+  const repoChoices = taskRepos.length
+    ? '<div class="settings-task-repos">' + taskRepos.map((repo) =>
+        '<label class="settings-check"><input type="checkbox" data-task-repo="' + attr(repo) + '"' +
+          (hiddenRepos.has(repo) ? '' : ' checked') + '> <span>' + attr(repo) + '</span></label>'
+      ).join('') + '</div>'
+    : '<p class="settings__hint">Issue取得後に、ここで表示するリポジトリを選べます。</p>';
   return (
     '<section class="settings-card">' +
       '<h2>' + t('settings.lang.title') + '</h2>' +
@@ -379,6 +390,7 @@ function displaySection() {
           (tHidden ? t('settings.display.tasks.show') : t('settings.display.tasks.hide')) +
         '</button>' +
       '</div>' +
+      '<h3>表示するリポジトリ</h3>' + repoChoices +
     '</section>' +
     '<section class="settings-card">' +
       '<h2>' + t('settings.map.title') + '</h2>' +
@@ -693,6 +705,11 @@ export function bindSettings() {
     setTasksHidden(!tasksHidden());
     const app = document.getElementById('app');
     if (app) { app.innerHTML = renderSettings(); bindSettings(); }
+  });
+  document.querySelectorAll('[data-task-repo]').forEach((input) => {
+    input.addEventListener('change', () => {
+      setTaskRepoVisible(input.getAttribute('data-task-repo') || '', input.checked);
+    });
   });
 
   // Push-notify toggle — chains the browser permission ask onto the

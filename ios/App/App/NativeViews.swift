@@ -1514,15 +1514,20 @@ private enum IssueDueStatus { case overdue, soon, later }
 private struct OpenIssuesCard: View {
     let handle: String
     let result: GitHubIssueSearchResponse?
+    @AppStorage("spotcode.hiddenIssueRepos") private var hiddenIssueReposJSON = "[]"
     @State private var listExpanded = false
     @State private var expandedIssues: Set<Int> = []
     @State private var selectedRepository: String?
-    private var total: Int { result?.totalCount ?? 0 }
+    private var allowedIssues: [GitHubIssue] {
+        let hidden = decodeRepoSet(hiddenIssueReposJSON)
+        return (result?.items ?? []).filter { !$0.isHiddenFromSpotcode && !hidden.contains($0.repositoryName) }
+    }
+    private var total: Int { allowedIssues.count }
     private var issueGroups: [(key: String, value: [GitHubIssue])] {
-        Array(Dictionary(grouping: result?.items ?? [], by: \.repositoryName).sorted { $0.key < $1.key }.prefix(8))
+        Array(Dictionary(grouping: allowedIssues, by: \.repositoryName).sorted { $0.key < $1.key }.prefix(8))
     }
     private var visibleIssues: [GitHubIssue] {
-        let filtered = (result?.items ?? []).filter { selectedRepository == nil || $0.repositoryName == selectedRepository }
+        let filtered = allowedIssues.filter { selectedRepository == nil || $0.repositoryName == selectedRepository }
         return Array(filtered.sorted { left, right in
             if left.isTemplateTask != right.isTemplateTask { return left.isTemplateTask }
             switch (left.dueDate, right.dueDate) {
@@ -1536,7 +1541,7 @@ private struct OpenIssuesCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues").foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text("公開リポの未クローズ issue (task)").font(.caption2).foregroundColor(SpotcodeTheme.muted)
-                if result?.items.isEmpty == false {
+                if !allowedIssues.isEmpty {
                     Button(listExpanded ? "折りたたむ" : "リストを表示") { withAnimation { listExpanded.toggle() } }
                         .font(.caption2).foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 8).padding(.vertical, 3)
                         .overlay(Capsule().stroke(SpotcodeTheme.border))
@@ -1557,7 +1562,7 @@ private struct OpenIssuesCard: View {
             }
             if result == nil {
                 ProgressView("Issueを読み込み中…").font(.caption).foregroundColor(SpotcodeTheme.muted)
-            } else if result?.items.isEmpty == true {
+            } else if allowedIssues.isEmpty {
                 Text("未クローズのIssueはありません").font(.caption).foregroundColor(SpotcodeTheme.muted)
             } else if listExpanded {
                 ForEach(visibleIssues) { issue in
@@ -1748,11 +1753,42 @@ private struct PrivacySettings: View {
 }
 
 private struct DisplaySettings: View {
+    @EnvironmentObject private var model: AppModel
     @State private var compact = false
+    @State private var issueRepositories: [String] = []
+    @AppStorage("spotcode.hiddenIssueRepos") private var hiddenIssueReposJSON = "[]"
     var body: some View { VStack(spacing: 18) {
         SettingsCard("テーマ") { Label("ダーク", systemImage: "moon.fill"); Text("Webモバイル版と同じGitHubダークテーマです。").foregroundColor(SpotcodeTheme.muted) }
         SettingsCard("タイムライン") { Toggle("コンパクト表示", isOn: $compact) }
+        SettingsCard("Open issues") {
+            Text("プロフィールに表示するリポジトリ").foregroundColor(SpotcodeTheme.muted)
+            if issueRepositories.isEmpty { Text("Issue取得後に選択できます").font(.caption).foregroundColor(SpotcodeTheme.muted) }
+            ForEach(issueRepositories, id: \.self) { repo in
+                Toggle(repo, isOn: Binding(
+                    get: { !decodeRepoSet(hiddenIssueReposJSON).contains(repo) },
+                    set: { visible in
+                        var hidden = decodeRepoSet(hiddenIssueReposJSON)
+                        if visible { hidden.remove(repo) } else { hidden.insert(repo) }
+                        hiddenIssueReposJSON = encodeRepoSet(hidden)
+                    }
+                )).font(.caption)
+            }
+        }
+    }.task {
+        guard let handle = model.me?.githubHandle,
+              let result = try? await SupabaseService.shared.githubOpenIssues(handle: handle) else { return }
+        issueRepositories = Array(Set(result.items.map(\.repositoryName))).sorted()
     }}
+}
+
+private func decodeRepoSet(_ value: String) -> Set<String> {
+    guard let data = value.data(using: .utf8), let items = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+    return Set(items)
+}
+
+private func encodeRepoSet(_ value: Set<String>) -> String {
+    guard let data = try? JSONEncoder().encode(value.sorted()), let text = String(data: data, encoding: .utf8) else { return "[]" }
+    return text
 }
 
 private struct OutlineButtonStyle: ButtonStyle {

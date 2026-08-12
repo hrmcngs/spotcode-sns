@@ -137,6 +137,12 @@ struct GitHubIssue: Codable, Identifiable, Hashable {
     var isTemplateTask: Bool {
         dueDate != nil || labels.contains { $0.name.caseInsensitiveCompare("task") == .orderedSame }
     }
+
+    var isHiddenFromSpotcode: Bool {
+        guard let body else { return false }
+        let pattern = "(?:\\*\\*)?\\s*spotcode\\s*表示\\s*(?:\\*\\*)?\\s*[:：]\\s*(?:しない|非表示|off|false|no)\\b"
+        return body.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
 }
 
 struct GitHubIssueSearchResponse: Codable {

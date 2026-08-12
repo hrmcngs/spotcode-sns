@@ -84,6 +84,11 @@ function shape(item) {
   };
 }
 
+function hiddenByIssueTemplate(item) {
+  const body = String(item?.body || '');
+  return /(?:\*\*)?\s*spotcode\s*表示\s*(?:\*\*)?\s*[:：]\s*(?:しない|非表示|off|false|no)\b/im.test(body);
+}
+
 function readCache() {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
   catch { return {}; }
@@ -132,7 +137,10 @@ export async function fetchTasks(ghHandle) {
   catch { return cachedTasks(ghHandle); }
   if (!raw) return cachedTasks(ghHandle);
 
-  const items = (raw.items || []).map(shape);
+  // Keep every repo in cache so turning a repo back on in Settings is
+  // reflected immediately without waiting for another GitHub request.
+  // Per-repo visibility is applied by the profile renderer instead.
+  const items = (raw.items || []).filter((item) => !hiddenByIssueTemplate(item)).map(shape);
   // Sort so the most-urgent issues surface first:
   //   1. Items WITH a parsed due date, ordered earliest → latest
   //      (overdue is naturally at the top since its ts is in the past)

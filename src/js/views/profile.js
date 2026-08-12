@@ -21,7 +21,7 @@ import { maskHandle, maskName } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
 import { fetchTasks, cachedTasks } from '../github-tasks.js';
 import { renderMarkdown } from '../markdown.js';
-import { tasksHidden } from '../display-prefs.js';
+import { tasksHidden, hiddenTaskRepos } from '../display-prefs.js';
 
 // (Previously a `let renderVersion = 0` lived here as the freshness
 //  flag for async hydrations. It's been replaced with path-based
@@ -312,8 +312,9 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '') {
       '</div>'
     );
   }
-  const { totalCount, items } = tasks;
-  const all = items || [];
+  const hiddenRepos = new Set(hiddenTaskRepos().map((value) => value.toLowerCase()));
+  const all = (tasks.items || []).filter((item) => !hiddenRepos.has(String(item.repo || '').toLowerCase()));
+  const totalCount = all.length;
 
   // Repo filter chips — one per distinct repo, plus an "All" chip
   // that clears the filter. Count is the number of issues in each

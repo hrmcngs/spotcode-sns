@@ -7,6 +7,7 @@ assignees: []
 ---
 
 **期限**: YYYY-MM-DD
+**spotcode表示**: する
 
 <!-- 時刻を含めたいときは YYYY-MM-DD HH:MM (24h)。時刻を省くと "その日いっぱい" 扱い。 -->
 
