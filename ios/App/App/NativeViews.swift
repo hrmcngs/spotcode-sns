@@ -1683,8 +1683,9 @@ private struct OpenIssuesCard: View {
 private extension Text {
     func issuePill() -> some View { self.font(.caption).padding(.horizontal, 9).padding(.vertical, 5).overlay(Capsule().stroke(SpotcodeTheme.border)) }
     func issueFilterPill(selected: Bool) -> some View {
-        self.font(.caption.weight(selected ? .bold : .regular)).padding(.horizontal, 9).padding(.vertical, 5)
-            .fontDesign(.monospaced).foregroundColor(selected ? SpotcodeTheme.text : SpotcodeTheme.muted)
+        self.font(.system(.caption, design: .monospaced).weight(selected ? .bold : .regular))
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .foregroundColor(selected ? SpotcodeTheme.text : SpotcodeTheme.muted)
             .background(selected ? SpotcodeTheme.accent.opacity(0.08) : Color.clear).clipShape(Capsule())
             .overlay(Capsule().stroke(selected ? SpotcodeTheme.accent : SpotcodeTheme.border))
     }
