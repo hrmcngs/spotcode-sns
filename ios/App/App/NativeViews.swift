@@ -1514,12 +1514,14 @@ private struct OpenIssuesCard: View {
     let result: GitHubIssueSearchResponse?
     @State private var listExpanded = false
     @State private var expandedIssues: Set<Int> = []
+    @State private var selectedRepository: String?
     private var total: Int { result?.totalCount ?? 0 }
     private var issueGroups: [(key: String, value: [GitHubIssue])] {
         Array(Dictionary(grouping: result?.items ?? [], by: \.repositoryName).sorted { $0.key < $1.key }.prefix(8))
     }
     private var visibleIssues: [GitHubIssue] {
-        Array((result?.items ?? []).sorted { left, right in
+        let filtered = (result?.items ?? []).filter { selectedRepository == nil || $0.repositoryName == selectedRepository }
+        return Array(filtered.sorted { left, right in
             if left.isTemplateTask != right.isTemplateTask { return left.isTemplateTask }
             switch (left.dueDate, right.dueDate) {
             case let (a?, b?): return a < b
@@ -1538,9 +1540,14 @@ private struct OpenIssuesCard: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    Link(destination: URL(string: "https://github.com/issues?q=is%3Aopen+user%3A\(handle)")!) { Text("All \(total)").issuePill() }
+                    Button { selectedRepository = nil; listExpanded = true; expandedIssues.removeAll() } label: {
+                        Text("All \(total)").issueFilterPill(selected: selectedRepository == nil)
+                    }.buttonStyle(.plain)
                     ForEach(issueGroups, id: \.key) { entry in
-                        Text("\(entry.key.split(separator: "/").last.map(String.init) ?? entry.key) \(entry.value.count)").issuePill()
+                        Button { selectedRepository = entry.key; listExpanded = true; expandedIssues.removeAll() } label: {
+                            Text("\(entry.key.split(separator: "/").last.map(String.init) ?? entry.key) \(entry.value.count)")
+                                .issueFilterPill(selected: selectedRepository == entry.key)
+                        }.buttonStyle(.plain)
                     }
                 }.foregroundColor(SpotcodeTheme.text)
             }
@@ -1602,11 +1609,18 @@ private struct OpenIssuesCard: View {
     private func collapseAll() {
         listExpanded = false
         expandedIssues.removeAll()
+        selectedRepository = nil
     }
 }
 
 private extension Text {
     func issuePill() -> some View { self.font(.caption).padding(.horizontal, 9).padding(.vertical, 5).overlay(Capsule().stroke(SpotcodeTheme.border)) }
+    func issueFilterPill(selected: Bool) -> some View {
+        self.font(.caption.weight(selected ? .bold : .regular)).padding(.horizontal, 9).padding(.vertical, 5)
+            .foregroundColor(selected ? SpotcodeTheme.background : SpotcodeTheme.text)
+            .background(selected ? SpotcodeTheme.text : Color.clear).clipShape(Capsule())
+            .overlay(Capsule().stroke(selected ? SpotcodeTheme.text : SpotcodeTheme.border))
+    }
 }
 
 private struct ProfileCount: View {
