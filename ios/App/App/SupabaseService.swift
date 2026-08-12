@@ -104,10 +104,11 @@ actor SupabaseService {
     }
 
     func updateProfile(id: UUID, name: String, bio: String, location: String, avatarURL: String?, avatarShape: String, token: String) async throws -> Profile {
-        let body = try JSONSerialization.data(withJSONObject: [
+        let payload: [String: Any] = [
             "name": name, "bio": bio, "location": location,
-            "avatar_url": avatarURL ?? NSNull(), "avatar_shape": avatarShape
-        ])
+            "avatar_url": (avatarURL as Any?) ?? NSNull(), "avatar_shape": avatarShape
+        ]
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let rows: [Profile] = try await request(
             "rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape",
             method: "PATCH", token: token, body: body, preferRepresentation: true
