@@ -7,6 +7,8 @@ final class AppModel: ObservableObject {
     @Published var me: Profile?
     @Published var posts: [Post] = []
     @Published private(set) var savedAccounts: [SavedAccount] = []
+    @Published private(set) var officialProfile: Profile?
+    @Published private(set) var isPostingAsOfficial = false
     @Published var isLoading = false
     @Published var errorMessage: String?
 
@@ -15,6 +17,8 @@ final class AppModel: ObservableObject {
     private let savedSessionPrefix = "supabase-session."
     private let cachedProfileKey = "spotcode.native.cached-profile"
     private let cachedPostsKey = "spotcode.native.cached-posts"
+
+    var displayProfile: Profile? { isPostingAsOfficial ? officialProfile : me }
 
     init() {
         if let data = UserDefaults.standard.data(forKey: savedAccountsKey) {
@@ -47,12 +51,18 @@ final class AppModel: ObservableObject {
         let email = emailOrAlias.contains("@") ? emailOrAlias : emailOrAlias + "@spotcode-sns.local"
         do {
             let value = try await SupabaseService.shared.login(email: email, password: password)
-            persist(value)
-            if let profile = try? await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) {
-                me = profile
-                cacheProfile(profile)
-                rememberAccount(session: value, profile: profile)
+            guard let profile = try await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) else {
+                throw URLError(.userAuthenticationRequired)
             }
+            // Commit the account change only after its profile is usable.
+            // Otherwise a transient profile request failure overwrites the
+            // previous active session while the UI still shows that account.
+            persist(value)
+            me = profile
+            cacheProfile(profile)
+            rememberAccount(session: value, profile: profile)
+            isPostingAsOfficial = false
+            officialProfile = nil
             Task { await loadTimeline() }
             return true
         } catch {
@@ -65,6 +75,8 @@ final class AppModel: ObservableObject {
         if let id = session?.user.id { forgetAccount(id) }
         session = nil
         me = nil
+        officialProfile = nil
+        isPostingAsOfficial = false
         posts = []
         KeychainStore.delete(account: sessionAccount)
         UserDefaults.standard.removeObject(forKey: cachedProfileKey)
@@ -72,7 +84,10 @@ final class AppModel: ObservableObject {
     }
 
     func switchAccount(to id: UUID) async -> Bool {
-        guard id != session?.user.id else { return true }
+        if id == session?.user.id {
+            switchToPersonalAccount()
+            return true
+        }
         guard let data = KeychainStore.load(account: savedSessionPrefix + id.uuidString),
               var next = try? JSONDecoder().decode(AuthSession.self, from: data) else {
             forgetAccount(id)
@@ -93,6 +108,8 @@ final class AppModel: ObservableObject {
             me = profile
             cacheProfile(profile)
             rememberAccount(session: next, profile: profile)
+            officialProfile = nil
+            isPostingAsOfficial = false
             posts = []
             await loadTimeline()
             return true
@@ -100,6 +117,29 @@ final class AppModel: ObservableObject {
             errorMessage = "アカウントを切り替えられませんでした。もう一度ログインしてください。\n\(error.localizedDescription)"
             return false
         }
+    }
+
+    func switchToOfficial() async -> Bool {
+        guard me?.isAdmin == true || me?.isOperator == true, let token = session?.accessToken else {
+            errorMessage = "公式アカウントは管理者または運営者のみ利用できます。"
+            return false
+        }
+        do {
+            guard let profile = try await SupabaseService.shared.profile(handle: "spotcode_official", token: token) else {
+                throw URLError(.resourceUnavailable)
+            }
+            officialProfile = profile
+            isPostingAsOfficial = true
+            return true
+        } catch {
+            errorMessage = "公式アカウントへ切り替えられませんでした。\n\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func switchToPersonalAccount() {
+        isPostingAsOfficial = false
+        officialProfile = nil
     }
 
     func loadTimeline() async {
@@ -116,10 +156,10 @@ final class AppModel: ObservableObject {
     }
 
     func publish(body: String, githubLink: String?, eventURL: String? = nil, spot: Spot? = nil, kind: String? = nil, visibility: String = "public", photos: [String]? = nil, poll: PostPoll? = nil) async -> Bool {
-        guard let session, let meID = me?.id else { return false }
+        guard let session, let authorID = displayProfile?.id else { return false }
         do {
             let post = try await SupabaseService.shared.createPost(
-                .init(authorID: meID, body: body, githubLink: githubLink, eventURL: eventURL, spot: spot, kind: kind, visibility: visibility, photos: photos, poll: poll, status: "wip"),
+                .init(authorID: authorID, body: body, githubLink: githubLink, eventURL: eventURL, spot: spot, kind: kind, visibility: visibility, photos: photos, poll: poll, status: "wip"),
                 token: session.accessToken
             )
             posts.insert(post, at: 0)

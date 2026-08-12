@@ -135,7 +135,7 @@ private struct TopBar: View {
             Button { section = .settings; navigationReset = UUID() } label: { Image(systemName: "gearshape") }.spotcodeIconButton()
             Button {
                 if model.session == nil { showLogin = true } else { showAccounts = true }
-            } label: { AvatarView(profile: model.me, size: 34) }
+            } label: { AvatarView(profile: model.displayProfile, size: 34) }
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(SpotcodeTheme.surface)
@@ -171,7 +171,7 @@ private struct SideDrawer: View {
                     .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
             }.padding(.top, 10).disabled(model.session == nil)
             Spacer()
-            if let me = model.me {
+            if let me = model.displayProfile {
                 HStack(spacing: 10) {
                     AvatarView(profile: me, size: 36)
                     VStack(alignment: .leading, spacing: 1) {
@@ -197,7 +197,7 @@ private struct AccountSwitcher: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack { Text("アカウント").font(.title3).fontWeight(.bold); Spacer(); Button { isPresented = false } label: { Image(systemName: "xmark").font(.title3) } }
             ForEach(model.savedAccounts) { account in
-                let active = account.id == model.session?.user.id
+                let active = account.id == model.session?.user.id && !model.isPostingAsOfficial
                 Button {
                     guard !active, switchingID == nil else { return }
                     switchingID = account.id
@@ -226,10 +226,30 @@ private struct AccountSwitcher: View {
                 .disabled(switchingID != nil)
             }
             if model.session != nil && (model.me?.isAdmin == true || model.me?.isOperator == true) {
-                HStack(spacing: 12) {
-                    ZStack { LinearGradient(colors: [SpotcodeTheme.accent, .green], startPoint: .topLeading, endPoint: .bottomTrailing); Text("S").font(.title2).fontWeight(.bold) }.frame(width: 44, height: 44).clipShape(Circle())
-                    VStack(alignment: .leading) { HStack { Text("spotcode").fontWeight(.bold); Text("公式").font(.caption.weight(.bold)).foregroundColor(.yellow).padding(4).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }; Text("@spotcode_official").foregroundColor(SpotcodeTheme.muted) }
-                }.padding(.horizontal, 12)
+                Button {
+                    guard switchingID == nil else { return }
+                    if model.isPostingAsOfficial {
+                        model.switchToPersonalAccount()
+                        isPresented = false
+                    } else {
+                        Task {
+                            if await model.switchToOfficial() { isPresented = false }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        ZStack { LinearGradient(colors: [SpotcodeTheme.accent, .green], startPoint: .topLeading, endPoint: .bottomTrailing); Text("S").font(.title2).fontWeight(.bold) }.frame(width: 44, height: 44).clipShape(Circle())
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Text("spotcode").fontWeight(.bold)
+                                Text("公式").font(.caption.weight(.bold)).foregroundColor(.yellow).padding(4).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5))
+                                if model.isPostingAsOfficial { Text("現在").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent) }
+                            }
+                            Text("@spotcode_official").foregroundColor(SpotcodeTheme.muted)
+                        }
+                        Spacer()
+                    }.padding(12).background(model.isPostingAsOfficial ? Color(red: 23/255, green: 40/255, blue: 54/255) : SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 9))
+                }.buttonStyle(.plain)
             }
             Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
             Button {
@@ -320,7 +340,7 @@ private struct InlineComposer: View {
     @State private var editorFocused = false
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            AvatarView(profile: model.me, size: 42)
+            AvatarView(profile: model.displayProfile, size: 42)
             VStack(alignment: .leading, spacing: 12) {
                 ZStack(alignment: .topLeading) {
                     ComposerTextView(text: $draft, isFocused: $editorFocused)
