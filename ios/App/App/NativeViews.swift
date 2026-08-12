@@ -1509,6 +1509,8 @@ private struct GitHubActivity: View {
     }
 }
 
+private enum IssueDueStatus { case overdue, soon, later }
+
 private struct OpenIssuesCard: View {
     let handle: String
     let result: GitHubIssueSearchResponse?
@@ -1533,9 +1535,11 @@ private struct OpenIssuesCard: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues"); Text("\(total)").fontWeight(.bold); Text("公開リポの未クローズ issue (task)").font(.caption).foregroundColor(SpotcodeTheme.muted); Spacer()
+            HStack(spacing: 6) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues").foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text("公開リポの未クローズ issue (task)").font(.caption2).foregroundColor(SpotcodeTheme.muted)
                 if result?.items.isEmpty == false {
-                    Button(listExpanded ? "閉じる" : "リストを表示") { withAnimation { listExpanded.toggle() } }.font(.caption.weight(.semibold))
+                    Button(listExpanded ? "折りたたむ" : "リストを表示") { withAnimation { listExpanded.toggle() } }
+                        .font(.caption2).foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 8).padding(.vertical, 3)
+                        .overlay(Capsule().stroke(SpotcodeTheme.border))
                 }
             }
             ScrollView(.horizontal, showsIndicators: false) {
@@ -1558,35 +1562,56 @@ private struct OpenIssuesCard: View {
             } else if listExpanded {
                 ForEach(visibleIssues) { issue in
                     VStack(alignment: .leading, spacing: 7) {
-                        Button {
-                            withAnimation {
-                                if expandedIssues.contains(issue.id) { expandedIssues.remove(issue.id) }
-                                else { expandedIssues.insert(issue.id) }
-                            }
-                        } label: {
-                          HStack(spacing: 8) {
-                            Image(systemName: expandedIssues.contains(issue.id) ? "chevron.down" : "chevron.right").font(.caption)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(issue.title).lineLimit(1).foregroundColor(SpotcodeTheme.text)
-                                HStack(spacing: 6) {
-                                    Text(issue.repositoryName)
-                                    if issue.isTemplateTask { Text("task").foregroundColor(SpotcodeTheme.accent) }
-                                    if let due = issue.dueDate { Text(dueLabel(due)).foregroundColor(due < Date() ? .red : (due.timeIntervalSinceNow < 259_200 ? SpotcodeTheme.warning : SpotcodeTheme.muted)) }
-                                }.font(.caption).foregroundColor(SpotcodeTheme.muted)
-                            }
-                            Spacer()
-                          }.contentShape(Rectangle())
-                        }.buttonStyle(.plain)
+                        HStack(spacing: 6) {
+                            Button {
+                                withAnimation {
+                                    if expandedIssues.contains(issue.id) { expandedIssues.remove(issue.id) }
+                                    else { expandedIssues.insert(issue.id) }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down").font(.caption2).foregroundColor(SpotcodeTheme.muted)
+                                    .rotationEffect(.degrees(expandedIssues.contains(issue.id) ? 0 : -90)).frame(width: 22, height: 22)
+                            }.buttonStyle(.plain)
+                            Text(issue.title).font(.caption.weight(.semibold)).lineLimit(expandedIssues.contains(issue.id) ? nil : 1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .onTapGesture {
+                                    withAnimation {
+                                        if expandedIssues.contains(issue.id) { expandedIssues.remove(issue.id) } else { expandedIssues.insert(issue.id) }
+                                    }
+                                }
+                            Button { selectedRepository = issue.repositoryName; expandedIssues.removeAll() } label: {
+                                Text(issue.repositoryName.split(separator: "/").last.map(String.init) ?? issue.repositoryName)
+                                    .font(.caption2.monospaced()).lineLimit(1).frame(maxWidth: 90)
+                                    .padding(.horizontal, 7).padding(.vertical, 2).overlay(Capsule().stroke(SpotcodeTheme.border))
+                            }.buttonStyle(.plain).foregroundColor(SpotcodeTheme.muted)
+                            if let due = issue.dueDate { Text(dueLabel(due)).issueDuePill(status: dueStatus(due)) }
+                            Link(destination: issue.htmlURL) {
+                                Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13)
+                            }.foregroundColor(SpotcodeTheme.muted)
+                        }
+                        if !issue.labels.isEmpty {
+                            HStack(spacing: 4) {
+                                ForEach(Array(issue.labels.prefix(3)), id: \.name) { label in
+                                    Text(label.name).font(.caption2).foregroundColor(SpotcodeTheme.muted)
+                                        .padding(.horizontal, 6).padding(.vertical, 1).overlay(Capsule().stroke(SpotcodeTheme.border))
+                                }
+                            }.padding(.leading, 28)
+                        }
                         if expandedIssues.contains(issue.id) {
                             if let body = issue.body, !body.isEmpty {
                                 Text(cleanIssueBody(body)).font(.caption).foregroundColor(SpotcodeTheme.text)
-                                    .frame(maxWidth: .infinity, alignment: .leading).padding(10)
-                                    .background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .lineSpacing(3).frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                                    .background(Color.black.opacity(0.22)).clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border)).padding(.leading, 28)
                             }
-                            Link(destination: issue.htmlURL) { Label("GitHubで開く · #\(issue.number)", systemImage: "arrow.up.right") }
-                                .font(.caption).foregroundColor(SpotcodeTheme.accent)
                         }
-                    }.padding(.vertical, 5).overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+                    }.padding(.horizontal, 8).padding(.vertical, 7)
+                        .background(Color.white.opacity(0.02)).clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(alignment: .leading) {
+                            if let due = issue.dueDate, dueStatus(due) != .later {
+                                Rectangle().fill(dueStatus(due) == .overdue ? Color.red : SpotcodeTheme.warning).frame(width: 3)
+                            }
+                        }
                 }
             }
         }.padding(12).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border)).padding(.top, 8)
@@ -1598,6 +1623,12 @@ private struct OpenIssuesCard: View {
         let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"
         let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: Calendar.current.startOfDay(for: date)).day ?? 0
         return "\(formatter.string(from: date)) · " + (days < 0 ? "\(-days)日超過" : "あと\(days)日")
+    }
+
+    private func dueStatus(_ date: Date) -> IssueDueStatus {
+        if date < Date() { return .overdue }
+        if date.timeIntervalSinceNow < 259_200 { return .soon }
+        return .later
     }
 
     private func cleanIssueBody(_ body: String) -> String {
@@ -1617,9 +1648,14 @@ private extension Text {
     func issuePill() -> some View { self.font(.caption).padding(.horizontal, 9).padding(.vertical, 5).overlay(Capsule().stroke(SpotcodeTheme.border)) }
     func issueFilterPill(selected: Bool) -> some View {
         self.font(.caption.weight(selected ? .bold : .regular)).padding(.horizontal, 9).padding(.vertical, 5)
-            .foregroundColor(selected ? SpotcodeTheme.background : SpotcodeTheme.text)
-            .background(selected ? SpotcodeTheme.text : Color.clear).clipShape(Capsule())
-            .overlay(Capsule().stroke(selected ? SpotcodeTheme.text : SpotcodeTheme.border))
+            .fontDesign(.monospaced).foregroundColor(selected ? SpotcodeTheme.text : SpotcodeTheme.muted)
+            .background(selected ? SpotcodeTheme.accent.opacity(0.08) : Color.clear).clipShape(Capsule())
+            .overlay(Capsule().stroke(selected ? SpotcodeTheme.accent : SpotcodeTheme.border))
+    }
+    func issueDuePill(status: IssueDueStatus) -> some View {
+        let color: Color = status == .overdue ? .red : (status == .soon ? SpotcodeTheme.warning : SpotcodeTheme.muted)
+        return self.font(.caption2.monospaced()).foregroundColor(color).padding(.horizontal, 6).padding(.vertical, 2)
+            .background(color.opacity(0.08)).clipShape(Capsule()).overlay(Capsule().stroke(color.opacity(0.4)))
     }
 }
 
