@@ -2037,6 +2037,10 @@ document.addEventListener('submit', (e) => {
   const form = e.target.closest('.idea-form');
   if (!form) return;
   e.preventDefault();
+  // requestSubmit(), keyboard shortcuts, and a quick double tap can deliver
+  // two submit events before the disabled button paints. Keep one write in
+  // flight per composer and always release it in finally.
+  if (form.dataset.posting === '1') return;
   const me = currentUser();
   if (!me) return openAuth('register');
   const ta = form.querySelector('textarea[name="text"]');
@@ -2084,6 +2088,7 @@ document.addEventListener('submit', (e) => {
   if (pendingVisibility && pendingVisibility !== 'public') post.visibility = pendingVisibility;
 
   const submitBtn = form.querySelector('button[type="submit"]');
+  form.dataset.posting = '1';
   if (submitBtn) submitBtn.disabled = true;
   addPost(post)
     .then((created) => {
@@ -2102,7 +2107,10 @@ document.addEventListener('submit', (e) => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     })
     .catch((err) => alert('投稿に失敗しました: ' + err.message))
-    .finally(() => { if (submitBtn) submitBtn.disabled = false; });
+    .finally(() => {
+      delete form.dataset.posting;
+      if (submitBtn) submitBtn.disabled = false;
+    });
 });
 
 // Auto-grow the composer textarea as the user types, and drop the

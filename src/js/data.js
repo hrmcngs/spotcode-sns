@@ -812,8 +812,13 @@ const POLL_MIGRATION_MSG =
 
 export async function addPost(post) {
   const supa = await getClient();
-  const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしていません');
+  // currentUser() was established from the active Supabase session during
+  // auth boot/login. Do not call auth.getUser() again here: that performs a
+  // network round trip before every insert and can hang behind GoTrue's token
+  // refresh lock, making Push appear broken until a reload. PostgREST still
+  // validates the JWT and RLS server-side, so this does not weaken auth.
+  const me = currentUser();
+  if (!me?.id) throw new Error('ログイン情報を確認できません。もう一度ログインしてください');
   const wantsPhotos = Array.isArray(post.photos) && post.photos.length > 0;
   const wantsPoll = post.poll && Array.isArray(post.poll.options) && post.poll.options.length >= 2;
 
@@ -821,7 +826,7 @@ export async function addPost(post) {
   // Supabase session is unchanged — Stage 25 RLS validates that
   // admin/op privileges are present before letting the substituted
   // author_id through.
-  let authorId = user.id;
+  let authorId = me.id;
   if (isPostingAsOfficial()) {
     const official = await getOfficialAccount();
     if (!official) throw new Error('公式アカウントが設定されていません (Stage 25 マイグレーション未実行?)');
