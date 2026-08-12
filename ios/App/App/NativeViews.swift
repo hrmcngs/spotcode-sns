@@ -1006,7 +1006,11 @@ struct AvatarView: View {
     private var avatarFallback: some View {
         ZStack {
             LinearGradient(colors: [SpotcodeTheme.accent, Color(red: 46/255, green: 160/255, blue: 67/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            Text(String(profile?.name.first ?? "?")).foregroundColor(.white).fontWeight(.bold)
+            Text(String(profile?.name.first ?? "?"))
+                .font(.system(size: max(13, size * 0.4), weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
         }
     }
 }
