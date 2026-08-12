@@ -1072,7 +1072,16 @@ export function handleTasksClick(e) {
     if (!tasks) return true;
     const wrap = document.createElement('div');
     wrap.innerHTML = renderTasksCard(gh, tasks, next);
-    if (wrap.firstElementChild) card.replaceWith(wrap.firstElementChild);
+    const nextCard = wrap.firstElementChild;
+    if (nextCard) {
+      // Repo filters behave like the native app: choosing a chip keeps
+      // the issue list visible instead of applying renderTasksCard's
+      // initial collapsed state again on every re-render.
+      nextCard.classList.remove('is-all-collapsed');
+      const listToggle = nextCard.querySelector('[data-tasks-collapse-all]');
+      if (listToggle) listToggle.textContent = t('profile.tasks.collapse_all');
+      card.replaceWith(nextCard);
+    }
     return true;
   }
   return false;
