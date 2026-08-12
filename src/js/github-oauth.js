@@ -51,9 +51,20 @@ export async function linkGithub(redirectTo = window.location.href) {
 // `repo` is therefore requested only after the user enables this feature.
 export async function linkGithubForPrivateIssues(redirectTo = window.location.href) {
   const supa = await getClient();
-  const { data, error } = await supa.auth.linkIdentity({
+  const returnUrl = new URL(redirectTo, window.location.href);
+  returnUrl.hash = '';
+  returnUrl.search = '?spotcode_private_issues=1';
+  // The identity is already linked, so linkIdentity would return
+  // identity_already_exists. Re-authenticate through the same GitHub
+  // identity instead; Supabase then returns a fresh provider_token
+  // carrying the newly-approved repo scope.
+  const { data, error } = await supa.auth.signInWithOAuth({
     provider: 'github',
-    options: { redirectTo, scopes: 'read:user repo' },
+    options: {
+      redirectTo: returnUrl.href,
+      scopes: 'read:user repo',
+      queryParams: { prompt: 'consent' },
+    },
   });
   if (error) throw new Error(error.message);
   return data;

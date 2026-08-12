@@ -1180,6 +1180,15 @@ const searchInput = document.querySelector('.topbar__search input');
 if (searchInput) searchInput.placeholder = t('nav.search.placeholder');
 
 onRoute(dispatch);
+
+// OAuth permission-upgrade returns to the static index document (not a
+// GitHub Pages route). Remove its one-shot marker and restore Settings
+// so the user never lands on the generic not-found view.
+const oauthReturnParams = new URLSearchParams(location.search);
+if (oauthReturnParams.has('spotcode_private_issues') || oauthReturnParams.get('error_code') === 'identity_already_exists') {
+  history.replaceState({}, '', location.pathname + location.hash);
+  navigate('/settings/display', true);
+}
 renderAuthArea();
 renderSideMe();
 initSearch();
