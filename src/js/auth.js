@@ -13,6 +13,7 @@
 //   fetchGithubProfile(h) — same public GitHub API lookup as before
 
 import { getClient } from './supa.js';
+import { withTimeout } from './net-utils.js';
 import {
   rememberAccount, forgetAccount, getRefreshToken,
   setPendingSwitch, consumePendingSwitch,
@@ -487,9 +488,11 @@ export async function updateProfile(patch) {
       // PostgREST returns 200 + [] when UPDATE is hidden by RLS. Ask for the
       // row while editing the official account so that case is distinguishable
       // from a successful save.
-      const { data: updatedRows, error } = postingAsOfficial
-        ? await query.select('id')
-        : await query;
+      const { data: updatedRows, error } = await withTimeout(
+        postingAsOfficial ? query.select('id') : query,
+        20000,
+        postingAsOfficial ? '公式プロフィール保存' : 'プロフィール保存',
+      );
       if (!error) {
         if (postingAsOfficial && Array.isArray(updatedRows) && updatedRows.length === 0) {
           throw new Error('公式プロフィールを保存できません。Supabase SQL Editorで Stage 32 を実行してください。');
@@ -512,7 +515,11 @@ export async function updateProfile(patch) {
     }
   }
   if (postingAsOfficial) {
-    const { data: row, error } = await supa.from('profiles').select('*').eq('id', targetId).maybeSingle();
+    const { data: row, error } = await withTimeout(
+      supa.from('profiles').select('*').eq('id', targetId).maybeSingle(),
+      12000,
+      '公式プロフィール確認',
+    );
     if (error || !row) throw new Error(error?.message || '公式プロフィールを再取得できませんでした');
     const updated = projectUser({ id: row.id, email: '' }, row);
     const { setCachedOfficialAccount } = await import('./official-account.js');

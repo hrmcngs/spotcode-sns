@@ -284,6 +284,8 @@ export function openEditProfile(profile) {
       if (editingOfficial) location.reload();
     } catch (ex) {
       err.textContent = ex.message || String(ex);
+      err.classList.add('is-visible');
+      err.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }
     }
   });
