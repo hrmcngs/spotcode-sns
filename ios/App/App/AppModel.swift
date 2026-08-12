@@ -83,7 +83,12 @@ final class AppModel: ObservableObject {
             if next.expiresAt.map({ $0 < Int(Date().timeIntervalSince1970) + 60 }) ?? true {
                 next = try await SupabaseService.shared.refresh(next.refreshToken)
             }
-            let profile = try await SupabaseService.shared.profile(id: next.user.id, token: next.accessToken)
+            guard let profile = try await SupabaseService.shared.profile(
+                id: next.user.id,
+                token: next.accessToken
+            ) else {
+                throw URLError(.userAuthenticationRequired)
+            }
             persist(next)
             me = profile
             cacheProfile(profile)
