@@ -297,7 +297,12 @@ private struct InlineComposer: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Binding var repositoryComposeURL: String?
-    @AppStorage("spotcode.native.draft") private var draft = ""
+    // Do not bind the editor directly to @AppStorage. That performs a
+    // synchronous UserDefaults write for every keystroke and made typing
+    // visibly stall on real devices. Keep editing in memory and persist
+    // only after the user pauses.
+    @State private var draft = UserDefaults.standard.string(forKey: "spotcode.native.draft") ?? ""
+    @State private var draftSaveTask: Task<Void, Never>?
     @State private var githubLink = ""
     @State private var eventURL = ""
     @State private var sending = false
@@ -366,6 +371,8 @@ private struct InlineComposer: View {
         }.padding(16)
          .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
          .onAppear { applyRepositoryRequest(repositoryComposeURL) }
+         .onDisappear { persistDraftImmediately() }
+         .onChange(of: draft) { scheduleDraftSave($0) }
          .onChange(of: repositoryComposeURL) { applyRepositoryRequest($0) }
          .sheet(isPresented: $showLocationPicker) {
              LocationPickerSheet(spot: $selectedSpot, isPresented: $showLocationPicker)
@@ -458,6 +465,20 @@ private struct InlineComposer: View {
         showLink = true
         editorFocused = true
         repositoryComposeURL = nil
+    }
+
+    private func scheduleDraftSave(_ value: String) {
+        draftSaveTask?.cancel()
+        draftSaveTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            UserDefaults.standard.set(value, forKey: "spotcode.native.draft")
+        }
+    }
+
+    private func persistDraftImmediately() {
+        draftSaveTask?.cancel()
+        UserDefaults.standard.set(draft, forKey: "spotcode.native.draft")
     }
 }
 
@@ -1848,8 +1869,16 @@ struct LoginView: View {
         NavigationView {
             VStack(spacing: 14) {
                 Image(systemName: "chevron.left.forwardslash.chevron.right").font(.largeTitle)
-                TextField("メールまたはログイン名", text: $email).textInputAutocapitalization(.never).keyboardType(.emailAddress).spotcodeField()
-                SecureField("パスワード", text: $password).spotcodeField()
+                TextField("メールまたはログイン名", text: $email)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .textContentType(.username)
+                    .keyboardType(.emailAddress)
+                    .spotcodeField()
+                SecureField("パスワード", text: $password)
+                    .textContentType(.password)
+                    .autocorrectionDisabled(true)
+                    .spotcodeField()
                 Button(signing ? "ログイン中…" : "ログイン") {
                     signing = true
                     Task {
