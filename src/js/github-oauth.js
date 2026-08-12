@@ -46,6 +46,19 @@ export async function linkGithub(redirectTo = window.location.href) {
   return data;
 }
 
+// Explicit opt-in for private issue display. GitHub's classic OAuth
+// scopes do not offer a narrower read-only private-issues permission;
+// `repo` is therefore requested only after the user enables this feature.
+export async function linkGithubForPrivateIssues(redirectTo = window.location.href) {
+  const supa = await getClient();
+  const { data, error } = await supa.auth.linkIdentity({
+    provider: 'github',
+    options: { redirectTo, scopes: 'read:user repo' },
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 // Idempotent post-redirect sync. Reads the current auth user's
 // linked identities; if one of them is `github`, mirrors the GitHub
 // username into public.profiles.github_handle and flips

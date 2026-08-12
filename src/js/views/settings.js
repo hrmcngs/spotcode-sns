@@ -5,7 +5,8 @@ import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode, maskHandle, maskName 
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
-import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, hiddenTaskRepos, setTaskRepoVisible } from '../display-prefs.js';
+import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, hiddenTaskRepos, setTaskRepoVisible, privateTasksEnabled, setPrivateTasksEnabled } from '../display-prefs.js';
+import { linkGithubForPrivateIssues } from '../github-oauth.js';
 import { cachedTasks } from '../github-tasks.js';
 import { isPostingAsOfficial, setPostingAsOfficial } from '../posting-identity.js';
 import { icon } from '../icons.js';
@@ -343,7 +344,7 @@ function displaySection() {
   const hidden = badgesHidden();
   const tHidden = tasksHidden();
   const me = currentUser();
-  const taskItems = cachedTasks(me?.github?.handle)?.items || [];
+  const taskItems = cachedTasks(me?.github?.handle, privateTasksEnabled())?.items || [];
   const taskRepos = [...new Set(taskItems.map((item) => item.repo).filter(Boolean))].sort();
   const hiddenRepos = new Set(hiddenTaskRepos());
   const repoChoices = taskRepos.length
@@ -391,6 +392,9 @@ function displaySection() {
         '</button>' +
       '</div>' +
       '<h3>表示するリポジトリ</h3>' + repoChoices +
+      '<div class="settings-form__actions"><button type="button" class="btn btn--ghost" id="private-tasks-toggle">' +
+        (privateTasksEnabled() ? '非公開Issue表示をOFF' : '非公開Issueを表示する（GitHub再認証）') +
+      '</button></div>' +
     '</section>' +
     '<section class="settings-card">' +
       '<h2>' + t('settings.map.title') + '</h2>' +
@@ -710,6 +714,17 @@ export function bindSettings() {
     input.addEventListener('change', () => {
       setTaskRepoVisible(input.getAttribute('data-task-repo') || '', input.checked);
     });
+  });
+  document.getElementById('private-tasks-toggle')?.addEventListener('click', async () => {
+    if (privateTasksEnabled()) {
+      setPrivateTasksEnabled(false);
+      const app = document.getElementById('app');
+      if (app) { app.innerHTML = renderSettings(); bindSettings(); }
+      return;
+    }
+    setPrivateTasksEnabled(true);
+    try { await linkGithubForPrivateIssues(window.location.href); }
+    catch (error) { setPrivateTasksEnabled(false); alert(error?.message || String(error)); }
   });
 
   // Push-notify toggle — chains the browser permission ask onto the

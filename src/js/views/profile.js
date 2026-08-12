@@ -21,7 +21,7 @@ import { maskHandle, maskName } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
 import { fetchTasks, cachedTasks } from '../github-tasks.js';
 import { renderMarkdown } from '../markdown.js';
-import { tasksHidden, hiddenTaskRepos } from '../display-prefs.js';
+import { tasksHidden, hiddenTaskRepos, privateTasksEnabled } from '../display-prefs.js';
 
 // (Previously a `let renderVersion = 0` lived here as the freshness
 //  flag for async hydrations. It's been replaced with path-based
@@ -296,7 +296,7 @@ function renderDueBadge(dueTs, hasTime) {
 // state lives on the DOM (dataset on the container) rather than a
 // module-level variable so navigating between profiles doesn't
 // carry a stale filter.
-function renderTasksCard(ghHandle, tasks, activeRepo = '') {
+function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = false) {
   if (!ghHandle) return '';
   // Per-device display pref: user opted the whole card out from
   // /settings → 表示 → タスク. Skip the render + skip the fetch.
@@ -408,7 +408,7 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '') {
   // page. Toggle flips both the class AND the button label.
   return (
     '<div class="profile-tasks is-all-collapsed" id="profile-tasks-' + ghHandle + '" ' +
-        'data-gh="' + escAttr(ghHandle) + '" data-active-repo="' + escAttr(activeRepo || '') + '">' +
+        'data-gh="' + escAttr(ghHandle) + '" data-private="' + (includePrivate ? '1' : '0') + '" data-active-repo="' + escAttr(activeRepo || '') + '">' +
       '<div class="profile-tasks__head">' +
         icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
         ' ' + t('profile.tasks.title') +
@@ -1069,10 +1069,11 @@ export function handleTasksClick(e) {
     // repos on and off.
     const current = card.getAttribute('data-active-repo') || '';
     const next = (requested === current) ? '' : requested;
-    const tasks = cachedTasks(gh);
+    const includePrivate = card.getAttribute('data-private') === '1';
+    const tasks = cachedTasks(gh, includePrivate);
     if (!tasks) return true;
     const wrap = document.createElement('div');
-    wrap.innerHTML = renderTasksCard(gh, tasks, next);
+    wrap.innerHTML = renderTasksCard(gh, tasks, next, includePrivate);
     const nextCard = wrap.firstElementChild;
     if (nextCard) {
       // Repo filters behave like the native app: choosing a chip keeps
@@ -1150,7 +1151,9 @@ export async function hydrateProfileTasks(handle) {
   if (slot.dataset.hydrating === '1') return;
   slot.dataset.hydrating = '1';
   try {
-    const tasks = await fetchTasks(gh);
+    const me = currentUser();
+    const includePrivate = privateTasksEnabled() && me?.github?.handle?.toLowerCase() === gh.toLowerCase();
+    const tasks = await fetchTasks(gh, includePrivate);
     if (!tasks) return;
     // Re-resolve the slot after the await — a re-render (e.g. from
     // hydrateProfile's post-fetch re-paint) can replace the element
@@ -1158,7 +1161,7 @@ export async function hydrateProfileTasks(handle) {
     const live = document.getElementById('profile-tasks-' + gh);
     if (!live) return;
     const wrap = document.createElement('div');
-    wrap.innerHTML = renderTasksCard(gh, tasks);
+    wrap.innerHTML = renderTasksCard(gh, tasks, '', includePrivate);
     if (wrap.firstElementChild) live.replaceWith(wrap.firstElementChild);
   } finally {
     if (slot.isConnected) delete slot.dataset.hydrating;

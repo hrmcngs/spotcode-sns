@@ -119,8 +119,8 @@ struct GitHubIssue: Codable, Identifiable, Hashable {
 
     var dueDate: Date? {
         guard let body else { return nil }
-        let keywords = "(?:due|deadline|by|期限|締切|締め切り|しめきり|しめ切り)"
-        let pattern = "(?:\\*\\*)?\\s*\(keywords)\\s*(?:\\*\\*)?\\s*[:：]?\\s*(\\d{4})[-/年]\\s*(\\d{1,2})[-/月]\\s*(\\d{1,2})日?(?:[T\\s]+(\\d{1,2}):(\\d{2}))?"
+        let keywords = "(?:due|deadline|by|期限|提出期限|提出日|締切|締め切り|しめきり|しめ切り)"
+        let pattern = "(?:\\*\\*)?\\s*\(keywords)\\s*[:：]?\\s*(?:\\*\\*)?\\s*[:：]?\\s*(?:(\\d{4})[-/年]\\s*)?(\\d{1,2})[-/月]\\s*(\\d{1,2})日?(?:\\s*\\([^)]*\\))?(?:[T\\s]+(\\d{1,2}):(\\d{2}))?"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
               let match = regex.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)) else { return nil }
         func value(_ index: Int) -> Int? {
@@ -128,7 +128,8 @@ struct GitHubIssue: Codable, Identifiable, Hashable {
             guard range.location != NSNotFound, let swiftRange = Range(range, in: body) else { return nil }
             return Int(body[swiftRange])
         }
-        guard let year = value(1), let month = value(2), let day = value(3) else { return nil }
+        guard let month = value(2), let day = value(3) else { return nil }
+        let year = value(1) ?? Calendar.current.component(.year, from: Date())
         var parts = DateComponents(); parts.year = year; parts.month = month; parts.day = day
         parts.hour = value(4) ?? 23; parts.minute = value(5) ?? 59
         return Calendar.current.date(from: parts)
@@ -140,7 +141,7 @@ struct GitHubIssue: Codable, Identifiable, Hashable {
 
     var isHiddenFromSpotcode: Bool {
         guard let body else { return false }
-        let pattern = "(?:\\*\\*)?\\s*spotcode\\s*表示\\s*(?:\\*\\*)?\\s*[:：]\\s*(?:しない|非表示|off|false|no)\\b"
+        let pattern = "(?:\\*\\*)?\\s*spotcode\\s*表示\\s*(?:\\*\\*)?\\s*[:：]\\s*(?:しない|非表示|off|false|no)(?:\\s|$)"
         return body.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 }

@@ -16,6 +16,7 @@ const KEY = 'spotcode:hide-badges';
 // budget spent. Same shape as `hide-badges`: default is visible.
 const KEY_TASKS_HIDDEN = 'spotcode:hide-tasks';
 const KEY_TASK_REPOS = 'spotcode:hidden-task-repos';
+const KEY_PRIVATE_TASKS = 'spotcode:private-tasks';
 
 export function badgesHidden() {
   try { return localStorage.getItem(KEY) === '1'; } catch { return false; }
@@ -52,6 +53,14 @@ export function setTaskRepoVisible(repo, visible) {
   const hidden = new Set(hiddenTaskRepos());
   if (visible) hidden.delete(repo); else hidden.add(repo);
   try { localStorage.setItem(KEY_TASK_REPOS, JSON.stringify([...hidden])); } catch {}
+}
+
+export function privateTasksEnabled() {
+  try { return localStorage.getItem(KEY_PRIVATE_TASKS) === '1'; } catch { return false; }
+}
+
+export function setPrivateTasksEnabled(enabled) {
+  try { enabled ? localStorage.setItem(KEY_PRIVATE_TASKS, '1') : localStorage.removeItem(KEY_PRIVATE_TASKS); } catch {}
 }
 
 // Apply every display-pref attribute on <html>. Call once on boot

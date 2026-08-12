@@ -33,11 +33,11 @@ function repoFullNameFromRepoUrl(u) {
 // Format guide is at docs/task-issue-template.md — keep the regex
 // permissive enough that a user copying the template variants above
 // still parses.
-const DUE_KEYWORDS = '(?:due|deadline|by|期限|締切|締め切り|しめきり|しめ切り|しめきり)';
+const DUE_KEYWORDS = '(?:due|deadline|by|期限|提出期限|提出日|締切|締め切り|しめきり|しめ切り|しめきり)';
 const DUE_RE = new RegExp(
-  '(?:\\*\\*)?\\s*' + DUE_KEYWORDS + '\\s*(?:\\*\\*)?\\s*[:：]?\\s*' +
-    '(\\d{4})[-/年]\\s*(\\d{1,2})[-/月]\\s*(\\d{1,2})日?' +
-    '(?:[T\\s]+(\\d{1,2}):(\\d{2}))?',
+  '(?:\\*\\*)?\\s*' + DUE_KEYWORDS + '\\s*[:：]?\\s*(?:\\*\\*)?\\s*[:：]?\\s*' +
+    '(?:(\\d{4})[-/年]\\s*)?(\\d{1,2})[-/月]\\s*(\\d{1,2})日?' +
+    '(?:\\s*\\([^)]*\\))?(?:[T\\s]+(\\d{1,2}):(\\d{2}))?',
   'i',
 );
 
@@ -45,7 +45,7 @@ export function parseDue(body) {
   if (!body) return null;
   const m = String(body).match(DUE_RE);
   if (!m) return null;
-  const y = Number(m[1]);
+  const y = m[1] ? Number(m[1]) : new Date().getFullYear();
   const mo = Number(m[2]);
   const d = Number(m[3]);
   const h = m[4] != null ? Number(m[4]) : 23;   // default to end-of-day so
@@ -86,7 +86,7 @@ function shape(item) {
 
 function hiddenByIssueTemplate(item) {
   const body = String(item?.body || '');
-  return /(?:\*\*)?\s*spotcode\s*表示\s*(?:\*\*)?\s*[:：]\s*(?:しない|非表示|off|false|no)\b/im.test(body);
+  return /(?:\*\*)?\s*spotcode\s*表示\s*(?:\*\*)?\s*[:：]\s*(?:しない|非表示|off|false|no)(?:\s|$)/im.test(body);
 }
 
 function readCache() {
@@ -101,10 +101,11 @@ function writeCache(o) {
 // Sync accessor for the render path — reads the cached snapshot
 // so the profile card can paint SOMETHING before the network call
 // resolves. Returns null on cache miss / stale.
-export function cachedTasks(ghHandle) {
+export function cachedTasks(ghHandle, includePrivate = false) {
   if (!ghHandle) return null;
   const all = readCache();
-  const entry = all[ghHandle.toLowerCase()];
+  const entry = all[ghHandle.toLowerCase() + (includePrivate ? ':private' : ':public')]
+             || (!includePrivate ? all[ghHandle.toLowerCase()] : null);
   if (!entry) return null;
   // Stale-while-revalidate: an older issue snapshot is much more useful
   // than a loading card while GitHub Search is slow. fetchTasks() still
@@ -116,9 +117,9 @@ export function cachedTasks(ghHandle) {
 // via the Search API. Returns { totalCount, items[] }. On rate limit
 // or fetch error, returns whatever's cached (possibly stale) so the
 // card degrades gracefully rather than showing an error every render.
-export async function fetchTasks(ghHandle) {
+export async function fetchTasks(ghHandle, includePrivate = false) {
   if (!ghHandle) return null;
-  if (isRateLimited()) return cachedTasks(ghHandle);
+  if (isRateLimited()) return cachedTasks(ghHandle, includePrivate);
 
   // Search qualifiers:
   //   author:<handle>  — issues opened by this user
@@ -129,13 +130,13 @@ export async function fetchTasks(ghHandle) {
   // sort=created + order=desc → newest first, so the top of the list
   // is what the viewer is most likely to care about.
   const q = 'author:' + encodeURIComponent(ghHandle)
-          + '+type:issue+state:open+is:public';
+          + '+type:issue+state:open' + (includePrivate ? '' : '+is:public');
   const url = 'https://api.github.com/search/issues?q=' + q +
               '&sort=created&order=desc&per_page=' + MAX_ITEMS;
   let raw;
   try { raw = await fetchJson(url, 6000); }
-  catch { return cachedTasks(ghHandle); }
-  if (!raw) return cachedTasks(ghHandle);
+  catch { return cachedTasks(ghHandle, includePrivate); }
+  if (!raw) return cachedTasks(ghHandle, includePrivate);
 
   // Keep every repo in cache so turning a repo back on in Settings is
   // reflected immediately without waiting for another GitHub request.
@@ -161,7 +162,7 @@ export async function fetchTasks(ghHandle) {
     items,
   };
   const all = readCache();
-  all[ghHandle.toLowerCase()] = entry;
+  all[ghHandle.toLowerCase() + (includePrivate ? ':private' : ':public')] = entry;
   writeCache(all);
   return entry;
 }
