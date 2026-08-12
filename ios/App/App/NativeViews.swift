@@ -1512,14 +1512,30 @@ private struct GitHubActivity: View {
 private struct OpenIssuesCard: View {
     let handle: String
     let result: GitHubIssueSearchResponse?
+    @State private var listExpanded = false
+    @State private var expandedIssues: Set<Int> = []
     private var total: Int { result?.totalCount ?? 0 }
     private var issueGroups: [(key: String, value: [GitHubIssue])] {
         Array(Dictionary(grouping: result?.items ?? [], by: \.repositoryName).sorted { $0.key < $1.key }.prefix(8))
     }
-    private var visibleIssues: [GitHubIssue] { Array((result?.items ?? []).prefix(5)) }
+    private var visibleIssues: [GitHubIssue] {
+        Array((result?.items ?? []).sorted { left, right in
+            if left.isTemplateTask != right.isTemplateTask { return left.isTemplateTask }
+            switch (left.dueDate, right.dueDate) {
+            case let (a?, b?): return a < b
+            case (_?, nil): return true
+            case (nil, _?): return false
+            case (nil, nil): return (left.createdAt ?? "") > (right.createdAt ?? "")
+            }
+        }.prefix(20))
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues"); Text("\(total)").fontWeight(.bold); Text("公開リポの未クローズ issue (task)").font(.caption).foregroundColor(SpotcodeTheme.muted); Spacer() }
+            HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues"); Text("\(total)").fontWeight(.bold); Text("公開リポの未クローズ issue (task)").font(.caption).foregroundColor(SpotcodeTheme.muted); Spacer()
+                if result?.items.isEmpty == false {
+                    Button(listExpanded ? "閉じる" : "リストを表示") { withAnimation { listExpanded.toggle() } }.font(.caption.weight(.semibold))
+                }
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
                     Link(destination: URL(string: "https://github.com/issues?q=is%3Aopen+user%3A\(handle)")!) { Text("All \(total)").issuePill() }
@@ -1532,21 +1548,53 @@ private struct OpenIssuesCard: View {
                 ProgressView("Issueを読み込み中…").font(.caption).foregroundColor(SpotcodeTheme.muted)
             } else if result?.items.isEmpty == true {
                 Text("未クローズのIssueはありません").font(.caption).foregroundColor(SpotcodeTheme.muted)
-            } else {
+            } else if listExpanded {
                 ForEach(visibleIssues) { issue in
-                    Link(destination: issue.htmlURL) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.circle")
+                    VStack(alignment: .leading, spacing: 7) {
+                        Button {
+                            withAnimation {
+                                if expandedIssues.contains(issue.id) { expandedIssues.remove(issue.id) }
+                                else { expandedIssues.insert(issue.id) }
+                            }
+                        } label: {
+                          HStack(spacing: 8) {
+                            Image(systemName: expandedIssues.contains(issue.id) ? "chevron.down" : "chevron.right").font(.caption)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(issue.title).lineLimit(1).foregroundColor(SpotcodeTheme.text)
-                                Text(issue.repositoryName).font(.caption).foregroundColor(SpotcodeTheme.muted)
+                                HStack(spacing: 6) {
+                                    Text(issue.repositoryName)
+                                    if issue.isTemplateTask { Text("task").foregroundColor(SpotcodeTheme.accent) }
+                                    if let due = issue.dueDate { Text(dueLabel(due)).foregroundColor(due < Date() ? .red : (due.timeIntervalSinceNow < 259_200 ? SpotcodeTheme.warning : SpotcodeTheme.muted)) }
+                                }.font(.caption).foregroundColor(SpotcodeTheme.muted)
                             }
-                            Spacer(); Image(systemName: "arrow.up.right").font(.caption)
-                        }.padding(.vertical, 4)
-                    }
+                            Spacer()
+                          }.contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                        if expandedIssues.contains(issue.id) {
+                            if let body = issue.body, !body.isEmpty {
+                                Text(cleanIssueBody(body)).font(.caption).foregroundColor(SpotcodeTheme.text)
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+                                    .background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            Link(destination: issue.htmlURL) { Label("GitHubで開く · #\(issue.number)", systemImage: "arrow.up.right") }
+                                .font(.caption).foregroundColor(SpotcodeTheme.accent)
+                        }
+                    }.padding(.vertical, 5).overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
                 }
             }
         }.padding(12).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border)).padding(.top, 8)
+    }
+
+    private func dueLabel(_ date: Date) -> String {
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"
+        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: Calendar.current.startOfDay(for: date)).day ?? 0
+        return "\(formatter.string(from: date)) · " + (days < 0 ? "\(-days)日超過" : "あと\(days)日")
+    }
+
+    private func cleanIssueBody(_ body: String) -> String {
+        body.replacingOccurrences(of: "<!--(?:.|\\n)*?-->", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "**", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

@@ -97,20 +97,46 @@ struct GitHubContributionsResponse: Codable {
 }
 
 struct GitHubIssue: Codable, Identifiable, Hashable {
+    struct Label: Codable, Hashable { let name: String }
     let id: Int
+    let number: Int
     let title: String
+    let body: String?
     let htmlURL: URL
     let repositoryURL: URL
     let createdAt: String?
+    let comments: Int
+    let labels: [Label]
 
     enum CodingKeys: String, CodingKey {
-        case id, title
+        case id, number, title, body, comments, labels
         case htmlURL = "html_url"
         case repositoryURL = "repository_url"
         case createdAt = "created_at"
     }
 
     var repositoryName: String { repositoryURL.pathComponents.suffix(2).joined(separator: "/") }
+
+    var dueDate: Date? {
+        guard let body else { return nil }
+        let keywords = "(?:due|deadline|by|期限|締切|締め切り|しめきり|しめ切り)"
+        let pattern = "(?:\\*\\*)?\\s*\(keywords)\\s*(?:\\*\\*)?\\s*[:：]?\\s*(\\d{4})[-/年]\\s*(\\d{1,2})[-/月]\\s*(\\d{1,2})日?(?:[T\\s]+(\\d{1,2}):(\\d{2}))?"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)) else { return nil }
+        func value(_ index: Int) -> Int? {
+            let range = match.range(at: index)
+            guard range.location != NSNotFound, let swiftRange = Range(range, in: body) else { return nil }
+            return Int(body[swiftRange])
+        }
+        guard let year = value(1), let month = value(2), let day = value(3) else { return nil }
+        var parts = DateComponents(); parts.year = year; parts.month = month; parts.day = day
+        parts.hour = value(4) ?? 23; parts.minute = value(5) ?? 59
+        return Calendar.current.date(from: parts)
+    }
+
+    var isTemplateTask: Bool {
+        dueDate != nil || labels.contains { $0.name.caseInsensitiveCompare("task") == .orderedSame }
+    }
 }
 
 struct GitHubIssueSearchResponse: Codable {
