@@ -1355,7 +1355,18 @@ struct ProfileView: View {
             ScrollView {
                 if let profile {
                     VStack(spacing: 0) {
-                        ProfileHero(profile: profile, counts: counts, repositories: repositories, contributions: contributions, issueSearch: issueSearch, isOwn: profile.id == model.me?.id)
+                        ProfileHero(
+                            profile: profile,
+                            counts: counts,
+                            repositories: repositories,
+                            contributions: contributions,
+                            issueSearch: issueSearch,
+                            isOwn: profile.id == model.me?.id || (
+                                model.isPostingAsOfficial &&
+                                profile.id == model.officialProfile?.id &&
+                                (model.me?.isAdmin == true || model.me?.isOperator == true)
+                            )
+                        )
                         HStack(spacing: 0) {
                             ForEach(["Posts", "Spots", "Likes"].indices, id: \.self) { index in
                                 Button { selectedTab = index } label: {

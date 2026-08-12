@@ -171,12 +171,22 @@ final class AppModel: ObservableObject {
     }
 
     func updateProfile(name: String, bio: String, location: String, avatarURL: String?, avatarShape: String) async -> Bool {
-        guard let session, let id = me?.id else { return false }
+        guard let session else { return false }
+        let editingOfficial = isPostingAsOfficial
+        if editingOfficial && me?.isAdmin != true && me?.isOperator != true {
+            errorMessage = "公式プロフィールは管理者または運営者のみ編集できます。"
+            return false
+        }
+        guard let id = (editingOfficial ? officialProfile?.id : me?.id) else { return false }
         do {
             let profile = try await SupabaseService.shared.updateProfile(id: id, name: name, bio: bio, location: location, avatarURL: avatarURL, avatarShape: avatarShape, token: session.accessToken)
-            me = profile
-            cacheProfile(profile)
-            rememberAccount(session: session, profile: profile)
+            if editingOfficial {
+                officialProfile = profile
+            } else {
+                me = profile
+                cacheProfile(profile)
+                rememberAccount(session: session, profile: profile)
+            }
             return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
