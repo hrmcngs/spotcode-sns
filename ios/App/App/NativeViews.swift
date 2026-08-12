@@ -1307,9 +1307,9 @@ struct ProfileView: View {
     private func loadProfile() async {
         guard let id = profile?.id else { return }
         async let posts = try? SupabaseService.shared.posts(limit: 80, authorID: id, token: model.session?.accessToken)
-        async let stats = try? SupabaseService.shared.profileCounts(userID: id, token: model.session?.accessToken)
+        async let stats = SupabaseService.shared.profileCounts(userID: id, token: model.session?.accessToken)
         profilePosts = await posts ?? []
-        if let value = await stats { counts = value }
+        counts = await stats
         if let handle = profile?.githubHandle {
             async let loadedRepos = SupabaseService.shared.repositories(handle: handle)
             async let loadedContributions = SupabaseService.shared.githubContributions(handle: handle)

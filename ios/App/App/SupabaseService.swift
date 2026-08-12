@@ -221,21 +221,22 @@ actor SupabaseService {
         )
     }
 
-    func profileCounts(userID: UUID, token: String?) async throws -> (following: Int, followers: Int, posts: Int) {
-        async let following = count("rest/v1/follows?follower_id=eq.\(userID.uuidString)&status=eq.accepted&select=id", token: token)
-        async let followers = count("rest/v1/follows?target_id=eq.\(userID.uuidString)&status=eq.accepted&select=id", token: token)
-        async let posts = count("rest/v1/posts?author_id=eq.\(userID.uuidString)&select=id", token: token)
-        return try await (following, followers, posts)
+    func profileCounts(userID: UUID, token: String?) async -> (following: Int, followers: Int, posts: Int) {
+        async let followingRows = try? following(userID: userID, token: token)
+        async let followerRows = try? followers(userID: userID, token: token)
+        async let postCount = try? count("rest/v1/posts?author_id=eq.\(userID.uuidString)&select=id", token: token)
+        return await (followingRows?.count ?? 0, followerRows?.count ?? 0, postCount ?? 0)
     }
 
     private func count(_ path: String, token: String?) async throws -> Int {
         guard let endpoint = URL(string: path, relativeTo: baseURL) else { throw URLError(.badURL) }
         var value = URLRequest(url: endpoint)
-        value.httpMethod = "HEAD"
+        value.httpMethod = "GET"
         value.timeoutInterval = 35
         value.setValue(anonKey, forHTTPHeaderField: "apikey")
         value.setValue("Bearer \(token ?? anonKey)", forHTTPHeaderField: "Authorization")
         value.setValue("count=exact", forHTTPHeaderField: "Prefer")
+        value.setValue("0-0", forHTTPHeaderField: "Range")
         let (_, response) = try await data(for: value, retryable: true)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
         let range = http.value(forHTTPHeaderField: "Content-Range") ?? "*/0"
