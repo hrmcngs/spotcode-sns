@@ -1084,12 +1084,9 @@ try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
 if (currentUser()) {
   import('./github-oauth.js').then(({ syncGithubIdentity, getGithubToken }) => {
     syncGithubIdentity().catch((err) => console.warn('syncGithubIdentity', err));
-    getGithubToken()
-      .then((token) => {
-        if (!token) return;
-        return import('./language-stats.js').then(({ setGithubApiToken }) => setGithubApiToken(token));
-      })
-      .catch(() => {});
+    // getGithubToken also restores the account-bound API token into the
+    // shared GitHub client; no second write is needed here.
+    getGithubToken().catch(() => {});
   });
 }
 // Warm the official-account cache for admins / operators so the

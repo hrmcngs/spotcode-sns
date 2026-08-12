@@ -117,9 +117,29 @@ export function isRateLimited() {
 // 60/h one; Search API rises from 10 → 30 req/min. Falls back to
 // anonymous the moment it goes missing (token refresh dropped it,
 // user unlinked, etc).
+const GH_TOKEN_STORAGE_KEY = 'spotcode.github_api_token';
 let ghApiToken = null;
-export function setGithubApiToken(token) { ghApiToken = token || null; }
+export function setGithubApiToken(token, ownerId = '') {
+  ghApiToken = token || null;
+  // Supabase drops provider_token when its own session refreshes. Keep the
+  // GitHub grant for this browser tab so navigation/reloads do not randomly
+  // disable private issues. sessionStorage clears when the tab is closed.
+  try {
+    if (ghApiToken && ownerId) window.sessionStorage.setItem(
+      GH_TOKEN_STORAGE_KEY, JSON.stringify({ token: ghApiToken, ownerId })
+    );
+    else window.sessionStorage.removeItem(GH_TOKEN_STORAGE_KEY);
+  } catch {}
+}
 export function hasGithubApiToken() { return !!ghApiToken; }
+export function restoreGithubApiToken(ownerId) {
+  try {
+    const saved = JSON.parse(window.sessionStorage.getItem(GH_TOKEN_STORAGE_KEY) || 'null');
+    if (!saved?.token || saved.ownerId !== ownerId) return null;
+    ghApiToken = saved.token;
+    return ghApiToken;
+  } catch { return null; }
+}
 
 // Exported so other GitHub-data views (e.g. /repos) share the same
 // rate-limit cooldown. When this helper trips RATE_LIMIT, every caller
@@ -137,7 +157,7 @@ export async function fetchJson(url, timeoutMs = 10000) {
     // known-bad credential (which GitHub eventually rate-limits
     // separately from the anon budget).
     if (r.status === 401 && ghApiToken) {
-      ghApiToken = null;
+      setGithubApiToken(null);
     }
     if (r.status === 403) {
       rateLimitedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;

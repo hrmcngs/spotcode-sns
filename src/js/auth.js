@@ -376,6 +376,10 @@ export async function logout() {
   // on this device anymore." If they want it back in the switcher
   // they can log in again.
   if (me?.id) forgetAccount(me.id);
+  try {
+    const { setGithubApiToken } = await import('./language-stats.js');
+    setGithubApiToken(null);
+  } catch {}
   cachedUser = null;
   emit();
 }

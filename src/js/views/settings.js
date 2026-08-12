@@ -588,12 +588,16 @@ export function bindSettings() {
       (async () => {
         if (includePrivate) {
           const token = await getGithubToken();
-          if (!token || !(await githubTokenCanReadPrivateRepos(token))) {
+          const permission = token ? await githubTokenCanReadPrivateRepos(token) : false;
+          if (!token || permission === false) {
             privateIssueAuthError = 'GitHubの非公開Repo権限を確認できません。OFFにしてから再認証してください。';
           } else {
-            setGithubApiToken(token);
+            // getGithubToken already restored/stored this account's token.
+            setGithubApiToken(token, settingsUser.id);
             const tasks = await fetchTasks(settingsGh, true);
-            if (!tasks) privateIssueAuthError = '非公開Issueを取得できません。GitHub再認証でrepo権限を許可してください。';
+            // A temporary GitHub/network failure should keep the saved repo
+            // selection and cached issues instead of claiming auth expired.
+            if (!tasks && permission === true) privateIssueAuthError = 'GitHubに接続できません。しばらくしてから再試行してください。';
             else privateIssueAuthError = '';
           }
         } else {

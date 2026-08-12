@@ -150,7 +150,21 @@ export async function syncGithubIdentity() {
 export async function getGithubToken() {
   const supa = await getClient();
   const { data } = await supa.auth.getSession();
-  return data?.session?.provider_token || null;
+  const ownerId = data?.session?.user?.id || '';
+  const fresh = data?.session?.provider_token || null;
+  if (fresh) {
+    try {
+      const { setGithubApiToken } = await import('./language-stats.js');
+      setGithubApiToken(fresh, ownerId);
+    } catch {}
+    return fresh;
+  }
+  // provider_token is commonly omitted after Supabase refreshes its session.
+  // language-stats restores the last OAuth grant from localStorage.
+  try {
+    const { restoreGithubApiToken } = await import('./language-stats.js');
+    return restoreGithubApiToken(ownerId);
+  } catch { return null; }
 }
 
 export async function githubTokenCanReadPrivateRepos(token) {
@@ -159,11 +173,14 @@ export async function githubTokenCanReadPrivateRepos(token) {
     const response = await fetch('https://api.github.com/user', {
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + token },
     });
-    if (!response.ok) return false;
+    if (response.status === 401) return false;
+    if (!response.ok) return null;
     const scopes = String(response.headers.get('x-oauth-scopes') || '')
       .split(',').map((value) => value.trim().toLowerCase());
     return scopes.includes('repo');
-  } catch { return false; }
+  // `null` means the permission could not be checked due to a transient
+  // network failure. It must not be presented as a revoked permission.
+  } catch { return null; }
 }
 
 // Detach the GitHub identity from the auth user and clear the profile
