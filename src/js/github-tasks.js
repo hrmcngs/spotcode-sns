@@ -89,7 +89,7 @@ function hiddenByIssueTemplate(item) {
   const hiddenLabel = (item?.labels || []).some((label) =>
     ['spotcode非表示', 'spotcode-hidden'].includes(String(label?.name || '').toLowerCase())
   );
-  return hiddenLabel || /(?:\*\*)?\s*spotcode\s*表示\s*(?:\*\*)?\s*[:：]\s*(?:しない|非表示|off|false|no)(?:\s|$)/im.test(body);
+  return hiddenLabel || /(?:\*\*)?\s*spotcode\s*表示\s*[:：]?\s*(?:\*\*)?\s*[:：]?\s*(?:しない|非表示|off|false|no)(?:\s|$)/im.test(body);
 }
 
 function readCache() {

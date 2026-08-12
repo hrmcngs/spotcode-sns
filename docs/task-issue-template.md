@@ -21,8 +21,34 @@ issue 本文に `期限` / `Due` の行を書いておくと、
 自由に書いてください。
 ```
 
-`spotcode表示` を `しない` にすると、そのIssueはspotcode-snsのOpen issuesに表示されません。
-項目を省略した既存Issueは表示されます。
+## Issueごとの表示設定
+
+Issue本文の先頭付近に、次のどちらかを記載してください。
+
+```markdown
+**spotcode表示**: する
+```
+
+このIssueをプロフィールのOpen issuesへ表示します。
+
+```markdown
+**spotcode表示**: しない
+```
+
+このIssueはOpen issuesへ表示しません。`非表示`、`OFF`、`false`、`no` も
+`しない` と同じ扱いです。大文字・小文字は問いません。
+
+| 記述 | 結果 |
+| --- | --- |
+| `spotcode表示: する` | 表示 |
+| `**spotcode表示**: する` | 表示 |
+| `**spotcode表示:** しない` | 非表示 |
+| `spotcode表示: OFF` | 非表示 |
+| 記述なし | 表示（既存Issueとの互換性） |
+
+リポジトリ側で一時的に隠したい場合は、`spotcode非表示` または
+`spotcode-hidden` ラベルでも非表示にできます。本文の設定とラベルの
+どちらか一方が非表示なら、そのIssueは表示されません。
 
 ## 非公開リポジトリの課題Issue
 

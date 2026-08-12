@@ -142,7 +142,7 @@ struct GitHubIssue: Codable, Identifiable, Hashable {
     var isHiddenFromSpotcode: Bool {
         if labels.contains(where: { ["spotcode非表示", "spotcode-hidden"].contains($0.name.lowercased()) }) { return true }
         guard let body else { return false }
-        let pattern = "(?:\\*\\*)?\\s*spotcode\\s*表示\\s*(?:\\*\\*)?\\s*[:：]\\s*(?:しない|非表示|off|false|no)(?:\\s|$)"
+        let pattern = "(?:\\*\\*)?\\s*spotcode\\s*表示\\s*[:：]?\\s*(?:\\*\\*)?\\s*[:：]?\\s*(?:しない|非表示|off|false|no)(?:\\s|$)"
         return body.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 }
