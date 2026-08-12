@@ -42,15 +42,17 @@ struct RootView: View {
     @State private var composing = false
     @State private var showAccounts = false
     @State private var repositoryComposeURL: String?
+    @State private var navigationReset = UUID()
 
     var body: some View {
         ZStack(alignment: .leading) {
             SpotcodeTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                TopBar(drawerOpen: $drawerOpen, section: $section, showAccounts: $showAccounts, showLogin: $showLogin)
+                TopBar(drawerOpen: $drawerOpen, section: $section, showAccounts: $showAccounts, showLogin: $showLogin, navigationReset: $navigationReset)
                 HStack(spacing: 0) {
                     Spacer(minLength: horizontalSizeClass == .regular ? 24 : 0)
                     NavigationView { sectionView }
+                        .id(navigationReset)
                         .navigationViewStyle(.stack)
                         .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -61,7 +63,7 @@ struct RootView: View {
             }
             if drawerOpen {
                 Color.black.opacity(0.55).ignoresSafeArea().onTapGesture { withAnimation { drawerOpen = false } }
-                SideDrawer(section: $section, open: $drawerOpen, composing: $composing)
+                SideDrawer(section: $section, open: $drawerOpen, composing: $composing, navigationReset: $navigationReset)
                     .transition(.move(edge: .leading))
             }
             if showAccounts {
@@ -90,6 +92,7 @@ struct RootView: View {
         case .repos: RepositoriesView { url in
             repositoryComposeURL = url.absoluteString
             section = .home
+            navigationReset = UUID()
         }
         case .notifications: NotificationsView()
         case .profile: ProfileView(profile: model.me)
@@ -104,6 +107,7 @@ private struct TopBar: View {
     @Binding var section: AppSection
     @Binding var showAccounts: Bool
     @Binding var showLogin: Bool
+    @Binding var navigationReset: UUID
     @State private var query = ""
     @State private var showSearch = false
 
@@ -112,7 +116,7 @@ private struct TopBar: View {
             Button { withAnimation(.easeOut(duration: 0.2)) { drawerOpen.toggle() } } label: {
                 Image(systemName: "line.3.horizontal").frame(width: 34, height: 34)
             }.spotcodeIconButton()
-            Button { section = .home } label: {
+            Button { section = .home; navigationReset = UUID() } label: {
                 HStack(spacing: 7) {
                     Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 25, height: 25)
                     Text("spotcode").fontWeight(.bold)
@@ -128,7 +132,7 @@ private struct TopBar: View {
             .background(SpotcodeTheme.background)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
             Spacer(minLength: 0)
-            Button { section = .settings } label: { Image(systemName: "gearshape") }.spotcodeIconButton()
+            Button { section = .settings; navigationReset = UUID() } label: { Image(systemName: "gearshape") }.spotcodeIconButton()
             Button {
                 if model.session == nil { showLogin = true } else { showAccounts = true }
             } label: { AvatarView(profile: model.me, size: 34) }
@@ -145,12 +149,14 @@ private struct SideDrawer: View {
     @Binding var section: AppSection
     @Binding var open: Bool
     @Binding var composing: Bool
+    @Binding var navigationReset: UUID
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(AppSection.allCases, id: \.self) { item in
                 Button {
                     section = item
+                    navigationReset = UUID()
                     withAnimation { open = false }
                 } label: {
                     HStack(spacing: 16) {
@@ -790,7 +796,10 @@ struct PostRow: View {
                         }
                     }
                 }
-                Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                NavigationLink(destination: PostDetailView(post: post)) {
+                    Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                }.buttonStyle(.plain)
                 if let photos = post.photos, !photos.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) { ForEach(photos, id: \.self) { DataURLImage(value: $0).frame(width: 180, height: 140).clipShape(RoundedRectangle(cornerRadius: 10)) } }
@@ -1319,8 +1328,8 @@ private struct ProfileHero: View {
                     ProfileCount(value: counts.posts, label: "Posts")
                 }.padding(.top, 5)
                 if profile.githubHandle != nil {
-                    GitHubActivity(repositories: repositories)
-                    OpenIssuesCard(repositories: repositories)
+                    GitHubActivity(handle: profile.githubHandle ?? "", repositories: repositories)
+                    OpenIssuesCard(handle: profile.githubHandle ?? "", repositories: repositories)
                 }
             }.padding(.horizontal, 18).padding(.bottom, 20)
         }.overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
@@ -1378,9 +1387,11 @@ private struct EditProfileView: View {
 }
 
 private struct GitHubActivity: View {
+    let handle: String
     let repositories: [Repository]
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        Link(destination: URL(string: "https://github.com/\(handle)?tab=contributions")!) {
+          VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 5) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(0..<26, id: \.self) { column in
@@ -1392,18 +1403,25 @@ private struct GitHubActivity: View {
                     }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).clipped()
-        }.padding(.top, 8)
+          }.padding(.top, 8).foregroundColor(SpotcodeTheme.text)
+        }.buttonStyle(.plain)
     }
 }
 
 private struct OpenIssuesCard: View {
+    let handle: String
     let repositories: [Repository]
     private var total: Int { repositories.reduce(0) { $0 + $1.openIssues } }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues"); Text("\(total)").fontWeight(.bold); Text("公開リポの未クローズ issue (task)").font(.caption).foregroundColor(SpotcodeTheme.muted); Spacer() }
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack { Text("All \(total)").issuePill(); ForEach(repositories.prefix(5)) { repo in Text("\(repo.name) \(repo.openIssues)").issuePill() } }
+                HStack {
+                    Link(destination: URL(string: "https://github.com/issues?q=is%3Aopen+user%3A\(handle)")!) { Text("All \(total)").issuePill() }
+                    ForEach(repositories.prefix(8)) { repo in
+                        Link(destination: repo.htmlURL.appendingPathComponent("issues")) { Text("\(repo.name) \(repo.openIssues)").issuePill() }
+                    }
+                }.foregroundColor(SpotcodeTheme.text)
             }
         }.padding(12).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border)).padding(.top, 8)
     }
