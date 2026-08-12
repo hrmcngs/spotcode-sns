@@ -2173,6 +2173,14 @@ html[data-theme='light'] .post__body code { color: #6a3df0; }
   padding-left: 1.4rem;
 }
 .md-list li { margin: .15rem 0; }
+.md-table-wrap { width: 100%; overflow-x: auto; margin: .45rem 0; }
+.md-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: .88em; }
+.md-table th, .md-table td {
+  padding: .4rem .55rem; border: 1px solid var(--border);
+  text-align: left; vertical-align: top; white-space: normal;
+}
+.md-table th { background: rgba(255, 255, 255, .045); font-weight: 700; }
+.md-table tr:nth-child(even) td { background: rgba(255, 255, 255, .02); }
 .md-task {
   list-style: none;
   margin-left: -1.4rem;

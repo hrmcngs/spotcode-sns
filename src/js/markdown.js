@@ -92,6 +92,32 @@ export function renderMarkdown(escaped, opts = {}) {
       continue;
     }
 
+    // GitHub-flavoured pipe table. A header row followed by a
+    // `| --- | :---: |` delimiter starts the table; consume rows until
+    // the first blank/non-pipe line. Wrapping keeps wide issue tables
+    // horizontally scrollable instead of flattening them into prose.
+    const splitTableRow = (value) => {
+      let cells = String(value).trim().split('|');
+      if (cells[0].trim() === '') cells.shift();
+      if (cells[cells.length - 1]?.trim() === '') cells.pop();
+      return cells.map((cell) => cell.trim());
+    };
+    const headerCells = line.includes('|') ? splitTableRow(line) : [];
+    const delimiterCells = i + 1 < lines.length ? splitTableRow(lines[i + 1]) : [];
+    if (headerCells.length > 1 && delimiterCells.length === headerCells.length &&
+        delimiterCells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+      const head = '<thead><tr>' + headerCells.map((cell) => '<th>' + inlinePass(cell) + '</th>').join('') + '</tr></thead>';
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
+        const cells = splitTableRow(lines[i]);
+        rows.push('<tr>' + headerCells.map((_, index) => '<td>' + inlinePass(cells[index] || '') + '</td>').join('') + '</tr>');
+        i++;
+      }
+      out.push('<div class="md-table-wrap"><table class="md-table">' + head + '<tbody>' + rows.join('') + '</tbody></table></div>');
+      continue;
+    }
+
     // List block — consume contiguous list lines (mix of regular and
     // task items is fine; both wrap in the same <ul>).
     if (/^\s*[-*]\s+/.test(line)) {

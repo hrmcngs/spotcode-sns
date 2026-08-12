@@ -86,7 +86,10 @@ function shape(item) {
 
 function hiddenByIssueTemplate(item) {
   const body = String(item?.body || '');
-  return /(?:\*\*)?\s*spotcode\s*表示\s*(?:\*\*)?\s*[:：]\s*(?:しない|非表示|off|false|no)(?:\s|$)/im.test(body);
+  const hiddenLabel = (item?.labels || []).some((label) =>
+    ['spotcode非表示', 'spotcode-hidden'].includes(String(label?.name || '').toLowerCase())
+  );
+  return hiddenLabel || /(?:\*\*)?\s*spotcode\s*表示\s*(?:\*\*)?\s*[:：]\s*(?:しない|非表示|off|false|no)(?:\s|$)/im.test(body);
 }
 
 function readCache() {
