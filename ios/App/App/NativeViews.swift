@@ -1583,6 +1583,8 @@ private struct OpenIssuesCard: View {
                 }
             }
         }.padding(12).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border)).padding(.top, 8)
+            .onAppear { collapseAll() }
+            .onChange(of: handle) { _ in collapseAll() }
     }
 
     private func dueLabel(_ date: Date) -> String {
@@ -1595,6 +1597,11 @@ private struct OpenIssuesCard: View {
         body.replacingOccurrences(of: "<!--(?:.|\\n)*?-->", with: "", options: .regularExpression)
             .replacingOccurrences(of: "**", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func collapseAll() {
+        listExpanded = false
+        expandedIssues.removeAll()
     }
 }
 
