@@ -806,6 +806,7 @@ private struct ComposerTextView: UIViewRepresentable {
 
 struct PostRow: View {
     let post: Post
+    var opensDetail = true
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             NavigationLink(destination: ProfileLookupView(handle: post.author?.handle ?? "")) {
@@ -813,12 +814,8 @@ struct PostRow: View {
             }.buttonStyle(.plain).disabled(post.author?.handle == nil)
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 5) {
-                    NavigationLink(destination: ProfileLookupView(handle: post.author?.handle ?? "")) {
-                        HStack(spacing: 5) {
-                            Text(post.author?.name ?? "User").fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
-                            Text("@\(post.author?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
-                        }
-                    }.buttonStyle(.plain).disabled(post.author?.handle == nil)
+                    Text(post.author?.name ?? "User").fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
+                    Text("@\(post.author?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
                     Text("· \(relativeTime(post.createdAt))").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
                     Spacer(minLength: 2)
                     Text((post.status ?? "wip").uppercased()).font(.caption.weight(.bold))
@@ -837,10 +834,8 @@ struct PostRow: View {
                         }
                     }
                 }
-                NavigationLink(destination: PostDetailView(post: post)) {
-                    Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                }.buttonStyle(.plain)
+                Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if let photos = post.photos, !photos.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) { ForEach(photos, id: \.self) { DataURLImage(value: $0).frame(width: 180, height: 140).clipShape(RoundedRectangle(cornerRadius: 10)) } }
@@ -880,6 +875,16 @@ struct PostRow: View {
         }
         .padding(16).background(SpotcodeTheme.surface)
         .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+        .overlay {
+            if opensDetail {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: 70).allowsHitTesting(false)
+                    NavigationLink(destination: PostDetailView(post: post)) {
+                        Color.clear.contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     private func visibilityBadge(_ value: String) -> (icon: String, text: String) {
@@ -933,7 +938,7 @@ struct AvatarView: View {
 struct PostDetailView: View {
     let post: Post
     var body: some View {
-        ScrollView { PostRow(post: post) }
+        ScrollView { PostRow(post: post, opensDetail: false) }
             .background(SpotcodeTheme.surface).navigationTitle("Post").navigationBarTitleDisplayMode(.inline)
     }
 }
