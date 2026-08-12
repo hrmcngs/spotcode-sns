@@ -1102,8 +1102,6 @@ struct RepositoriesView: View {
     @EnvironmentObject private var model: AppModel
     let onCompose: (URL) -> Void
     @State private var repositories: [Repository] = []
-    @State private var contributions: [GitHubContribution] = []
-    @State private var issueSearch: GitHubIssueSearchResponse?
     @State private var relatedPosts: [Post] = []
     @State private var loading = false
     var body: some View {
@@ -1274,6 +1272,8 @@ struct ProfileView: View {
     @State private var counts = (following: 0, followers: 0, posts: 0)
     @State private var selectedTab = 0
     @State private var repositories: [Repository] = []
+    @State private var contributions: [GitHubContribution] = []
+    @State private var issueSearch: GitHubIssueSearchResponse?
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
