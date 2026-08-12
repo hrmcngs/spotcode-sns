@@ -95,7 +95,11 @@ struct RootView: View {
             navigationReset = UUID()
         }
         case .notifications: NotificationsView()
-        case .profile: ProfileView(profile: model.me)
+        // Profile follows the identity selected in the account switcher.
+        // Settings and authorization still use model.me (the real signed-in
+        // administrator), while official mode opens @spotcode_official here.
+        case .profile: ProfileView(profile: model.displayProfile)
+            .id(model.displayProfile?.id)
         case .settings: SettingsView()
         }
     }
@@ -1330,7 +1334,7 @@ private struct ProfileLookupView: View {
         .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
         .task {
             guard !handle.isEmpty else { loading = false; return }
-            if model.me?.handle.caseInsensitiveCompare(handle) == .orderedSame { profile = model.me }
+            if model.displayProfile?.handle.caseInsensitiveCompare(handle) == .orderedSame { profile = model.displayProfile }
             else { profile = try? await SupabaseService.shared.profile(handle: handle, token: model.session?.accessToken) }
             loading = false
         }
