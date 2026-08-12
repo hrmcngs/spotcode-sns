@@ -1102,6 +1102,8 @@ struct RepositoriesView: View {
     @EnvironmentObject private var model: AppModel
     let onCompose: (URL) -> Void
     @State private var repositories: [Repository] = []
+    @State private var contributions: [GitHubContribution] = []
+    @State private var issueSearch: GitHubIssueSearchResponse?
     @State private var relatedPosts: [Post] = []
     @State private var loading = false
     var body: some View {
@@ -1277,7 +1279,7 @@ struct ProfileView: View {
             ScrollView {
                 if let profile {
                     VStack(spacing: 0) {
-                        ProfileHero(profile: profile, counts: counts, repositories: repositories, isOwn: profile.id == model.me?.id)
+                        ProfileHero(profile: profile, counts: counts, repositories: repositories, contributions: contributions, issueSearch: issueSearch, isOwn: profile.id == model.me?.id)
                         HStack(spacing: 0) {
                             ForEach(["Posts", "Spots", "Likes"].indices, id: \.self) { index in
                                 Button { selectedTab = index } label: {
@@ -1309,7 +1311,12 @@ struct ProfileView: View {
         profilePosts = await posts ?? []
         if let value = await stats { counts = value }
         if let handle = profile?.githubHandle {
-            repositories = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []
+            async let loadedRepos = SupabaseService.shared.repositories(handle: handle)
+            async let loadedContributions = SupabaseService.shared.githubContributions(handle: handle)
+            async let loadedIssues = SupabaseService.shared.githubOpenIssues(handle: handle)
+            repositories = (try? await loadedRepos) ?? []
+            contributions = (try? await loadedContributions) ?? []
+            issueSearch = try? await loadedIssues
         }
     }
 }
@@ -1350,6 +1357,8 @@ private struct ProfileHero: View {
     let profile: Profile
     let counts: (following: Int, followers: Int, posts: Int)
     let repositories: [Repository]
+    let contributions: [GitHubContribution]
+    let issueSearch: GitHubIssueSearchResponse?
     let isOwn: Bool
     @State private var editing = false
     var body: some View {
@@ -1376,6 +1385,14 @@ private struct ProfileHero: View {
                     if let location = profile.location, !location.isEmpty { Label(location, systemImage: "mappin") }
                     if let joined = profile.createdAt { Label("Joined \(String(joined.prefix(7)))", systemImage: "calendar") }
                 }.foregroundColor(SpotcodeTheme.muted)
+                if let handle = profile.githubHandle, let url = URL(string: "https://github.com/\(handle)") {
+                    Link(destination: url) {
+                        HStack(spacing: 6) {
+                            Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 15, height: 15)
+                            Text("@\(handle)")
+                        }
+                    }.foregroundColor(SpotcodeTheme.accent)
+                }
                 HStack(spacing: 22) {
                     if let id = profile.id {
                         NavigationLink(destination: FollowListView(userID: id, kind: .following)) { ProfileCount(value: counts.following, label: "Following") }.buttonStyle(.plain)
@@ -1384,8 +1401,8 @@ private struct ProfileHero: View {
                     ProfileCount(value: counts.posts, label: "Posts")
                 }.padding(.top, 5)
                 if profile.githubHandle != nil {
-                    GitHubActivity(handle: profile.githubHandle ?? "", repositories: repositories)
-                    OpenIssuesCard(handle: profile.githubHandle ?? "", repositories: repositories)
+                    GitHubActivity(handle: profile.githubHandle ?? "", contributions: contributions)
+                    OpenIssuesCard(handle: profile.githubHandle ?? "", result: issueSearch)
                 }
             }.padding(.horizontal, 18).padding(.bottom, 20)
         }.overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
@@ -1462,7 +1479,8 @@ private struct EditProfileView: View {
 
 private struct GitHubActivity: View {
     let handle: String
-    let repositories: [Repository]
+    let contributions: [GitHubContribution]
+    private var cells: [GitHubContribution] { Array(contributions.suffix(26 * 7)) }
     var body: some View {
         Link(destination: URL(string: "https://github.com/\(handle)?tab=contributions")!) {
           VStack(alignment: .leading, spacing: 8) {
@@ -1471,8 +1489,9 @@ private struct GitHubActivity: View {
                 ForEach(0..<26, id: \.self) { column in
                     VStack(spacing: 3) {
                         ForEach(0..<7, id: \.self) { row in
-                            let level = (column * 7 + row + repositories.count * 3) % 6
-                            RoundedRectangle(cornerRadius: 2).fill(level < 2 ? SpotcodeTheme.surface2 : Color.green.opacity(0.3 + Double(level) * 0.12)).frame(width: 9, height: 9)
+                            let index = column * 7 + row
+                            let count = index < cells.count ? cells[index].count : 0
+                            RoundedRectangle(cornerRadius: 2).fill(grassColor(count)).frame(width: 9, height: 9)
                         }
                     }
                 }
@@ -1480,22 +1499,52 @@ private struct GitHubActivity: View {
           }.padding(.top, 8).foregroundColor(SpotcodeTheme.text)
         }.buttonStyle(.plain)
     }
+
+    private func grassColor(_ count: Int) -> Color {
+        if count == 0 { return SpotcodeTheme.surface2 }
+        if count < 3 { return Color.green.opacity(0.38) }
+        if count < 6 { return Color.green.opacity(0.58) }
+        if count < 10 { return Color.green.opacity(0.78) }
+        return Color.green
+    }
 }
 
 private struct OpenIssuesCard: View {
     let handle: String
-    let repositories: [Repository]
-    private var total: Int { repositories.reduce(0) { $0 + $1.openIssues } }
+    let result: GitHubIssueSearchResponse?
+    private var total: Int { result?.totalCount ?? 0 }
+    private var issueGroups: [(key: String, value: [GitHubIssue])] {
+        Array(Dictionary(grouping: result?.items ?? [], by: \.repositoryName).sorted { $0.key < $1.key }.prefix(8))
+    }
+    private var visibleIssues: [GitHubIssue] { Array((result?.items ?? []).prefix(5)) }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues"); Text("\(total)").fontWeight(.bold); Text("公開リポの未クローズ issue (task)").font(.caption).foregroundColor(SpotcodeTheme.muted); Spacer() }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
                     Link(destination: URL(string: "https://github.com/issues?q=is%3Aopen+user%3A\(handle)")!) { Text("All \(total)").issuePill() }
-                    ForEach(repositories.prefix(8)) { repo in
-                        Link(destination: repo.htmlURL.appendingPathComponent("issues")) { Text("\(repo.name) \(repo.openIssues)").issuePill() }
+                    ForEach(issueGroups, id: \.key) { entry in
+                        Text("\(entry.key.split(separator: "/").last.map(String.init) ?? entry.key) \(entry.value.count)").issuePill()
                     }
                 }.foregroundColor(SpotcodeTheme.text)
+            }
+            if result == nil {
+                ProgressView("Issueを読み込み中…").font(.caption).foregroundColor(SpotcodeTheme.muted)
+            } else if result?.items.isEmpty == true {
+                Text("未クローズのIssueはありません").font(.caption).foregroundColor(SpotcodeTheme.muted)
+            } else {
+                ForEach(visibleIssues) { issue in
+                    Link(destination: issue.htmlURL) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.circle")
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(issue.title).lineLimit(1).foregroundColor(SpotcodeTheme.text)
+                                Text(issue.repositoryName).font(.caption).foregroundColor(SpotcodeTheme.muted)
+                            }
+                            Spacer(); Image(systemName: "arrow.up.right").font(.caption)
+                        }.padding(.vertical, 4)
+                    }
+                }
             }
         }.padding(12).overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border)).padding(.top, 8)
     }

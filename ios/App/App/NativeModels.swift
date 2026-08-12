@@ -87,6 +87,38 @@ struct Repository: Codable, Identifiable, Hashable {
     }
 }
 
+struct GitHubContribution: Codable, Hashable {
+    let date: String
+    let count: Int
+}
+
+struct GitHubContributionsResponse: Codable {
+    let contributions: [GitHubContribution]
+}
+
+struct GitHubIssue: Codable, Identifiable, Hashable {
+    let id: Int
+    let title: String
+    let htmlURL: URL
+    let repositoryURL: URL
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title
+        case htmlURL = "html_url"
+        case repositoryURL = "repository_url"
+        case createdAt = "created_at"
+    }
+
+    var repositoryName: String { repositoryURL.pathComponents.suffix(2).joined(separator: "/") }
+}
+
+struct GitHubIssueSearchResponse: Codable {
+    let totalCount: Int
+    let items: [GitHubIssue]
+    enum CodingKeys: String, CodingKey { case items; case totalCount = "total_count" }
+}
+
 struct AuthUser: Codable { let id: UUID; let email: String? }
 
 struct AuthSession: Codable {

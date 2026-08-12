@@ -164,6 +164,32 @@ actor SupabaseService {
         return try decoder.decode([Repository].self, from: data)
     }
 
+    func githubContributions(handle: String) async throws -> [GitHubContribution] {
+        let escaped = handle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? handle
+        var components = URLComponents(string: "https://github-contributions-api.jogruber.de/v4/\(escaped)")!
+        components.queryItems = [.init(name: "y", value: "last")]
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 35
+        let (data, response) = try await data(for: request, retryable: true)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
+        return try decoder.decode(GitHubContributionsResponse.self, from: data).contributions
+    }
+
+    func githubOpenIssues(handle: String) async throws -> GitHubIssueSearchResponse {
+        var components = URLComponents(string: "https://api.github.com/search/issues")!
+        components.queryItems = [
+            .init(name: "q", value: "author:\(handle) type:issue state:open is:public"),
+            .init(name: "sort", value: "created"), .init(name: "order", value: "desc"),
+            .init(name: "per_page", value: "30")
+        ]
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 35
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await data(for: request, retryable: true)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
+        return try decoder.decode(GitHubIssueSearchResponse.self, from: data)
+    }
+
     func followingProfiles(userID: UUID, token: String) async throws -> [Profile] {
         let rows: [FollowingProfile] = try await request(
             "rest/v1/follows?follower_id=eq.\(userID.uuidString)&status=eq.accepted&select=target:profiles!follows_target_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
