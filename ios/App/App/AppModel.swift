@@ -84,6 +84,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func updateProfile(name: String, bio: String, location: String) async -> Bool {
+        guard let session, let id = me?.id else { return false }
+        do {
+            let profile = try await SupabaseService.shared.updateProfile(id: id, name: name, bio: bio, location: location, token: session.accessToken)
+            me = profile
+            cacheProfile(profile)
+            return true
+        } catch { errorMessage = error.localizedDescription; return false }
+    }
+
     private func persist(_ value: AuthSession) {
         session = value
         if let data = try? JSONEncoder().encode(value) { try? KeychainStore.save(data, account: sessionAccount) }

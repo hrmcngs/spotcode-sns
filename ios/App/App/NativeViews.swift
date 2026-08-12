@@ -105,6 +105,7 @@ private struct TopBar: View {
     @Binding var showAccounts: Bool
     @Binding var showLogin: Bool
     @State private var query = ""
+    @State private var showSearch = false
 
     var body: some View {
         HStack(spacing: 9) {
@@ -120,6 +121,7 @@ private struct TopBar: View {
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass").foregroundColor(SpotcodeTheme.muted)
                 TextField("Search…", text: $query).foregroundColor(SpotcodeTheme.text)
+                    .onSubmit { if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { showSearch = true } }
             }
             .padding(.horizontal, 10).frame(height: 34)
             .frame(maxWidth: 520)
@@ -134,6 +136,7 @@ private struct TopBar: View {
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(SpotcodeTheme.surface)
         .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+        .sheet(isPresented: $showSearch) { ProfileSearchView(initialQuery: query) }
     }
 }
 
@@ -1246,11 +1249,44 @@ struct ProfileView: View {
     }
 }
 
+private struct ProfileSearchView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State var initialQuery: String
+    @State private var results: [Profile] = []
+    @State private var loading = false
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                TextField("ユーザー・スポット・リポジトリを検索…", text: $initialQuery)
+                    .textInputAutocapitalization(.never).submitLabel(.search).spotcodeField().padding()
+                    .onSubmit { Task { await search() } }
+                if loading { ProgressView().padding() }
+                List(results) { profile in
+                    NavigationLink(destination: ProfileView(profile: profile)) {
+                        HStack(spacing: 12) { AvatarView(profile: profile, size: 42); VStack(alignment: .leading) { Text(profile.name).fontWeight(.bold); Text("@\(profile.handle)").foregroundColor(SpotcodeTheme.muted) } }
+                    }.listRowBackground(SpotcodeTheme.surface)
+                }.listStyle(.plain)
+            }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+                .navigationTitle("Search").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { dismiss() } } }
+                .task { await search() }
+        }.preferredColorScheme(.dark)
+    }
+    private func search() async {
+        guard !initialQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { results = []; return }
+        loading = true; defer { loading = false }
+        results = (try? await SupabaseService.shared.searchProfiles(query: initialQuery, token: model.session?.accessToken)) ?? []
+    }
+}
+
 private struct ProfileHero: View {
+    @EnvironmentObject private var model: AppModel
     let profile: Profile
     let counts: (following: Int, followers: Int, posts: Int)
     let repositories: [Repository]
     let isOwn: Bool
+    @State private var editing = false
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             LinearGradient(colors: [Color(red: 8/255, green: 70/255, blue: 111/255), Color(red: 30/255, green: 116/255, blue: 77/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -1260,7 +1296,7 @@ private struct ProfileHero: View {
                     AvatarView(profile: profile, size: 104).padding(5).background(SpotcodeTheme.surface).clipShape(Circle()).offset(y: -63)
                     Spacer()
                     if isOwn {
-                        Button("Edit profile") { }.font(.body.weight(.bold)).foregroundColor(SpotcodeTheme.background)
+                        Button("Edit profile") { editing = true }.font(.body.weight(.bold)).foregroundColor(SpotcodeTheme.background)
                             .padding(.horizontal, 20).padding(.vertical, 11).background(SpotcodeTheme.text).clipShape(Capsule()).padding(.top, 14)
                     }
                 }.frame(height: 63)
@@ -1276,8 +1312,10 @@ private struct ProfileHero: View {
                     if let joined = profile.createdAt { Label("Joined \(String(joined.prefix(7)))", systemImage: "calendar") }
                 }.foregroundColor(SpotcodeTheme.muted)
                 HStack(spacing: 22) {
-                    ProfileCount(value: counts.following, label: "Following")
-                    ProfileCount(value: counts.followers, label: "Followers")
+                    if let id = profile.id {
+                        NavigationLink(destination: FollowListView(userID: id, kind: .following)) { ProfileCount(value: counts.following, label: "Following") }.buttonStyle(.plain)
+                        NavigationLink(destination: FollowListView(userID: id, kind: .followers)) { ProfileCount(value: counts.followers, label: "Followers") }.buttonStyle(.plain)
+                    }
                     ProfileCount(value: counts.posts, label: "Posts")
                 }.padding(.top, 5)
                 if profile.githubHandle != nil {
@@ -1286,6 +1324,56 @@ private struct ProfileHero: View {
                 }
             }.padding(.horizontal, 18).padding(.bottom, 20)
         }.overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
+         .sheet(isPresented: $editing) { EditProfileView(profile: profile, isPresented: $editing).environmentObject(model) }
+    }
+}
+
+private enum FollowListKind { case following, followers }
+
+private struct FollowListView: View {
+    @EnvironmentObject private var model: AppModel
+    let userID: UUID
+    let kind: FollowListKind
+    @State private var profiles: [Profile] = []
+    var body: some View {
+        List(profiles) { profile in
+            NavigationLink(destination: ProfileView(profile: profile)) {
+                HStack(spacing: 12) { AvatarView(profile: profile, size: 42); VStack(alignment: .leading) { Text(profile.name).fontWeight(.bold); Text("@\(profile.handle)").foregroundColor(SpotcodeTheme.muted) } }
+            }.listRowBackground(SpotcodeTheme.surface)
+        }.listStyle(.plain).background(SpotcodeTheme.surface)
+            .navigationTitle(kind == .following ? "Following" : "Followers")
+            .task {
+                if kind == .following { profiles = (try? await SupabaseService.shared.following(userID: userID, token: model.session?.accessToken)) ?? [] }
+                else { profiles = (try? await SupabaseService.shared.followers(userID: userID, token: model.session?.accessToken)) ?? [] }
+            }
+    }
+}
+
+private struct EditProfileView: View {
+    @EnvironmentObject private var model: AppModel
+    let profile: Profile
+    @Binding var isPresented: Bool
+    @State private var name = ""
+    @State private var bio = ""
+    @State private var location = ""
+    @State private var saving = false
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 14) {
+                TextField("表示名", text: $name).spotcodeField()
+                TextField("自己紹介", text: $bio).spotcodeField()
+                TextField("場所", text: $location).spotcodeField()
+                Spacer()
+            }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+                .navigationTitle("Edit profile").navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(saving ? "保存中…" : "保存") { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving)
+                    }
+                }
+                .onAppear { name = profile.name; bio = profile.bio ?? ""; location = profile.location ?? "" }
+        }.preferredColorScheme(.dark)
     }
 }
 
@@ -1375,6 +1463,7 @@ private struct SettingsCard<Content: View>: View {
 
 private struct AccountSettings: View {
     @EnvironmentObject private var model: AppModel
+    @State private var showAddAccount = false
     var body: some View {
         VStack(spacing: 18) {
             SettingsCard("アカウント") {
@@ -1383,18 +1472,23 @@ private struct AccountSettings: View {
                     HStack { AvatarView(profile: me, size: 42); VStack(alignment: .leading) { Text(me.name).fontWeight(.bold); Text("@\(me.handle) · 現在").font(.caption).foregroundColor(SpotcodeTheme.muted) }; Spacer(); Image(systemName: "xmark").foregroundColor(SpotcodeTheme.muted) }
                         .padding(12).background(Color(red: 23/255, green: 40/255, blue: 54/255)).clipShape(RoundedRectangle(cornerRadius: 9))
                 }
-                Button("＋ 別のアカウントを追加") { }.buttonStyle(OutlineButtonStyle())
+                Button("＋ 別のアカウントでログイン") { showAddAccount = true }.buttonStyle(OutlineButtonStyle())
             }
             SettingsCard("役割") {
-                Label("管理者", systemImage: "sparkles").foregroundColor(SpotcodeTheme.accent)
-                Text("すべての権限を持ちます。運営者の追加・解除、投稿削除、通報対応、ピンの自由配置、Supabase設定。").foregroundColor(SpotcodeTheme.muted)
+                Label(roleTitle, systemImage: model.me?.isAdmin == true ? "sparkles" : (model.me?.isOperator == true ? "flag" : "person")).foregroundColor(SpotcodeTheme.accent)
+                Text(roleDescription).foregroundColor(SpotcodeTheme.muted)
             }
             SettingsCard("アカウントの種類") {
                 Text("個人アカウント").fontWeight(.semibold)
                 Text("プロフィール表示が変わるだけで、投稿の公開範囲やフォローの挙動は変わりません。").foregroundColor(SpotcodeTheme.muted)
-                Button("▦ 組織アカウントに切り替え") { }.buttonStyle(OutlineButtonStyle(filled: true))
             }
-        }
+        }.sheet(isPresented: $showAddAccount) { LoginView(isPresented: $showAddAccount).environmentObject(model) }
+    }
+    private var roleTitle: String { model.me?.isAdmin == true ? "管理者" : (model.me?.isOperator == true ? "運営者" : "一般ユーザー") }
+    private var roleDescription: String {
+        if model.me?.isAdmin == true { return "すべての管理権限を持ちます。" }
+        if model.me?.isOperator == true { return "通報対応・投稿管理・ピン管理を行えます。" }
+        return "通常の投稿・フォロー・スポット機能を利用できます。"
     }
 }
 

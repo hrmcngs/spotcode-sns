@@ -143,3 +143,5 @@ struct FollowEvent: Codable, Identifiable {
 struct FollowingProfile: Codable {
     let target: Profile
 }
+
+struct FollowerProfile: Codable { let follower: Profile }

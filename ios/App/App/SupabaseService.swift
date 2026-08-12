@@ -98,6 +98,21 @@ actor SupabaseService {
         }
     }
 
+    func searchProfiles(query: String, token: String?) async throws -> [Profile] {
+        let escaped = query.trimmingCharacters(in: .whitespacesAndNewlines).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        return try await request("rest/v1/profiles?or=(handle.ilike.*\(escaped)*,name.ilike.*\(escaped)*)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape&limit=12", token: token)
+    }
+
+    func updateProfile(id: UUID, name: String, bio: String, location: String, token: String) async throws -> Profile {
+        let body = try JSONSerialization.data(withJSONObject: ["name": name, "bio": bio, "location": location])
+        let rows: [Profile] = try await request(
+            "rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape",
+            method: "PATCH", token: token, body: body, preferRepresentation: true
+        )
+        guard let profile = rows.first else { throw URLError(.badServerResponse) }
+        return profile
+    }
+
     func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = false) async throws -> [Post] {
         let photoColumn = includePhotos ? ",photos" : ""
         let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count\(photoColumn),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
@@ -148,6 +163,22 @@ actor SupabaseService {
     func followingProfiles(userID: UUID, token: String) async throws -> [Profile] {
         let rows: [FollowingProfile] = try await request(
             "rest/v1/follows?follower_id=eq.\(userID.uuidString)&status=eq.accepted&select=target:profiles!follows_target_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+            token: token
+        )
+        return rows.map(\.target)
+    }
+
+    func followers(userID: UUID, token: String?) async throws -> [Profile] {
+        let rows: [FollowerProfile] = try await request(
+            "rest/v1/follows?target_id=eq.\(userID.uuidString)&status=eq.accepted&select=follower:profiles!follows_follower_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc",
+            token: token
+        )
+        return rows.map(\.follower)
+    }
+
+    func following(userID: UUID, token: String?) async throws -> [Profile] {
+        let rows: [FollowingProfile] = try await request(
+            "rest/v1/follows?follower_id=eq.\(userID.uuidString)&status=eq.accepted&select=target:profiles!follows_target_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc",
             token: token
         )
         return rows.map(\.target)
