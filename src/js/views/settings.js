@@ -6,8 +6,9 @@ import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
 import { openAuth } from './auth-modal.js';
 import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, hiddenTaskRepos, setTaskRepoVisible, privateTasksEnabled, setPrivateTasksEnabled } from '../display-prefs.js';
-import { linkGithubForPrivateIssues } from '../github-oauth.js';
-import { cachedTasks } from '../github-tasks.js';
+import { linkGithubForPrivateIssues, getGithubToken } from '../github-oauth.js';
+import { cachedTasks, fetchTasks } from '../github-tasks.js';
+import { setGithubApiToken } from '../language-stats.js';
 import { isPostingAsOfficial, setPostingAsOfficial } from '../posting-identity.js';
 import { icon } from '../icons.js';
 import { renderAvatar } from '../avatar.js';
@@ -22,6 +23,7 @@ import { isPushEnabled, setPushEnabled, browserPermissionState, requestBrowserPe
 // can re-render without a round trip. Initialised in renderSettings()
 // from currentUser(); each edit immediately POSTs via updateProfile.
 const audienceState = { closeFriends: [], orgMembers: [] };
+const hydratedTaskSettings = new Set();
 
 function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
@@ -568,6 +570,25 @@ export function renderSettings() {
 }
 
 export function bindSettings() {
+  // Populate the repo selector from GitHub itself. This is especially
+  // important after private-repo consent: the private repo may never
+  // have appeared in a public profile cache, so Settings must discover
+  // it instead of waiting for the user to visit Profile first.
+  const settingsUser = currentUser();
+  const settingsGh = settingsUser?.github?.handle;
+  if (currentSettingsTab() === 'display' && settingsGh) {
+    const includePrivate = privateTasksEnabled();
+    const hydrationKey = settingsGh.toLowerCase() + (includePrivate ? ':private' : ':public');
+    if (!hydratedTaskSettings.has(hydrationKey)) {
+      hydratedTaskSettings.add(hydrationKey);
+      (async () => {
+        if (includePrivate) setGithubApiToken(await getGithubToken());
+        await fetchTasks(settingsGh, includePrivate);
+        const app = document.getElementById('app');
+        if (app && currentSettingsTab() === 'display') { app.innerHTML = renderSettings(); bindSettings(); }
+      })().catch(() => hydratedTaskSettings.delete(hydrationKey));
+    }
+  }
   // Revert button on the overlay banner — flips the "posting as
   // official" flag off so the staffer can save their own settings.
   const revertBtn = document.querySelector('[data-settings-overlay-revert]');
