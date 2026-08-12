@@ -192,14 +192,38 @@ private struct AccountSwitcher: View {
     @EnvironmentObject private var model: AppModel
     @Binding var isPresented: Bool
     @Binding var showLogin: Bool
+    @State private var switchingID: UUID?
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack { Text("アカウント").font(.title3).fontWeight(.bold); Spacer(); Button { isPresented = false } label: { Image(systemName: "xmark").font(.title3) } }
-            if let me = model.me {
-                HStack(spacing: 12) {
-                    AvatarView(profile: me, size: 44)
-                    VStack(alignment: .leading, spacing: 3) { HStack { Text(me.name).fontWeight(.bold); Text("現在").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent).padding(4).background(SpotcodeTheme.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }; Text("@\(me.handle)").foregroundColor(SpotcodeTheme.muted) }
-                }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Color(red: 23/255, green: 40/255, blue: 54/255)).clipShape(RoundedRectangle(cornerRadius: 9))
+            ForEach(model.savedAccounts) { account in
+                let active = account.id == model.session?.user.id
+                Button {
+                    guard !active, switchingID == nil else { return }
+                    switchingID = account.id
+                    Task {
+                        if await model.switchAccount(to: account.id) { isPresented = false }
+                        switchingID = nil
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        AvatarView(profile: account.profile, size: 44)
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Text(account.profile.name).fontWeight(.bold)
+                                if active { Text("現在").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent).padding(4).background(SpotcodeTheme.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }
+                            }
+                            Text("@\(account.profile.handle)").foregroundColor(SpotcodeTheme.muted)
+                        }
+                        Spacer()
+                        if switchingID == account.id { ProgressView() }
+                    }
+                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(active ? Color(red: 23/255, green: 40/255, blue: 54/255) : SpotcodeTheme.surface2)
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                }
+                .buttonStyle(.plain)
+                .disabled(switchingID != nil)
             }
             if model.session != nil && (model.me?.isAdmin == true || model.me?.isOperator == true) {
                 HStack(spacing: 12) {
@@ -208,6 +232,13 @@ private struct AccountSwitcher: View {
                 }.padding(.horizontal, 12)
             }
             Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
+            Button {
+                isPresented = false
+                showLogin = true
+            } label: {
+                Label("別のアカウントを追加", systemImage: "plus").font(.body.weight(.semibold))
+            }
+            .disabled(switchingID != nil)
             Button { model.signOut(); isPresented = false; showLogin = true } label: { Label("Log out", systemImage: "arrow.right").foregroundColor(Color(red: 248/255, green: 81/255, blue: 73/255)).font(.title3) }
         }
         .padding(15).background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)

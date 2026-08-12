@@ -169,6 +169,14 @@ struct AuthSession: Codable {
     }
 }
 
+/// Public account-switcher metadata. Authentication tokens are stored
+/// separately in Keychain, never in this UserDefaults-backed value.
+struct SavedAccount: Codable, Identifiable, Hashable {
+    let id: UUID
+    let profile: Profile
+    var lastUsed: Date
+}
+
 struct PostDraft: Encodable {
     let authorID: UUID
     let body: String

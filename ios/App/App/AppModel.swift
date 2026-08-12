@@ -6,14 +6,20 @@ final class AppModel: ObservableObject {
     @Published var session: AuthSession?
     @Published var me: Profile?
     @Published var posts: [Post] = []
+    @Published private(set) var savedAccounts: [SavedAccount] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
 
     private let sessionAccount = "supabase-session"
+    private let savedAccountsKey = "spotcode.native.saved-accounts"
+    private let savedSessionPrefix = "supabase-session."
     private let cachedProfileKey = "spotcode.native.cached-profile"
     private let cachedPostsKey = "spotcode.native.cached-posts"
 
     init() {
+        if let data = UserDefaults.standard.data(forKey: savedAccountsKey) {
+            savedAccounts = (try? JSONDecoder().decode([SavedAccount].self, from: data)) ?? []
+        }
         if let data = KeychainStore.load(account: sessionAccount),
            let saved = try? JSONDecoder().decode(AuthSession.self, from: data) {
             session = saved
@@ -29,7 +35,11 @@ final class AppModel: ObservableObject {
             current = refreshed
             persist(current)
         }
-        if let profile = try? await SupabaseService.shared.profile(id: current.user.id, token: current.accessToken) { me = profile; cacheProfile(profile) }
+        if let profile = try? await SupabaseService.shared.profile(id: current.user.id, token: current.accessToken) {
+            me = profile
+            cacheProfile(profile)
+            rememberAccount(session: current, profile: profile)
+        }
         await loadTimeline()
     }
 
@@ -38,7 +48,11 @@ final class AppModel: ObservableObject {
         do {
             let value = try await SupabaseService.shared.login(email: email, password: password)
             persist(value)
-            if let profile = try? await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) { me = profile; cacheProfile(profile) }
+            if let profile = try? await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) {
+                me = profile
+                cacheProfile(profile)
+                rememberAccount(session: value, profile: profile)
+            }
             Task { await loadTimeline() }
             return true
         } catch {
@@ -48,12 +62,39 @@ final class AppModel: ObservableObject {
     }
 
     func signOut() {
+        if let id = session?.user.id { forgetAccount(id) }
         session = nil
         me = nil
         posts = []
         KeychainStore.delete(account: sessionAccount)
         UserDefaults.standard.removeObject(forKey: cachedProfileKey)
         UserDefaults.standard.removeObject(forKey: cachedPostsKey)
+    }
+
+    func switchAccount(to id: UUID) async -> Bool {
+        guard id != session?.user.id else { return true }
+        guard let data = KeychainStore.load(account: savedSessionPrefix + id.uuidString),
+              var next = try? JSONDecoder().decode(AuthSession.self, from: data) else {
+            forgetAccount(id)
+            errorMessage = "保存済みのログイン情報が見つかりません。もう一度ログインしてください。"
+            return false
+        }
+        do {
+            if next.expiresAt.map({ $0 < Int(Date().timeIntervalSince1970) + 60 }) ?? true {
+                next = try await SupabaseService.shared.refresh(next.refreshToken)
+            }
+            let profile = try await SupabaseService.shared.profile(id: next.user.id, token: next.accessToken)
+            persist(next)
+            me = profile
+            cacheProfile(profile)
+            rememberAccount(session: next, profile: profile)
+            posts = []
+            await loadTimeline()
+            return true
+        } catch {
+            errorMessage = "アカウントを切り替えられませんでした。もう一度ログインしてください。\n\(error.localizedDescription)"
+            return false
+        }
     }
 
     func loadTimeline() async {
@@ -90,13 +131,39 @@ final class AppModel: ObservableObject {
             let profile = try await SupabaseService.shared.updateProfile(id: id, name: name, bio: bio, location: location, avatarURL: avatarURL, avatarShape: avatarShape, token: session.accessToken)
             me = profile
             cacheProfile(profile)
+            rememberAccount(session: session, profile: profile)
             return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
     private func persist(_ value: AuthSession) {
         session = value
-        if let data = try? JSONEncoder().encode(value) { try? KeychainStore.save(data, account: sessionAccount) }
+        if let data = try? JSONEncoder().encode(value) {
+            try? KeychainStore.save(data, account: sessionAccount)
+            try? KeychainStore.save(data, account: savedSessionPrefix + value.user.id.uuidString)
+        }
+    }
+
+    private func rememberAccount(session: AuthSession, profile: Profile) {
+        guard let id = profile.id, id == session.user.id else { return }
+        if let data = try? JSONEncoder().encode(session) {
+            try? KeychainStore.save(data, account: savedSessionPrefix + id.uuidString)
+        }
+        savedAccounts.removeAll { $0.id == id }
+        savedAccounts.insert(SavedAccount(id: id, profile: profile, lastUsed: Date()), at: 0)
+        saveAccountIndex()
+    }
+
+    private func forgetAccount(_ id: UUID) {
+        savedAccounts.removeAll { $0.id == id }
+        KeychainStore.delete(account: savedSessionPrefix + id.uuidString)
+        saveAccountIndex()
+    }
+
+    private func saveAccountIndex() {
+        if let data = try? JSONEncoder().encode(savedAccounts) {
+            UserDefaults.standard.set(data, forKey: savedAccountsKey)
+        }
     }
 
     private func cacheProfile(_ profile: Profile) {
