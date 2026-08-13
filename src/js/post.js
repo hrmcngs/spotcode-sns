@@ -306,7 +306,7 @@ export function renderPost(p) {
                 } catch {}
               }
               return '<div class="post__meta"><a class="post__link" href="' + escape(safe) + '" target="_blank" rel="noopener noreferrer" title="' + escape(safe) + '">' +
-                icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escape(label) + '</a></div>';
+                icon('repo', { size: 14, className: 'icon--inline' }) + escape(label) + '</a></div>';
             })()) +
             // connpass event chip. The link points at the in-app
             // /event/<id> page (so a click aggregates all posts about

@@ -30,7 +30,7 @@ function githubVerifyBlock(u) {
     return (
       '<div class="verify-row verify-row--ok" id="verify-row">' +
         '<div class="verify-row__title">' +
-          icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
+          icon('repo', { size: 14, className: 'icon--inline' }) +
           '@' + attr(u.github.handle) + ' と連携済み ✓' +
         '</div>' +
         '<div class="edit-actions">' +
@@ -43,7 +43,7 @@ function githubVerifyBlock(u) {
   return (
     '<div class="verify-row" id="verify-row">' +
       '<div class="verify-row__title">' +
-        icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
+        icon('repo', { size: 14, className: 'icon--inline' }) +
         'GitHub と連携' +
       '</div>' +
       '<p class="verify-row__hint">' +
@@ -51,7 +51,7 @@ function githubVerifyBlock(u) {
       '</p>' +
       '<div class="edit-actions">' +
         '<button type="button" class="btn btn--primary btn--sm" id="verify-link">' +
-          icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
+          icon('repo', { size: 14, className: 'icon--inline' }) +
           ' GitHub で連携する' +
         '</button>' +
         '<span class="verify-row__status" id="verify-status"></span>' +

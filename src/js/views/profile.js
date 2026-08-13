@@ -305,7 +305,7 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = fals
     return (
       '<div class="profile-tasks" id="profile-tasks-' + ghHandle + '" data-gh="' + escAttr(ghHandle) + '">' +
         '<div class="profile-tasks__head">' +
-          icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
+          icon('repo', { size: 12, className: 'icon--inline' }) +
           ' ' + t('profile.tasks.title') +
           '<span class="profile-tasks__hint">' + t('profile.tasks.loading') + '</span>' +
         '</div>' +
@@ -381,7 +381,7 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = fals
                 (due ? due : '') +
                 '<a class="profile-tasks__external" href="' + escAttr(it.url) + '" target="_blank" rel="noopener" ' +
                   'title="GitHub で開く" aria-label="GitHub で開く">' +
-                  icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
+                  icon('repo', { size: 12, className: 'icon--inline' }) +
                 '</a>' +
               '</div>' +
               (labels ? '<div class="profile-tasks__labels">' + labels + '</div>' : '') +
@@ -410,7 +410,7 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = fals
     '<div class="profile-tasks is-all-collapsed" id="profile-tasks-' + ghHandle + '" ' +
         'data-gh="' + escAttr(ghHandle) + '" data-private="' + (includePrivate ? '1' : '0') + '" data-active-repo="' + escAttr(activeRepo || '') + '">' +
       '<div class="profile-tasks__head">' +
-        icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
+        icon('repo', { size: 12, className: 'icon--inline' }) +
         ' ' + t('profile.tasks.title') +
         ' <b class="profile-tasks__count">' + totalCount + '</b>' +
         '<span class="profile-tasks__hint">' + t('profile.tasks.hint') + '</span>' +
@@ -571,7 +571,7 @@ export function renderProfile(handle) {
         (u.joined   ? '<span>' + icon('calendar', { size: 14, className: 'icon--inline' }) + t('profile.joined') + u.joined + '</span>' : '') +
         (ghLink ? '<a class="profile-gh" href="' + ghLink + '" target="_blank" rel="noopener" title="' +
                     (u.github?.verified ? '本人確認済み' : '未確認') + '">' +
-                    icon('github', { size: 14, fill: true, className: 'icon--inline' }) + (u.github.handle || '') +
+                    icon('repo', { size: 14, className: 'icon--inline' }) + (u.github.handle || '') +
                     (u.github?.verified ? ' <span class="gh-verified" title="本人確認済み">✓</span>' : '') +
                   '</a>' : '') +
       '</div>' +
@@ -593,7 +593,7 @@ export function renderProfile(handle) {
       (u.github?.handle
         ? '<div class="profile-activity" id="profile-activity-' + u.handle + '" data-gh="' + u.github.handle + '">' +
             '<div class="profile-activity__head">' +
-              icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
+              icon('repo', { size: 12, className: 'icon--inline' }) +
               ' GitHub activity ' +
               '<span class="profile-activity__hint">last 12 months</span>' +
             '</div>' +

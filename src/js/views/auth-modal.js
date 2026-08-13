@@ -23,7 +23,7 @@ function template() {
         '</div>' +
 
         '<div class="auth-social">' +
-          '<button type="button" class="btn btn--social btn--gh" data-social="github">' + icon('github', { size: 18, fill: true }) + 'Continue with GitHub</button>' +
+          '<button type="button" class="btn btn--social btn--gh" data-social="github">' + icon('repo', { size: 18 }) + 'Continue with GitHub</button>' +
         '</div>' +
         '<div class="auth-divider"><span>or</span></div>' +
 

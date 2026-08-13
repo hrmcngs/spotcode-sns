@@ -122,7 +122,7 @@ private struct TopBar: View {
             }.spotcodeIconButton()
             Button { section = .home; navigationReset = UUID() } label: {
                 HStack(spacing: 7) {
-                    Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 25, height: 25)
+                    Image(systemName: "mappin.and.ellipse").font(.system(size: 23, weight: .semibold))
                     Text("spotcode").fontWeight(.bold)
                 }.foregroundColor(SpotcodeTheme.text)
             }
@@ -929,7 +929,7 @@ struct PostRow: View {
                 if let link = post.githubLink, let url = URL(string: link) {
                     Link(destination: url) {
                         HStack(spacing: 5) {
-                            Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13)
+                            Image(systemName: "shippingbox")
                             Text(githubLinkLabel(link)).lineLimit(1)
                         }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
@@ -1044,7 +1044,7 @@ struct ComposeView: View {
                     ComposerTextView(text: $bodyText, isFocused: $editorFocused).frame(minHeight: 160)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : SpotcodeTheme.border, lineWidth: 2))
                 }
-                HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
+                HStack { Image(systemName: "shippingbox"); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
                     .padding(11).background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
                 Spacer()
             }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
@@ -1479,7 +1479,7 @@ private struct ProfileHero: View {
                 if let handle = profile.githubHandle, let url = URL(string: "https://github.com/\(handle)") {
                     Link(destination: url) {
                         HStack(spacing: 6) {
-                            Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 15, height: 15)
+                            Image(systemName: "shippingbox")
                             Text("@\(handle)")
                         }
                     }.foregroundColor(SpotcodeTheme.accent)
@@ -1575,7 +1575,7 @@ private struct GitHubActivity: View {
     var body: some View {
         Link(destination: URL(string: "https://github.com/\(handle)?tab=contributions")!) {
           VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 5) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
+            HStack(spacing: 5) { Image(systemName: "chart.bar.xaxis"); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(0..<26, id: \.self) { column in
                     VStack(spacing: 3) {
@@ -1631,7 +1631,7 @@ private struct OpenIssuesCard: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues").foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text("公開リポの未クローズ issue (task)").font(.caption2).foregroundColor(SpotcodeTheme.muted)
+            HStack(spacing: 6) { Image(systemName: "exclamationmark.circle").foregroundColor(SpotcodeTheme.muted); Text("Open issues").foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text("公開リポの未クローズ issue (task)").font(.caption2).foregroundColor(SpotcodeTheme.muted)
                 if !allowedIssues.isEmpty {
                     Button(listExpanded ? "折りたたむ" : "リストを表示") { withAnimation { listExpanded.toggle() } }
                         .font(.caption2).foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 8).padding(.vertical, 3)
@@ -1682,7 +1682,7 @@ private struct OpenIssuesCard: View {
                             }.buttonStyle(.plain).foregroundColor(SpotcodeTheme.muted)
                             if let due = issue.dueDate { Text(dueLabel(due)).issueDuePill(status: dueStatus(due)) }
                             Link(destination: issue.htmlURL) {
-                                Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13)
+                                Image(systemName: "arrow.up.right.square")
                             }.foregroundColor(SpotcodeTheme.muted)
                         }
                         if !issue.labels.isEmpty {
