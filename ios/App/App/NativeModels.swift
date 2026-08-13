@@ -214,6 +214,18 @@ struct FollowEvent: Codable, Identifiable {
     }
 }
 
+struct FollowRecord: Codable {
+    let followerID: UUID
+    let targetID: UUID
+    let status: String
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case followerID = "follower_id"
+        case targetID = "target_id"
+    }
+}
+
 struct FollowingProfile: Codable {
     let target: Profile
 }

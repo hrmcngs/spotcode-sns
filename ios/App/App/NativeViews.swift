@@ -933,8 +933,10 @@ private struct ComposerTextView: UIViewRepresentable {
 }
 
 struct PostRow: View {
+    @EnvironmentObject private var model: AppModel
     let post: Post
     var opensDetail = true
+    @State private var editing = false
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             NavigationLink(destination: ProfileLookupView(handle: post.author?.handle ?? "")) {
@@ -1013,6 +1015,15 @@ struct PostRow: View {
                 }
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if post.authorID == model.displayProfile?.id {
+                Button { editing = true } label: { Image(systemName: "pencil") }
+                    .buttonStyle(.plain).foregroundColor(SpotcodeTheme.muted)
+                    .padding(.trailing, 16).padding(.bottom, 17)
+                    .accessibilityLabel("投稿を編集")
+            }
+        }
+        .sheet(isPresented: $editing) { EditPostView(post: post, isPresented: $editing).environmentObject(model) }
     }
 
     private func visibilityBadge(_ value: String) -> (icon: String, text: String) {
@@ -1023,6 +1034,57 @@ struct PostRow: View {
         case "org": return ("building.2", "同じ組織")
         default: return ("lock", "限定公開")
         }
+    }
+}
+
+private struct EditPostView: View {
+    @EnvironmentObject private var model: AppModel
+    let post: Post
+    @Binding var isPresented: Bool
+    @State private var bodyText: String
+    @State private var githubLink: String
+    @State private var saving = false
+    @State private var editorFocused = false
+
+    init(post: Post, isPresented: Binding<Bool>) {
+        self.post = post
+        _isPresented = isPresented
+        _bodyText = State(initialValue: post.body)
+        _githubLink = State(initialValue: post.githubLink ?? "")
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                ComposerTextView(text: $bodyText, isFocused: $editorFocused)
+                    .frame(minHeight: 180)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : SpotcodeTheme.border, lineWidth: 2))
+                HStack {
+                    Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16)
+                    TextField("https://github.com/…", text: $githubLink)
+                        .textInputAutocapitalization(.never).keyboardType(.URL)
+                }.spotcodeURLField()
+                Spacer()
+            }
+            .padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+            .navigationTitle("投稿を編集").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? "Saving…" : "Save") {
+                        saving = true
+                        Task {
+                            let text = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let link = githubLink.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if await model.editPost(post, body: text, githubLink: link.isEmpty ? nil : link) != nil {
+                                isPresented = false
+                            }
+                            saving = false
+                        }
+                    }.disabled(saving || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }.preferredColorScheme(.dark)
     }
 }
 
@@ -1447,6 +1509,10 @@ struct ProfileView: View {
         }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
          .background(SwipeBackEnabler())
          .task { await loadProfile() }
+         .onReceive(model.$lastUpdatedPost) { updated in
+             guard let updated = updated, let index = profilePosts.firstIndex(where: { $0.id == updated.id }) else { return }
+             profilePosts[index] = updated
+         }
     }
 
     private func loadProfile() async {
@@ -1541,6 +1607,8 @@ private struct ProfileHero: View {
     let issueSearch: GitHubIssueSearchResponse?
     let isOwn: Bool
     @State private var editing = false
+    @State private var isFollowing = false
+    @State private var followLoading = false
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             LinearGradient(colors: [Color(red: 8/255, green: 70/255, blue: 111/255), Color(red: 30/255, green: 116/255, blue: 77/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -1552,6 +1620,14 @@ private struct ProfileHero: View {
                     if isOwn {
                         Button("Edit profile") { editing = true }.font(.body.weight(.bold)).foregroundColor(SpotcodeTheme.background)
                             .padding(.horizontal, 20).padding(.vertical, 11).background(SpotcodeTheme.text).clipShape(Capsule()).padding(.top, 14)
+                    } else if model.session != nil {
+                        Button(followLoading ? "…" : (isFollowing ? "Unfollow" : "Follow")) { toggleFollow() }
+                            .font(.body.weight(.bold))
+                            .foregroundColor(isFollowing ? SpotcodeTheme.text : SpotcodeTheme.background)
+                            .padding(.horizontal, 20).padding(.vertical, 11)
+                            .background(isFollowing ? SpotcodeTheme.surface : SpotcodeTheme.text)
+                            .overlay(Capsule().stroke(SpotcodeTheme.border)).clipShape(Capsule()).padding(.top, 14)
+                            .disabled(followLoading)
                     }
                 }.frame(height: 63)
                 HStack(spacing: 8) {
@@ -1587,6 +1663,27 @@ private struct ProfileHero: View {
             }.padding(.horizontal, 18).padding(.bottom, 20)
         }.overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
          .sheet(isPresented: $editing) { EditProfileView(profile: profile, isPresented: $editing).environmentObject(model) }
+         .task { await loadFollowStatus() }
+    }
+
+    private func loadFollowStatus() async {
+        guard !isOwn, let followerID = model.displayProfile?.id, let targetID = profile.id,
+              let token = model.session?.accessToken else { return }
+        isFollowing = (try? await SupabaseService.shared.followStatus(followerID: followerID, targetID: targetID, token: token)) ?? false
+    }
+
+    private func toggleFollow() {
+        guard let followerID = model.displayProfile?.id, let targetID = profile.id,
+              let token = model.session?.accessToken else { return }
+        followLoading = true
+        Task {
+            do {
+                if isFollowing { try await SupabaseService.shared.unfollow(followerID: followerID, targetID: targetID, token: token) }
+                else { try await SupabaseService.shared.follow(followerID: followerID, targetID: targetID, token: token) }
+                isFollowing.toggle()
+            } catch { model.errorMessage = error.localizedDescription }
+            followLoading = false
+        }
     }
 }
 

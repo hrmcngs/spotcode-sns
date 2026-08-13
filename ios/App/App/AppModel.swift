@@ -6,6 +6,7 @@ final class AppModel: ObservableObject {
     @Published var session: AuthSession?
     @Published var me: Profile?
     @Published var posts: [Post] = []
+    @Published var lastUpdatedPost: Post?
     @Published private(set) var savedAccounts: [SavedAccount] = []
     @Published private(set) var officialProfile: Profile?
     @Published private(set) var isPostingAsOfficial = false
@@ -167,6 +168,21 @@ final class AppModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    func editPost(_ post: Post, body: String, githubLink: String?) async -> Post? {
+        guard let session, post.authorID == displayProfile?.id else { return nil }
+        do {
+            let updated = try await SupabaseService.shared.updatePost(
+                id: post.id, body: body, githubLink: githubLink, token: session.accessToken
+            )
+            if let index = posts.firstIndex(where: { $0.id == post.id }) { posts[index] = updated }
+            lastUpdatedPost = updated
+            return updated
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
         }
     }
 

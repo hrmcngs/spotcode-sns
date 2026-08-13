@@ -153,6 +153,21 @@ actor SupabaseService {
         return post
     }
 
+    func updatePost(id: UUID, body text: String, githubLink: String?, token: String) async throws -> Post {
+        let payload: [String: Any] = [
+            "body": text,
+            "github_link": (githubLink as Any?) ?? NSNull()
+        ]
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
+        let rows: [Post] = try await request(
+            "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+            method: "PATCH", token: token, body: body, preferRepresentation: true
+        )
+        guard let post = rows.first else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を編集できません"]) }
+        return post
+    }
+
     func repositories(handle: String) async throws -> [Repository] {
         var components = URLComponents(string: "https://api.github.com/users/\(handle)/repos")!
         components.queryItems = [.init(name: "sort", value: "pushed"), .init(name: "type", value: "owner"), .init(name: "per_page", value: "30")]
@@ -218,6 +233,33 @@ actor SupabaseService {
         try await request(
             "rest/v1/follows?target_id=eq.\(userID.uuidString)&select=status,created_at,follower:profiles!follows_follower_id_fkey(id,handle,name,avatar_url,bio,location,github_handle)&order=created_at.desc&limit=30",
             token: token
+        )
+    }
+
+    func followStatus(followerID: UUID, targetID: UUID, token: String) async throws -> Bool {
+        let rows: [FollowRecord] = try await request(
+            "rest/v1/follows?follower_id=eq.\(followerID.uuidString)&target_id=eq.\(targetID.uuidString)&status=eq.accepted&select=follower_id,target_id,status&limit=1",
+            token: token
+        )
+        return !rows.isEmpty
+    }
+
+    func follow(followerID: UUID, targetID: UUID, token: String) async throws {
+        let payload = try JSONSerialization.data(withJSONObject: [
+            "follower_id": followerID.uuidString,
+            "target_id": targetID.uuidString,
+            "status": "accepted"
+        ])
+        let _: [FollowRecord] = try await request(
+            "rest/v1/follows?on_conflict=follower_id,target_id&select=follower_id,target_id,status",
+            method: "POST", token: token, body: payload, preferRepresentation: true
+        )
+    }
+
+    func unfollow(followerID: UUID, targetID: UUID, token: String) async throws {
+        let _: [FollowRecord] = try await request(
+            "rest/v1/follows?follower_id=eq.\(followerID.uuidString)&target_id=eq.\(targetID.uuidString)&select=follower_id,target_id,status",
+            method: "DELETE", token: token, preferRepresentation: true
         )
     }
 
