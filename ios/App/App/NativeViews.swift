@@ -125,7 +125,7 @@ struct RootView: View {
 
     @ViewBuilder private var sectionView: some View {
         switch section {
-        case .home: TimelineView(repositoryComposeURL: $repositoryComposeURL)
+        case .home: TimelineView(repositoryComposeURL: $repositoryComposeURL, drawerOpen: $drawerOpen)
         case .repos: RepositoriesView { url in
             repositoryComposeURL = url.absoluteString
             section = .home
@@ -310,6 +310,7 @@ private struct AccountSwitcher: View {
 struct TimelineView: View {
     @EnvironmentObject private var model: AppModel
     @Binding var repositoryComposeURL: String?
+    @Binding var drawerOpen: Bool
     @State private var selectedTab = 0
     @State private var composing = false
 
@@ -331,6 +332,20 @@ struct TimelineView: View {
                 }.refreshable { await model.loadTimeline() }
             }
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 18, coordinateSpace: .local)
+                .onEnded { value in
+                    let horizontal = value.translation.width
+                    let vertical = abs(value.translation.height)
+                    // Reserve the system-style leading edge for the drawer.
+                    // Starting farther inside remains available to maps,
+                    // horizontal chips and other Home content.
+                    guard value.startLocation.x <= 28,
+                          horizontal >= 70,
+                          vertical < horizontal * 0.65 else { return }
+                    withAnimation(.easeOut(duration: 0.2)) { drawerOpen = true }
+                }
+        )
         .background(SpotcodeTheme.surface).navigationBarHidden(true)
         .sheet(isPresented: $composing) { ComposeView(isPresented: $composing) }
     }
