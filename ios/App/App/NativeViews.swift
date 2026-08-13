@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import PhotosUI
+import UIKit
 
 private enum SpotcodeTheme {
     static let background = Color(red: 13/255, green: 17/255, blue: 23/255)
@@ -1336,6 +1337,7 @@ private struct ProfileLookupView: View {
             else { ContentUnavailableViewCompat(title: "プロフィールを取得できませんでした", icon: "person.crop.circle.badge.exclamationmark") }
         }
         .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+        .background(SwipeBackEnabler())
         .task {
             guard !handle.isEmpty else { loading = false; return }
             if model.displayProfile?.handle.caseInsensitiveCompare(handle) == .orderedSame { profile = model.displayProfile }
@@ -1392,6 +1394,7 @@ struct ProfileView: View {
                 } else { ContentUnavailableViewCompat(title: "ログインしてください", icon: "person.crop.circle") }
             }
         }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
+         .background(SwipeBackEnabler())
          .task { await loadProfile() }
     }
 
@@ -1408,6 +1411,41 @@ struct ProfileView: View {
             repositories = (try? await loadedRepos) ?? []
             contributions = (try? await loadedContributions) ?? []
             issueSearch = try? await loadedIssues
+        }
+    }
+}
+
+// Profile pages intentionally hide SwiftUI's navigation bar to match the web
+// layout. On some iOS versions that also disables UINavigationController's
+// standard edge-swipe gesture. Re-enable it only when this view was pushed and
+// there is an actual previous page to return to.
+private struct SwipeBackEnabler: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> SwipeBackController {
+        SwipeBackController()
+    }
+
+    func updateUIViewController(_ controller: SwipeBackController, context: Context) {
+        controller.enableWhenAvailable()
+    }
+
+    final class SwipeBackController: UIViewController, UIGestureRecognizerDelegate {
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            enableWhenAvailable()
+        }
+
+        func enableWhenAvailable() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self,
+                      let navigationController = self.navigationController,
+                      let gesture = navigationController.interactivePopGestureRecognizer else { return }
+                gesture.delegate = self
+                gesture.isEnabled = navigationController.viewControllers.count > 1
+            }
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            (navigationController?.viewControllers.count ?? 0) > 1
         }
     }
 }
