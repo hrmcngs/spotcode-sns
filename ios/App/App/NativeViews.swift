@@ -16,6 +16,42 @@ private enum SpotcodeTheme {
     static let warning = Color(red: 254/255, green: 188/255, blue: 46/255)
 }
 
+// Code-native marks shared with the web SVG icon set. Keeping the same 24×24
+// paths avoids platform-specific SF Symbols changing the visual language.
+private struct SpotcodePinMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        let sx = rect.width / 24, sy = rect.height / 24
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * sx, y: y * sy) }
+        var path = Path()
+        path.move(to: point(12, 22))
+        path.addCurve(to: point(19, 10), control1: point(12, 22), control2: point(19, 15))
+        path.addCurve(to: point(12, 3), control1: point(19, 6.1), control2: point(15.9, 3))
+        path.addCurve(to: point(5, 10), control1: point(8.1, 3), control2: point(5, 6.1))
+        path.addCurve(to: point(12, 22), control1: point(5, 15), control2: point(12, 22))
+        path.addEllipse(in: CGRect(x: 9 * sx, y: 7 * sy, width: 6 * sx, height: 6 * sy))
+        return path
+    }
+}
+
+private struct RepoMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        let sx = rect.width / 24, sy = rect.height / 24
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * sx, y: y * sy) }
+        var path = Path()
+        path.move(to: point(6, 3))
+        path.addLine(to: point(6, 18))
+        path.addCurve(to: point(9, 21), control1: point(6, 19.7), control2: point(7.3, 21))
+        path.addLine(to: point(20, 21))
+        path.addLine(to: point(20, 6))
+        path.addLine(to: point(9, 6))
+        path.addCurve(to: point(6, 3), control1: point(7.3, 6), control2: point(6, 4.7))
+        path.move(to: point(6, 18))
+        path.addCurve(to: point(9, 15), control1: point(6, 16.3), control2: point(7.3, 15))
+        path.addLine(to: point(20, 15))
+        return path
+    }
+}
+
 private enum AppSection: String, CaseIterable {
     case home = "Home"
     case repos = "Repos"
@@ -123,7 +159,7 @@ private struct TopBar: View {
             }.spotcodeIconButton()
             Button { section = .home; navigationReset = UUID() } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: "mappin.and.ellipse").font(.system(size: 23, weight: .semibold))
+                    SpotcodePinMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 25, height: 25)
                     Text("spotcode").fontWeight(.bold)
                 }.foregroundColor(SpotcodeTheme.text)
             }
@@ -930,7 +966,7 @@ struct PostRow: View {
                 if let link = post.githubLink, let url = URL(string: link) {
                     Link(destination: url) {
                         HStack(spacing: 5) {
-                            Image(systemName: "shippingbox")
+                            RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13)
                             Text(githubLinkLabel(link)).lineLimit(1)
                         }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
@@ -1045,7 +1081,7 @@ struct ComposeView: View {
                     ComposerTextView(text: $bodyText, isFocused: $editorFocused).frame(minHeight: 160)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : SpotcodeTheme.border, lineWidth: 2))
                 }
-                HStack { Image(systemName: "shippingbox"); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
+                HStack { RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 16, height: 16); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
                     .padding(11).background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
                 Spacer()
             }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
@@ -1189,7 +1225,7 @@ struct RepositoriesView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 6) {
-                    Image(systemName: "shippingbox").font(.title2).foregroundColor(SpotcodeTheme.accent)
+                    RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 22, height: 22).foregroundColor(SpotcodeTheme.accent)
                     Text("Repos").font(.title3).fontWeight(.bold)
                     Text("GitHub と紐づくリポジトリ単位で動きを見る。")
                         .font(.subheadline).foregroundColor(SpotcodeTheme.muted)
@@ -1213,7 +1249,7 @@ struct RepositoriesView: View {
             HStack(alignment: .top) {
                 Link(destination: repo.htmlURL) {
                     HStack(spacing: 6) {
-                        Image(systemName: "shippingbox").font(.caption)
+                        RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13)
                         Text(repo.fullName.split(separator: "/").first.map(String.init) ?? "")
                             .foregroundColor(SpotcodeTheme.muted)
                         Text("/").foregroundColor(SpotcodeTheme.muted)
@@ -1517,7 +1553,7 @@ private struct ProfileHero: View {
                 if let handle = profile.githubHandle, let url = URL(string: "https://github.com/\(handle)") {
                     Link(destination: url) {
                         HStack(spacing: 6) {
-                            Image(systemName: "shippingbox")
+                            RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 15, height: 15)
                             Text("@\(handle)")
                         }
                     }.foregroundColor(SpotcodeTheme.accent)
@@ -1613,7 +1649,7 @@ private struct GitHubActivity: View {
     var body: some View {
         Link(destination: URL(string: "https://github.com/\(handle)?tab=contributions")!) {
           VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 5) { Image(systemName: "chart.bar.xaxis"); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
+            HStack(spacing: 5) { RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(0..<26, id: \.self) { column in
                     VStack(spacing: 3) {
@@ -1669,7 +1705,7 @@ private struct OpenIssuesCard: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) { Image(systemName: "exclamationmark.circle").foregroundColor(SpotcodeTheme.muted); Text("Open issues").foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text("公開リポの未クローズ issue (task)").font(.caption2).foregroundColor(SpotcodeTheme.muted)
+            HStack(spacing: 6) { RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues").foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text("公開リポの未クローズ issue (task)").font(.caption2).foregroundColor(SpotcodeTheme.muted)
                 if !allowedIssues.isEmpty {
                     Button(listExpanded ? "折りたたむ" : "リストを表示") { withAnimation { listExpanded.toggle() } }
                         .font(.caption2).foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 8).padding(.vertical, 3)
@@ -1720,7 +1756,7 @@ private struct OpenIssuesCard: View {
                             }.buttonStyle(.plain).foregroundColor(SpotcodeTheme.muted)
                             if let due = issue.dueDate { Text(dueLabel(due)).issueDuePill(status: dueStatus(due)) }
                             Link(destination: issue.htmlURL) {
-                                Image(systemName: "arrow.up.right.square")
+                                RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13)
                             }.foregroundColor(SpotcodeTheme.muted)
                         }
                         if !issue.labels.isEmpty {
