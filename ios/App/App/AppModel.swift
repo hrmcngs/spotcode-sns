@@ -186,6 +186,18 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func deletePost(_ post: Post) async -> Bool {
+        guard let session, post.authorID == displayProfile?.id else { return false }
+        do {
+            try await SupabaseService.shared.deletePost(id: post.id, token: session.accessToken)
+            posts.removeAll { $0.id == post.id }
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func updateProfile(name: String, bio: String, location: String, avatarURL: String?, avatarShape: String) async -> Bool {
         guard let session else { return false }
         let editingOfficial = isPostingAsOfficial

@@ -168,6 +168,14 @@ actor SupabaseService {
         return post
     }
 
+    func deletePost(id: UUID, token: String) async throws {
+        let rows: [Post] = try await request(
+            "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+            method: "DELETE", token: token, preferRepresentation: true
+        )
+        guard !rows.isEmpty else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を削除できません"]) }
+    }
+
     func repositories(handle: String) async throws -> [Repository] {
         var components = URLComponents(string: "https://api.github.com/users/\(handle)/repos")!
         components.queryItems = [.init(name: "sort", value: "pushed"), .init(name: "type", value: "owner"), .init(name: "per_page", value: "30")]

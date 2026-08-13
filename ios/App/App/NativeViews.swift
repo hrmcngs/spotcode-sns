@@ -937,6 +937,7 @@ struct PostRow: View {
     let post: Post
     var opensDetail = true
     @State private var editing = false
+    @State private var confirmingDelete = false
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             NavigationLink(destination: ProfileLookupView(handle: post.author?.handle ?? "")) {
@@ -994,13 +995,23 @@ struct PostRow: View {
                             .font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
-                HStack {
-                    Label("\(post.commentsCount ?? 0)", systemImage: "bubble.left"); Spacer()
-                    Label("\(post.repostsCount ?? 0)", systemImage: "arrow.2.squarepath"); Spacer()
-                    Label("\(post.bookmarksCount ?? 0)", systemImage: "star"); Spacer()
-                    Label("0", systemImage: "heart"); Spacer(); Image(systemName: "square.and.arrow.up")
+                HStack(spacing: 0) {
+                    PostAction(icon: "bubble.left", count: post.commentsCount ?? 0); Spacer()
+                    PostAction(icon: "arrow.2.squarepath", count: post.repostsCount ?? 0); Spacer()
+                    PostAction(icon: "star", count: post.bookmarksCount ?? 0); Spacer()
+                    PostAction(icon: "heart", count: 0); Spacer()
+                    Image(systemName: "square.and.arrow.up"); Spacer()
+                    Image(systemName: "chart.bar")
+                    if post.authorID == model.displayProfile?.id {
+                        Spacer()
+                        Button { editing = true } label: { Image(systemName: "pencil") }
+                            .buttonStyle(.plain).accessibilityLabel("投稿を編集")
+                        Spacer()
+                        Button { confirmingDelete = true } label: { Image(systemName: "trash") }
+                            .buttonStyle(.plain).accessibilityLabel("投稿を削除")
+                    }
                 }
-                    .font(.caption).foregroundColor(SpotcodeTheme.muted).padding(.top, 4).padding(.trailing, 24)
+                    .font(.system(size: 15)).foregroundColor(SpotcodeTheme.muted).padding(.top, 7)
             }
         }
         .padding(16).background(SpotcodeTheme.surface)
@@ -1011,19 +1022,15 @@ struct PostRow: View {
                     Color.clear.frame(width: 70).allowsHitTesting(false)
                     NavigationLink(destination: PostDetailView(post: post)) {
                         Color.clear.contentShape(Rectangle())
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.plain).padding(.bottom, 44)
                 }
             }
         }
-        .overlay(alignment: .bottomTrailing) {
-            if post.authorID == model.displayProfile?.id {
-                Button { editing = true } label: { Image(systemName: "pencil") }
-                    .buttonStyle(.plain).foregroundColor(SpotcodeTheme.muted)
-                    .padding(.trailing, 16).padding(.bottom, 17)
-                    .accessibilityLabel("投稿を編集")
-            }
-        }
         .sheet(isPresented: $editing) { EditPostView(post: post, isPresented: $editing).environmentObject(model) }
+        .confirmationDialog("この投稿を削除しますか？", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("削除", role: .destructive) { Task { _ = await model.deletePost(post) } }
+            Button("キャンセル", role: .cancel) {}
+        }
     }
 
     private func visibilityBadge(_ value: String) -> (icon: String, text: String) {
@@ -1035,6 +1042,12 @@ struct PostRow: View {
         default: return ("lock", "限定公開")
         }
     }
+}
+
+private struct PostAction: View {
+    let icon: String
+    let count: Int
+    var body: some View { HStack(spacing: 5) { Image(systemName: icon); Text("\(count)") } }
 }
 
 private struct EditPostView: View {
@@ -1621,13 +1634,18 @@ private struct ProfileHero: View {
                         Button("Edit profile") { editing = true }.font(.body.weight(.bold)).foregroundColor(SpotcodeTheme.background)
                             .padding(.horizontal, 20).padding(.vertical, 11).background(SpotcodeTheme.text).clipShape(Capsule()).padding(.top, 14)
                     } else if model.session != nil {
-                        Button(followLoading ? "…" : (isFollowing ? "Unfollow" : "Follow")) { toggleFollow() }
-                            .font(.body.weight(.bold))
-                            .foregroundColor(isFollowing ? SpotcodeTheme.text : SpotcodeTheme.background)
-                            .padding(.horizontal, 20).padding(.vertical, 11)
-                            .background(isFollowing ? SpotcodeTheme.surface : SpotcodeTheme.text)
-                            .overlay(Capsule().stroke(SpotcodeTheme.border)).clipShape(Capsule()).padding(.top, 14)
-                            .disabled(followLoading)
+                        HStack(spacing: 10) {
+                            Menu {
+                                Button("プロフィールURLをコピー") {
+                                    UIPasteboard.general.string = "https://hrmcngs.github.io/spotcode-sns/#/\(profile.handle)"
+                                }
+                                if let handle = profile.githubHandle {
+                                    Link("GitHubで開く", destination: URL(string: "https://github.com/\(handle)")!)
+                                }
+                            } label: { Text("More").profileActionCapsule(filled: false) }
+                            Button(followLoading ? "…" : (isFollowing ? "Following" : "Follow")) { toggleFollow() }
+                                .profileActionCapsule(filled: !isFollowing).disabled(followLoading)
+                        }.padding(.top, 14)
                     }
                 }.frame(height: 63)
                 HStack(spacing: 8) {
@@ -2133,6 +2151,14 @@ private extension View {
     }
     func spotcodeURLField() -> some View {
         self.padding(12).background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
+    }
+    func profileActionCapsule(filled: Bool) -> some View {
+        self.font(.body.weight(.bold))
+            .foregroundColor(filled ? SpotcodeTheme.background : SpotcodeTheme.text)
+            .padding(.horizontal, 20).padding(.vertical, 11)
+            .background(filled ? SpotcodeTheme.text : SpotcodeTheme.surface)
+            .overlay(Capsule().stroke(SpotcodeTheme.border))
+            .clipShape(Capsule())
     }
 }
 
