@@ -159,7 +159,7 @@ function render(items, q) {
     }
     return (
       '<a class="search-result search-result--alt" data-idx="' + i + '" href="https://github.com/' + encodeURIComponent(it.handle) + '" target="_blank" rel="noopener">' +
-        '<span class="search-result__icon">' + icon('repo', { size: 18 }) + '</span>' +
+        '<span class="search-result__icon">' + icon('github', { size: 18, fill: true }) + '</span>' +
         '<div class="search-result__main">' +
           '<div class="search-result__name">GitHub で @' + escapeHtml(it.handle) + ' を見る</div>' +
           '<div class="search-result__handle">github.com/' + escapeHtml(it.handle) + '</div>' +

@@ -571,7 +571,7 @@ export function renderProfile(handle) {
         (u.joined   ? '<span>' + icon('calendar', { size: 14, className: 'icon--inline' }) + t('profile.joined') + u.joined + '</span>' : '') +
         (ghLink ? '<a class="profile-gh" href="' + ghLink + '" target="_blank" rel="noopener" title="' +
                     (u.github?.verified ? '本人確認済み' : '未確認') + '">' +
-                    icon('repo', { size: 14, className: 'icon--inline' }) + (u.github.handle || '') +
+                    icon('github', { size: 14, fill: true, className: 'icon--inline' }) + (u.github.handle || '') +
                     (u.github?.verified ? ' <span class="gh-verified" title="本人確認済み">✓</span>' : '') +
                   '</a>' : '') +
       '</div>' +
@@ -593,7 +593,7 @@ export function renderProfile(handle) {
       (u.github?.handle
         ? '<div class="profile-activity" id="profile-activity-' + u.handle + '" data-gh="' + u.github.handle + '">' +
             '<div class="profile-activity__head">' +
-              icon('repo', { size: 12, className: 'icon--inline' }) +
+              icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
               ' GitHub activity ' +
               '<span class="profile-activity__hint">last 12 months</span>' +
             '</div>' +

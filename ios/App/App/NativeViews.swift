@@ -981,7 +981,7 @@ struct PostRow: View {
                 if let link = post.githubLink, let url = URL(string: link) {
                     Link(destination: url) {
                         HStack(spacing: 5) {
-                            RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13)
+                            Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13)
                             Text(githubLinkLabel(link)).lineLimit(1)
                         }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
@@ -1096,7 +1096,7 @@ struct ComposeView: View {
                     ComposerTextView(text: $bodyText, isFocused: $editorFocused).frame(minHeight: 160)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : SpotcodeTheme.border, lineWidth: 2))
                 }
-                HStack { RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 16, height: 16); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
+                HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
                     .padding(11).background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
                 Spacer()
             }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
@@ -1264,7 +1264,7 @@ struct RepositoriesView: View {
             HStack(alignment: .top) {
                 Link(destination: repo.htmlURL) {
                     HStack(spacing: 6) {
-                        RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13)
+                        Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13)
                         Text(repo.fullName.split(separator: "/").first.map(String.init) ?? "")
                             .foregroundColor(SpotcodeTheme.muted)
                         Text("/").foregroundColor(SpotcodeTheme.muted)
@@ -1568,7 +1568,7 @@ private struct ProfileHero: View {
                 if let handle = profile.githubHandle, let url = URL(string: "https://github.com/\(handle)") {
                     Link(destination: url) {
                         HStack(spacing: 6) {
-                            RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 15, height: 15)
+                            Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 15, height: 15)
                             Text("@\(handle)")
                         }
                     }.foregroundColor(SpotcodeTheme.accent)
@@ -1664,7 +1664,7 @@ private struct GitHubActivity: View {
     var body: some View {
         Link(destination: URL(string: "https://github.com/\(handle)?tab=contributions")!) {
           VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 5) { RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
+            HStack(spacing: 5) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.font(.caption)
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(0..<26, id: \.self) { column in
                     VStack(spacing: 3) {
@@ -1771,7 +1771,7 @@ private struct OpenIssuesCard: View {
                             }.buttonStyle(.plain).foregroundColor(SpotcodeTheme.muted)
                             if let due = issue.dueDate { Text(dueLabel(due)).issueDuePill(status: dueStatus(due)) }
                             Link(destination: issue.htmlURL) {
-                                RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13)
+                                Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13)
                             }.foregroundColor(SpotcodeTheme.muted)
                         }
                         if !issue.labels.isEmpty {

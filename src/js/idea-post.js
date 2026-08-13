@@ -49,7 +49,7 @@ export function renderIdeaForm({ user = null } = {}) {
           '</button>' +
           '<button type="button" class="spot-chip-clear" id="compose-spot-clear" hidden title="' + t('composer.clear_spot') + '">×</button>' +
           '<button type="button" class="compose-link-toggle" id="compose-link-toggle" aria-expanded="false">' +
-            icon('repo', { size: 12, className: 'icon--inline' }) +
+            icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
             '<span>' + t('home.composer.add_url') + '</span>' +
           '</button>' +
           // Event link toggle — collapses the connpass URL input just
