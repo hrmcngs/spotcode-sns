@@ -153,10 +153,13 @@ actor SupabaseService {
         return post
     }
 
-    func updatePost(id: UUID, body text: String, githubLink: String?, token: String) async throws -> Post {
+    func updatePost(id: UUID, body text: String, githubLink: String?, eventURL: String?, kind: String?, visibility: String, token: String) async throws -> Post {
         let payload: [String: Any] = [
             "body": text,
-            "github_link": (githubLink as Any?) ?? NSNull()
+            "github_link": (githubLink as Any?) ?? NSNull(),
+            "event_url": (eventURL as Any?) ?? NSNull(),
+            "kind": (kind as Any?) ?? NSNull(),
+            "visibility": visibility
         ]
         let body = try JSONSerialization.data(withJSONObject: payload)
         let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")

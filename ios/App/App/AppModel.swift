@@ -171,11 +171,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func editPost(_ post: Post, body: String, githubLink: String?) async -> Post? {
+    func editPost(_ post: Post, body: String, githubLink: String?, eventURL: String?, kind: String?, visibility: String) async -> Post? {
         guard let session, post.authorID == displayProfile?.id else { return nil }
         do {
             let updated = try await SupabaseService.shared.updatePost(
-                id: post.id, body: body, githubLink: githubLink, token: session.accessToken
+                id: post.id, body: body, githubLink: githubLink, eventURL: eventURL,
+                kind: kind, visibility: visibility, token: session.accessToken
             )
             if let index = posts.firstIndex(where: { $0.id == post.id }) { posts[index] = updated }
             lastUpdatedPost = updated

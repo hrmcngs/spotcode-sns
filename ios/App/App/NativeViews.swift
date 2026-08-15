@@ -1056,6 +1056,9 @@ private struct EditPostView: View {
     @Binding var isPresented: Bool
     @State private var bodyText: String
     @State private var githubLink: String
+    @State private var eventURL: String
+    @State private var isIdea: Bool
+    @State private var visibility: String
     @State private var saving = false
     @State private var editorFocused = false
 
@@ -1064,6 +1067,9 @@ private struct EditPostView: View {
         _isPresented = isPresented
         _bodyText = State(initialValue: post.body)
         _githubLink = State(initialValue: post.githubLink ?? "")
+        _eventURL = State(initialValue: post.eventURL ?? "")
+        _isIdea = State(initialValue: post.kind == "idea")
+        _visibility = State(initialValue: post.visibility ?? "public")
     }
 
     var body: some View {
@@ -1075,6 +1081,30 @@ private struct EditPostView: View {
                 HStack {
                     Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16)
                     TextField("https://github.com/…", text: $githubLink)
+                        .textInputAutocapitalization(.never).keyboardType(.URL)
+                }.spotcodeURLField()
+                HStack(spacing: 10) {
+                    Button { isIdea.toggle() } label: {
+                        Label("アイデア", systemImage: "sparkles")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(isIdea ? SpotcodeTheme.warning : SpotcodeTheme.muted)
+                            .padding(.horizontal, 13).padding(.vertical, 9)
+                            .background(isIdea ? SpotcodeTheme.warning.opacity(0.14) : Color.clear)
+                            .overlay(Capsule().stroke(isIdea ? SpotcodeTheme.warning : SpotcodeTheme.border))
+                            .clipShape(Capsule())
+                    }.buttonStyle(.plain)
+                    Picker("公開範囲", selection: $visibility) {
+                        Text("全員").tag("public")
+                        Text("フォロー中").tag("following")
+                        Text("相互フォロー").tag("mutuals")
+                        Text("親しい友達").tag("friends")
+                        Text("同じ組織").tag("org")
+                    }.pickerStyle(.menu)
+                    Spacer()
+                }
+                HStack {
+                    Image(systemName: "calendar")
+                    TextField("イベントURL（任意）", text: $eventURL)
                         .textInputAutocapitalization(.never).keyboardType(.URL)
                 }.spotcodeURLField()
                 Spacer()
@@ -1089,7 +1119,12 @@ private struct EditPostView: View {
                         Task {
                             let text = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
                             let link = githubLink.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if await model.editPost(post, body: text, githubLink: link.isEmpty ? nil : link) != nil {
+                            let event = eventURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if await model.editPost(
+                                post, body: text, githubLink: link.isEmpty ? nil : link,
+                                eventURL: event.isEmpty ? nil : event,
+                                kind: isIdea ? "idea" : nil, visibility: visibility
+                            ) != nil {
                                 isPresented = false
                             }
                             saving = false
