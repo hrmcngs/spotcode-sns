@@ -40,7 +40,10 @@ function template() {
         //     "Hiro" inside a typed address.
         //   - method/action stub so iCloud Keychain treats the form
         //     as a real login (otherwise Safari sometimes ignores it).
-        '<form class="auth-form" data-pane="login" method="post" action="#">' +
+        // `novalidate` keeps iOS/WKWebView from silently swallowing the
+        // submit event when autofill has not committed a field value yet.
+        // We validate below so every tap produces visible feedback.
+        '<form class="auth-form" data-pane="login" method="post" action="#" novalidate>' +
           '<h2 id="auth-title">Log in</h2>' +
           // type="text" (not "email") so internal aliased identifiers
           // like `dev.test.account` are accepted at the field level —
@@ -185,7 +188,12 @@ function bindEvents() {
     if (form.dataset.busy === '1') return;
     setError(form, '');
     const fd = new FormData(form);
-    const rawEmail = fd.get('email');
+    const rawEmail = String(fd.get('email') || '').trim();
+    const password = String(fd.get('password') || '');
+    if (!rawEmail || !password) {
+      setError(form, 'Email と Password を入力してください');
+      return;
+    }
     // Reject bare strings that aren't a known alias before Supabase
     // sees them — gives the user a clearer error than "invalid login
     // credentials".
@@ -200,7 +208,7 @@ function bindEvents() {
     try {
       // Expand internal bare identifiers (e.g. dev.test.account →
       // dev.test.account@spotcode-sns.local) before calling Supabase.
-      await login({ email: resolveLoginEmail(rawEmail), password: fd.get('password') });
+      await login({ email: resolveLoginEmail(rawEmail), password });
       close();
     } catch (err) {
       setError(form, err.message || String(err));
