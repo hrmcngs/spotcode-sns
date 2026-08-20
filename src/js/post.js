@@ -8,7 +8,7 @@ import { isLiked, likeCount, isReposted, isBookmarked } from './interactions.js'
 import { currentUser }      from './auth.js';
 import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
-import { isDevMode } from './dev-mode.js';
+import { isDevMode, isOperator } from './dev-mode.js';
 import { parseConnpassUrl, cachedEventMeta, formatEventStart } from './connpass.js';
 import { parseGithubLink } from './gh-link.js';
 import { maskHandle, maskName, maskMentionsInText } from './privacy-mode.js';

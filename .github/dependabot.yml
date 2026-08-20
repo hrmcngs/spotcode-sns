@@ -27,7 +27,6 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
-      - npm
     groups:
       # Roll every non-major bump into one PR so the queue doesn't
       # fill up with e.g. individual @capacitor/* patch releases.
