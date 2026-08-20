@@ -49,6 +49,12 @@ final class AppModel: ObservableObject {
     }
 
     func signIn(emailOrAlias: String, password: String) async -> Bool {
+        // Adding another account must never evict the currently active one.
+        // Re-save it before exchanging credentials, including sessions that
+        // were restored from Keychain but have not completed bootstrap yet.
+        if let currentSession = session, let currentProfile = me {
+            rememberAccount(session: currentSession, profile: currentProfile)
+        }
         let email = emailOrAlias.contains("@") ? emailOrAlias : emailOrAlias + "@spotcode-sns.local"
         do {
             let value = try await SupabaseService.shared.login(email: email, password: password)

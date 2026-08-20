@@ -295,7 +295,13 @@ private struct AccountSwitcher: View {
             Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
             Button {
                 isPresented = false
-                showLogin = true
+                // Presenting a sheet in the same update that removes this
+                // overlay is occasionally ignored by SwiftUI. Wait for the
+                // account panel to leave the hierarchy first.
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 180_000_000)
+                    showLogin = true
+                }
             } label: {
                 Label("別のアカウントを追加", systemImage: "plus").font(.body.weight(.semibold))
             }
@@ -2050,9 +2056,26 @@ private struct AccountSettings: View {
         VStack(spacing: 18) {
             SettingsCard("アカウント") {
                 Text("この端末にログイン済みのアカウントを切り替えられます。アカウント自体は削除されません。").foregroundColor(SpotcodeTheme.muted)
-                if let me = model.me {
-                    HStack { AvatarView(profile: me, size: 42); VStack(alignment: .leading) { Text(me.name).fontWeight(.bold); Text("@\(me.handle) · 現在").font(.caption).foregroundColor(SpotcodeTheme.muted) }; Spacer(); Image(systemName: "xmark").foregroundColor(SpotcodeTheme.muted) }
-                        .padding(12).background(Color(red: 23/255, green: 40/255, blue: 54/255)).clipShape(RoundedRectangle(cornerRadius: 9))
+                ForEach(model.savedAccounts) { account in
+                    let active = account.id == model.session?.user.id && !model.isPostingAsOfficial
+                    Button {
+                        guard !active else { return }
+                        Task { _ = await model.switchAccount(to: account.id) }
+                    } label: {
+                        HStack {
+                            AvatarView(profile: account.profile, size: 42)
+                            VStack(alignment: .leading) {
+                                Text(account.profile.name).fontWeight(.bold)
+                                Text("@\(account.profile.handle)" + (active ? " · 現在" : ""))
+                                    .font(.caption).foregroundColor(SpotcodeTheme.muted)
+                            }
+                            Spacer()
+                            if !active { Text("切り替え").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent) }
+                        }
+                        .padding(12)
+                        .background(active ? Color(red: 23/255, green: 40/255, blue: 54/255) : SpotcodeTheme.surface2)
+                        .clipShape(RoundedRectangle(cornerRadius: 9))
+                    }.buttonStyle(.plain)
                 }
                 Button("＋ 別のアカウントでログイン") { showAddAccount = true }.buttonStyle(OutlineButtonStyle())
             }
