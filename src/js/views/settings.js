@@ -18,6 +18,7 @@ import { debounce } from '../drafts.js';
 import { hydrateMyFollows, myFollowingHandles } from '../interactions.js';
 import { navigate, currentPath, url } from '../router.js';
 import { isPushEnabled, setPushEnabled, browserPermissionState, requestBrowserPermission } from '../push-notify.js';
+import { withTimeout } from '../net-utils.js';
 
 // In-memory state for the two audience-list editors so add/remove
 // can re-render without a round trip. Initialised in renderSettings()
@@ -1345,14 +1346,20 @@ function openMfaEnrollment(enrollment, onComplete) {
     const button = form.querySelector('button[type="submit"]');
     const errorEl = form.querySelector('[data-mfa-error]');
     button.disabled = true;
+    button.textContent = '確認中…';
     errorEl.textContent = '';
     try {
-      await confirmMfaEnrollment(enrollment.id, new FormData(form).get('code'));
+      await withTimeout(
+        confirmMfaEnrollment(enrollment.id, new FormData(form).get('code')),
+        15000,
+        '2段階認証',
+      );
       close();
       onComplete?.();
     } catch (error) {
       errorEl.textContent = error.message || String(error);
       button.disabled = false;
+      button.textContent = '確認して有効にする';
     }
   });
   setTimeout(() => root.querySelector('input[name="code"]')?.focus(), 0);

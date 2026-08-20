@@ -285,7 +285,11 @@ export async function initAuth() {
     }
   }
 
-  supa.auth.onAuthStateChange(async (event, session) => {
+  // Never await another Supabase auth call inside onAuthStateChange itself.
+  // GoTrue holds its auth lock while invoking this callback; MFA verify then
+  // waits forever if the callback calls mfa.listFactors before returning.
+  supa.auth.onAuthStateChange((event, session) => {
+    setTimeout(async () => {
     if (!session) { cachedUser = null; emit(); return; }
     // Password authentication for an MFA-enabled account first emits an
     // AAL1 session. Never project that session into an authenticated UI;
@@ -327,6 +331,7 @@ export async function initAuth() {
     cachedUser = nextUser;
     if (cachedUser) rememberAccount({ user: cachedUser, session });
     if (!same) emit();
+    }, 0);
   });
 }
 
