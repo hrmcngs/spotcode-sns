@@ -2011,6 +2011,30 @@ html[data-theme='light'] .profile-tasks__body {
 }
 .modal__close > * { pointer-events: none; }
 .modal__close:hover { background: var(--surface-2); color: var(--text); }
+.password-input {
+  position: relative;
+  display: block;
+}
+.password-input > input {
+  width: 100%;
+  padding-right: 4.5rem !important;
+}
+.password-input__toggle {
+  position: absolute;
+  right: .45rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: .35rem .5rem;
+  border-radius: 6px;
+}
+.password-input__toggle:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 @media (max-width: 480px) {
   .modal__card { padding: 1rem 1rem 1.4rem; }
 }
@@ -2968,6 +2992,7 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
 
 /* ---------- post address line ---------- */
 .post__addr {
+  display: block;
   margin-top: .4rem;
   font-size: .82rem;
   color: var(--muted);
@@ -2976,6 +3001,13 @@ a.spot-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparen
   border-radius: var(--radius-sm);
   padding: .35em .55em;
   word-break: break-word;
+  text-decoration: none;
+  cursor: pointer;
+}
+.post__addr:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
 }
 .post__addr-warn {
   color: var(--warn);

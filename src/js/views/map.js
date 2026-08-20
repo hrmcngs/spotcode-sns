@@ -12,6 +12,7 @@ import { icon }     from '../icons.js';
 import { getMyLocation, isNearSpotSync, getRadius, permissionDenied,
          cachedLocation, cachedApproxLocation, getApproxLocationViaIP } from '../geo-gate.js';
 import { currentUser } from '../auth.js';
+import { isDevMode } from '../dev-mode.js';
 import { timelineTabs } from './timeline-tabs.js';
 import { withTimeout } from '../net-utils.js';
 
@@ -52,7 +53,7 @@ function pinPopupHtml(post) {
   const near = isNearSpotSync(post.spot.lat, post.spot.lng);
   const me = currentUser();
   const isMine = me && me.handle === handle;
-  const canRead = isMine || near === true;
+  const canRead = isMine || isDevMode() || near === true;
 
   const headerHtml =
     '<div class="map-popup__head">' +
@@ -70,7 +71,7 @@ function pinPopupHtml(post) {
     '</div>';
 }
 
-export async function hydrateMap(city) {
+export async function hydrateMap(city, focus = null) {
   const myVersion = renderVersion;
   const canvas = document.getElementById('map-canvas');
   const status = document.getElementById('map-status');
@@ -133,14 +134,16 @@ export async function hydrateMap(city) {
   // Center: in city mode prefer the city's spots (fitBounds below
   // handles real positioning); otherwise prefer the exact GPS fix,
   // then IP approx, then the first spotted post, then a Tokyo default.
-  const center = (cityFiltered && cityFiltered.length)
+  const hasFocus = focus && Number.isFinite(focus.lat) && Number.isFinite(focus.lng);
+  const center = hasFocus ? [focus.lat, focus.lng]
+                : (cityFiltered && cityFiltered.length)
                 ? [cityFiltered[0].spot.lat, cityFiltered[0].spot.lng]
                 : here       ? [here.lat, here.lng]
                 : approxIp  ? [approxIp.lat, approxIp.lng]
                 : spotted[0] ? [spotted[0].spot.lat, spotted[0].spot.lng]
                 : [TOKYO.lat, TOKYO.lng];
 
-  mapInst = L.map(canvas, { zoomControl: true }).setView(center, here ? 15 : 13);
+  mapInst = L.map(canvas, { zoomControl: true }).setView(center, hasFocus ? 17 : (here ? 15 : 13));
 
   // ---- Base layers ----
   // Default: OSM standard map. Two aerial options behind a layer
@@ -214,19 +217,31 @@ export async function hydrateMap(city) {
   // and was thrown away for every pin the user never clicked. Defer it
   // to the first popupopen event per marker.
   markerLayer = L.layerGroup().addTo(mapInst);
+  let focusedMarker = null;
   for (const p of spotted) {
     const m = L.circleMarker([p.spot.lat, p.spot.lng], {
       radius: 7, weight: 2, color: '#f91880', fillColor: '#f91880', fillOpacity: 0.85,
     });
     m.bindPopup(() => pinPopupHtml(p), { className: 'map-popup' });
     markerLayer.addLayer(m);
+    if (hasFocus && (
+      (focus.postId && p.id === focus.postId) ||
+      (!focus.postId && Number(p.spot.lat) === focus.lat && Number(p.spot.lng) === focus.lng)
+    )) focusedMarker = m;
+  }
+
+  // A location link from a post should land on that exact pin rather
+  // than being reframed around the user's current-location radius.
+  if (hasFocus) {
+    mapInst.setView([focus.lat, focus.lng], 17, { animate: false });
+    if (focusedMarker) focusedMarker.openPopup();
   }
 
   // City-scoped framing: fit the canvas to just this 市区町村's pins so
   // the user lands looking at the area, not at their own location or
   // the Tokyo default. Single pin → recenter at a sensible zoom (one
   // point has no bounds).
-  if (cityFiltered && cityFiltered.length) {
+  if (!hasFocus && cityFiltered && cityFiltered.length) {
     if (cityFiltered.length === 1) {
       mapInst.setView([cityFiltered[0].spot.lat, cityFiltered[0].spot.lng], 14);
     } else {

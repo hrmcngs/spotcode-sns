@@ -604,6 +604,53 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
     }
 }
 
+// Shared reader-location gate for every timeline row. One CLLocationManager
+// serves For you, Following, profile and detail views, so dozens of visible
+// rows never create competing permission/location requests. Following an
+// author does not affect this check: a spot post unlocks only for its author
+// or when this device is physically within 100 metres of the pin.
+private final class PostLocationGate: NSObject, ObservableObject, CLLocationManagerDelegate {
+    static let shared = PostLocationGate()
+    @Published private(set) var location: CLLocation?
+    private let manager = CLLocationManager()
+    private var requested = false
+    private let radius: CLLocationDistance = 100
+
+    private override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+    }
+
+    func request() {
+        guard !requested else { return }
+        requested = true
+        manager.requestWhenInUseAuthorization()
+        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            manager.requestLocation()
+        }
+    }
+
+    func isNear(_ spot: Spot) -> Bool {
+        guard let location else { return false }
+        let destination = CLLocation(latitude: spot.lat, longitude: spot.lng)
+        return location.distance(from: destination) <= radius
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let latest = locations.last else { return }
+        location = latest
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            manager.requestLocation()
+        }
+    }
+}
+
 private struct PhotoLibraryPicker: UIViewControllerRepresentable {
     @Binding var images: [String]
     @Environment(\.dismiss) private var dismiss
@@ -944,6 +991,16 @@ struct PostRow: View {
     var opensDetail = true
     @State private var editing = false
     @State private var confirmingDelete = false
+    @State private var showSpotMap = false
+    @ObservedObject private var locationGate = PostLocationGate.shared
+
+    private var canReadContent: Bool {
+        guard let spot = post.spot else { return true }
+        if post.authorID == model.me?.id { return true }
+        if model.me?.isAdmin == true { return true }
+        return locationGate.isNear(spot)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             NavigationLink(destination: ProfileLookupView(handle: post.author?.handle ?? "")) {
@@ -963,7 +1020,11 @@ struct PostRow: View {
                 if post.spot != nil || post.kind == "idea" || (post.visibility ?? "public") != "public" {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
-                            if let label = post.spot?.label { PostMetadataBadge(icon: "mappin", text: label, color: SpotcodeTheme.accent) }
+                            if let spot = post.spot {
+                                Button { showSpotMap = true } label: {
+                                    PostMetadataBadge(icon: "mappin", text: spot.label ?? spot.address ?? "選択した場所", color: SpotcodeTheme.accent)
+                                }.buttonStyle(.plain)
+                            }
                             if post.kind == "idea" { PostMetadataBadge(icon: "sparkles", text: "アイデア", color: SpotcodeTheme.warning) }
                             if let visibility = post.visibility, visibility != "public" {
                                 PostMetadataBadge(icon: visibilityBadge(visibility).icon, text: visibilityBadge(visibility).text, color: SpotcodeTheme.muted)
@@ -971,14 +1032,21 @@ struct PostRow: View {
                         }
                     }
                 }
-                Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let photos = post.photos, !photos.isEmpty {
+                if !canReadContent {
+                    Label("この場所から半径100m以内に来ると内容を表示できます", systemImage: "location.slash")
+                        .font(.subheadline).foregroundColor(SpotcodeTheme.muted)
+                        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 9))
+                } else {
+                    Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if canReadContent, let photos = post.photos, !photos.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) { ForEach(photos, id: \.self) { DataURLImage(value: $0).frame(width: 180, height: 140).clipShape(RoundedRectangle(cornerRadius: 10)) } }
                     }
                 }
-                if let poll = post.poll {
+                if canReadContent, let poll = post.poll {
                     VStack(alignment: .leading, spacing: 8) {
                         Label(poll.question, systemImage: "chart.bar").font(.subheadline.weight(.bold))
                         ForEach(poll.options, id: \.self) { option in
@@ -987,7 +1055,7 @@ struct PostRow: View {
                         }
                     }.padding(10).background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 10))
                 }
-                if let link = post.githubLink, let url = URL(string: link) {
+                if canReadContent, let link = post.githubLink, let url = URL(string: link) {
                     Link(destination: url) {
                         HStack(spacing: 5) {
                             Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13)
@@ -995,29 +1063,31 @@ struct PostRow: View {
                         }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
-                if let link = post.eventURL, let url = URL(string: link) {
+                if canReadContent, let link = post.eventURL, let url = URL(string: link) {
                     Link(destination: url) {
                         Label("イベントを開く", systemImage: "calendar")
                             .font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
-                HStack(spacing: 0) {
-                    PostAction(icon: "bubble.left", count: post.commentsCount ?? 0); Spacer()
-                    PostAction(icon: "arrow.2.squarepath", count: post.repostsCount ?? 0); Spacer()
-                    PostAction(icon: "star", count: post.bookmarksCount ?? 0); Spacer()
-                    PostAction(icon: "heart", count: 0); Spacer()
-                    Image(systemName: "square.and.arrow.up"); Spacer()
-                    Image(systemName: "chart.bar")
-                    if post.authorID == model.displayProfile?.id {
-                        Spacer()
-                        Button { editing = true } label: { Image(systemName: "pencil") }
-                            .buttonStyle(.plain).accessibilityLabel("投稿を編集")
-                        Spacer()
-                        Button { confirmingDelete = true } label: { Image(systemName: "trash") }
-                            .buttonStyle(.plain).accessibilityLabel("投稿を削除")
+                if canReadContent {
+                    HStack(spacing: 0) {
+                        PostAction(icon: "bubble.left", count: post.commentsCount ?? 0); Spacer()
+                        PostAction(icon: "arrow.2.squarepath", count: post.repostsCount ?? 0); Spacer()
+                        PostAction(icon: "star", count: post.bookmarksCount ?? 0); Spacer()
+                        PostAction(icon: "heart", count: 0); Spacer()
+                        Image(systemName: "square.and.arrow.up"); Spacer()
+                        Image(systemName: "chart.bar")
+                        if post.authorID == model.displayProfile?.id {
+                            Spacer()
+                            Button { editing = true } label: { Image(systemName: "pencil") }
+                                .buttonStyle(.plain).accessibilityLabel("投稿を編集")
+                            Spacer()
+                            Button { confirmingDelete = true } label: { Image(systemName: "trash") }
+                                .buttonStyle(.plain).accessibilityLabel("投稿を削除")
+                        }
                     }
-                }
                     .font(.system(size: 15)).foregroundColor(SpotcodeTheme.muted).padding(.top, 7)
+                }
             }
         }
         .padding(16).background(SpotcodeTheme.surface)
@@ -1028,11 +1098,23 @@ struct PostRow: View {
                     Color.clear.frame(width: 70).allowsHitTesting(false)
                     NavigationLink(destination: PostDetailView(post: post)) {
                         Color.clear.contentShape(Rectangle())
-                    }.buttonStyle(.plain).padding(.bottom, 44)
+                    }
+                    // Keep the metadata row above this transparent detail
+                    // link so the location badge can open its focused map.
+                    .buttonStyle(.plain).padding(.top, 96).padding(.bottom, 44)
                 }
             }
         }
         .sheet(isPresented: $editing) { EditPostView(post: post, isPresented: $editing).environmentObject(model) }
+        .sheet(isPresented: $showSpotMap) {
+            NavigationView {
+                NativeMapView(focusPost: post)
+                    .navigationTitle(post.spot?.label ?? "Spot")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { showSpotMap = false } } }
+            }
+        }
+        .onAppear { if post.spot != nil { locationGate.request() } }
         .confirmationDialog("この投稿を削除しますか？", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("削除", role: .destructive) { Task { _ = await model.deletePost(post) } }
             Button("キャンセル", role: .cancel) {}
@@ -1352,11 +1434,19 @@ struct ComposeView: View {
 
 struct NativeMapView: View {
     @EnvironmentObject private var model: AppModel
+    var focusPost: Post? = nil
     @State private var posts: [Post] = []
-    @State private var region = MKCoordinateRegion(center: .init(latitude: 35.681236, longitude: 139.767125), span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
+    @State private var region: MKCoordinateRegion
     @State private var selectedPost: Post?
     @State private var loading = false
     @StateObject private var location = ComposerLocationProvider()
+
+    init(focusPost: Post? = nil) {
+        self.focusPost = focusPost
+        let center = focusPost?.spot?.coordinate ?? .init(latitude: 35.681236, longitude: 139.767125)
+        _region = State(initialValue: .init(center: center, span: .init(latitudeDelta: 0.003, longitudeDelta: 0.003)))
+    }
+
     var body: some View {
         ZStack(alignment: .trailing) {
             ClusteredPostMap(posts: posts, region: $region, selectedPost: $selectedPost)
@@ -1372,8 +1462,13 @@ struct NativeMapView: View {
             location.request()
             loading = true; defer { loading = false }
             posts = (try? await SupabaseService.shared.spottedPosts(token: model.session?.accessToken)) ?? []
+            if let focusPost, !posts.contains(where: { $0.id == focusPost.id }) { posts.append(focusPost) }
+            if let coordinate = focusPost?.spot?.coordinate {
+                region = .init(center: coordinate, span: .init(latitudeDelta: 0.003, longitudeDelta: 0.003))
+            }
         }
         .onChange(of: location.spot) { value in
+            guard focusPost == nil else { return }
             guard let coordinate = value?.coordinate else { return }
             region = .init(center: coordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
         }
@@ -1459,7 +1554,9 @@ private final class PostMapAnnotation: NSObject, MKAnnotation {
     let post: Post
     let coordinate: CLLocationCoordinate2D
     var title: String? { post.spot?.label ?? post.author?.name ?? "Spot" }
-    var subtitle: String? { post.body }
+    // Never expose the protected post body in an annotation callout.
+    // PostDetailView applies the 100m gate after the user opens it.
+    var subtitle: String? { "この場所の投稿" }
     init(post: Post, coordinate: CLLocationCoordinate2D) { self.post = post; self.coordinate = coordinate }
 }
 
@@ -2283,6 +2380,7 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var signing = false
+    @State private var showsPassword = false
     var body: some View {
         NavigationView {
             VStack(spacing: 14) {
@@ -2293,10 +2391,23 @@ struct LoginView: View {
                     .textContentType(.username)
                     .keyboardType(.emailAddress)
                     .spotcodeField()
-                SecureField("パスワード", text: $password)
+                HStack {
+                    Group {
+                        if showsPassword {
+                            TextField("パスワード", text: $password)
+                        } else {
+                            SecureField("パスワード", text: $password)
+                        }
+                    }
                     .textContentType(.password)
                     .autocorrectionDisabled(true)
-                    .spotcodeField()
+                    Button { showsPassword.toggle() } label: {
+                        Image(systemName: showsPassword ? "eye.slash" : "eye")
+                            .foregroundColor(SpotcodeTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showsPassword ? "パスワードを隠す" : "パスワードを表示")
+                }.spotcodeField()
                 Button(signing ? "ログイン中…" : "ログイン") {
                     signing = true
                     Task {

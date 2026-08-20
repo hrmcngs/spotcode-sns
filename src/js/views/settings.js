@@ -3,7 +3,7 @@ import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping,
 import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
 import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode, maskHandle, maskName } from '../privacy-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
-import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange } from '../auth.js';
+import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange, verifyCurrentPassword } from '../auth.js';
 import { openAuth } from './auth-modal.js';
 import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, hiddenTaskRepos, setTaskRepoVisible, privateTasksEnabled, setPrivateTasksEnabled } from '../display-prefs.js';
 import { linkGithubForPrivateIssues, getGithubToken, githubTokenCanReadPrivateRepos } from '../github-oauth.js';
@@ -25,6 +25,66 @@ import { isPushEnabled, setPushEnabled, browserPermissionState, requestBrowserPe
 const audienceState = { closeFriends: [], orgMembers: [] };
 const hydratedTaskSettings = new Set();
 let privateIssueAuthError = '';
+
+// Password-shaped confirmation UI for sensitive settings. window.prompt()
+// would expose the password as plain text, so use the existing modal styles
+// and a real type=password field instead.
+function requestSettingsPassword() {
+  return new Promise((resolve) => {
+    const root = document.createElement('div');
+    root.className = 'modal';
+    root.innerHTML =
+      '<div class="modal__backdrop" data-password-cancel></div>' +
+      '<div class="modal__card" role="dialog" aria-modal="true" aria-labelledby="settings-password-title">' +
+        '<button type="button" class="modal__close" data-password-cancel aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
+        '<form class="auth-form" data-password-form>' +
+          '<h2 id="settings-password-title">' + attr(t('settings.password.title')) + '</h2>' +
+          '<p class="settings__hint">' + attr(t('settings.password.hint')) + '</p>' +
+          '<label>' + attr(t('settings.password.label')) +
+            '<span class="password-input">' +
+              '<input type="password" name="password" required autocomplete="current-password">' +
+              '<button type="button" class="password-input__toggle" data-settings-password-toggle>表示</button>' +
+            '</span>' +
+          '</label>' +
+          '<button type="submit" class="btn btn--primary btn--block">' + attr(t('settings.password.confirm')) + '</button>' +
+          '<p class="auth-error" data-password-error></p>' +
+        '</form>' +
+      '</div>';
+    document.body.appendChild(root);
+    const input = root.querySelector('input[name="password"]');
+    const finish = (value) => {
+      document.removeEventListener('keydown', onKey);
+      root.remove();
+      resolve(value);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(null); };
+    document.addEventListener('keydown', onKey);
+    root.querySelectorAll('[data-password-cancel]').forEach(el => {
+      el.addEventListener('click', () => finish(null));
+    });
+    root.querySelector('[data-settings-password-toggle]').addEventListener('click', (e) => {
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      e.currentTarget.textContent = showing ? '表示' : '隠す';
+    });
+    root.querySelector('[data-password-form]').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submit = e.currentTarget.querySelector('button[type="submit"]');
+      const error = e.currentTarget.querySelector('[data-password-error]');
+      submit.disabled = true;
+      error.textContent = '';
+      try {
+        await verifyCurrentPassword(input.value);
+        finish(true);
+      } catch (ex) {
+        error.textContent = ex.message || String(ex);
+        submit.disabled = false;
+        input.select();
+      }
+    });
+    setTimeout(() => input?.focus(), 0);
+  });
+}
 
 function attr(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
@@ -703,7 +763,7 @@ export function bindSettings() {
     if (supaForm) supaForm.hidden = !supaForm.hidden;
   });
 
-  supaForm?.addEventListener('submit', (e) => {
+  supaForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(supaForm);
     const url = String(fd.get('url') || '').trim();
@@ -713,13 +773,17 @@ export function bindSettings() {
       show(t('settings.supa.err.bad_url'), 'bad');
       return;
     }
+    const password = await requestSettingsPassword();
+    if (!password) { show(t('settings.password.cancelled')); return; }
     setConfig({ url, anonKey });
     show(t('settings.supa.saved'), 'ok');
     setTimeout(() => location.reload(), 400);
   });
 
-  document.getElementById('supa-clear')?.addEventListener('click', () => {
+  document.getElementById('supa-clear')?.addEventListener('click', async () => {
     if (!confirm(t('settings.supa.confirm_clear'))) return;
+    const password = await requestSettingsPassword();
+    if (!password) { show(t('settings.password.cancelled')); return; }
     setConfig({ url: '', anonKey: '' });
     show(t('settings.supa.cleared'), 'ok');
     setTimeout(() => location.reload(), 400);
@@ -895,8 +959,15 @@ export function bindSettings() {
     const me = currentUser();
     if (!me) return;
     kindBtn.disabled = true;
-    if (kindStatus) kindStatus.textContent = t('settings.kind.updating');
+    if (kindStatus) kindStatus.textContent = t('settings.password.required');
     try {
+      const password = await requestSettingsPassword();
+      if (!password) {
+        if (kindStatus) kindStatus.textContent = t('settings.password.cancelled');
+        kindBtn.disabled = false;
+        return;
+      }
+      if (kindStatus) kindStatus.textContent = t('settings.kind.updating');
       await updateProfile({ isOrg: !me.isOrg });
       if (kindStatus) {
         kindStatus.textContent = t('settings.kind.updated');

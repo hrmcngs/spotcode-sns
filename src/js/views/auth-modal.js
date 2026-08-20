@@ -1,15 +1,15 @@
 // Login / Sign-up modal. Mounts itself on first open() and stays in the DOM.
-import { register, login, fetchGithubProfile } from '../auth.js';
+import { register, login, loginWithUsername, fetchGithubProfile } from '../auth.js';
 import { icon } from '../icons.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
-import { resolveLoginEmail, isAcceptableLoginEmail, reservedSignupReason } from '../login-aliases.js';
+import { resolveLoginEmail, isAcceptableLoginEmail, isAcceptableLoginIdentifier, reservedSignupReason } from '../login-aliases.js';
 
 let rootEl = null;
 
 // Shown when the user types a bare identifier that isn't a known
 // alias. login-aliases.js's ALIASES map is the source of truth for
 // what we accept without an `@`.
-const BARE_EMAIL_REJECTED = 'メールアドレスを入力してください（@ を含めてください）';
+const BARE_EMAIL_REJECTED = 'メールアドレスまたはユーザー名を入力してください';
 
 function template() {
   return (
@@ -50,13 +50,15 @@ function template() {
           // login-aliases.js expands them before they hit Supabase,
           // which still receives a well-formed email. inputmode="email"
           // keeps the right mobile keyboard for the common case.
-          '<label for="auth-login-email">Email' +
+          '<label for="auth-login-email">Email / Username' +
             '<input id="auth-login-email" type="text" name="email" required ' +
               'autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false">' +
           '</label>' +
           '<label for="auth-login-password">Password' +
-            '<input id="auth-login-password" type="password" name="password" required ' +
-              'autocomplete="current-password">' +
+            '<span class="password-input">' +
+              '<input id="auth-login-password" type="password" name="password" required autocomplete="current-password">' +
+              '<button type="button" class="password-input__toggle" data-password-toggle aria-label="パスワードを表示">表示</button>' +
+            '</span>' +
           '</label>' +
           '<button type="submit" class="btn btn--primary btn--block">Log in</button>' +
           '<p class="auth-error" data-error></p>' +
@@ -86,8 +88,10 @@ function template() {
               'autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false">' +
           '</label>' +
           '<label for="auth-reg-password">Password <span class="hint">(8 文字以上)</span>' +
-            '<input id="auth-reg-password" type="password" name="password" required ' +
-              'minlength="8" autocomplete="new-password">' +
+            '<span class="password-input">' +
+              '<input id="auth-reg-password" type="password" name="password" required minlength="8" autocomplete="new-password">' +
+              '<button type="button" class="password-input__toggle" data-password-toggle aria-label="パスワードを表示">表示</button>' +
+            '</span>' +
           '</label>' +
 
           '<fieldset class="role-group">' +
@@ -139,6 +143,17 @@ function bindEvents() {
     if (e.target.closest('[data-close]')) { close(); return; }
     const tab = e.target.closest('.auth-tab');
     if (tab) { showTab(tab.dataset.tab); return; }
+
+    const passwordToggle = e.target.closest('[data-password-toggle]');
+    if (passwordToggle) {
+      const input = passwordToggle.closest('.password-input')?.querySelector('input');
+      if (!input) return;
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      passwordToggle.textContent = showing ? '表示' : '隠す';
+      passwordToggle.setAttribute('aria-label', showing ? 'パスワードを表示' : 'パスワードを隠す');
+      return;
+    }
 
     const social = e.target.closest('[data-social]');
     if (social && social.dataset.social === 'github') {
@@ -197,7 +212,7 @@ function bindEvents() {
     // Reject bare strings that aren't a known alias before Supabase
     // sees them — gives the user a clearer error than "invalid login
     // credentials".
-    if (!isAcceptableLoginEmail(rawEmail)) {
+    if (!isAcceptableLoginIdentifier(rawEmail)) {
       setError(form, BARE_EMAIL_REJECTED);
       return;
     }
@@ -208,7 +223,14 @@ function bindEvents() {
     try {
       // Expand internal bare identifiers (e.g. dev.test.account →
       // dev.test.account@spotcode-sns.local) before calling Supabase.
-      await login({ email: resolveLoginEmail(rawEmail), password });
+      let email = resolveLoginEmail(rawEmail);
+      // Known internal aliases expand synchronously. Any other bare value
+      // (with or without a leading @) is a public profile handle.
+      if (!email.includes('@') || email.startsWith('@')) {
+        await loginWithUsername({ identifier: rawEmail, password });
+      } else {
+        await login({ email, password });
+      }
       close();
     } catch (err) {
       setError(form, err.message || String(err));

@@ -8,7 +8,7 @@ import { isLiked, likeCount, isReposted, isBookmarked } from './interactions.js'
 import { currentUser }      from './auth.js';
 import { renderAvatar }     from './avatar.js';
 import { isNearSpotSync, getRadius } from './geo-gate.js';
-import { isDevMode, isOperator } from './dev-mode.js';
+import { isDevMode } from './dev-mode.js';
 import { parseConnpassUrl, cachedEventMeta, formatEventStart } from './connpass.js';
 import { parseGithubLink } from './gh-link.js';
 import { maskHandle, maskName, maskMentionsInText } from './privacy-mode.js';
@@ -107,53 +107,38 @@ function timeText(p) {
   return p.time || '';
 }
 
-// Build a Google Maps URL that, when opened, shows the building name
-// in the search box instead of raw N/E coordinates. Priority order:
-//   1. label   ("東京都立桜町高等学校") — text search, Maps resolves to the place
-//   2. address ("世田谷区用賀…")        — same, but less specific
-//   3. lat/lng                          — last-resort coordinate pin
-// In (1)/(2) we still append the coords via the `/@<lat>,<lng>,17z`
-// suffix so Maps centres on the exact spot the user picked, even when
-// the name lookup matches multiple branches (e.g. a chain store).
-function gmapsUrl(spot) {
-  const lat = Number(spot.lat), lng = Number(spot.lng);
-  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
-  const text = (spot.label || spot.address || '').trim();
-  if (text) {
-    const q = encodeURIComponent(text);
-    return hasCoords
-      ? 'https://www.google.com/maps/search/' + q + '/@' + lat + ',' + lng + ',17z'
-      : 'https://www.google.com/maps/search/?api=1&query=' + q;
-  }
-  if (hasCoords) return 'https://www.google.com/maps?q=' + lat + ',' + lng;
-  return 'https://www.google.com/maps';
+function spotMapUrl(spot, postId) {
+  const lat = Number(spot?.lat), lng = Number(spot?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return url('/spots');
+  const post = postId ? '/' + encodeURIComponent(postId) : '';
+  return url('/spots/@' + lat + ',' + lng + post);
 }
 
-function spotChip(spot) {
+function spotChip(spot, postId) {
   if (!spot) return '';
   const pinIcon = icon('pin', { size: 12, className: 'icon--inline' });
   if (typeof spot === 'object') {
     const label = spot.label || (Number(spot.lat).toFixed(4) + ', ' + Number(spot.lng).toFixed(4));
-    const gmaps = gmapsUrl(spot);
-    const title = spot.address ? 'Google Maps で開く — ' + spot.address : 'Google Maps で開く';
-    return '<a class="spot-chip" href="' + escape(gmaps) + '" target="_blank" rel="noopener noreferrer" title="' + escape(title) + '">' +
+    const mapUrl = spotMapUrl(spot, postId);
+    const title = spot.address ? 'Spotsで開く — ' + spot.address : 'Spotsで開く';
+    return '<a class="spot-chip" href="' + escape(mapUrl) + '" title="' + escape(title) + '">' +
       pinIcon + escape(label) + '</a>';
   }
   return '<span class="spot-chip">' + pinIcon + escape(spot) + '</span>';
 }
 
 // Address line under the post body: includes 〒postcode and 番地 when known.
-function spotAddress(spot) {
+function spotAddress(spot, postId) {
   if (!spot || typeof spot !== 'object') return '';
   if (!spot.address) return '';
   const d = spot.addressDetails || {};
   const hnNote = d.houseNumber
     ? ''
     : ' <span class="post__addr-warn" title="OpenStreetMap に番地データがありません">(番地情報なし)</span>';
-  return '<div class="post__addr">' +
+  return '<a class="post__addr" href="' + escape(spotMapUrl(spot, postId)) + '" title="Spotsでこの場所を開く">' +
     icon('pin', { size: 12, className: 'icon--inline' }) +
     escape(spot.address) + hnNote +
-  '</div>';
+  '</a>';
 }
 
 // Render an embedded quoted-post card. Used when `p.quoteOf` is set
@@ -197,9 +182,7 @@ function analyticsLink(postId) {
 function isLockedBySpot(p, me) {
   if (!p.spot || p.spot.lat == null || p.spot.lng == null) return false;
   if (me && p.authorHandle === me.handle) return false;
-  // Operators (and admins) can read any post regardless of distance
-  // — they need to be able to evaluate reports without travelling.
-  if (isOperator()) return false;
+  if (isDevMode()) return false;
   return isNearSpotSync(p.spot.lat, p.spot.lng) !== true;
 }
 
@@ -262,7 +245,7 @@ export function renderPost(p) {
           '<span class="post__sep">·</span>' +
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">（編集済み）</span>' : '') +
-          (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot) : '') +
+          (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot, p.id) : '') +
           (p.kind === 'idea'
             ? ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">' +
                 icon('spark', { size: 12, className: 'icon--inline' }) + escape(t('kind.idea')) +
@@ -276,12 +259,12 @@ export function renderPost(p) {
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
         (locked
-          ? lockedBanner() + spotAddress(p.spot)
+          ? lockedBanner() + spotAddress(p.spot, p.id)
           : (
             '<div class="post__body' + (canEdit ? ' post__body--editable-tasks' : '') + '">' +
               renderMarkdown(escape(maskMentionsInText(p.body)), { editable: canEdit }) +
             '</div>' +
-            spotAddress(p.spot) +
+            spotAddress(p.spot, p.id) +
             // Author-supplied URL — validated against the safeLinkUrl
             // allowlist so a `javascript:` scheme can't slip past.
             // Render the LABEL as a compact `owner/repo` / `owner/repo :

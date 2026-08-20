@@ -72,6 +72,11 @@ actor SupabaseService {
         return try await request("auth/v1/token?grant_type=password", method: "POST", body: payload)
     }
 
+    func usernameLogin(handle: String, password: String) async throws -> AuthSession {
+        let payload = try JSONSerialization.data(withJSONObject: ["username": handle, "password": password])
+        return try await request("functions/v1/username-login", method: "POST", body: payload)
+    }
+
     func refresh(_ refreshToken: String) async throws -> AuthSession {
         let payload = try JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
         return try await request("auth/v1/token?grant_type=refresh_token", method: "POST", body: payload)

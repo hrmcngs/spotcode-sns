@@ -12,7 +12,7 @@
 //   updateProfile(patch)  — writes to public.profiles + refreshes cache
 //   fetchGithubProfile(h) — same public GitHub API lookup as before
 
-import { getClient } from './supa.js';
+import { getClient, getConfig } from './supa.js';
 import { withTimeout } from './net-utils.js';
 import {
   rememberAccount, forgetAccount, getRefreshToken,
@@ -339,6 +339,55 @@ export async function login({ email, password }) {
   if (error) throw new Error(translateAuthError(error.message));
   await adoptSession(data?.session || null);
   return cachedUser;
+}
+
+// Resolve @handle / handle to the email Supabase Auth requires. The RPC is
+// installed by Stage 33 of docs/supabase-schema.sql. Real email addresses
+// pass straight through and never call the resolver.
+export async function loginWithUsername({ identifier, password }) {
+  const raw = String(identifier || '').trim();
+  const handle = raw.replace(/^@/, '').toLowerCase();
+  if (!handle) throw new Error('ユーザー名を入力してください');
+  const { url, anonKey } = getConfig();
+  const response = await fetch(url.replace(/\/$/, '') + '/functions/v1/username-login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + anonKey,
+      'apikey': anonKey,
+    },
+    body: JSON.stringify({ username: handle, password: String(password || '') }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.access_token || !payload?.refresh_token) {
+    throw new Error(payload?.error || 'ユーザー名かパスワードが違います');
+  }
+  const supa = await getClient();
+  const { data, error } = await supa.auth.setSession({
+    access_token: payload.access_token,
+    refresh_token: payload.refresh_token,
+  });
+  if (error || !data?.session) throw new Error(translateAuthError(error?.message));
+  await adoptSession(data.session);
+  return cachedUser;
+}
+
+// Re-check the active account's password before sensitive settings changes.
+// A successful sign-in may rotate the session token, so adopt the returned
+// session immediately and keep the saved-account switcher token current.
+export async function verifyCurrentPassword(password) {
+  if (!cachedUser?.email) throw new Error('ログイン中のメールアドレスを確認できません');
+  if (!password) throw new Error('パスワードを入力してください');
+  const supa = await getClient();
+  const { data, error } = await supa.auth.signInWithPassword({
+    email: cachedUser.email,
+    password: String(password),
+  });
+  if (error || !data?.session) {
+    throw new Error(translateAuthError(error?.message || 'パスワードを確認できませんでした'));
+  }
+  await adoptSession(data.session);
+  return true;
 }
 
 // Rotate the password of the currently-signed-in auth user. The

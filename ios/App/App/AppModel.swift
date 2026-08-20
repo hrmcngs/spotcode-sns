@@ -55,9 +55,19 @@ final class AppModel: ObservableObject {
         if let currentSession = session, let currentProfile = me {
             rememberAccount(session: currentSession, profile: currentProfile)
         }
-        let email = emailOrAlias.contains("@") ? emailOrAlias : emailOrAlias + "@spotcode-sns.local"
         do {
-            let value = try await SupabaseService.shared.login(email: email, password: password)
+            let raw = emailOrAlias.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value: AuthSession
+            if raw.contains("@") && !raw.hasPrefix("@") {
+                value = try await SupabaseService.shared.login(email: raw, password: password)
+            } else if raw.lowercased() == "dev.test.account" {
+                value = try await SupabaseService.shared.login(email: "dev.test.account@spotcode-sns.local", password: password)
+            } else {
+                value = try await SupabaseService.shared.usernameLogin(
+                    handle: raw.trimmingCharacters(in: CharacterSet(charactersIn: "@")).lowercased(),
+                    password: password
+                )
+            }
             guard let profile = try await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) else {
                 throw URLError(.userAuthenticationRequired)
             }

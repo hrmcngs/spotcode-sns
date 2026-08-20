@@ -76,6 +76,17 @@ export function isAcceptableLoginEmail(input) {
   return !!ALIASES[v.toLowerCase()];
 }
 
+// Login accepts either an email/internal alias or a public profile handle.
+// Signup still uses isAcceptableLoginEmail because Supabase must receive a
+// real contact email when creating a normal account.
+export function isAcceptableLoginIdentifier(input) {
+  const v = String(input || '').trim();
+  if (!v) return false;
+  if (v.indexOf('@') > 0) return true; // email
+  const handle = v.replace(/^@/, '');
+  return /^[A-Za-z0-9_][A-Za-z0-9_-]{1,19}$/.test(handle) || !!ALIASES[v.toLowerCase()];
+}
+
 // Signup-side gate: reject any attempt to claim one of the
 // pre-reserved identifiers / handles / the internal domain. The
 // brand + QA accounts are seeded once by the admin (see README

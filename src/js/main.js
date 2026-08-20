@@ -599,6 +599,7 @@ function dispatch(path) {
   forceUnlockBodyScroll();
   const reposMatch     = path === '/repos' || path === '/repos/';
   const mapMatch       = path === '/spots' || path === '/spots/';
+  const mapFocusMatch  = path.match(/^\/spots\/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:\/([0-9a-fA-F-]{36}))?\/?$/);
   const mapCityMatch   = path.match(/^\/spots\/(.+?)\/?$/);
   const spotMatch      = path.match(/^\/spot\/(.+?)\/?$/);
   const analyticsMatch = path.match(/^\/post\/([0-9a-fA-F-]{36})\/analytics\/?$/);
@@ -640,6 +641,15 @@ function dispatch(path) {
     document.title = '@' + handle + ' ' + kind + ' / spotcode-sns';
     app.innerHTML = renderFollowList(handle, kind);
     hydrateFollowList(handle, kind);
+  } else if (mapFocusMatch) {
+    const focus = {
+      lat: Number(mapFocusMatch[1]),
+      lng: Number(mapFocusMatch[2]),
+      postId: mapFocusMatch[3] || null,
+    };
+    document.title = 'Spot / spotcode-sns';
+    app.innerHTML = renderMap();
+    hydrateMap(null, focus);
   } else if (mapCityMatch) {
     // City-scoped map view — reached from the right-rail "Trending spots"
     // card. Same canvas as /spots, but filtered and fit-bounded to a
