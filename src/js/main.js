@@ -434,6 +434,10 @@ function openAccountMenu(anchorRect) {
         '</button>' +
       '</header>' +
       '<div class="account-menu__list">' + rows + '</div>' +
+      '<button type="button" class="account-menu__row" data-account-menu-add>' +
+        icon('plus', { size: 14, className: 'icon--inline' }) +
+        '<span class="account-menu__row-text">' + escapeText(t('settings.accounts.add')) + '</span>' +
+      '</button>' +
       '<div class="account-menu__sep"></div>' +
       '<button type="button" class="account-menu__row account-menu__row--bad" data-account-menu-logout>' +
         icon('arrow_right', { size: 14, className: 'icon--inline' }) +
@@ -503,6 +507,22 @@ function openAccountMenu(anchorRect) {
     if (e.target.closest('[data-account-revert-official]')) {
       closeAccountMenu();
       setPostingAsOfficial(false);
+      return;
+    }
+    // Add another real login without signing the current account out
+    // first. login() replaces the active Supabase session and keeps the
+    // previous refresh token in saved-accounts, so both accounts remain
+    // available in this switcher afterwards.
+    if (e.target.closest('[data-account-menu-add]')) {
+      closeAccountMenu();
+      const meBefore = currentUser();
+      const off = onAuthChange((u) => {
+        if (u && (!meBefore || u.id !== meBefore.id)) {
+          off();
+          location.reload();
+        }
+      });
+      openAuth('login');
       return;
     }
     if (e.target.closest('[data-account-menu-logout]')) {
