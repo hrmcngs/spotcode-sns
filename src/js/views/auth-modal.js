@@ -28,7 +28,7 @@ function template() {
         '<div class="auth-divider"><span>or</span></div>' +
 
         // login pane
-        // For 1Password / iCloud Keychain / Google Password Manager
+        // For password managers to recognise and autofill the form
         // to recognise the form and offer save / autofill:
         //   - autocomplete="username" + "current-password" pair (the
         //     password manager looks for that exact pairing — even on
@@ -66,7 +66,7 @@ function template() {
 
         '<form class="auth-form" data-pane="mfa" hidden method="post" action="#" novalidate>' +
           '<h2>2段階認証</h2>' +
-          '<p class="settings__hint">1Passwordなどに表示されている6桁のワンタイムパスワードを入力してください。</p>' +
+          '<p class="settings__hint">認証アプリに表示されている6桁のワンタイムパスワードを入力してください。</p>' +
           '<label for="auth-mfa-code">確認コード' +
             '<input id="auth-mfa-code" name="code" type="text" required maxlength="6" ' +
               'inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="123456">' +

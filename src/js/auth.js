@@ -97,7 +97,9 @@ export async function beginMfaEnrollment() {
   const existing = await mfaStatus();
   if (existing) throw new Error('2段階認証はすでに有効です');
   const { data: factors } = await supa.auth.mfa.listFactors();
-  for (const factor of (factors?.totp || []).filter(item => item.status !== 'verified')) {
+  // `totp` contains verified factors only in some supabase-js versions;
+  // abandoned enrollment attempts are still present in `all`.
+  for (const factor of (factors?.all || []).filter(item => item.factor_type === 'totp' && item.status !== 'verified')) {
     await supa.auth.mfa.unenroll({ factorId: factor.id });
   }
   const { data, error } = await supa.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Spotcode' });

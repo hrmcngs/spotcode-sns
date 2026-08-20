@@ -2328,7 +2328,7 @@ private struct MFASettingsCard: View {
                     .foregroundColor(factor == nil ? SpotcodeTheme.muted : .green)
                 Spacer()
             }
-            Text("ログイン時に1Passwordなどが生成する6桁のワンタイムパスワードを要求します。")
+            Text("ログイン時に認証アプリが生成する6桁のワンタイムパスワードを要求します。")
                 .foregroundColor(SpotcodeTheme.muted)
             Button(factor == nil ? "2段階認証を設定する" : "2段階認証を無効にする") {
                 if factor != nil { showDisableConfirmation = true }
@@ -2384,20 +2384,26 @@ private struct MFAEnrollmentView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 16) {
-                    Text("1Passwordで「ワンタイムパスワードを設定」を選び、QRコードを読み取ってください。")
+                    Text("認証アプリでワンタイムパスワードの追加を選び、QRコードを読み取ってください。")
                     if let image = qrImage(enrollment.totp.uri ?? enrollment.totp.secret) {
                         Image(uiImage: image).interpolation(.none).resizable().frame(width: 240, height: 240).padding(10).background(Color.white).cornerRadius(12)
                     }
                     Text("読み取れない場合").font(.caption).foregroundColor(SpotcodeTheme.muted)
                     Text(enrollment.totp.secret).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                    TextField("6桁コード", text: $code).keyboardType(.numberPad).textContentType(.oneTimeCode).spotcodeField()
+                    TextField("6桁コード", text: $code)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+                        .onChange(of: code) { value in
+                            code = String(value.filter(\.isNumber).prefix(6))
+                        }
+                        .spotcodeField()
                     Button(busy ? "確認中…" : "確認して有効にする") {
                         busy = true
                         Task {
                             do { try await model.confirmMFAEnrollment(enrollment, code: code); completed(); dismiss() }
                             catch { errorMessage = "確認コードが違うか、有効期限が切れています。"; busy = false }
                         }
-                    }.buttonStyle(OutlineButtonStyle(filled: true)).disabled(code.count != 6 || busy)
+                    }.buttonStyle(OutlineButtonStyle(filled: true)).disabled(busy)
                     if !errorMessage.isEmpty { Text(errorMessage).foregroundColor(SpotcodeTheme.warning) }
                 }.padding()
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("2段階認証")
@@ -2490,11 +2496,14 @@ struct LoginView: View {
                 Image(systemName: "chevron.left.forwardslash.chevron.right").font(.largeTitle)
                 if model.requiresMFA {
                     Text("2段階認証").font(.title3.bold())
-                    Text("1Passwordなどに表示されている6桁コードを入力してください。")
+                    Text("認証アプリに表示されている6桁コードを入力してください。")
                         .foregroundColor(SpotcodeTheme.muted)
                     TextField("123456", text: $otpCode)
                         .keyboardType(.numberPad)
                         .textContentType(.oneTimeCode)
+                        .onChange(of: otpCode) { value in
+                            otpCode = String(value.filter(\.isNumber).prefix(6))
+                        }
                         .spotcodeField()
                     Button(signing ? "確認中…" : "確認してログイン") {
                         signing = true
@@ -2504,7 +2513,7 @@ struct LoginView: View {
                             if succeeded { isPresented = false }
                         }
                     }.font(.body.weight(.bold)).frame(maxWidth: .infinity).padding(13).background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
-                     .disabled(otpCode.count != 6 || signing)
+                     .disabled(signing)
                 } else {
                 TextField("メールまたはログイン名", text: $email)
                     .textInputAutocapitalization(.never)

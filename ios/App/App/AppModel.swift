@@ -144,6 +144,10 @@ final class AppModel: ObservableObject {
 
     func beginMFAEnrollment() async throws -> MFAEnrollment {
         guard let token = session?.accessToken else { throw URLError(.userAuthenticationRequired) }
+        let factors = try await SupabaseService.shared.allMFAFactors(token: token)
+        for factor in factors where factor.status != "verified" {
+            try? await SupabaseService.shared.disableMFA(factorID: factor.id, token: token)
+        }
         return try await SupabaseService.shared.enrollMFA(token: token)
     }
 

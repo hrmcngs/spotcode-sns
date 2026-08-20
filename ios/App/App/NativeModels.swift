@@ -178,7 +178,10 @@ struct MFAFactor: Codable, Identifiable {
     enum CodingKeys: String, CodingKey { case id, status; case friendlyName = "friendly_name" }
 }
 
-struct MFAFactorsResponse: Codable { let totp: [MFAFactor]? }
+struct MFAFactorsResponse: Codable {
+    let all: [MFAFactor]?
+    let totp: [MFAFactor]?
+}
 
 struct MFATOTPEnrollment: Codable {
     let qrCode: String?

@@ -340,7 +340,7 @@ function accountSection() {
 function mfaCard() {
   return '<section class="settings-card" id="mfa-card">' +
     '<h2>2段階認証 <span class="settings-tag" id="mfa-tag">確認中…</span></h2>' +
-    '<p class="settings__hint">ログイン時に、1Password・Google Authenticator・Appleの「パスワード」などが生成する6桁コードを要求します。</p>' +
+    '<p class="settings__hint">ログイン時に、認証アプリが生成する6桁のワンタイムパスワードを要求します。</p>' +
     '<div class="settings-form__actions"><button type="button" class="btn btn--primary" id="mfa-toggle" disabled>読み込み中…</button></div>' +
     '<p class="settings-status" id="mfa-status"></p>' +
   '</section>';
@@ -651,7 +651,7 @@ export function bindSettings() {
   const settingsGh = settingsUser?.github?.handle;
 
   // TOTP MFA — Supabase returns an SVG data URL and an otpauth URI that
-  // 1Password, Apple Passwords, Google Authenticator, etc. understand.
+  // Standards-compatible authenticator apps understand this TOTP URI.
   const mfaButton = document.getElementById('mfa-toggle');
   const mfaTag = document.getElementById('mfa-tag');
   const mfaStatusEl = document.getElementById('mfa-status');
@@ -1328,7 +1328,7 @@ function openMfaEnrollment(enrollment, onComplete) {
       '<button type="button" class="modal__close" data-mfa-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
       '<form class="auth-form" data-mfa-enroll-form>' +
         '<h2 id="mfa-enroll-title">認証アプリを登録</h2>' +
-        '<p class="settings__hint">1Passwordで「ワンタイムパスワードを設定」を選び、このQRコードを読み取ってください。</p>' +
+        '<p class="settings__hint">認証アプリでワンタイムパスワードの追加を選び、このQRコードを読み取ってください。</p>' +
         (qr ? '<img class="mfa-qr" src="' + attr(qr) + '" alt="2段階認証QRコード">' : '') +
         '<details><summary>QRを読めない場合</summary><code class="mfa-secret">' + attr(secret) + '</code></details>' +
         '<label>表示された6桁コード<input name="code" type="text" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="123456" required></label>' +

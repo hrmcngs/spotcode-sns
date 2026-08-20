@@ -87,6 +87,11 @@ actor SupabaseService {
         return result.totp ?? []
     }
 
+    func allMFAFactors(token: String) async throws -> [MFAFactor] {
+        let result: MFAFactorsResponse = try await request("auth/v1/factors", token: token)
+        return result.all ?? result.totp ?? []
+    }
+
     func enrollMFA(token: String) async throws -> MFAEnrollment {
         let body = try JSONSerialization.data(withJSONObject: ["factor_type": "totp", "friendly_name": "Spotcode"])
         return try await request("auth/v1/factors", method: "POST", token: token, body: body)
