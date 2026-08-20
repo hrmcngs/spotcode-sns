@@ -1196,40 +1196,157 @@ struct ComposeView: View {
     @Binding var isPresented: Bool
     @State private var bodyText = ""
     @State private var githubLink = ""
+    @State private var eventURL = ""
     @State private var sending = false
     @State private var editorFocused = false
+    @State private var showLink = false
+    @State private var showEvent = false
+    @State private var isIdea = false
+    @State private var visibility = "public"
+    @State private var selectedSpot: Spot?
+    @State private var photos: [String] = []
+    @State private var poll: PostPoll?
+    @State private var showLocationPicker = false
+    @State private var showPhotoPicker = false
+    @State private var showPollEditor = false
 
     init(isPresented: Binding<Bool>, initialGitHubLink: String = "") {
         _isPresented = isPresented
         _githubLink = State(initialValue: initialGitHubLink)
+        _showLink = State(initialValue: !initialGitHubLink.isEmpty)
     }
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 16) {
-                HStack(alignment: .top, spacing: 12) {
-                    AvatarView(profile: model.me, size: 42)
-                    ComposerTextView(text: $bodyText, isFocused: $editorFocused).frame(minHeight: 160)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(alignment: .top, spacing: 12) {
+                        AvatarView(profile: model.displayProfile, size: 42)
+                        ZStack(alignment: .topLeading) {
+                            ComposerTextView(text: $bodyText, isFocused: $editorFocused).frame(minHeight: 160)
+                            if bodyText.isEmpty {
+                                Text("いまどうしてる？").font(.title3).foregroundColor(SpotcodeTheme.muted)
+                                    .padding(.horizontal, 14).padding(.vertical, 17).allowsHitTesting(false)
+                            }
+                        }
+                        .background(SpotcodeTheme.inputSurface)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : SpotcodeTheme.border, lineWidth: 2))
+                    }
+
+                    VStack(alignment: .leading, spacing: 9) {
+                        HStack(spacing: 8) {
+                            Button { showLocationPicker = true } label: {
+                                ComposerChip(icon: "mappin", title: selectedSpot?.label ?? "場所を追加", active: selectedSpot != nil)
+                            }
+                            Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加", active: showLink) }
+                        }
+                        HStack(spacing: 8) {
+                            Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: "イベントを追加", active: showEvent) }
+                            Button { isIdea.toggle() } label: { ComposerChip(icon: "sparkles", title: "アイデア", active: isIdea) }
+                            audienceMenu
+                        }
+                    }
+
+                    if showLink {
+                        HStack {
+                            Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16)
+                            TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL)
+                        }.spotcodeURLField()
+                    }
+                    if showEvent {
+                        HStack {
+                            Image(systemName: "calendar")
+                            TextField("イベントURL（任意）", text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL)
+                        }.spotcodeURLField()
+                    }
+                    if !photos.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack {
+                                ForEach(Array(photos.enumerated()), id: \.offset) { index, value in
+                                    ZStack(alignment: .topTrailing) {
+                                        DataURLImage(value: value).frame(width: 90, height: 90).clipShape(RoundedRectangle(cornerRadius: 9))
+                                        Button { photos.remove(at: index) } label: { Image(systemName: "xmark.circle.fill") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let poll { Label("投票: \(poll.question)", systemImage: "chart.bar").foregroundColor(SpotcodeTheme.accent) }
+
+                    HStack(spacing: 28) {
+                        Button { showPhotoPicker = true } label: { Image(systemName: "photo") }
+                        Button { insertCodeBlock() } label: { Image(systemName: "chevron.left.forwardslash.chevron.right") }
+                        Button { showLocationPicker = true } label: { Image(systemName: "mappin.circle") }
+                        Button { showPollEditor = true } label: { Image(systemName: "chart.bar") }
+                    }.font(.title3).foregroundColor(SpotcodeTheme.accent).padding(.leading, 54)
                 }
-                HStack { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16); TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL) }
-                    .padding(11).background(SpotcodeTheme.inputSurface).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
-                Spacer()
-            }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+                .padding()
+            }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
              .navigationTitle("New idea").navigationBarTitleDisplayMode(.inline)
              .toolbar {
                  ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
                  ToolbarItem(placement: .confirmationAction) {
                      Button(sending ? "Posting…" : "Post") {
-                         sending = true
-                         Task {
-                             if await model.publish(body: bodyText.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink) { isPresented = false }
-                             sending = false
-                         }
+                         publish()
                      }.disabled(bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending)
                  }
              }
-        }.preferredColorScheme(.dark)
+        }
+        .preferredColorScheme(.dark)
+        .sheet(isPresented: $showLocationPicker) { LocationPickerSheet(spot: $selectedSpot, isPresented: $showLocationPicker) }
+        .sheet(isPresented: $showPhotoPicker) { PhotoLibraryPicker(images: $photos) }
+        .sheet(isPresented: $showPollEditor) { PollEditorSheet(poll: $poll, isPresented: $showPollEditor) }
+    }
+
+    private var audienceMenu: some View {
+        Menu {
+            audienceButton("全員", value: "public")
+            audienceButton("相互フォロー", value: "mutuals")
+            audienceButton("フォロー中", value: "following")
+            audienceButton("親しい友達", value: "friends")
+            audienceButton("同じ組織", value: "org")
+        } label: {
+            ComposerChip(icon: visibilityIcon, title: visibilityLabel, strong: true, active: visibility != "public")
+        }
+    }
+
+    private func audienceButton(_ title: String, value: String) -> some View {
+        Button { visibility = value } label: {
+            if visibility == value { Label(title, systemImage: "checkmark") } else { Text(title) }
+        }
+    }
+
+    private var visibilityLabel: String {
+        ["public":"全員", "mutuals":"相互フォロー", "following":"フォロー中", "friends":"親しい友達", "org":"同じ組織"][visibility] ?? "全員"
+    }
+
+    private var visibilityIcon: String {
+        ["public":"globe", "mutuals":"arrow.2.squarepath", "following":"person.badge.plus", "friends":"heart", "org":"building.2"][visibility] ?? "globe"
+    }
+
+    private func insertCodeBlock() {
+        if !bodyText.isEmpty && !bodyText.hasSuffix("\n") { bodyText += "\n" }
+        bodyText += "```\nコードを入力\n```\n"
+        editorFocused = true
+    }
+
+    private func publish() {
+        sending = true
+        Task {
+            let link = githubLink.trimmingCharacters(in: .whitespacesAndNewlines)
+            let event = eventURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            if await model.publish(
+                body: bodyText.trimmingCharacters(in: .whitespacesAndNewlines),
+                githubLink: link.isEmpty ? nil : link,
+                eventURL: event.isEmpty ? nil : event,
+                spot: selectedSpot,
+                kind: isIdea ? "idea" : nil,
+                visibility: visibility,
+                photos: photos.isEmpty ? nil : photos,
+                poll: poll
+            ) { isPresented = false }
+            sending = false
+        }
     }
 }
 
