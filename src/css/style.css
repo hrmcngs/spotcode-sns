@@ -3382,3 +3382,19 @@ html.account-menu-locked { overflow: hidden; }
 .repo-card__post:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .repo-card__post-author { color: var(--muted); margin-right: .4rem; font-size: .82rem; }
 .repo-card__post-body { font-size: .9rem; }
+.mfa-qr {
+  display: block;
+  width: min(240px, 100%);
+  aspect-ratio: 1;
+  margin: 8px auto;
+  padding: 10px;
+  border-radius: 12px;
+  background: #fff;
+}
+.mfa-secret {
+  display: block;
+  margin: 8px 0;
+  padding: 10px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

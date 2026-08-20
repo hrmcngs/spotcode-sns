@@ -12,6 +12,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var isPostingAsOfficial = false
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var requiresMFA = false
+    private var pendingMFASession: AuthSession?
+    private var pendingMFAFactorID: String?
 
     private let sessionAccount = "supabase-session"
     private let savedAccountsKey = "spotcode.native.saved-accounts"
@@ -68,6 +71,47 @@ final class AppModel: ObservableObject {
                     password: password
                 )
             }
+            let factors = try await SupabaseService.shared.mfaFactors(token: value.accessToken)
+            if Self.assuranceLevel(of: value.accessToken) != "aal2",
+               let factor = factors.first(where: { $0.status == "verified" }) {
+                pendingMFASession = value
+                pendingMFAFactorID = factor.id
+                requiresMFA = true
+                errorMessage = nil
+                return false
+            }
+            try await finishSignIn(value)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func verifyMFA(code: String) async -> Bool {
+        guard let pending = pendingMFASession, let factorID = pendingMFAFactorID else {
+            errorMessage = "確認中の2段階認証がありません。"
+            return false
+        }
+        let value = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.range(of: "^[0-9]{6}$", options: .regularExpression) != nil else {
+            errorMessage = "6桁の確認コードを入力してください。"
+            return false
+        }
+        do {
+            let verified = try await SupabaseService.shared.verifyMFA(factorID: factorID, code: value, token: pending.accessToken)
+            try await finishSignIn(verified)
+            pendingMFASession = nil
+            pendingMFAFactorID = nil
+            requiresMFA = false
+            return true
+        } catch {
+            errorMessage = "確認コードが違うか、有効期限が切れています。"
+            return false
+        }
+    }
+
+    private func finishSignIn(_ value: AuthSession) async throws {
             guard let profile = try await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) else {
                 throw URLError(.userAuthenticationRequired)
             }
@@ -81,11 +125,37 @@ final class AppModel: ObservableObject {
             isPostingAsOfficial = false
             officialProfile = nil
             Task { await loadTimeline() }
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
-        }
+    }
+
+    private static func assuranceLevel(of jwt: String) -> String? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count > 1 else { return nil }
+        var value = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        value += String(repeating: "=", count: (4 - value.count % 4) % 4)
+        guard let data = Data(base64Encoded: value),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["aal"] as? String
+    }
+
+    func currentMFAFactor() async throws -> MFAFactor? {
+        guard let token = session?.accessToken else { throw URLError(.userAuthenticationRequired) }
+        return try await SupabaseService.shared.mfaFactors(token: token).first(where: { $0.status == "verified" })
+    }
+
+    func beginMFAEnrollment() async throws -> MFAEnrollment {
+        guard let token = session?.accessToken else { throw URLError(.userAuthenticationRequired) }
+        return try await SupabaseService.shared.enrollMFA(token: token)
+    }
+
+    func confirmMFAEnrollment(_ enrollment: MFAEnrollment, code: String) async throws {
+        guard let token = session?.accessToken else { throw URLError(.userAuthenticationRequired) }
+        let verified = try await SupabaseService.shared.verifyMFA(factorID: enrollment.id, code: code, token: token)
+        persist(verified)
+    }
+
+    func disableMFA(_ factor: MFAFactor) async throws {
+        guard let token = session?.accessToken else { throw URLError(.userAuthenticationRequired) }
+        try await SupabaseService.shared.disableMFA(factorID: factor.id, token: token)
     }
 
     func signOut() {

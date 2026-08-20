@@ -1,4 +1,6 @@
 import Foundation
+
+struct EmptyResponse: Codable {}
 import CoreLocation
 
 struct Profile: Codable, Identifiable, Hashable {
@@ -168,6 +170,29 @@ struct AuthSession: Codable {
         case expiresAt = "expires_at"
     }
 }
+
+struct MFAFactor: Codable, Identifiable {
+    let id: String
+    let status: String
+    let friendlyName: String?
+    enum CodingKeys: String, CodingKey { case id, status; case friendlyName = "friendly_name" }
+}
+
+struct MFAFactorsResponse: Codable { let totp: [MFAFactor]? }
+
+struct MFATOTPEnrollment: Codable {
+    let qrCode: String?
+    let secret: String
+    let uri: String?
+    enum CodingKeys: String, CodingKey { case secret, uri; case qrCode = "qr_code" }
+}
+
+struct MFAEnrollment: Codable, Identifiable {
+    let id: String
+    let totp: MFATOTPEnrollment
+}
+
+struct MFAChallenge: Codable { let id: String }
 
 /// Public account-switcher metadata. Authentication tokens are stored
 /// separately in Keychain, never in this UserDefaults-backed value.

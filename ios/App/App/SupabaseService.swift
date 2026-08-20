@@ -82,6 +82,31 @@ actor SupabaseService {
         return try await request("auth/v1/token?grant_type=refresh_token", method: "POST", body: payload)
     }
 
+    func mfaFactors(token: String) async throws -> [MFAFactor] {
+        let result: MFAFactorsResponse = try await request("auth/v1/factors", token: token)
+        return result.totp ?? []
+    }
+
+    func enrollMFA(token: String) async throws -> MFAEnrollment {
+        let body = try JSONSerialization.data(withJSONObject: ["factor_type": "totp", "friendly_name": "Spotcode"])
+        return try await request("auth/v1/factors", method: "POST", token: token, body: body)
+    }
+
+    func verifyMFA(factorID: String, code: String, token: String) async throws -> AuthSession {
+        let challengeBody = try JSONSerialization.data(withJSONObject: ["factor_id": factorID])
+        let challenge: MFAChallenge = try await request(
+            "auth/v1/factors/\(factorID)/challenge", method: "POST", token: token, body: challengeBody
+        )
+        let verifyBody = try JSONSerialization.data(withJSONObject: [
+            "factor_id": factorID, "challenge_id": challenge.id, "code": code
+        ])
+        return try await request("auth/v1/factors/\(factorID)/verify", method: "POST", token: token, body: verifyBody)
+    }
+
+    func disableMFA(factorID: String, token: String) async throws {
+        let _: EmptyResponse = try await request("auth/v1/factors/\(factorID)", method: "DELETE", token: token)
+    }
+
     func profile(id: UUID, token: String) async throws -> Profile? {
         do {
             let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape,is_admin,is_operator", token: token)

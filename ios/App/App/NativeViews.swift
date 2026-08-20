@@ -3,6 +3,7 @@ import MapKit
 import CoreLocation
 import PhotosUI
 import UIKit
+import CoreImage
 
 private enum SpotcodeTheme {
     static let background = Color(red: 13/255, green: 17/255, blue: 23/255)
@@ -2293,6 +2294,7 @@ private struct AccountSettings: View {
                 }
                 Button("＋ 別のアカウントでログイン") { showAddAccount = true }.buttonStyle(OutlineButtonStyle())
             }
+            MFASettingsCard()
             SettingsCard("役割") {
                 Label(roleTitle, systemImage: model.me?.isAdmin == true ? "sparkles" : (model.me?.isOperator == true ? "flag" : "person")).foregroundColor(SpotcodeTheme.accent)
                 Text(roleDescription).foregroundColor(SpotcodeTheme.muted)
@@ -2308,6 +2310,106 @@ private struct AccountSettings: View {
         if model.me?.isAdmin == true { return "すべての管理権限を持ちます。" }
         if model.me?.isOperator == true { return "通報対応・投稿管理・ピン管理を行えます。" }
         return "通常の投稿・フォロー・スポット機能を利用できます。"
+    }
+}
+
+private struct MFASettingsCard: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var factor: MFAFactor?
+    @State private var enrollment: MFAEnrollment?
+    @State private var loading = true
+    @State private var message = ""
+    @State private var showDisableConfirmation = false
+
+    var body: some View {
+        SettingsCard("2段階認証") {
+            HStack {
+                Text(factor == nil ? "OFF" : "ON").font(.caption.bold())
+                    .foregroundColor(factor == nil ? SpotcodeTheme.muted : .green)
+                Spacer()
+            }
+            Text("ログイン時に1Passwordなどが生成する6桁のワンタイムパスワードを要求します。")
+                .foregroundColor(SpotcodeTheme.muted)
+            Button(factor == nil ? "2段階認証を設定する" : "2段階認証を無効にする") {
+                if factor != nil { showDisableConfirmation = true }
+                else {
+                    loading = true
+                    Task {
+                        do { enrollment = try await model.beginMFAEnrollment(); message = "" }
+                        catch { message = error.localizedDescription }
+                        loading = false
+                    }
+                }
+            }.buttonStyle(OutlineButtonStyle(filled: factor == nil)).disabled(loading)
+            if !message.isEmpty { Text(message).font(.caption).foregroundColor(SpotcodeTheme.warning) }
+        }
+        .task { await refresh() }
+        .sheet(item: $enrollment) { value in
+            MFAEnrollmentView(enrollment: value) {
+                enrollment = nil
+                Task { await refresh() }
+            }.environmentObject(model)
+        }
+        .confirmationDialog("2段階認証を無効にしますか？", isPresented: $showDisableConfirmation) {
+            Button("無効にする", role: .destructive) {
+                guard let factor else { return }
+                loading = true
+                Task {
+                    do { try await model.disableMFA(factor); self.factor = nil; message = "無効にしました" }
+                    catch { message = error.localizedDescription }
+                    loading = false
+                }
+            }
+        }
+    }
+
+    private func refresh() async {
+        loading = true
+        do { factor = try await model.currentMFAFactor() }
+        catch { message = error.localizedDescription }
+        loading = false
+    }
+}
+
+private struct MFAEnrollmentView: View {
+    @EnvironmentObject private var model: AppModel
+    let enrollment: MFAEnrollment
+    let completed: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var code = ""
+    @State private var busy = false
+    @State private var errorMessage = ""
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 16) {
+                    Text("1Passwordで「ワンタイムパスワードを設定」を選び、QRコードを読み取ってください。")
+                    if let image = qrImage(enrollment.totp.uri ?? enrollment.totp.secret) {
+                        Image(uiImage: image).interpolation(.none).resizable().frame(width: 240, height: 240).padding(10).background(Color.white).cornerRadius(12)
+                    }
+                    Text("読み取れない場合").font(.caption).foregroundColor(SpotcodeTheme.muted)
+                    Text(enrollment.totp.secret).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    TextField("6桁コード", text: $code).keyboardType(.numberPad).textContentType(.oneTimeCode).spotcodeField()
+                    Button(busy ? "確認中…" : "確認して有効にする") {
+                        busy = true
+                        Task {
+                            do { try await model.confirmMFAEnrollment(enrollment, code: code); completed(); dismiss() }
+                            catch { errorMessage = "確認コードが違うか、有効期限が切れています。"; busy = false }
+                        }
+                    }.buttonStyle(OutlineButtonStyle(filled: true)).disabled(code.count != 6 || busy)
+                    if !errorMessage.isEmpty { Text(errorMessage).foregroundColor(SpotcodeTheme.warning) }
+                }.padding()
+            }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("2段階認証")
+        }.preferredColorScheme(.dark)
+    }
+
+    private func qrImage(_ text: String) -> UIImage? {
+        guard let data = text.data(using: .utf8), let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
+        guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 8, y: 8)) else { return nil }
+        return UIImage(ciImage: output)
     }
 }
 
@@ -2381,10 +2483,29 @@ struct LoginView: View {
     @State private var password = ""
     @State private var signing = false
     @State private var showsPassword = false
+    @State private var otpCode = ""
     var body: some View {
         NavigationView {
             VStack(spacing: 14) {
                 Image(systemName: "chevron.left.forwardslash.chevron.right").font(.largeTitle)
+                if model.requiresMFA {
+                    Text("2段階認証").font(.title3.bold())
+                    Text("1Passwordなどに表示されている6桁コードを入力してください。")
+                        .foregroundColor(SpotcodeTheme.muted)
+                    TextField("123456", text: $otpCode)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+                        .spotcodeField()
+                    Button(signing ? "確認中…" : "確認してログイン") {
+                        signing = true
+                        Task {
+                            let succeeded = await model.verifyMFA(code: otpCode)
+                            signing = false
+                            if succeeded { isPresented = false }
+                        }
+                    }.font(.body.weight(.bold)).frame(maxWidth: .infinity).padding(13).background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
+                     .disabled(otpCode.count != 6 || signing)
+                } else {
                 TextField("メールまたはログイン名", text: $email)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
@@ -2417,6 +2538,7 @@ struct LoginView: View {
                     }
                 }.font(.body.weight(.bold)).frame(maxWidth: .infinity).padding(13).background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
                  .disabled(email.isEmpty || password.isEmpty || signing)
+                }
                 Spacer()
             }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("spotcodeへログイン")
         }.preferredColorScheme(.dark)

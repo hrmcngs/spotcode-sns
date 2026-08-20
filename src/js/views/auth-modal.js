@@ -1,5 +1,5 @@
 // Login / Sign-up modal. Mounts itself on first open() and stays in the DOM.
-import { register, login, loginWithUsername, fetchGithubProfile } from '../auth.js';
+import { register, login, loginWithUsername, verifyLoginMfa, fetchGithubProfile } from '../auth.js';
 import { icon } from '../icons.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
 import { resolveLoginEmail, isAcceptableLoginEmail, isAcceptableLoginIdentifier, reservedSignupReason } from '../login-aliases.js';
@@ -61,6 +61,17 @@ function template() {
             '</span>' +
           '</label>' +
           '<button type="submit" class="btn btn--primary btn--block">Log in</button>' +
+          '<p class="auth-error" data-error></p>' +
+        '</form>' +
+
+        '<form class="auth-form" data-pane="mfa" hidden method="post" action="#" novalidate>' +
+          '<h2>2段階認証</h2>' +
+          '<p class="settings__hint">1Passwordなどに表示されている6桁のワンタイムパスワードを入力してください。</p>' +
+          '<label for="auth-mfa-code">確認コード' +
+            '<input id="auth-mfa-code" name="code" type="text" required maxlength="6" ' +
+              'inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="123456">' +
+          '</label>' +
+          '<button type="submit" class="btn btn--primary btn--block">確認してログイン</button>' +
           '<p class="auth-error" data-error></p>' +
         '</form>' +
 
@@ -233,10 +244,30 @@ function bindEvents() {
       }
       close();
     } catch (err) {
-      setError(form, err.message || String(err));
+      if (err?.code === 'MFA_REQUIRED') {
+        showTab('mfa');
+        setTimeout(() => rootEl.querySelector('#auth-mfa-code')?.focus(), 0);
+      } else {
+        setError(form, err.message || String(err));
+      }
     } finally {
       delete form.dataset.busy;
       if (submit) { submit.disabled = false; submit.textContent = originalLabel; }
+    }
+  });
+
+  rootEl.querySelector('[data-pane="mfa"]').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const submit = form.querySelector('button[type="submit"]');
+    setError(form, '');
+    submit.disabled = true;
+    try {
+      await verifyLoginMfa(new FormData(form).get('code'));
+      close();
+    } catch (err) {
+      setError(form, err.message || String(err));
+      submit.disabled = false;
     }
   });
 

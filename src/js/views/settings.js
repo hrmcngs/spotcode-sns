@@ -3,7 +3,7 @@ import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping,
 import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
 import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode, maskHandle, maskName } from '../privacy-mode.js';
 import { getLang, setLang, t } from '../i18n.js';
-import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange, verifyCurrentPassword } from '../auth.js';
+import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange, verifyCurrentPassword, mfaStatus, beginMfaEnrollment, confirmMfaEnrollment, disableMfa } from '../auth.js';
 import { openAuth } from './auth-modal.js';
 import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, hiddenTaskRepos, setTaskRepoVisible, privateTasksEnabled, setPrivateTasksEnabled } from '../display-prefs.js';
 import { linkGithubForPrivateIssues, getGithubToken, githubTokenCanReadPrivateRepos } from '../github-oauth.js';
@@ -333,8 +333,17 @@ function accountSection() {
   // orgLabelCard moved in here after the "profile" tab was retired —
   // the free-text affiliation is a small enough card to ride with
   // the account-identity group.
-  return accountsCard() + roleCard() + accountTypeCard() + orgLabelCard()
+  return accountsCard() + mfaCard() + roleCard() + accountTypeCard() + orgLabelCard()
        + pushNotifyCard();
+}
+
+function mfaCard() {
+  return '<section class="settings-card" id="mfa-card">' +
+    '<h2>2段階認証 <span class="settings-tag" id="mfa-tag">確認中…</span></h2>' +
+    '<p class="settings__hint">ログイン時に、1Password・Google Authenticator・Appleの「パスワード」などが生成する6桁コードを要求します。</p>' +
+    '<div class="settings-form__actions"><button type="button" class="btn btn--primary" id="mfa-toggle" disabled>読み込み中…</button></div>' +
+    '<p class="settings-status" id="mfa-status"></p>' +
+  '</section>';
 }
 
 // Browser Notifications API opt-in. Two switches in series: the
@@ -640,6 +649,53 @@ export function bindSettings() {
   // it instead of waiting for the user to visit Profile first.
   const settingsUser = currentUser();
   const settingsGh = settingsUser?.github?.handle;
+
+  // TOTP MFA — Supabase returns an SVG data URL and an otpauth URI that
+  // 1Password, Apple Passwords, Google Authenticator, etc. understand.
+  const mfaButton = document.getElementById('mfa-toggle');
+  const mfaTag = document.getElementById('mfa-tag');
+  const mfaStatusEl = document.getElementById('mfa-status');
+  let activeMfaFactor = null;
+  const paintMfa = (factor) => {
+    activeMfaFactor = factor;
+    if (mfaTag) { mfaTag.textContent = factor ? 'ON' : 'OFF'; mfaTag.className = 'settings-tag' + (factor ? ' is-ok' : ''); }
+    if (mfaButton) {
+      mfaButton.disabled = false;
+      mfaButton.textContent = factor ? '2段階認証を無効にする' : '2段階認証を設定する';
+      mfaButton.className = 'btn btn--' + (factor ? 'ghost' : 'primary');
+    }
+  };
+  if (mfaButton) {
+    mfaStatus().then(paintMfa).catch((error) => {
+      if (mfaStatusEl) { mfaStatusEl.textContent = error.message || String(error); mfaStatusEl.className = 'settings-status is-bad'; }
+    });
+    mfaButton.addEventListener('click', async () => {
+      mfaButton.disabled = true;
+      if (activeMfaFactor) {
+        if (!confirm('2段階認証を無効にしますか？')) { mfaButton.disabled = false; return; }
+        try {
+          await disableMfa(activeMfaFactor.id);
+          paintMfa(null);
+          if (mfaStatusEl) { mfaStatusEl.textContent = '2段階認証を無効にしました'; mfaStatusEl.className = 'settings-status is-ok'; }
+        } catch (error) {
+          if (mfaStatusEl) { mfaStatusEl.textContent = error.message || String(error); mfaStatusEl.className = 'settings-status is-bad'; }
+          mfaButton.disabled = false;
+        }
+        return;
+      }
+      try {
+        const enrollment = await beginMfaEnrollment();
+        openMfaEnrollment(enrollment, () => {
+          paintMfa({ id: enrollment.id, status: 'verified' });
+          if (mfaStatusEl) { mfaStatusEl.textContent = '2段階認証を有効にしました'; mfaStatusEl.className = 'settings-status is-ok'; }
+        });
+      } catch (error) {
+        if (mfaStatusEl) { mfaStatusEl.textContent = error.message || String(error); mfaStatusEl.className = 'settings-status is-bad'; }
+      } finally {
+        mfaButton.disabled = false;
+      }
+    });
+  }
   if (currentSettingsTab() === 'display' && settingsGh) {
     const includePrivate = privateTasksEnabled();
     const hydrationKey = settingsGh.toLowerCase() + (includePrivate ? ':private' : ':public');
@@ -1260,4 +1316,44 @@ export function bindSettings() {
       show(msg, 'bad');
     }
   });
+}
+
+function openMfaEnrollment(enrollment, onComplete) {
+  const root = document.createElement('div');
+  root.className = 'modal';
+  const qr = enrollment?.totp?.qr_code || '';
+  const secret = enrollment?.totp?.secret || '';
+  root.innerHTML = '<div class="modal__backdrop" data-mfa-close></div>' +
+    '<div class="modal__card" role="dialog" aria-modal="true" aria-labelledby="mfa-enroll-title">' +
+      '<button type="button" class="modal__close" data-mfa-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
+      '<form class="auth-form" data-mfa-enroll-form>' +
+        '<h2 id="mfa-enroll-title">認証アプリを登録</h2>' +
+        '<p class="settings__hint">1Passwordで「ワンタイムパスワードを設定」を選び、このQRコードを読み取ってください。</p>' +
+        (qr ? '<img class="mfa-qr" src="' + attr(qr) + '" alt="2段階認証QRコード">' : '') +
+        '<details><summary>QRを読めない場合</summary><code class="mfa-secret">' + attr(secret) + '</code></details>' +
+        '<label>表示された6桁コード<input name="code" type="text" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="123456" required></label>' +
+        '<button type="submit" class="btn btn--primary btn--block">確認して有効にする</button>' +
+        '<p class="auth-error" data-mfa-error></p>' +
+      '</form>' +
+    '</div>';
+  document.body.appendChild(root);
+  const close = () => root.remove();
+  root.querySelectorAll('[data-mfa-close]').forEach(el => el.addEventListener('click', close));
+  root.querySelector('[data-mfa-enroll-form]').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button[type="submit"]');
+    const errorEl = form.querySelector('[data-mfa-error]');
+    button.disabled = true;
+    errorEl.textContent = '';
+    try {
+      await confirmMfaEnrollment(enrollment.id, new FormData(form).get('code'));
+      close();
+      onComplete?.();
+    } catch (error) {
+      errorEl.textContent = error.message || String(error);
+      button.disabled = false;
+    }
+  });
+  setTimeout(() => root.querySelector('input[name="code"]')?.focus(), 0);
 }

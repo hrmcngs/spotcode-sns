@@ -22,6 +22,7 @@ import {
 const subscribers = new Set();
 let cachedUser = null;
 let initialized = false;
+let pendingMfaFactorId = null;
 
 // Authentication must never hold the whole application shell hostage.
 // CDN loading, Web Locks inside supabase-js, or a stale refresh token can
@@ -53,6 +54,72 @@ function emit() { subscribers.forEach(fn => { try { fn(cachedUser); } catch {} }
 
 export function onAuthChange(fn) { subscribers.add(fn); return () => subscribers.delete(fn); }
 export function currentUser() { return cachedUser; }
+
+async function requireSecondFactorIfNeeded(supa) {
+  const { data: aal, error: aalError } = await supa.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aalError) throw new Error(aalError.message);
+  if (aal?.nextLevel !== 'aal2' || aal?.currentLevel === 'aal2') return false;
+  const { data: factors, error } = await supa.auth.mfa.listFactors();
+  if (error) throw new Error(error.message);
+  const factor = factors?.totp?.find(item => item.status === 'verified');
+  if (!factor) return false;
+  pendingMfaFactorId = factor.id;
+  return true;
+}
+
+export async function verifyLoginMfa(code) {
+  if (!pendingMfaFactorId) throw new Error('確認中の2段階認証がありません');
+  const value = String(code || '').replace(/\s/g, '');
+  if (!/^\d{6}$/.test(value)) throw new Error('6桁の確認コードを入力してください');
+  const supa = await getClient();
+  const { data: challenge, error: challengeError } = await supa.auth.mfa.challenge({ factorId: pendingMfaFactorId });
+  if (challengeError) throw new Error(challengeError.message);
+  const { data, error } = await supa.auth.mfa.verify({
+    factorId: pendingMfaFactorId,
+    challengeId: challenge.id,
+    code: value,
+  });
+  if (error) throw new Error('確認コードが違うか、有効期限が切れています');
+  pendingMfaFactorId = null;
+  await adoptSession(data?.session || (await supa.auth.getSession()).data?.session || null);
+  return cachedUser;
+}
+
+export async function mfaStatus() {
+  const supa = await getClient();
+  const { data, error } = await supa.auth.mfa.listFactors();
+  if (error) throw new Error(error.message);
+  return data?.totp?.find(item => item.status === 'verified') || null;
+}
+
+export async function beginMfaEnrollment() {
+  const supa = await getClient();
+  const existing = await mfaStatus();
+  if (existing) throw new Error('2段階認証はすでに有効です');
+  const { data: factors } = await supa.auth.mfa.listFactors();
+  for (const factor of (factors?.totp || []).filter(item => item.status !== 'verified')) {
+    await supa.auth.mfa.unenroll({ factorId: factor.id });
+  }
+  const { data, error } = await supa.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Spotcode' });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function confirmMfaEnrollment(factorId, code) {
+  const value = String(code || '').replace(/\s/g, '');
+  if (!/^\d{6}$/.test(value)) throw new Error('6桁の確認コードを入力してください');
+  const supa = await getClient();
+  const { data: challenge, error: challengeError } = await supa.auth.mfa.challenge({ factorId });
+  if (challengeError) throw new Error(challengeError.message);
+  const { error } = await supa.auth.mfa.verify({ factorId, challengeId: challenge.id, code: value });
+  if (error) throw new Error('確認コードが違うか、有効期限が切れています');
+}
+
+export async function disableMfa(factorId) {
+  const supa = await getClient();
+  const { error } = await supa.auth.mfa.unenroll({ factorId });
+  if (error) throw new Error(error.message);
+}
 
 // Build the UI-facing user object from a Supabase auth user + profiles row.
 function projectUser(authUser, profile) {
@@ -203,9 +270,14 @@ export async function initAuth() {
   }
   if (session) {
     try {
-      const profile = await withBootTimeout(loadProfile(session.user.id), 'profile');
-      cachedUser = projectUser(session.user, profile);
-      if (cachedUser) rememberAccount({ user: cachedUser, session });
+      const needsMfa = await withBootTimeout(requireSecondFactorIfNeeded(supa), 'mfa');
+      if (needsMfa) {
+        cachedUser = null;
+      } else {
+        const profile = await withBootTimeout(loadProfile(session.user.id), 'profile');
+        cachedUser = projectUser(session.user, profile);
+        if (cachedUser) rememberAccount({ user: cachedUser, session });
+      }
     } catch {
       cachedUser = null;
     }
@@ -213,6 +285,20 @@ export async function initAuth() {
 
   supa.auth.onAuthStateChange(async (event, session) => {
     if (!session) { cachedUser = null; emit(); return; }
+    // Password authentication for an MFA-enabled account first emits an
+    // AAL1 session. Never project that session into an authenticated UI;
+    // verifyLoginMfa() upgrades it to AAL2 and only then calls adoptSession.
+    try {
+      if (await requireSecondFactorIfNeeded(supa)) {
+        cachedUser = null;
+        emit();
+        return;
+      }
+    } catch {
+      cachedUser = null;
+      emit();
+      return;
+    }
     // supabase-js fires INITIAL_SESSION the moment this subscriber
     // attaches — right after initAuth() has already set cachedUser
     // itself. Re-running loadProfile + emitting a duplicate onAuthChange
@@ -337,6 +423,11 @@ export async function login({ email, password }) {
   // password-auth response always carries the new session inline.
   const { data, error } = await supa.auth.signInWithPassword({ email, password });
   if (error) throw new Error(translateAuthError(error.message));
+  if (await requireSecondFactorIfNeeded(supa)) {
+    const err = new Error('ワンタイムパスワードを入力してください');
+    err.code = 'MFA_REQUIRED';
+    throw err;
+  }
   await adoptSession(data?.session || null);
   return cachedUser;
 }
@@ -368,6 +459,11 @@ export async function loginWithUsername({ identifier, password }) {
     refresh_token: payload.refresh_token,
   });
   if (error || !data?.session) throw new Error(translateAuthError(error?.message));
+  if (await requireSecondFactorIfNeeded(supa)) {
+    const err = new Error('ワンタイムパスワードを入力してください');
+    err.code = 'MFA_REQUIRED';
+    throw err;
+  }
   await adoptSession(data.session);
   return cachedUser;
 }
