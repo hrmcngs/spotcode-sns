@@ -49,6 +49,7 @@ const inserted = await supabaseRequest('/rest/v1/posts?select=id', {
     author_id: session.user.id,
     body: `${AUTO_POST_PREFIX}\n${createdAt}`,
     status: 'active',
+    visibility: 'public',
   },
 });
 
@@ -68,5 +69,22 @@ const deleted = await supabaseRequest(`/rest/v1/posts?${cleanupQuery}`, {
   accessToken: session.access_token,
   method: 'DELETE',
 });
+
+// Do not report a green workflow when RLS, a trigger, or a later cleanup made
+// the new post unreadable. This is the same authenticated read used by the
+// profile screen, so a successful run guarantees that @spotcode_dev shows it.
+const verificationQuery = new URLSearchParams({
+  id: `eq.${newPostId}`,
+  author_id: `eq.${session.user.id}`,
+  status: 'eq.active',
+  visibility: 'eq.public',
+  select: 'id',
+});
+const verified = await supabaseRequest(`/rest/v1/posts?${verificationQuery}`, {
+  accessToken: session.access_token,
+});
+if (verified?.[0]?.id !== newPostId) {
+  throw new Error(`Automatic post ${newPostId} was created but is not visible`);
+}
 
 console.log(`Created automatic post ${newPostId}; deleted ${deleted?.length || 0} previous automatic post(s).`);
