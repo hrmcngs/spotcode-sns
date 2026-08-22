@@ -428,7 +428,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func updateProfile(name: String, bio: String, location: String, website: String, avatarURL: String?, avatarShape: String) async -> Bool {
+    func updateProfile(name: String, bio: String, location: String, website: String, twitter: String, instagram: String, avatarURL: String?, avatarShape: String) async -> Bool {
         guard let session else { return false }
         let editingOfficial = isPostingAsOfficial
         if editingOfficial && me?.isAdmin != true && me?.isOperator != true {
@@ -437,7 +437,7 @@ final class AppModel: ObservableObject {
         }
         guard let id = (editingOfficial ? officialProfile?.id : me?.id) else { return false }
         do {
-            let profile = try await SupabaseService.shared.updateProfile(id: id, name: name, bio: bio, location: location, website: website, avatarURL: avatarURL, avatarShape: avatarShape, token: session.accessToken)
+            let profile = try await SupabaseService.shared.updateProfile(id: id, name: name, bio: bio, location: location, website: website, twitter: twitter, instagram: instagram, avatarURL: avatarURL, avatarShape: avatarShape, token: session.accessToken)
             if editingOfficial {
                 officialProfile = profile
             } else {
@@ -452,6 +452,22 @@ final class AppModel: ObservableObject {
             } else {
                 errorMessage = error.localizedDescription
             }
+            return false
+        }
+    }
+
+    func updateProfilePreferences(isPrivate: Bool, isOrg: Bool, organization: String, closeFriends: [String], orgMembers: [String]) async -> Bool {
+        guard let session, let id = me?.id else { return false }
+        do {
+            let profile = try await SupabaseService.shared.updateProfilePreferences(
+                id: id, isPrivate: isPrivate, isOrg: isOrg, organization: organization,
+                closeFriends: closeFriends, orgMembers: orgMembers, token: session.accessToken
+            )
+            me = profile
+            cacheProfile(profile)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
             return false
         }
     }

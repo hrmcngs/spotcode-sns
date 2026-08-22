@@ -83,7 +83,23 @@ struct RootView: View {
     @State private var showAccounts = false
     @State private var repositoryComposeURL: String?
     @State private var navigationReset = UUID()
-    @AppStorage("spotcode.native.language") private var appLanguage = "ja"
+    @AppStorage("spotcode.native.language") private var appLanguage = "en"
+
+    private var screenshotMode: Bool {
+        ProcessInfo.processInfo.arguments.contains("-SpotcodeScreenshotMode")
+    }
+
+    private var screenshotShowsLogin: Bool {
+        ProcessInfo.processInfo.arguments.contains("-SpotcodeScreenshotShowLogin")
+    }
+
+    private var screenshotSection: AppSection? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-SpotcodeScreenshotSection"),
+              arguments.indices.contains(flag + 1) else { return nil }
+        let requested = arguments[flag + 1]
+        return AppSection.allCases.first { $0.rawValue.caseInsensitiveCompare(requested) == .orderedSame }
+    }
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -117,7 +133,12 @@ struct RootView: View {
         .environment(\.locale, Locale(identifier: appLanguage))
         .tint(SpotcodeTheme.accent)
         .task {
-            if model.session == nil { showLogin = true }
+            if let screenshotSection { section = screenshotSection }
+            if screenshotShowsLogin {
+                showLogin = true
+            } else if model.session == nil && !screenshotMode {
+                showLogin = true
+            }
             await model.bootstrap()
         }
         .sheet(isPresented: $showLogin) { LoginView(isPresented: $showLogin) }
@@ -127,7 +148,7 @@ struct RootView: View {
             set: { if !$0 { model.errorMessage = nil } }
         )) { Button("OK") {} } message: { Text(LocalizedStringKey(model.errorMessage ?? "")) }
         .onChange(of: model.requiresReauthentication) { required in
-            if required {
+            if required && !screenshotMode {
                 showAccounts = false
                 showLogin = true
             }
@@ -1893,6 +1914,7 @@ struct ProfileView: View {
     @State private var counts = (following: 0, followers: 0, posts: 0)
     @State private var selectedTab = 0
     @State private var repositories: [Repository] = []
+    @State private var languageStats: [GitHubLanguageStat] = []
     @State private var contributions: [GitHubContribution] = []
     @State private var issueSearch: GitHubIssueSearchResponse?
     var body: some View {
@@ -1904,6 +1926,7 @@ struct ProfileView: View {
                             profile: profile,
                             counts: counts,
                             repositories: repositories,
+                            languageStats: languageStats,
                             contributions: contributions,
                             issueSearch: issueSearch,
                             isOwn: profile.id == model.me?.id || (
@@ -1953,9 +1976,11 @@ struct ProfileView: View {
             async let loadedRepos = SupabaseService.shared.repositories(handle: handle)
             async let loadedContributions = SupabaseService.shared.githubContributions(handle: handle)
             async let loadedIssues = SupabaseService.shared.githubOpenIssues(handle: handle, githubToken: githubToken, includePrivate: mayReadPrivate && githubToken != nil)
+            async let loadedLanguages = SupabaseService.shared.githubLanguageStats(handle: handle)
             repositories = (try? await loadedRepos) ?? []
             contributions = (try? await loadedContributions) ?? []
             issueSearch = try? await loadedIssues
+            languageStats = (try? await loadedLanguages) ?? []
         }
     }
 }
@@ -2031,12 +2056,15 @@ private struct ProfileHero: View {
     let profile: Profile
     let counts: (following: Int, followers: Int, posts: Int)
     let repositories: [Repository]
+    let languageStats: [GitHubLanguageStat]
     let contributions: [GitHubContribution]
     let issueSearch: GitHubIssueSearchResponse?
     let isOwn: Bool
     @State private var editing = false
     @State private var isFollowing = false
     @State private var followLoading = false
+    @AppStorage("spotcode.hideBadges") private var hideBadges = false
+    @AppStorage("spotcode.hideTasks") private var hideTasks = false
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             LinearGradient(colors: [Color(red: 8/255, green: 70/255, blue: 111/255), Color(red: 30/255, green: 116/255, blue: 77/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -2063,10 +2091,17 @@ private struct ProfileHero: View {
                         }.padding(.top, 14)
                     }
                 }.frame(height: 63)
-                HStack(spacing: 8) {
-                    Text(profile.name).font(.title).fontWeight(.bold)
-                    Text("{ }").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent)
-                        .padding(.horizontal, 8).padding(.vertical, 3).overlay(Capsule().stroke(SpotcodeTheme.accent))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 9) {
+                        Text(profile.name).font(.title).fontWeight(.bold)
+                        if !hideBadges {
+                            Text("{ }").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent)
+                                .padding(.horizontal, 8).padding(.vertical, 3).overlay(Capsule().stroke(SpotcodeTheme.accent))
+                            ForEach(languageStats.prefix(4)) { language in
+                                LanguageMedal(language: language)
+                            }
+                        }
+                    }.padding(.vertical, 5)
                 }
                 Text("@\(profile.handle)").font(.title3).foregroundColor(SpotcodeTheme.muted)
                 if let bio = profile.bio, !bio.isEmpty { Text(bio) }
@@ -2079,12 +2114,25 @@ private struct ProfileHero: View {
                         HStack(spacing: 6) {
                             Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 15, height: 15)
                             Text("@\(handle)")
+                            if profile.githubVerified == true {
+                                Image(systemName: "checkmark").font(.caption.bold()).foregroundColor(.green)
+                            }
                         }
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
                 if let website = profile.website, !website.isEmpty, let url = normalizedWebsite(website) {
                     Link(destination: url) {
                         Label(prettyWebsite(url), systemImage: "globe")
+                    }.foregroundColor(SpotcodeTheme.accent)
+                }
+                if let twitter = profile.twitter, !twitter.isEmpty, let url = URL(string: "https://x.com/\(twitter)") {
+                    Link(destination: url) {
+                        HStack(spacing: 6) { Text("𝕏").font(.body.bold()); Text("@\(twitter)") }
+                    }.foregroundColor(SpotcodeTheme.accent)
+                }
+                if let instagram = profile.instagram, !instagram.isEmpty, let url = URL(string: "https://instagram.com/\(instagram)") {
+                    Link(destination: url) {
+                        Label("@\(instagram)", systemImage: "camera")
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
                 HStack(spacing: 22) {
@@ -2096,7 +2144,7 @@ private struct ProfileHero: View {
                 }.padding(.top, 5)
                 if profile.githubHandle != nil {
                     GitHubActivity(handle: profile.githubHandle ?? "", contributions: contributions)
-                    OpenIssuesCard(handle: profile.githubHandle ?? "", result: issueSearch)
+                    if !hideTasks { OpenIssuesCard(handle: profile.githubHandle ?? "", result: issueSearch) }
                 }
             }.padding(.horizontal, 18).padding(.bottom, 20)
         }.overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
@@ -2122,6 +2170,53 @@ private struct ProfileHero: View {
             } catch { model.errorMessage = error.localizedDescription }
             followLoading = false
         }
+    }
+}
+
+private struct LanguageMedal: View {
+    let language: GitHubLanguageStat
+    private var color: Color {
+        [
+            "JavaScript": Color(red: 241/255, green: 224/255, blue: 90/255),
+            "TypeScript": Color(red: 49/255, green: 120/255, blue: 198/255),
+            "HTML": Color(red: 227/255, green: 76/255, blue: 38/255),
+            "CSS": Color(red: 86/255, green: 61/255, blue: 124/255),
+            "Java": Color(red: 176/255, green: 114/255, blue: 25/255),
+            "Python": Color(red: 53/255, green: 114/255, blue: 165/255),
+            "C": Color(red: 85/255, green: 85/255, blue: 85/255),
+            "C++": Color(red: 243/255, green: 75/255, blue: 125/255),
+            "C#": Color(red: 23/255, green: 134/255, blue: 0),
+            "Swift": Color(red: 240/255, green: 81/255, blue: 56/255),
+            "Kotlin": Color(red: 169/255, green: 123/255, blue: 255/255),
+            "JSON": Color(red: 68/255, green: 68/255, blue: 68/255)
+        ][language.name] ?? SpotcodeTheme.muted
+    }
+    private var abbreviation: String {
+        ["JavaScript":"JS", "TypeScript":"TS", "HTML":"HT", "CSS":"CS", "Java":"Jv", "Python":"Py", "C":"C", "C++":"C+", "C#":"C#", "Swift":"Sw", "Kotlin":"Kt", "JSON":"JN"][language.name]
+            ?? String(language.name.filter(\.isLetter).prefix(2))
+    }
+    private var usesDarkText: Bool { ["JavaScript", "Java", "Kotlin"].contains(language.name) }
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Text(abbreviation)
+                .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                .foregroundColor(usesDarkText ? .black : .white)
+                .frame(width: 30, height: 30)
+                .background(color)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(color.opacity(0.65), lineWidth: 2))
+            if language.repositoryCount > 1 {
+                Text("×\(language.repositoryCount)")
+                    .font(.system(size: 9, weight: .heavy, design: .monospaced))
+                    .foregroundColor(color)
+                    .padding(.horizontal, 3).frame(minHeight: 15)
+                    .background(SpotcodeTheme.surface)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(color, lineWidth: 1.5))
+                    .offset(x: 7, y: 5)
+            }
+        }.padding(.trailing, language.repositoryCount > 1 ? 7 : 0)
+         .accessibilityLabel("\(language.name), \(language.repositoryCount) repositories")
     }
 }
 
@@ -2154,6 +2249,8 @@ private struct EditProfileView: View {
     @State private var bio = ""
     @State private var location = ""
     @State private var website = ""
+    @State private var twitter = ""
+    @State private var instagram = ""
     @State private var avatarURL: String?
     @State private var avatarShape = "round"
     @State private var showingImagePicker = false
@@ -2181,22 +2278,26 @@ private struct EditProfileView: View {
                         .font(.footnote).foregroundColor(SpotcodeTheme.warning)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                TextField("Twitter / X", text: $twitter)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).spotcodeField()
+                TextField("Instagram", text: $instagram)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).spotcodeField()
               }.padding()
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
                 .navigationTitle("Edit profile").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(saving ? "保存中…" : "保存") { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location, website: normalizedWebsiteValue, avatarURL: avatarURL, avatarShape: avatarShape) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving || !websiteIsValid)
+                        Button(saving ? "保存中…" : "保存") { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location, website: normalizedWebsiteValue, twitter: sanitizeSocialHandle(twitter), instagram: sanitizeSocialHandle(instagram), avatarURL: avatarURL, avatarShape: avatarShape) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving || !websiteIsValid)
                     }
                 }
-                .onAppear { name = profile.name; bio = profile.bio ?? ""; location = profile.location ?? ""; website = profile.website ?? ""; avatarURL = profile.avatarURL; avatarShape = profile.avatarShape ?? "round" }
+                .onAppear { name = profile.name; bio = profile.bio ?? ""; location = profile.location ?? ""; website = profile.website ?? ""; twitter = profile.twitter ?? ""; instagram = profile.instagram ?? ""; avatarURL = profile.avatarURL; avatarShape = profile.avatarShape ?? "round" }
                 .sheet(isPresented: $showingImagePicker) { ProfileImagePicker(image: $avatarURL) }
         }.preferredColorScheme(.dark)
     }
 
     private var previewProfile: Profile {
-        Profile(id: profile.id, handle: profile.handle, name: name.isEmpty ? profile.name : name, avatarURL: avatarURL, bio: profile.bio, location: profile.location, githubHandle: profile.githubHandle, website: website, createdAt: profile.createdAt, avatarShape: avatarShape, isAdmin: profile.isAdmin, isOperator: profile.isOperator)
+        Profile(id: profile.id, handle: profile.handle, name: name.isEmpty ? profile.name : name, avatarURL: avatarURL, bio: profile.bio, location: profile.location, githubHandle: profile.githubHandle, githubVerified: profile.githubVerified, website: website, twitter: twitter, instagram: instagram, isPrivate: profile.isPrivate, isOrg: profile.isOrg, organization: profile.organization, closeFriends: profile.closeFriends, orgMembers: profile.orgMembers, createdAt: profile.createdAt, avatarShape: avatarShape, isAdmin: profile.isAdmin, isOperator: profile.isOperator)
     }
 
     private var normalizedWebsiteValue: String {
@@ -2559,7 +2660,13 @@ private struct ProfileCount: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var tab = 0
+    @State private var tab: Int
+
+    init() {
+        let arguments = ProcessInfo.processInfo.arguments
+        let screenshotTab = arguments.contains("-SpotcodeScreenshotMode") ? 2 : 0
+        _tab = State(initialValue: screenshotTab)
+    }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -2567,7 +2674,7 @@ struct SettingsView: View {
                 HStack(spacing: 0) {
                     SettingsTab(title: "アカウント", icon: "person", selected: tab == 0) { tab = 0 }
                     SettingsTab(title: "プライバシー", icon: "lock", selected: tab == 1) { tab = 1 }
-                    SettingsTab(title: "表示", icon: "gearshape", selected: tab == 2) { tab = 2 }
+                    SettingsTab(title: "画面表示", icon: "gearshape", selected: tab == 2) { tab = 2 }
                     if model.me?.isAdmin == true {
                         SettingsTab(title: "開発", icon: "hammer", selected: tab == 3) { tab = 3 }
                     }
@@ -2605,9 +2712,25 @@ private struct SettingsCard<Content: View>: View {
     }
 }
 
+private struct SettingsStatusTag: View {
+    let text: String
+    let enabled: Bool
+    var body: some View {
+        Text(LocalizedStringKey(text)).font(.caption.bold())
+            .foregroundColor(enabled ? .green : SpotcodeTheme.muted)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background((enabled ? Color.green : SpotcodeTheme.muted).opacity(0.12))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke((enabled ? Color.green : SpotcodeTheme.muted).opacity(0.45)))
+    }
+}
+
 private struct AccountSettings: View {
     @EnvironmentObject private var model: AppModel
     @State private var showAddAccount = false
+    @State private var isOrg = false
+    @State private var organization = ""
+    @State private var savingIdentity = false
     var body: some View {
         VStack(spacing: 18) {
             SettingsCard("アカウント") {
@@ -2622,8 +2745,13 @@ private struct AccountSettings: View {
                             AvatarView(profile: account.profile, size: 42)
                             VStack(alignment: .leading) {
                                 Text(account.profile.name).fontWeight(.bold)
-                                Text("@\(account.profile.handle)" + (active ? " · 現在" : ""))
-                                    .font(.caption).foregroundColor(SpotcodeTheme.muted)
+                                HStack(spacing: 4) {
+                                    Text("@\(account.profile.handle)")
+                                    if active {
+                                        Text("·")
+                                        Text("現在")
+                                    }
+                                }.font(.caption).foregroundColor(SpotcodeTheme.muted)
                             }
                             Spacer()
                             if !active { Text("切り替え").font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent) }
@@ -2641,16 +2769,32 @@ private struct AccountSettings: View {
                 Text(LocalizedStringKey(roleDescription)).foregroundColor(SpotcodeTheme.muted)
             }
             SettingsCard("アカウントの種類") {
-                Text("個人アカウント").fontWeight(.semibold)
-                Text("プロフィール表示が変わるだけで、投稿の公開範囲やフォローの挙動は変わりません。").foregroundColor(SpotcodeTheme.muted)
+                SettingsStatusTag(text: isOrg ? "組織アカウント" : "個人アカウント", enabled: isOrg)
+                Text(isOrg ? "プロフィールに組織バッジを表示します。" : "個人のプログラマープロフィールとして表示します。").foregroundColor(SpotcodeTheme.muted)
+                Button(isOrg ? "個人アカウントに変更" : "組織アカウントに変更") {
+                    isOrg.toggle(); saveIdentity()
+                }.buttonStyle(OutlineButtonStyle(filled: !isOrg)).disabled(savingIdentity)
+            }
+            SettingsCard("所属・組織名") {
+                Text("プロフィールに表示する会社・学校・コミュニティ名を設定します。").foregroundColor(SpotcodeTheme.muted)
+                TextField("所属名", text: $organization).spotcodeField()
+                Button("保存") { saveIdentity() }.buttonStyle(OutlineButtonStyle()).disabled(savingIdentity)
             }
         }.sheet(isPresented: $showAddAccount) { LoginView(isPresented: $showAddAccount).environmentObject(model) }
+         .onAppear { isOrg = model.me?.isOrg ?? false; organization = model.me?.organization ?? "" }
     }
     private var roleTitle: String { model.me?.isAdmin == true ? "管理者" : (model.me?.isOperator == true ? "運営者" : "一般ユーザー") }
     private var roleDescription: String {
         if model.me?.isAdmin == true { return "すべての管理権限を持ちます。" }
         if model.me?.isOperator == true { return "通報対応・投稿管理・ピン管理を行えます。" }
         return "通常の投稿・フォロー・スポット機能を利用できます。"
+    }
+    private func saveIdentity() {
+        savingIdentity = true
+        Task {
+            _ = await model.updateProfilePreferences(isPrivate: model.me?.isPrivate ?? false, isOrg: isOrg, organization: organization, closeFriends: model.me?.closeFriends ?? [], orgMembers: model.me?.orgMembers ?? [])
+            savingIdentity = false
+        }
     }
 }
 
@@ -2898,17 +3042,46 @@ private struct MFAEnrollmentView: View {
 }
 
 private struct PrivacySettings: View {
+    @EnvironmentObject private var model: AppModel
     @State private var privateAccount = false
-    @State private var locationEnabled = true
+    @State private var closeFriends = ""
+    @State private var orgMembers = ""
+    @State private var saving = false
     var body: some View { VStack(spacing: 18) {
-        SettingsCard("アカウントの公開範囲") { Toggle("非公開アカウント", isOn: $privateAccount); Text("承認したフォロワーだけが投稿を表示できます。").foregroundColor(SpotcodeTheme.muted) }
-        SettingsCard("位置情報") { Toggle("スポット機能を使用", isOn: $locationEnabled); Text("投稿への場所追加と近くのスポット表示に利用します。").foregroundColor(SpotcodeTheme.muted) }
+        SettingsCard("アカウントの公開範囲") {
+            SettingsStatusTag(text: privateAccount ? "非公開" : "公開", enabled: privateAccount)
+            Text(privateAccount ? "承認したフォロワーだけが投稿を表示できます。" : "すべてのユーザーが投稿を表示できます。").foregroundColor(SpotcodeTheme.muted)
+            Button(privateAccount ? "公開アカウントにする" : "非公開アカウントにする") { privateAccount.toggle(); save() }
+                .buttonStyle(OutlineButtonStyle(filled: !privateAccount)).disabled(saving)
+        }
+        SettingsCard("公開対象リスト") {
+            Text("「親しい友達」と「同じ組織」の投稿を表示できるユーザーを設定します。").foregroundColor(SpotcodeTheme.muted)
+            TextField("親しい友達（@handle、カンマ区切り）", text: $closeFriends).spotcodeField()
+            TextField("同じ組織（@handle、カンマ区切り）", text: $orgMembers).spotcodeField()
+            Button("保存") { save() }.buttonStyle(OutlineButtonStyle()).disabled(saving)
+        }
+    }.onAppear {
+        privateAccount = model.me?.isPrivate ?? false
+        closeFriends = (model.me?.closeFriends ?? []).map { "@\($0)" }.joined(separator: ", ")
+        orgMembers = (model.me?.orgMembers ?? []).map { "@\($0)" }.joined(separator: ", ")
     }}
+    private func handles(_ value: String) -> [String] {
+        value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "^@", with: "", options: .regularExpression) }.filter { !$0.isEmpty }
+    }
+    private func save() {
+        saving = true
+        Task {
+            _ = await model.updateProfilePreferences(isPrivate: privateAccount, isOrg: model.me?.isOrg ?? false, organization: model.me?.organization ?? "", closeFriends: handles(closeFriends), orgMembers: handles(orgMembers))
+            saving = false
+        }
+    }
 }
 
 private struct DisplaySettings: View {
     @EnvironmentObject private var model: AppModel
     @State private var compact = false
+    @AppStorage("spotcode.hideBadges") private var hideBadges = false
+    @AppStorage("spotcode.hideTasks") private var hideTasks = false
     @State private var issueRepositories: [String] = []
     @AppStorage("spotcode.hiddenIssueRepos") private var hiddenIssueReposJSON = "[]"
     @AppStorage("spotcode.privateIssuesEnabled") private var privateIssuesEnabled = false
@@ -2920,7 +3093,7 @@ private struct DisplaySettings: View {
     @AppStorage("spotcode.notifications.comments") private var notifyComments = true
     @AppStorage("spotcode.notifications.mentions") private var notifyMentions = true
     @AppStorage("spotcode.notifications.follows") private var notifyFollows = true
-    @AppStorage("spotcode.native.language") private var appLanguage = "ja"
+    @AppStorage("spotcode.native.language") private var appLanguage = "en"
     var body: some View { VStack(spacing: 18) {
         SettingsCard("Language") {
             Picker("Language", selection: $appLanguage) {
@@ -2930,8 +3103,18 @@ private struct DisplaySettings: View {
             Text("アプリ内の表示言語を切り替えます。投稿本文は翻訳されません。")
                 .foregroundColor(SpotcodeTheme.muted)
         }
-        SettingsCard("テーマ") { Label("ダーク", systemImage: "moon.fill"); Text("Webモバイル版と同じGitHubダークテーマです。").foregroundColor(SpotcodeTheme.muted) }
-        SettingsCard("タイムライン") { Toggle("コンパクト表示", isOn: $compact) }
+        SettingsCard("装飾バッジの表示") {
+            SettingsStatusTag(text: hideBadges ? "非表示" : "表示", enabled: !hideBadges)
+            Text("プロフィールや投稿の { }・言語・アイデア・WIPなどのバッジをまとめて切り替えます。").foregroundColor(SpotcodeTheme.muted)
+            Button(hideBadges ? "バッジを表示する" : "バッジを非表示にする") { hideBadges.toggle() }
+                .buttonStyle(OutlineButtonStyle(filled: hideBadges))
+        }
+        SettingsCard("Open issues (task)") {
+            SettingsStatusTag(text: hideTasks ? "OFF" : "ON", enabled: !hideTasks)
+            Text("プロフィールのOpen issuesカードを表示するかどうかを切り替えます。").foregroundColor(SpotcodeTheme.muted)
+            Button(hideTasks ? "Issueカードを表示する" : "Issueカードを非表示にする") { hideTasks.toggle() }
+                .buttonStyle(OutlineButtonStyle(filled: hideTasks))
+        }
         SettingsCard("通知") {
             HStack {
                 Label { Text(LocalizedStringKey(notificationStatusText)) } icon: { Image(systemName: notificationStatus == .authorized ? "bell.badge.fill" : "bell.slash") }
@@ -3008,6 +3191,15 @@ private struct DisplaySettings: View {
                     }
                 )).font(.caption)
             }
+        }
+        SettingsCard("地図") {
+            Text("スポット機能で使用するApple Mapsと位置情報を確認します。").foregroundColor(SpotcodeTheme.muted)
+            Button("地図をテスト") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
+        }
+        SettingsCard("Spotcodeについて") {
+            Text("Spotcodeは、コード・スポット・アイデアを共有するSNSです。").foregroundColor(SpotcodeTheme.muted)
+            Link("プライバシーポリシー", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
+                .foregroundColor(SpotcodeTheme.accent)
         }
     }.task {
         await refreshNotificationStatus()
@@ -3194,15 +3386,26 @@ struct LoginView: View {
                             otpCode = String(value.filter(\.isNumber).prefix(6))
                         }
                         .spotcodeField()
-                    Button(signing ? "確認中…" : "確認してログイン") {
+                    Button {
                         signing = true
                         Task {
                             let succeeded = await model.verifyMFA(code: otpCode)
                             signing = false
                             if succeeded { isPresented = false }
                         }
-                    }.font(.body.weight(.bold)).frame(maxWidth: .infinity).padding(13).background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
-                     .disabled(signing)
+                    } label: {
+                        Text(LocalizedStringKey(signing ? "確認中…" : "確認してログイン"))
+                            .font(.body.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(13)
+                            .background(SpotcodeTheme.accent)
+                            .foregroundColor(.white)
+                            .clipShape(Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Capsule())
+                    .disabled(signing)
                 } else {
                 TextField("メールまたはログイン名", text: $email)
                     .textInputAutocapitalization(.never)
@@ -3227,15 +3430,26 @@ struct LoginView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(showsPassword ? "パスワードを隠す" : "パスワードを表示")
                 }.spotcodeField()
-                Button(signing ? "ログイン中…" : "ログイン") {
+                Button {
                     signing = true
                     Task {
                         let succeeded = await model.signIn(emailOrAlias: email, password: password)
                         signing = false
                         if succeeded { isPresented = false }
                     }
-                }.font(.body.weight(.bold)).frame(maxWidth: .infinity).padding(13).background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
-                 .disabled(email.isEmpty || password.isEmpty || signing)
+                } label: {
+                    Text(LocalizedStringKey(signing ? "ログイン中…" : "ログイン"))
+                        .font(.body.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(13)
+                        .background(SpotcodeTheme.accent)
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .contentShape(Capsule())
+                .disabled(email.isEmpty || password.isEmpty || signing)
                 }
                 if let message = model.authenticationError, !message.isEmpty {
                     Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -3256,7 +3470,7 @@ struct LoginView: View {
 
 struct ContentUnavailableViewCompat: View {
     let title: String; let icon: String
-    var body: some View { VStack(spacing: 12) { Image(systemName: icon).font(.largeTitle); Text(title).multilineTextAlignment(.center) }.foregroundColor(SpotcodeTheme.muted).padding() }
+    var body: some View { VStack(spacing: 12) { Image(systemName: icon).font(.largeTitle); Text(LocalizedStringKey(title)).multilineTextAlignment(.center) }.foregroundColor(SpotcodeTheme.muted).padding() }
 }
 
 private extension View {
@@ -3293,6 +3507,20 @@ private func normalizedWebsite(_ value: String) -> URL? {
 private func prettyWebsite(_ url: URL) -> String {
     let path = url.path == "/" ? "" : url.path
     return (url.host ?? url.absoluteString) + path
+}
+
+private func sanitizeSocialHandle(_ value: String) -> String {
+    var handle = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    handle = handle.replacingOccurrences(
+        of: "^https?://(www\\.)?(twitter|x|instagram)\\.com/",
+        with: "",
+        options: [.regularExpression, .caseInsensitive]
+    )
+    if handle.hasPrefix("@") { handle.removeFirst() }
+    if let boundary = handle.firstIndex(where: { "/?#".contains($0) }) {
+        handle = String(handle[..<boundary])
+    }
+    return String(handle.prefix(30))
 }
 
 private func relativeTime(_ value: String?) -> String {

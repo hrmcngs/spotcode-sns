@@ -11,16 +11,30 @@ struct Profile: Codable, Identifiable, Hashable {
     let bio: String?
     let location: String?
     let githubHandle: String?
+    let githubVerified: Bool?
     let website: String?
+    let twitter: String?
+    let instagram: String?
+    let isPrivate: Bool?
+    let isOrg: Bool?
+    let organization: String?
+    let closeFriends: [String]?
+    let orgMembers: [String]?
     let createdAt: String?
     let avatarShape: String?
     let isAdmin: Bool?
     let isOperator: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case id, handle, name, bio, location, website
+        case id, handle, name, bio, location, website, twitter, instagram
+        case organization
         case avatarURL = "avatar_url"
         case githubHandle = "github_handle"
+        case githubVerified = "github_verified"
+        case isPrivate = "is_private"
+        case isOrg = "is_org"
+        case closeFriends = "close_friends"
+        case orgMembers = "org_members"
         case createdAt = "created_at"
         case avatarShape = "avatar_shape"
         case isAdmin = "is_admin"
@@ -97,6 +111,13 @@ struct GitHubContribution: Codable, Hashable {
 
 struct GitHubContributionsResponse: Codable {
     let contributions: [GitHubContribution]
+}
+
+struct GitHubLanguageStat: Identifiable, Hashable {
+    let name: String
+    let bytes: Int
+    let repositoryCount: Int
+    var id: String { name }
 }
 
 struct GitHubIssue: Codable, Identifiable, Hashable {

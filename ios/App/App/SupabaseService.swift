@@ -159,10 +159,10 @@ actor SupabaseService {
 
     func profile(id: UUID, token: String) async throws -> Profile? {
         do {
-            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape,is_admin,is_operator", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape,is_admin,is_operator", token: token)
             return rows.first
         } catch where error.localizedDescription.lowercased().contains("is_admin") || error.localizedDescription.lowercased().contains("is_operator") {
-            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape", token: token)
             return rows.first
         }
     }
@@ -170,27 +170,45 @@ actor SupabaseService {
     func profile(handle: String, token: String?) async throws -> Profile? {
         let escaped = handle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? handle
         do {
-            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape,is_admin,is_operator", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape,is_admin,is_operator", token: token)
             return rows.first
         } catch where error.localizedDescription.lowercased().contains("is_admin") || error.localizedDescription.lowercased().contains("is_operator") {
-            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape", token: token)
             return rows.first
         }
     }
 
     func searchProfiles(query: String, token: String?) async throws -> [Profile] {
         let escaped = query.trimmingCharacters(in: .whitespacesAndNewlines).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        return try await request("rest/v1/profiles?or=(handle.ilike.*\(escaped)*,name.ilike.*\(escaped)*)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape&limit=12", token: token)
+        return try await request("rest/v1/profiles?or=(handle.ilike.*\(escaped)*,name.ilike.*\(escaped)*)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,created_at,avatar_shape&limit=12", token: token)
     }
 
-    func updateProfile(id: UUID, name: String, bio: String, location: String, website: String, avatarURL: String?, avatarShape: String, token: String) async throws -> Profile {
+    func updateProfile(id: UUID, name: String, bio: String, location: String, website: String, twitter: String, instagram: String, avatarURL: String?, avatarShape: String, token: String) async throws -> Profile {
         let payload: [String: Any] = [
             "name": name, "bio": bio, "location": location, "website": website.isEmpty ? NSNull() : website,
+            "twitter": twitter.isEmpty ? NSNull() : twitter, "instagram": instagram.isEmpty ? NSNull() : instagram,
             "avatar_url": (avatarURL as Any?) ?? NSNull(), "avatar_shape": avatarShape
         ]
         let body = try JSONSerialization.data(withJSONObject: payload)
         let rows: [Profile] = try await request(
-            "rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape",
+            "rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape",
+            method: "PATCH", token: token, body: body, preferRepresentation: true
+        )
+        guard let profile = rows.first else { throw URLError(.badServerResponse) }
+        return profile
+    }
+
+    func updateProfilePreferences(id: UUID, isPrivate: Bool, isOrg: Bool, organization: String, closeFriends: [String], orgMembers: [String], token: String) async throws -> Profile {
+        let payload: [String: Any] = [
+            "is_private": isPrivate,
+            "is_org": isOrg,
+            "organization": organization.isEmpty ? NSNull() : organization,
+            "close_friends": closeFriends,
+            "org_members": orgMembers
+        ]
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        let rows: [Profile] = try await request(
+            "rest/v1/profiles?id=eq.\(id.uuidString)&select=*",
             method: "PATCH", token: token, body: body, preferRepresentation: true
         )
         guard let profile = rows.first else { throw URLError(.badServerResponse) }
@@ -304,6 +322,36 @@ actor SupabaseService {
         let (data, response) = try await data(for: request, retryable: true)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
         return try decoder.decode(GitHubContributionsResponse.self, from: data).contributions
+    }
+
+    func githubLanguageStats(handle: String) async throws -> [GitHubLanguageStat] {
+        let repos = try await repositories(handle: handle)
+        var byteTotals: [String: Int] = [:]
+        var repositoryCounts: [String: Int] = [:]
+        await withTaskGroup(of: [String: Int]?.self) { group in
+            for repo in repos.prefix(30) {
+                group.addTask {
+                    let encoded = repo.fullName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? repo.fullName
+                    guard let url = URL(string: "https://api.github.com/repos/\(encoded)/languages") else { return nil }
+                    var request = URLRequest(url: url)
+                    request.timeoutInterval = 20
+                    request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+                    guard let (data, response) = try? await URLSession.shared.data(for: request),
+                          (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+                    return try? JSONDecoder().decode([String: Int].self, from: data)
+                }
+            }
+            for await languages in group {
+                guard let languages else { continue }
+                for (name, bytes) in languages {
+                    byteTotals[name, default: 0] += bytes
+                    repositoryCounts[name, default: 0] += 1
+                }
+            }
+        }
+        return byteTotals.map {
+            GitHubLanguageStat(name: $0.key, bytes: $0.value, repositoryCount: repositoryCounts[$0.key, default: 0])
+        }.sorted { $0.bytes > $1.bytes }
     }
 
     func githubOpenIssues(handle: String, githubToken: String? = nil, includePrivate: Bool = false) async throws -> GitHubIssueSearchResponse {
