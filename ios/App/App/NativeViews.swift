@@ -83,6 +83,7 @@ struct RootView: View {
     @State private var showAccounts = false
     @State private var repositoryComposeURL: String?
     @State private var navigationReset = UUID()
+    @AppStorage("spotcode.native.language") private var appLanguage = "ja"
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -113,6 +114,7 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .environment(\.locale, Locale(identifier: appLanguage))
         .tint(SpotcodeTheme.accent)
         .task {
             if model.session == nil { showLogin = true }
@@ -123,7 +125,7 @@ struct RootView: View {
         .alert("エラー", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
-        )) { Button("OK") {} } message: { Text(model.errorMessage ?? "") }
+        )) { Button("OK") {} } message: { Text(LocalizedStringKey(model.errorMessage ?? "")) }
         .onChange(of: model.requiresReauthentication) { required in
             if required {
                 showAccounts = false
@@ -211,7 +213,7 @@ private struct SideDrawer: View {
                 } label: {
                     HStack(spacing: 16) {
                         Image(systemName: item.icon).frame(width: 25)
-                        Text(item.rawValue).fontWeight(section == item ? .bold : .medium)
+                        Text(LocalizedStringKey(item.rawValue)).fontWeight(section == item ? .bold : .medium)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
                 }.foregroundColor(SpotcodeTheme.text)
             }
@@ -543,7 +545,13 @@ private struct InlineComposer: View {
     }
 
     private func audienceButton(_ title: String, value: String) -> some View {
-        Button { visibility = value } label: { if visibility == value { Label(title, systemImage: "checkmark") } else { Text(title) } }
+        Button { visibility = value } label: {
+            if visibility == value {
+                Label { Text(LocalizedStringKey(title)) } icon: { Image(systemName: "checkmark") }
+            } else {
+                Text(LocalizedStringKey(title))
+            }
+        }
     }
     private var visibilityLabel: String {
         ["public":"全員", "mutuals":"相互フォロー", "following":"フォロー中", "friends":"親しい友達", "org":"同じ組織"][visibility] ?? "全員"
@@ -581,7 +589,8 @@ private struct ComposerChip: View {
     var strong = false
     var active = false
     var body: some View {
-        Label(title, systemImage: icon).font(.caption.weight(.semibold)).foregroundColor(active ? SpotcodeTheme.accent : (strong ? SpotcodeTheme.text : SpotcodeTheme.muted))
+        Label { Text(LocalizedStringKey(title)) } icon: { Image(systemName: icon) }
+            .font(.caption.weight(.semibold)).foregroundColor(active ? SpotcodeTheme.accent : (strong ? SpotcodeTheme.text : SpotcodeTheme.muted))
             .padding(.horizontal, 10).padding(.vertical, 7)
             .background(active ? SpotcodeTheme.accent.opacity(0.12) : Color.clear).clipShape(Capsule())
             .overlay(Capsule().stroke(active ? SpotcodeTheme.accent : SpotcodeTheme.border, style: StrokeStyle(lineWidth: 1, dash: active ? [] : [5])))
@@ -1426,7 +1435,11 @@ struct ComposeView: View {
 
     private func audienceButton(_ title: String, value: String) -> some View {
         Button { visibility = value } label: {
-            if visibility == value { Label(title, systemImage: "checkmark") } else { Text(title) }
+            if visibility == value {
+                Label { Text(LocalizedStringKey(title)) } icon: { Image(systemName: "checkmark") }
+            } else {
+                Text(LocalizedStringKey(title))
+            }
         }
     }
 
@@ -1799,7 +1812,7 @@ private struct NotificationRow: View {
                     Spacer(minLength: 4)
                     if let date = notification.createdAt { Text(relativeTime(date)).font(.caption).foregroundColor(SpotcodeTheme.muted) }
                 }
-                Text(label).font(.subheadline).foregroundColor(SpotcodeTheme.muted)
+                Text(LocalizedStringKey(label)).font(.subheadline).foregroundColor(SpotcodeTheme.muted)
                 if let context = notification.context ?? notification.post?.body, !context.isEmpty {
                     Text(context).font(.subheadline).lineLimit(3).padding(9)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2069,6 +2082,11 @@ private struct ProfileHero: View {
                         }
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
+                if let website = profile.website, !website.isEmpty, let url = normalizedWebsite(website) {
+                    Link(destination: url) {
+                        Label(prettyWebsite(url), systemImage: "globe")
+                    }.foregroundColor(SpotcodeTheme.accent)
+                }
                 HStack(spacing: 22) {
                     if let id = profile.id {
                         NavigationLink(destination: FollowListView(userID: id, kind: .following)) { ProfileCount(value: counts.following, label: "Following") }.buttonStyle(.plain)
@@ -2135,6 +2153,7 @@ private struct EditProfileView: View {
     @State private var name = ""
     @State private var bio = ""
     @State private var location = ""
+    @State private var website = ""
     @State private var avatarURL: String?
     @State private var avatarShape = "round"
     @State private var showingImagePicker = false
@@ -2155,22 +2174,39 @@ private struct EditProfileView: View {
                 TextField("表示名", text: $name).spotcodeField()
                 TextField("自己紹介", text: $bio).spotcodeField()
                 TextField("場所", text: $location).spotcodeField()
+                TextField("プロフィールURL", text: $website)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).spotcodeField()
+                if !websiteIsValid {
+                    Label("http(s)形式のURLを入力してください。", systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote).foregroundColor(SpotcodeTheme.warning)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
               }.padding()
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
                 .navigationTitle("Edit profile").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(saving ? "保存中…" : "保存") { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location, avatarURL: avatarURL, avatarShape: avatarShape) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving)
+                        Button(saving ? "保存中…" : "保存") { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location, website: normalizedWebsiteValue, avatarURL: avatarURL, avatarShape: avatarShape) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving || !websiteIsValid)
                     }
                 }
-                .onAppear { name = profile.name; bio = profile.bio ?? ""; location = profile.location ?? ""; avatarURL = profile.avatarURL; avatarShape = profile.avatarShape ?? "round" }
+                .onAppear { name = profile.name; bio = profile.bio ?? ""; location = profile.location ?? ""; website = profile.website ?? ""; avatarURL = profile.avatarURL; avatarShape = profile.avatarShape ?? "round" }
                 .sheet(isPresented: $showingImagePicker) { ProfileImagePicker(image: $avatarURL) }
         }.preferredColorScheme(.dark)
     }
 
     private var previewProfile: Profile {
-        Profile(id: profile.id, handle: profile.handle, name: name.isEmpty ? profile.name : name, avatarURL: avatarURL, bio: profile.bio, location: profile.location, githubHandle: profile.githubHandle, createdAt: profile.createdAt, avatarShape: avatarShape, isAdmin: profile.isAdmin, isOperator: profile.isOperator)
+        Profile(id: profile.id, handle: profile.handle, name: name.isEmpty ? profile.name : name, avatarURL: avatarURL, bio: profile.bio, location: profile.location, githubHandle: profile.githubHandle, website: website, createdAt: profile.createdAt, avatarShape: avatarShape, isAdmin: profile.isAdmin, isOperator: profile.isOperator)
+    }
+
+    private var normalizedWebsiteValue: String {
+        let trimmed = website.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        return normalizedWebsite(trimmed)?.absoluteString ?? trimmed
+    }
+
+    private var websiteIsValid: Bool {
+        website.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || normalizedWebsite(website) != nil
     }
 }
 
@@ -2550,7 +2586,8 @@ private struct SettingsTab: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 10) {
-                Label(title, systemImage: icon).font(.caption.weight(.semibold))
+                Label { Text(LocalizedStringKey(title)) } icon: { Image(systemName: icon) }
+                    .font(.caption.weight(.semibold))
                 Rectangle().fill(selected ? SpotcodeTheme.accent : SpotcodeTheme.muted).frame(height: selected ? 3 : 1)
             }.frame(maxWidth: .infinity)
         }.foregroundColor(selected ? SpotcodeTheme.accent : SpotcodeTheme.muted)
@@ -2562,7 +2599,7 @@ private struct SettingsCard<Content: View>: View {
     @ViewBuilder let content: Content
     init(_ title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) { Text(title).font(.headline); content }
+        VStack(alignment: .leading, spacing: 14) { Text(LocalizedStringKey(title)).font(.headline); content }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
     }
@@ -2600,8 +2637,8 @@ private struct AccountSettings: View {
             }
             MFASettingsCard()
             SettingsCard("役割") {
-                Label(roleTitle, systemImage: model.me?.isAdmin == true ? "sparkles" : (model.me?.isOperator == true ? "flag" : "person")).foregroundColor(SpotcodeTheme.accent)
-                Text(roleDescription).foregroundColor(SpotcodeTheme.muted)
+                Label { Text(LocalizedStringKey(roleTitle)) } icon: { Image(systemName: model.me?.isAdmin == true ? "sparkles" : (model.me?.isOperator == true ? "flag" : "person")) }.foregroundColor(SpotcodeTheme.accent)
+                Text(LocalizedStringKey(roleDescription)).foregroundColor(SpotcodeTheme.muted)
             }
             SettingsCard("アカウントの種類") {
                 Text("個人アカウント").fontWeight(.semibold)
@@ -2650,7 +2687,7 @@ private struct DeveloperSettings: View {
                 HStack {
                     Text("CONNECTED").font(.caption.bold()).foregroundColor(.green)
                     Spacer()
-                    Text(currentMode).font(.caption.bold()).foregroundColor(.green)
+                    Text(LocalizedStringKey(currentMode)).font(.caption.bold()).foregroundColor(.green)
                 }
                 Text(URL(string: projectURL)?.host ?? projectURL).font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
@@ -2883,12 +2920,21 @@ private struct DisplaySettings: View {
     @AppStorage("spotcode.notifications.comments") private var notifyComments = true
     @AppStorage("spotcode.notifications.mentions") private var notifyMentions = true
     @AppStorage("spotcode.notifications.follows") private var notifyFollows = true
+    @AppStorage("spotcode.native.language") private var appLanguage = "ja"
     var body: some View { VStack(spacing: 18) {
+        SettingsCard("Language") {
+            Picker("Language", selection: $appLanguage) {
+                Text("日本語").tag("ja")
+                Text("English").tag("en")
+            }.pickerStyle(.segmented)
+            Text("アプリ内の表示言語を切り替えます。投稿本文は翻訳されません。")
+                .foregroundColor(SpotcodeTheme.muted)
+        }
         SettingsCard("テーマ") { Label("ダーク", systemImage: "moon.fill"); Text("Webモバイル版と同じGitHubダークテーマです。").foregroundColor(SpotcodeTheme.muted) }
         SettingsCard("タイムライン") { Toggle("コンパクト表示", isOn: $compact) }
         SettingsCard("通知") {
             HStack {
-                Label(notificationStatusText, systemImage: notificationStatus == .authorized ? "bell.badge.fill" : "bell.slash")
+                Label { Text(LocalizedStringKey(notificationStatusText)) } icon: { Image(systemName: notificationStatus == .authorized ? "bell.badge.fill" : "bell.slash") }
                     .foregroundColor(notificationStatus == .authorized ? .green : SpotcodeTheme.muted)
                 Spacer()
             }
@@ -3115,7 +3161,7 @@ private struct OutlineButtonStyle: ButtonStyle {
 
 private struct PageHeader: View {
     let title: String
-    var body: some View { Text(title).font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(16).background(SpotcodeTheme.surface).overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) } }
+    var body: some View { Text(LocalizedStringKey(title)).font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(16).background(SpotcodeTheme.surface).overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) } }
 }
 
 struct LoginView: View {
@@ -3231,6 +3277,22 @@ private extension View {
             .overlay(Capsule().stroke(SpotcodeTheme.border))
             .clipShape(Capsule())
     }
+}
+
+private func normalizedWebsite(_ value: String) -> URL? {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    let hasScheme = trimmed.range(of: "^https?://", options: [.regularExpression, .caseInsensitive]) != nil
+    let candidate = hasScheme ? trimmed : "https://\(trimmed)"
+    guard let url = URL(string: candidate),
+          ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+          url.host != nil else { return nil }
+    return url
+}
+
+private func prettyWebsite(_ url: URL) -> String {
+    let path = url.path == "/" ? "" : url.path
+    return (url.host ?? url.absoluteString) + path
 }
 
 private func relativeTime(_ value: String?) -> String {

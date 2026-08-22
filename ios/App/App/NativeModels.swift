@@ -11,13 +11,14 @@ struct Profile: Codable, Identifiable, Hashable {
     let bio: String?
     let location: String?
     let githubHandle: String?
+    let website: String?
     let createdAt: String?
     let avatarShape: String?
     let isAdmin: Bool?
     let isOperator: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case id, handle, name, bio, location
+        case id, handle, name, bio, location, website
         case avatarURL = "avatar_url"
         case githubHandle = "github_handle"
         case createdAt = "created_at"

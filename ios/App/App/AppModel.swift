@@ -428,7 +428,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func updateProfile(name: String, bio: String, location: String, avatarURL: String?, avatarShape: String) async -> Bool {
+    func updateProfile(name: String, bio: String, location: String, website: String, avatarURL: String?, avatarShape: String) async -> Bool {
         guard let session else { return false }
         let editingOfficial = isPostingAsOfficial
         if editingOfficial && me?.isAdmin != true && me?.isOperator != true {
@@ -437,7 +437,7 @@ final class AppModel: ObservableObject {
         }
         guard let id = (editingOfficial ? officialProfile?.id : me?.id) else { return false }
         do {
-            let profile = try await SupabaseService.shared.updateProfile(id: id, name: name, bio: bio, location: location, avatarURL: avatarURL, avatarShape: avatarShape, token: session.accessToken)
+            let profile = try await SupabaseService.shared.updateProfile(id: id, name: name, bio: bio, location: location, website: website, avatarURL: avatarURL, avatarShape: avatarShape, token: session.accessToken)
             if editingOfficial {
                 officialProfile = profile
             } else {

@@ -16,7 +16,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
         // surface show through, matching the mobile web composer.
         UITextView.appearance().backgroundColor = .clear
         UNUserNotificationCenter.current().delegate = self
-        registerNotificationPermissionIfNeeded(application)
+        // UI automation can skip the system sheet so screenshots and smoke
+        // tests can reach the app itself. Normal builds never pass this flag.
+        if !ProcessInfo.processInfo.arguments.contains("-SkipNotificationPermissionPrompt") {
+            registerNotificationPermissionIfNeeded(application)
+        }
 
         let model = AppModel()
         let root = RootView().environmentObject(model)

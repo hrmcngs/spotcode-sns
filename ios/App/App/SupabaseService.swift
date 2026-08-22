@@ -159,10 +159,10 @@ actor SupabaseService {
 
     func profile(id: UUID, token: String) async throws -> Profile? {
         do {
-            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape,is_admin,is_operator", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape,is_admin,is_operator", token: token)
             return rows.first
         } catch where error.localizedDescription.lowercased().contains("is_admin") || error.localizedDescription.lowercased().contains("is_operator") {
-            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape", token: token)
             return rows.first
         }
     }
@@ -170,27 +170,27 @@ actor SupabaseService {
     func profile(handle: String, token: String?) async throws -> Profile? {
         let escaped = handle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? handle
         do {
-            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape,is_admin,is_operator", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape,is_admin,is_operator", token: token)
             return rows.first
         } catch where error.localizedDescription.lowercased().contains("is_admin") || error.localizedDescription.lowercased().contains("is_operator") {
-            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape", token: token)
             return rows.first
         }
     }
 
     func searchProfiles(query: String, token: String?) async throws -> [Profile] {
         let escaped = query.trimmingCharacters(in: .whitespacesAndNewlines).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        return try await request("rest/v1/profiles?or=(handle.ilike.*\(escaped)*,name.ilike.*\(escaped)*)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape&limit=12", token: token)
+        return try await request("rest/v1/profiles?or=(handle.ilike.*\(escaped)*,name.ilike.*\(escaped)*)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape&limit=12", token: token)
     }
 
-    func updateProfile(id: UUID, name: String, bio: String, location: String, avatarURL: String?, avatarShape: String, token: String) async throws -> Profile {
+    func updateProfile(id: UUID, name: String, bio: String, location: String, website: String, avatarURL: String?, avatarShape: String, token: String) async throws -> Profile {
         let payload: [String: Any] = [
-            "name": name, "bio": bio, "location": location,
+            "name": name, "bio": bio, "location": location, "website": website.isEmpty ? NSNull() : website,
             "avatar_url": (avatarURL as Any?) ?? NSNull(), "avatar_shape": avatarShape
         ]
         let body = try JSONSerialization.data(withJSONObject: payload)
         let rows: [Profile] = try await request(
-            "rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape",
+            "rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,website,created_at,avatar_shape",
             method: "PATCH", token: token, body: body, preferRepresentation: true
         )
         guard let profile = rows.first else { throw URLError(.badServerResponse) }
@@ -219,39 +219,61 @@ actor SupabaseService {
 
     func createPost(_ draft: PostDraft, token: String) async throws -> Post {
         let encoded = try JSONEncoder().encode(draft)
-        var payload = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] ?? [:]
-        for column in ["repo_full_name", "kind", "visibility", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
-            payload.removeValue(forKey: column)
+        let original = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] ?? [:]
+        while true {
+            var payload = original
+            for column in ["repo_full_name", "kind", "visibility", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
+                payload.removeValue(forKey: column)
+            }
+            let body = try JSONSerialization.data(withJSONObject: payload)
+            let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
+            do {
+                let rows: [Post] = try await request(
+                    "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+                    method: "POST", token: token, body: body, preferRepresentation: true
+                )
+                guard let post = rows.first else { throw NSError(domain: "Supabase", code: -2, userInfo: [NSLocalizedDescriptionKey: "投稿結果が空です"]) }
+                return post
+            } catch {
+                guard removeMissingPostMetadata(from: error) else { throw error }
+            }
         }
-        let body = try JSONSerialization.data(withJSONObject: payload)
-        let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
-        let rows: [Post] = try await request(
-            "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
-            method: "POST", token: token, body: body, preferRepresentation: true
-        )
-        guard let post = rows.first else { throw NSError(domain: "Supabase", code: -2, userInfo: [NSLocalizedDescriptionKey: "投稿結果が空です"]) }
-        return post
     }
 
     func updatePost(id: UUID, body text: String, githubLink: String?, repoFullName: String?, eventURL: String?, kind: String?, visibility: String, token: String) async throws -> Post {
-        var payload: [String: Any] = [
+        let original: [String: Any] = [
             "body": text,
             "github_link": (githubLink as Any?) ?? NSNull(),
+            "repo_full_name": (repoFullName as Any?) ?? NSNull(),
             "event_url": (eventURL as Any?) ?? NSNull(),
             "kind": (kind as Any?) ?? NSNull(),
             "visibility": visibility
         ]
-        if supportedPostMetadata.contains("repo_full_name") {
-            payload["repo_full_name"] = (repoFullName as Any?) ?? NSNull()
+        while true {
+            var payload = original
+            for column in ["repo_full_name", "kind", "visibility", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
+                payload.removeValue(forKey: column)
+            }
+            let body = try JSONSerialization.data(withJSONObject: payload)
+            let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
+            do {
+                let rows: [Post] = try await request(
+                    "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+                    method: "PATCH", token: token, body: body, preferRepresentation: true
+                )
+                guard let post = rows.first else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を編集できません"]) }
+                return post
+            } catch {
+                guard removeMissingPostMetadata(from: error) else { throw error }
+            }
         }
-        let body = try JSONSerialization.data(withJSONObject: payload)
-        let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
-        let rows: [Post] = try await request(
-            "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
-            method: "PATCH", token: token, body: body, preferRepresentation: true
-        )
-        guard let post = rows.first else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を編集できません"]) }
-        return post
+    }
+
+    private func removeMissingPostMetadata(from error: Error) -> Bool {
+        let message = error.localizedDescription.lowercased()
+        guard let missing = supportedPostMetadata.first(where: { message.contains($0) }) else { return false }
+        supportedPostMetadata.removeAll { $0 == missing }
+        return true
     }
 
     func deletePost(id: UUID, token: String) async throws {
