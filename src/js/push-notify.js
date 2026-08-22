@@ -15,6 +15,37 @@
 // surface for any path that wants to fire a notification.
 
 const PREF_KEY = 'spotcode:push-notify';
+const TYPE_PREF_KEY = 'spotcode:notification-types:v1';
+const DEFAULT_TYPES = Object.freeze({
+  like: true, comment: true, mention: true, follow: true,
+  follow_request: true, nearby: true,
+});
+
+export function notificationTypePreferences() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TYPE_PREF_KEY) || '{}');
+    return { ...DEFAULT_TYPES, ...(saved && typeof saved === 'object' ? saved : {}) };
+  } catch { return { ...DEFAULT_TYPES }; }
+}
+
+export function notificationTypeEnabled(type) {
+  return notificationTypePreferences()[type] !== false;
+}
+
+export function setNotificationTypeEnabled(type, enabled) {
+  if (!(type in DEFAULT_TYPES)) return;
+  const next = notificationTypePreferences();
+  next[type] = !!enabled;
+  // Follow and follow-request are one user-facing setting.
+  if (type === 'follow') next.follow_request = !!enabled;
+  try { localStorage.setItem(TYPE_PREF_KEY, JSON.stringify(next)); } catch {}
+  listeners.forEach((fn) => { try { fn(isPushEnabled()); } catch {} });
+}
+
+export function filterNotificationTypes(items) {
+  const prefs = notificationTypePreferences();
+  return (items || []).filter((item) => prefs[item?.type] !== false);
+}
 
 // User-facing opt-in stored in localStorage so the choice survives
 // reloads. Independent from the browser's own `Notification.permission`

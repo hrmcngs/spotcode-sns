@@ -17,7 +17,7 @@ import { searchProfiles, fetchProfileByHandle } from '../profiles.js';
 import { debounce } from '../drafts.js';
 import { hydrateMyFollows, myFollowingHandles } from '../interactions.js';
 import { navigate, currentPath, url } from '../router.js';
-import { isPushEnabled, setPushEnabled, browserPermissionState, requestBrowserPermission } from '../push-notify.js';
+import { isPushEnabled, setPushEnabled, browserPermissionState, requestBrowserPermission, notificationTypePreferences, setNotificationTypeEnabled } from '../push-notify.js';
 import { withTimeout } from '../net-utils.js';
 
 // In-memory state for the two audience-list editors so add/remove
@@ -354,6 +354,7 @@ function mfaCard() {
 function pushNotifyCard() {
   const perm = browserPermissionState();
   const enabled = isPushEnabled();
+  const types = notificationTypePreferences();
   // Status tag mirrors the gate state: ON if permission granted AND
   // user opted in; otherwise the closest reason. 'unsupported' covers
   // iOS Safari < 16.4 and any context without Notification global.
@@ -389,6 +390,14 @@ function pushNotifyCard() {
               '</div>'
           )
       ) +
+      '<div class="settings-notification-types">' +
+        '<h3>' + t('settings.push.types') + '</h3>' +
+        [['like', 'like'], ['comment', 'comment'], ['mention', 'mention'], ['follow', 'follow'], ['nearby', 'nearby']].map(([type, key]) =>
+          '<label class="settings-check"><input type="checkbox" data-notification-type="' + type + '"' +
+            (types[type] !== false ? ' checked' : '') + '> ' + t('settings.push.type.' + key) + '</label>'
+        ).join('') +
+        '<p class="settings__hint">' + t('settings.push.types_hint') + '</p>' +
+      '</div>' +
     '</section>'
   );
 }
@@ -919,6 +928,11 @@ export function bindSettings() {
     }
     const app = document.getElementById('app');
     if (app) { app.innerHTML = renderSettings(); bindSettings(); }
+  });
+  document.querySelectorAll('[data-notification-type]').forEach((input) => {
+    input.addEventListener('change', () => {
+      setNotificationTypeEnabled(input.dataset.notificationType, input.checked);
+    });
   });
 
   // Privacy toggle — flip is_private on the profile and reload so every

@@ -5,6 +5,7 @@ import PhotosUI
 import UIKit
 import CoreImage
 import AuthenticationServices
+import UserNotifications
 
 private enum SpotcodeTheme {
     static let background = Color(red: 13/255, green: 17/255, blue: 23/255)
@@ -1713,21 +1714,21 @@ struct RepositoriesView: View {
 
 struct NotificationsView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var events: [FollowEvent] = []
+    @AppStorage("spotcode.notifications.likes") private var likesEnabled = true
+    @AppStorage("spotcode.notifications.comments") private var commentsEnabled = true
+    @AppStorage("spotcode.notifications.mentions") private var mentionsEnabled = true
+    @AppStorage("spotcode.notifications.follows") private var followsEnabled = true
+    @State private var notifications: [AppNotification] = []
     @State private var loading = false
     var body: some View {
         VStack(spacing: 0) {
             PageHeader(title: "Notifications")
-            if loading && events.isEmpty { Spacer(); ProgressView("通知を読み込み中…"); Spacer() }
-            else if events.isEmpty { Spacer(); ContentUnavailableViewCompat(title: "通知はありません", icon: "bell"); Spacer() }
-            else { ScrollView { LazyVStack(spacing: 0) { ForEach(events) { event in
-                HStack(spacing: 12) {
-                    AvatarView(profile: event.follower, size: 42)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(event.follower.name).fontWeight(.bold)
-                        Text(event.status == "pending" ? "@\(event.follower.handle) からフォローリクエスト" : "@\(event.follower.handle) にフォローされました").font(.subheadline).foregroundColor(SpotcodeTheme.muted)
-                    }; Spacer()
-                }.padding(16).overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+            if loading && notifications.isEmpty { Spacer(); ProgressView("通知を読み込み中…"); Spacer() }
+            else if notifications.isEmpty { Spacer(); ContentUnavailableViewCompat(title: "通知はありません", icon: "bell"); Spacer() }
+            else { ScrollView { LazyVStack(spacing: 0) { ForEach(notifications) { notification in
+                NotificationRow(notification: notification) {
+                    await respond(to: notification, accept: $0)
+                }
             }}}.refreshable { await load() } }
         }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task { await load() }
     }
@@ -1737,16 +1738,116 @@ struct NotificationsView: View {
         do {
             var session = try await model.validSession()
             do {
-                events = try await SupabaseService.shared.followNotifications(userID: id, token: session.accessToken)
+                notifications = filterNotifications(try await SupabaseService.shared.notifications(
+                    userID: id, handle: model.me?.handle ?? "", token: session.accessToken
+                ))
             } catch where AppModel.isExpiredSessionError(error) {
                 session = try await model.validSession(forceRefresh: true)
-                events = try await SupabaseService.shared.followNotifications(userID: id, token: session.accessToken)
+                notifications = filterNotifications(try await SupabaseService.shared.notifications(
+                    userID: id, handle: model.me?.handle ?? "", token: session.accessToken
+                ))
             }
         } catch {
             model.errorMessage = AppModel.isExpiredSessionError(error)
                 ? "ログインの有効期限が切れました。もう一度ログインしてください。"
                 : error.localizedDescription
         }
+    }
+
+    private func filterNotifications(_ values: [AppNotification]) -> [AppNotification] {
+        values.filter { value in
+            switch value.kind {
+            case .like: return likesEnabled
+            case .comment: return commentsEnabled
+            case .mention: return mentionsEnabled
+            case .follow, .followRequest: return followsEnabled
+            }
+        }
+    }
+
+    private func respond(to notification: AppNotification, accept: Bool) async {
+        guard let followerID = notification.actor.id, let targetID = model.me?.id else { return }
+        do {
+            let session = try await model.validSession()
+            try await SupabaseService.shared.respondToFollowRequest(
+                followerID: followerID, targetID: targetID, accept: accept, token: session.accessToken
+            )
+            await load()
+        } catch { model.errorMessage = error.localizedDescription }
+    }
+}
+
+private struct NotificationRow: View {
+    let notification: AppNotification
+    let respond: (Bool) async -> Void
+    @State private var responding = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack(alignment: .bottomTrailing) {
+                NavigationLink(destination: ProfileLookupView(handle: notification.actor.handle)) {
+                    AvatarView(profile: notification.actor, size: 44)
+                }.buttonStyle(.plain)
+                Image(systemName: icon).font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+                    .frame(width: 20, height: 20).background(badgeColor).clipShape(Circle())
+                    .overlay(Circle().stroke(SpotcodeTheme.surface, lineWidth: 2))
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(notification.actor.name).fontWeight(.bold)
+                    Text("@\(notification.actor.handle)").foregroundColor(SpotcodeTheme.muted)
+                    Spacer(minLength: 4)
+                    if let date = notification.createdAt { Text(relativeTime(date)).font(.caption).foregroundColor(SpotcodeTheme.muted) }
+                }
+                Text(label).font(.subheadline).foregroundColor(SpotcodeTheme.muted)
+                if let context = notification.context ?? notification.post?.body, !context.isEmpty {
+                    Text(context).font(.subheadline).lineLimit(3).padding(9)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                if notification.kind == .followRequest {
+                    HStack {
+                        Button("承認") { act(true) }.buttonStyle(OutlineButtonStyle(filled: true))
+                        Button("拒否") { act(false) }.buttonStyle(OutlineButtonStyle())
+                    }.disabled(responding)
+                } else if let post = notification.post {
+                    NavigationLink("投稿を見る", destination: PostDetailView(post: post))
+                        .font(.caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent)
+                }
+            }
+        }
+        .padding(16)
+        .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+    }
+
+    private var label: String {
+        switch notification.kind {
+        case .like: return "あなたの投稿にいいねしました"
+        case .comment: return "あなたの投稿にコメントしました"
+        case .mention: return "あなたをメンションしました"
+        case .follow: return "あなたをフォローしました"
+        case .followRequest: return "フォローをリクエストしました"
+        }
+    }
+    private var icon: String {
+        switch notification.kind {
+        case .like: return "heart.fill"
+        case .comment: return "bubble.left.fill"
+        case .mention: return "at"
+        case .follow, .followRequest: return "person.fill"
+        }
+    }
+    private var badgeColor: Color {
+        switch notification.kind {
+        case .like: return .pink
+        case .comment: return .green
+        case .mention: return .purple
+        case .follow, .followRequest: return SpotcodeTheme.accent
+        }
+    }
+    private func act(_ accept: Bool) {
+        responding = true
+        Task { await respond(accept); responding = false }
     }
 }
 
@@ -2776,9 +2877,43 @@ private struct DisplaySettings: View {
     @AppStorage("spotcode.privateIssuesEnabled") private var privateIssuesEnabled = false
     @State private var authorizingPrivateIssues = false
     @State private var privateIssueMessage = ""
+    @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
+    @State private var requestingNotifications = false
+    @AppStorage("spotcode.notifications.likes") private var notifyLikes = true
+    @AppStorage("spotcode.notifications.comments") private var notifyComments = true
+    @AppStorage("spotcode.notifications.mentions") private var notifyMentions = true
+    @AppStorage("spotcode.notifications.follows") private var notifyFollows = true
     var body: some View { VStack(spacing: 18) {
         SettingsCard("テーマ") { Label("ダーク", systemImage: "moon.fill"); Text("Webモバイル版と同じGitHubダークテーマです。").foregroundColor(SpotcodeTheme.muted) }
         SettingsCard("タイムライン") { Toggle("コンパクト表示", isOn: $compact) }
+        SettingsCard("通知") {
+            HStack {
+                Label(notificationStatusText, systemImage: notificationStatus == .authorized ? "bell.badge.fill" : "bell.slash")
+                    .foregroundColor(notificationStatus == .authorized ? .green : SpotcodeTheme.muted)
+                Spacer()
+            }
+            Text("いいね・コメント・メンション・フォローなどをiPhoneの通知として受け取ります。")
+                .foregroundColor(SpotcodeTheme.muted)
+            if notificationStatus == .denied {
+                Button("iPhoneの通知設定を開く") { openSystemSettings() }
+                    .buttonStyle(OutlineButtonStyle(filled: true))
+                Text("通知が拒否されています。iPhoneの設定アプリでSpotcodeの通知を許可してください。")
+                    .font(.caption).foregroundColor(SpotcodeTheme.warning)
+            } else if notificationStatus != .authorized && notificationStatus != .provisional {
+                Button(requestingNotifications ? "確認中…" : "通知をONにする") { requestNotificationPermission() }
+                    .buttonStyle(OutlineButtonStyle(filled: true)).disabled(requestingNotifications)
+            } else {
+                Button("iPhoneの通知設定を開く") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
+            }
+            Divider().overlay(SpotcodeTheme.border)
+            Text("通知する内容").font(.subheadline.weight(.bold))
+            Toggle("いいね", isOn: $notifyLikes)
+            Toggle("コメント", isOn: $notifyComments)
+            Toggle("メンション", isOn: $notifyMentions)
+            Toggle("フォロー・フォローリクエスト", isOn: $notifyFollows)
+            Text("種類別の設定はSpotcode内の通知一覧に適用されます。通知音やバナー表示は上の「iPhoneの通知設定」で変更できます。")
+                .font(.caption).foregroundColor(SpotcodeTheme.muted)
+        }
         SettingsCard("Open issues") {
             Toggle("非公開Issueを表示", isOn: Binding(
                 get: { privateIssuesEnabled && model.privateIssueToken != nil },
@@ -2829,9 +2964,42 @@ private struct DisplaySettings: View {
             }
         }
     }.task {
+        await refreshNotificationStatus()
         await hydratePreferences()
         await loadIssueRepositories()
     }}
+
+    private var notificationStatusText: String {
+        switch notificationStatus {
+        case .authorized, .provisional: return "通知 ON"
+        case .denied: return "通知 OFF"
+        case .notDetermined: return "未設定"
+        case .ephemeral: return "一時的に許可"
+        @unknown default: return "未設定"
+        }
+    }
+
+    private func refreshNotificationStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        notificationStatus = settings.authorizationStatus
+    }
+
+    private func requestNotificationPermission() {
+        requestingNotifications = true
+        Task {
+            do {
+                let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
+                if granted { await MainActor.run { UIApplication.shared.registerForRemoteNotifications() } }
+            } catch { model.errorMessage = "通知を有効にできませんでした: \(error.localizedDescription)" }
+            await refreshNotificationStatus()
+            requestingNotifications = false
+        }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
 
     private func hydratePreferences() async {
         guard let id = model.me?.id else { return }

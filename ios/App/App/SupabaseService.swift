@@ -384,6 +384,80 @@ actor SupabaseService {
         )
     }
 
+    func notifications(userID: UUID, handle: String, token: String) async throws -> [AppNotification] {
+        async let ownPostsResult = posts(limit: 60, authorID: userID, token: token)
+        async let followsResult: [FollowEvent] = request(
+            "rest/v1/follows?target_id=eq.\(userID.uuidString)&select=status,created_at,follower:profiles!follows_follower_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=30",
+            token: token
+        )
+        async let postMentionsResult = notificationPostMentions(handle: handle, excluding: userID, token: token)
+        async let commentMentionsResult = notificationCommentMentions(handle: handle, excluding: userID, token: token)
+
+        let ownPosts = try await ownPostsResult
+        let postIDs = ownPosts.map(\.id)
+        let postMap = Dictionary(uniqueKeysWithValues: ownPosts.map { ($0.id, $0) })
+        async let likesResult = notificationLikes(postIDs: postIDs, excluding: userID, token: token)
+        async let commentsResult = notificationComments(postIDs: postIDs, excluding: userID, token: token)
+
+        var result = try await followsResult.map { event in
+            AppNotification(
+                id: "follow:\(event.follower.id?.uuidString ?? event.follower.handle):\(event.createdAt ?? "")",
+                kind: event.status == "pending" ? .followRequest : .follow,
+                actor: event.follower, createdAt: event.createdAt, post: nil, context: nil, followStatus: event.status
+            )
+        }
+        result += try await likesResult.map { row in
+            AppNotification(id: "like:\(row.user.id?.uuidString ?? row.user.handle):\(row.postID.uuidString):\(row.createdAt ?? "")",
+                            kind: .like, actor: row.user, createdAt: row.createdAt,
+                            post: postMap[row.postID], context: nil, followStatus: nil)
+        }
+        result += try await commentsResult.map { row in
+            AppNotification(id: "comment:\(row.id.uuidString)", kind: .comment, actor: row.author,
+                            createdAt: row.createdAt, post: postMap[row.postID], context: row.body, followStatus: nil)
+        }
+        result += try await postMentionsResult.map { row in
+            AppNotification(id: "mention-post:\(row.id.uuidString)", kind: .mention, actor: row.author,
+                            createdAt: row.createdAt, post: nil, context: row.body, followStatus: nil)
+        }
+        result += try await commentMentionsResult.map { row in
+            AppNotification(id: "mention-comment:\(row.id.uuidString)", kind: .mention, actor: row.author,
+                            createdAt: row.createdAt, post: postMap[row.postID], context: row.body, followStatus: nil)
+        }
+        return Array(result.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.prefix(30))
+    }
+
+    private func notificationLikes(postIDs: [UUID], excluding userID: UUID, token: String) async throws -> [NotificationLikeRow] {
+        guard !postIDs.isEmpty else { return [] }
+        let ids = postIDs.map(\.uuidString).joined(separator: ",")
+        return try await request("rest/v1/likes?post_id=in.(\(ids))&user_id=neq.\(userID.uuidString)&select=post_id,created_at,user:profiles!likes_user_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=30", token: token)
+    }
+
+    private func notificationComments(postIDs: [UUID], excluding userID: UUID, token: String) async throws -> [NotificationCommentRow] {
+        guard !postIDs.isEmpty else { return [] }
+        let ids = postIDs.map(\.uuidString).joined(separator: ",")
+        return try await request("rest/v1/comments?post_id=in.(\(ids))&author_id=neq.\(userID.uuidString)&select=id,body,post_id,created_at,author:profiles!comments_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=30", token: token)
+    }
+
+    private func notificationPostMentions(handle: String, excluding userID: UUID, token: String) async throws -> [NotificationMentionPostRow] {
+        let term = "%@\(handle)%".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "%@\(handle)%"
+        return try await request("rest/v1/posts?body=ilike.\(term)&author_id=neq.\(userID.uuidString)&select=id,body,created_at,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=30", token: token)
+    }
+
+    private func notificationCommentMentions(handle: String, excluding userID: UUID, token: String) async throws -> [NotificationCommentRow] {
+        let term = "%@\(handle)%".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "%@\(handle)%"
+        return try await request("rest/v1/comments?body=ilike.\(term)&author_id=neq.\(userID.uuidString)&select=id,body,post_id,created_at,author:profiles!comments_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=30", token: token)
+    }
+
+    func respondToFollowRequest(followerID: UUID, targetID: UUID, accept: Bool, token: String) async throws {
+        let path = "rest/v1/follows?follower_id=eq.\(followerID.uuidString)&target_id=eq.\(targetID.uuidString)"
+        if accept {
+            let body = try JSONSerialization.data(withJSONObject: ["status": "accepted"])
+            let _: EmptyResponse = try await request(path, method: "PATCH", token: token, body: body)
+        } else {
+            let _: EmptyResponse = try await request(path, method: "DELETE", token: token)
+        }
+    }
+
     func followStatus(followerID: UUID, targetID: UUID, token: String) async throws -> Bool {
         let rows: [FollowRecord] = try await request(
             "rest/v1/follows?follower_id=eq.\(followerID.uuidString)&target_id=eq.\(targetID.uuidString)&status=eq.accepted&select=follower_id,target_id,status&limit=1",

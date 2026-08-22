@@ -18,6 +18,7 @@ import { relTime }       from '../data.js';
 import { t }             from '../i18n.js';
 import { maskHandle, maskName, maskMentionsInText } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
+import { filterNotificationTypes } from '../push-notify.js';
 
 const notificationCache = new Map();
 const NOTIF_SESSION_PREFIX = 'spotcode:notif-cache:v1:';
@@ -221,12 +222,14 @@ export async function hydrateNotifications() {
   const r = live();
   if (!r) return;
 
+  items = filterNotificationTypes(items);
   writeNotificationCache(cacheKey, items);
   paintNotifications(r, items);
 }
 
 function paintNotifications(r, items) {
   if (!r) return;
+  items = filterNotificationTypes(items);
   if (!items.length) {
     r.innerHTML =
       '<div class="stub">' +

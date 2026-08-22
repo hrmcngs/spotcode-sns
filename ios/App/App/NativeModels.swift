@@ -259,6 +259,48 @@ struct FollowEvent: Codable, Identifiable {
     }
 }
 
+enum NotificationKind: String, Hashable {
+    case like, comment, mention, follow, followRequest
+}
+
+struct AppNotification: Identifiable, Hashable {
+    let id: String
+    let kind: NotificationKind
+    let actor: Profile
+    let createdAt: String?
+    let post: Post?
+    let context: String?
+    let followStatus: String?
+}
+
+struct NotificationLikeRow: Codable {
+    let postID: UUID
+    let createdAt: String?
+    let user: Profile
+    enum CodingKeys: String, CodingKey { case user; case postID = "post_id"; case createdAt = "created_at" }
+}
+
+struct NotificationCommentRow: Codable {
+    let id: UUID
+    let postID: UUID
+    let body: String
+    let createdAt: String?
+    let author: Profile
+    enum CodingKeys: String, CodingKey {
+        case id, body, author
+        case postID = "post_id"
+        case createdAt = "created_at"
+    }
+}
+
+struct NotificationMentionPostRow: Codable {
+    let id: UUID
+    let body: String
+    let createdAt: String?
+    let author: Profile
+    enum CodingKeys: String, CodingKey { case id, body, author; case createdAt = "created_at" }
+}
+
 struct FollowRecord: Codable {
     let followerID: UUID
     let targetID: UUID

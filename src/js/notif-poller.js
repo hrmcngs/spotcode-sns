@@ -18,7 +18,7 @@
 // visibility API to save battery. visibilitychange resumes it.
 
 import { notificationsForMe } from './interactions.js';
-import { canPush, showPush } from './push-notify.js';
+import { canPush, showPush, filterNotificationTypes } from './push-notify.js';
 import { currentUser } from './auth.js';
 import { isPostingAsOfficial } from './posting-identity.js';
 import { getOfficialAccount } from './official-account.js';
@@ -139,8 +139,14 @@ async function tick() {
     return;
   }
 
-  const fresh = items.filter((n) => (n.createdAt || 0) > previous);
-  if (!fresh.length) return;
+  const rawFresh = items.filter((n) => (n.createdAt || 0) > previous);
+  const fresh = filterNotificationTypes(rawFresh);
+  // Advance the watermark even for disabled types. Re-enabling a category
+  // later must not release a backlog of banners collected while it was OFF.
+  if (!fresh.length) {
+    if (rawFresh.length) setLastSeen(Math.max(...rawFresh.map((n) => n.createdAt || 0), previous));
+    return;
+  }
 
   // Cap the burst — if 50 follows landed at once we don't want 50
   // banners to chain. The inbox is one click away.
@@ -164,7 +170,7 @@ async function tick() {
       skipIfVisible: true,
     });
   }
-  setLastSeen(Math.max(...fresh.map((n) => n.createdAt || 0), previous));
+  setLastSeen(Math.max(...rawFresh.map((n) => n.createdAt || 0), previous));
 }
 
 export function startNotifPoller() {

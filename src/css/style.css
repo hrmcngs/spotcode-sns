@@ -1767,6 +1767,22 @@ html[data-theme='light'] .profile-tasks__body {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: .82rem;
 }
+
+.settings-notification-types {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.settings-notification-types h3 { margin: 0 0 2px; }
+.settings-notification-types .settings-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+.settings-notification-types input { accent-color: var(--accent); }
 .settings-task-repos input { accent-color: var(--accent); }
 .profile-stats a { color: var(--muted); }
 .profile-stats a:hover { color: var(--text); text-decoration: underline; }

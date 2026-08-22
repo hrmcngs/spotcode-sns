@@ -16,7 +16,7 @@
 // need sub-minute precision for "is the user walking past a spot"
 // — they're going to be there for at least a few minutes.
 
-import { canPush, showPush } from './push-notify.js';
+import { canPush, showPush, notificationTypeEnabled } from './push-notify.js';
 import { cachedPosts } from './data.js';
 import { currentUser } from './auth.js';
 
@@ -80,6 +80,7 @@ function candidateSpotPosts() {
 async function tick() {
   if (stopped) return;
   if (!canPush()) return;
+  if (!notificationTypeEnabled('nearby')) return;
   if (!currentUser()) return;
   if (document.visibilityState !== 'visible') return;
 
