@@ -1517,3 +1517,24 @@ create policy "staff can update official profile"
     and public.can_manage_official_profile()
   )
   with check (handle = 'spotcode_official');
+
+-- ===================================================================
+-- Stage 33 — cross-device Open Issue display preferences
+-- ===================================================================
+create table if not exists public.issue_display_preferences (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  hidden_repos text[] not null default '{}',
+  include_private boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.issue_display_preferences enable row level security;
+drop policy if exists "users read own issue preferences" on public.issue_display_preferences;
+drop policy if exists "users insert own issue preferences" on public.issue_display_preferences;
+drop policy if exists "users update own issue preferences" on public.issue_display_preferences;
+create policy "users read own issue preferences" on public.issue_display_preferences
+  for select using (auth.uid() = user_id);
+create policy "users insert own issue preferences" on public.issue_display_preferences
+  for insert with check (auth.uid() = user_id);
+create policy "users update own issue preferences" on public.issue_display_preferences
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);

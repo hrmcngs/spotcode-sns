@@ -201,6 +201,17 @@ struct MFAEnrollment: Codable, Identifiable {
 
 struct MFAChallenge: Codable { let id: String }
 
+struct IssueDisplayPreferences: Codable {
+    let userID: UUID
+    let hiddenRepos: [String]
+    let includePrivate: Bool
+    enum CodingKeys: String, CodingKey {
+        case userID = "user_id"
+        case hiddenRepos = "hidden_repos"
+        case includePrivate = "include_private"
+    }
+}
+
 /// Public account-switcher metadata. Authentication tokens are stored
 /// separately in Keychain, never in this UserDefaults-backed value.
 struct SavedAccount: Codable, Identifiable, Hashable {

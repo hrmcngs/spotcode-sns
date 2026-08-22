@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>spotcode-sns</title>
   <script>
+    // Native iOS private-Issue OAuth bridge. Supabase redirects to this
+    // already-allowlisted HTTPS origin; immediately hand the returned token
+    // fragment to ASWebAuthenticationSession via the app's custom scheme.
+    (function () {
+      var params = new URLSearchParams(location.search);
+      if (!params.has('spotcode_ios_private_issues')) return;
+      params.delete('spotcode_ios_private_issues');
+      var query = params.toString();
+      location.replace('spotcode://github-oauth' + (query ? '?' + query : '') + location.hash);
+    })();
+  </script>
+  <script>
     // Inject icon / manifest / stylesheet / main.js with an absolute base
     // URL so they resolve correctly on deep links like
     // /spotcode-sns/<handle>. Without this the browser walks the URL bar

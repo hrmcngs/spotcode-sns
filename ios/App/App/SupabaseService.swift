@@ -46,7 +46,8 @@ actor SupabaseService {
         method: String = "GET",
         token: String? = nil,
         body: Data? = nil,
-        preferRepresentation: Bool = false
+        preferRepresentation: Bool = false,
+        prefer: String? = nil
     ) async throws -> T {
         guard let endpoint = URL(string: path, relativeTo: baseURL) else { throw URLError(.badURL) }
         var request = URLRequest(url: endpoint)
@@ -56,7 +57,8 @@ actor SupabaseService {
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(token ?? anonKey)", forHTTPHeaderField: "Authorization")
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
-        if preferRepresentation { request.setValue("return=representation", forHTTPHeaderField: "Prefer") }
+        if let prefer { request.setValue(prefer, forHTTPHeaderField: "Prefer") }
+        else if preferRepresentation { request.setValue("return=representation", forHTTPHeaderField: "Prefer") }
         let isAuthRequest = path.hasPrefix("auth/v1/")
         let (data, response) = try await data(for: request, retryable: method == "GET" || method == "HEAD" || isAuthRequest)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
@@ -261,11 +263,36 @@ actor SupabaseService {
         var components = URLComponents(url: baseURL.appendingPathComponent("auth/v1/authorize"), resolvingAgainstBaseURL: false)
         components?.queryItems = [
             .init(name: "provider", value: "github"),
-            .init(name: "redirect_to", value: "spotcode://github-oauth"),
+            // Supabase already allows the production web origin. It bridges
+            // the OAuth fragment back to the custom app scheme, avoiding a
+            // fallback to the project's localhost Site URL when custom
+            // schemes are rejected by hosted Auth configuration.
+            .init(name: "redirect_to", value: "https://hrmcngs.github.io/spotcode-sns/?spotcode_ios_private_issues=1"),
             .init(name: "scopes", value: "read:user repo"),
             .init(name: "prompt", value: "consent")
         ]
         return components?.url
+    }
+
+    func issueDisplayPreferences(userID: UUID, token: String) async throws -> IssueDisplayPreferences? {
+        let rows: [IssueDisplayPreferences] = try await request(
+            "rest/v1/issue_display_preferences?user_id=eq.\(userID.uuidString)&select=user_id,hidden_repos,include_private",
+            token: token
+        )
+        return rows.first
+    }
+
+    func saveIssueDisplayPreferences(userID: UUID, hiddenRepos: [String], includePrivate: Bool, token: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "user_id": userID.uuidString,
+            "hidden_repos": hiddenRepos,
+            "include_private": includePrivate
+        ])
+        let _: [IssueDisplayPreferences] = try await request(
+            "rest/v1/issue_display_preferences?on_conflict=user_id&select=user_id,hidden_repos,include_private",
+            method: "POST", token: token, body: body,
+            prefer: "resolution=merge-duplicates,return=representation"
+        )
     }
 
     func followingProfiles(userID: UUID, token: String) async throws -> [Profile] {

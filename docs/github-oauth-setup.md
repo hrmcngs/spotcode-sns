@@ -40,7 +40,6 @@ secret を保持させ、client は `supa.auth.linkIdentity({ provider: 'github'
 
 - `https://hrmcngs.github.io/spotcode-sns/**`
 - `http://localhost:8080/**` (dev server)
-- `spotcode://github-oauth` (iOS の非公開 Issue 認証)
 - 必要なら Electron / iOS 用のカスタムスキーム
   (`capacitor://localhost/**`, `file://**`) — このリストにないと
   リダイレクトが弾かれる

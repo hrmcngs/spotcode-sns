@@ -34,7 +34,7 @@ import { toggleLike, isLiked, likeCount,
          hydrateOfficialFollows, isOfficialFollowing } from './interactions.js';
 import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
-import { applyDisplayPrefs } from './display-prefs.js';
+import { applyDisplayPrefs, hydrateIssueDisplayPrefs } from './display-prefs.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
@@ -1104,6 +1104,10 @@ try {
   await finishPrivateIssueAuthorization();
 } catch (err) { console.warn('private issue OAuth restore failed', err); }
 try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
+if (currentUser()) {
+  await hydrateIssueDisplayPrefs(currentUser().id);
+  applyDisplayPrefs();
+}
 // Post-redirect GitHub OAuth sync. If the user JUST returned from
 // linkGithub()'s redirect, the auth user carries a fresh `github`
 // identity that isn't mirrored into public.profiles yet — writing
@@ -1455,6 +1459,7 @@ document.addEventListener('click', (e) => {
     // (NOT inside the body — escape() in renderPost puts it after).
     const isIdea = !!post.querySelector('.post__kind--idea');
     const ghLink = post.querySelector('.post__meta .post__link')?.getAttribute('href') || '';
+    const repoFullName = post.getAttribute('data-repo-full-name') || '';
     const escAttr = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
       '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
     }[c]));
@@ -1472,6 +1477,10 @@ document.addEventListener('click', (e) => {
         '<label class="post__edit-link">' +
           'GitHub link' +
           '<input type="url" class="post__edit-link-input" placeholder="https://github.com/owner/repo" value="' + escAttr(ghLink) + '">' +
+        '</label>' +
+        '<label class="post__edit-link">' +
+          'Repository' +
+          '<input type="text" class="post__edit-repo-input" placeholder="owner/repository" value="' + escAttr(repoFullName) + '">' +
         '</label>' +
       '</div>' +
       '<div class="post__edit-actions">' +
@@ -1518,15 +1527,20 @@ document.addEventListener('click', (e) => {
     const ideaActive = !!body.querySelector('.act--edit-toggle-idea.is-active');
     const linkInput = body.querySelector('.post__edit-link-input');
     const newLink = linkInput ? linkInput.value.trim() : '';
+    const repoInput = body.querySelector('.post__edit-repo-input');
+    const newRepo = repoInput ? repoInput.value.trim() : '';
     saveBtn.disabled = true;
     ta.disabled = true;
     if (linkInput) linkInput.disabled = true;
+    if (repoInput) repoInput.disabled = true;
     updatePost(post.getAttribute('data-post-id'), {
       body:       newBody,
       kind:       ideaActive ? 'idea' : null,
       githubLink: newLink || null,
+      repoFullName: newRepo || null,
     })
       .then(() => {
+        post.setAttribute('data-repo-full-name', newRepo);
         // Re-render the body inline — keep the post card in place so
         // scroll position / surrounding cards don't jump.
         // inlineFormat lives in post.js; cheaper than a full refresh().

@@ -17,6 +17,39 @@ const KEY = 'spotcode:hide-badges';
 const KEY_TASKS_HIDDEN = 'spotcode:hide-tasks';
 const KEY_TASK_REPOS = 'spotcode:hidden-task-repos';
 const KEY_PRIVATE_TASKS = 'spotcode:private-tasks';
+let syncedUserId = '';
+
+export async function hydrateIssueDisplayPrefs(userId) {
+  if (!userId) return;
+  const { getClient } = await import('./supa.js');
+  const supa = await getClient();
+  const { data, error } = await supa.from('issue_display_preferences')
+    .select('hidden_repos,include_private').eq('user_id', userId).maybeSingle();
+  if (error) return; // Stage 33 not installed yet: retain device-local values.
+  syncedUserId = userId;
+  if (data) {
+    try {
+      localStorage.setItem(KEY_TASK_REPOS, JSON.stringify(data.hidden_repos || []));
+      data.include_private ? localStorage.setItem(KEY_PRIVATE_TASKS, '1') : localStorage.removeItem(KEY_PRIVATE_TASKS);
+    } catch {}
+  } else {
+    await persistIssueDisplayPrefs();
+  }
+}
+
+async function persistIssueDisplayPrefs() {
+  if (!syncedUserId) return;
+  try {
+    const { getClient } = await import('./supa.js');
+    const supa = await getClient();
+    await supa.from('issue_display_preferences').upsert({
+      user_id: syncedUserId,
+      hidden_repos: hiddenTaskRepos(),
+      include_private: privateTasksEnabled(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+  } catch {}
+}
 
 export function badgesHidden() {
   try { return localStorage.getItem(KEY) === '1'; } catch { return false; }
@@ -53,6 +86,7 @@ export function setTaskRepoVisible(repo, visible) {
   const hidden = new Set(hiddenTaskRepos());
   if (visible) hidden.delete(repo); else hidden.add(repo);
   try { localStorage.setItem(KEY_TASK_REPOS, JSON.stringify([...hidden])); } catch {}
+  persistIssueDisplayPrefs();
 }
 
 export function privateTasksEnabled() {
@@ -61,6 +95,7 @@ export function privateTasksEnabled() {
 
 export function setPrivateTasksEnabled(enabled) {
   try { enabled ? localStorage.setItem(KEY_PRIVATE_TASKS, '1') : localStorage.removeItem(KEY_PRIVATE_TASKS); } catch {}
+  persistIssueDisplayPrefs();
 }
 
 // Apply every display-pref attribute on <html>. Call once on boot

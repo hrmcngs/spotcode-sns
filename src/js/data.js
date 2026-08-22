@@ -910,6 +910,10 @@ export async function updatePost(postId, fields) {
     const v = fields.githubLink;
     patch.github_link = (v && String(v).trim()) || null;
   }
+  if (hasRepoFullName && Object.prototype.hasOwnProperty.call(fields, 'repoFullName')) {
+    const value = fields.repoFullName;
+    patch.repo_full_name = (value && String(value).trim()) || null;
+  }
   // `eventUrl` — same optional shape as githubLink. Only writes when
   // the column exists (Stage 31 migration applied).
   if (hasEventUrl && Object.prototype.hasOwnProperty.call(fields, 'eventUrl')) {

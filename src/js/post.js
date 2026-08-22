@@ -236,7 +236,7 @@ export function renderPost(p) {
   const displayName   = maskName(u.handle, u.name);
   const displayHandle = maskHandle(u.handle);
   return (
-    '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '">' +
+    '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '" data-repo-full-name="' + escape(p.repoFullName || '') + '">' +
       renderAvatar(u, { tag: 'a', href: profileUrl }) +
       '<div class="post__main">' +
         '<div class="post__head">' +

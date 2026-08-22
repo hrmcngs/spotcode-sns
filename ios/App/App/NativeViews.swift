@@ -2484,6 +2484,7 @@ private struct DisplaySettings: View {
                                 let token = try await GitHubPrivateIssueAuthorizer.shared.authorize()
                                 model.savePrivateIssueToken(token)
                                 privateIssuesEnabled = true
+                                await savePreferences()
                                 privateIssueMessage = "GitHubの非公開Issue表示を有効にしました。"
                                 await loadIssueRepositories()
                             } catch {
@@ -2495,7 +2496,7 @@ private struct DisplaySettings: View {
                     } else {
                         privateIssuesEnabled = false
                         model.removePrivateIssueToken()
-                        Task { await loadIssueRepositories() }
+                        Task { await savePreferences(); await loadIssueRepositories() }
                     }
                 }
             )).disabled(authorizingPrivateIssues || model.me?.githubHandle == nil)
@@ -2510,11 +2511,45 @@ private struct DisplaySettings: View {
                         var hidden = decodeRepoSet(hiddenIssueReposJSON)
                         if visible { hidden.remove(repo) } else { hidden.insert(repo) }
                         hiddenIssueReposJSON = encodeRepoSet(hidden)
+                        Task { await savePreferences() }
                     }
                 )).font(.caption)
             }
         }
-    }.task { await loadIssueRepositories() }}
+    }.task {
+        await hydratePreferences()
+        await loadIssueRepositories()
+    }}
+
+    private func hydratePreferences() async {
+        guard let id = model.me?.id else { return }
+        do {
+            let session = try await model.validSession()
+            if let value = try await SupabaseService.shared.issueDisplayPreferences(userID: id, token: session.accessToken) {
+                hiddenIssueReposJSON = encodeRepoSet(Set(value.hiddenRepos))
+                privateIssuesEnabled = value.includePrivate
+            } else {
+                await savePreferences()
+            }
+        } catch {
+            // Stage 33 may not be installed yet. Keep the local preference.
+        }
+    }
+
+    private func savePreferences() async {
+        guard let id = model.me?.id else { return }
+        do {
+            let session = try await model.validSession()
+            try await SupabaseService.shared.saveIssueDisplayPreferences(
+                userID: id,
+                hiddenRepos: Array(decodeRepoSet(hiddenIssueReposJSON)).sorted(),
+                includePrivate: privateIssuesEnabled,
+                token: session.accessToken
+            )
+        } catch {
+            // Keep the device-local value and retry on the next settings load.
+        }
+    }
 
     private func loadIssueRepositories() async {
         guard let handle = model.me?.githubHandle else { return }
