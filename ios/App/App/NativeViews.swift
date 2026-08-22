@@ -1700,10 +1700,21 @@ struct NotificationsView: View {
         }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task { await load() }
     }
     private func load() async {
-        guard let session = model.session, let id = model.me?.id else { return }
+        guard let id = model.me?.id else { return }
         loading = true; defer { loading = false }
-        do { events = try await SupabaseService.shared.followNotifications(userID: id, token: session.accessToken) }
-        catch { model.errorMessage = error.localizedDescription }
+        do {
+            var session = try await model.validSession()
+            do {
+                events = try await SupabaseService.shared.followNotifications(userID: id, token: session.accessToken)
+            } catch where AppModel.isExpiredSessionError(error) {
+                session = try await model.validSession(forceRefresh: true)
+                events = try await SupabaseService.shared.followNotifications(userID: id, token: session.accessToken)
+            }
+        } catch {
+            model.errorMessage = AppModel.isExpiredSessionError(error)
+                ? "ログインの有効期限が切れました。もう一度ログインしてください。"
+                : error.localizedDescription
+        }
     }
 }
 
@@ -2548,9 +2559,20 @@ struct LoginView: View {
                 }.font(.body.weight(.bold)).frame(maxWidth: .infinity).padding(13).background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
                  .disabled(email.isEmpty || password.isEmpty || signing)
                 }
+                if let message = model.authenticationError, !message.isEmpty {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundColor(SpotcodeTheme.warning)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(SpotcodeTheme.warning.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
                 Spacer()
             }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("spotcodeへログイン")
-        }.preferredColorScheme(.dark)
+        }
+        .preferredColorScheme(.dark)
+        .onDisappear { model.authenticationError = nil }
     }
 }
 

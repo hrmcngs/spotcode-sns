@@ -12,6 +12,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var isPostingAsOfficial = false
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var authenticationError: String?
     @Published var requiresMFA = false
     private var pendingMFASession: AuthSession?
     private var pendingMFAFactorID: String?
@@ -37,11 +38,10 @@ final class AppModel: ObservableObject {
     }
 
     func bootstrap() async {
-        guard var current = session else { return }
-        if let expiry = current.expiresAt, expiry < Int(Date().timeIntervalSince1970) + 60,
-           let refreshed = try? await SupabaseService.shared.refresh(current.refreshToken) {
-            current = refreshed
-            persist(current)
+        guard session != nil else { return }
+        guard let current = try? await validSession() else {
+            errorMessage = "ログインの有効期限が切れました。もう一度ログインしてください。"
+            return
         }
         if let profile = try? await SupabaseService.shared.profile(id: current.user.id, token: current.accessToken) {
             me = profile
@@ -51,7 +51,38 @@ final class AppModel: ObservableObject {
         await loadTimeline()
     }
 
+    /// Returns a usable session, refreshing the access token when it is close
+    /// to expiry. `forceRefresh` is used after an API rejects a token whose
+    /// local expiry metadata was missing or stale.
+    func validSession(forceRefresh: Bool = false) async throws -> AuthSession {
+        guard var current = session else { throw URLError(.userAuthenticationRequired) }
+        let expiresSoon = current.expiresAt.map {
+            $0 < Int(Date().timeIntervalSince1970) + 60
+        } ?? true
+        if forceRefresh || expiresSoon {
+            do {
+                current = try await SupabaseService.shared.refresh(current.refreshToken)
+                persist(current)
+                if let profile = me { rememberAccount(session: current, profile: profile) }
+            } catch {
+                throw NSError(
+                    domain: "SpotcodeAuth",
+                    code: 401,
+                    userInfo: [NSLocalizedDescriptionKey: "ログインの有効期限が切れました。もう一度ログインしてください。"]
+                )
+            }
+        }
+        return current
+    }
+
+    static func isExpiredSessionError(_ error: Error) -> Bool {
+        let value = error as NSError
+        let message = error.localizedDescription.lowercased()
+        return value.code == 401 || message.contains("pgrst303") || message.contains("jwt expired")
+    }
+
     func signIn(emailOrAlias: String, password: String) async -> Bool {
+        authenticationError = nil
         // Adding another account must never evict the currently active one.
         // Re-save it before exchanging credentials, including sessions that
         // were restored from Keychain but have not completed bootstrap yet.
@@ -71,31 +102,37 @@ final class AppModel: ObservableObject {
                     password: password
                 )
             }
-            let factors = try await SupabaseService.shared.mfaFactors(token: value.accessToken)
-            if Self.assuranceLevel(of: value.accessToken) != "aal2",
-               let factor = factors.first(where: { $0.status == "verified" }) {
-                pendingMFASession = value
-                pendingMFAFactorID = factor.id
-                requiresMFA = true
-                errorMessage = nil
-                return false
+            if Self.assuranceLevel(of: value.accessToken) != "aal2" {
+                // MFA discovery is a post-login capability. If an older
+                // GoTrue deployment cannot serve this endpoint, accounts
+                // without MFA must still be able to sign in normally.
+                if let factors = try? await SupabaseService.shared.mfaFactors(token: value.accessToken),
+                   let factor = factors.first(where: { $0.status == "verified" }) {
+                    pendingMFASession = value
+                    pendingMFAFactorID = factor.id
+                    requiresMFA = true
+                    authenticationError = nil
+                    return false
+                }
             }
             try await finishSignIn(value)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            if authenticationError == nil {
+                authenticationError = Self.authenticationMessage(for: error)
+            }
             return false
         }
     }
 
     func verifyMFA(code: String) async -> Bool {
         guard let pending = pendingMFASession, let factorID = pendingMFAFactorID else {
-            errorMessage = "確認中の2段階認証がありません。"
+            authenticationError = "確認中の2段階認証がありません。"
             return false
         }
         let value = code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard value.range(of: "^[0-9]{6}$", options: .regularExpression) != nil else {
-            errorMessage = "6桁の確認コードを入力してください。"
+            authenticationError = "6桁の確認コードを入力してください。"
             return false
         }
         do {
@@ -104,16 +141,59 @@ final class AppModel: ObservableObject {
             pendingMFASession = nil
             pendingMFAFactorID = nil
             requiresMFA = false
+            authenticationError = nil
             return true
         } catch {
-            errorMessage = "確認コードが違うか、有効期限が切れています。"
+            authenticationError = "確認コードが違うか、有効期限が切れています。"
             return false
         }
     }
 
+    private static func authenticationMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        let raw = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let data = raw.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["message", "error_description", "error"] {
+                if let message = json[key] as? String, !message.isEmpty {
+                    if nsError.code == 400 || nsError.code == 401 {
+                        return "メールアドレス／ログイン名、またはパスワードが正しくありません。"
+                    }
+                    return message
+                }
+            }
+        }
+        if nsError.code == 400 || nsError.code == 401 {
+            return "メールアドレス／ログイン名、またはパスワードが正しくありません。"
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+                return "サーバーに接続できません。通信状態を確認して、もう一度お試しください。"
+            case .timedOut:
+                return "ログイン処理がタイムアウトしました。もう一度お試しください。"
+            default: break
+            }
+        }
+        if error is DecodingError {
+            return "ログイン情報の読み込みに失敗しました。アプリを最新版に更新して、もう一度お試しください。"
+        }
+        return raw.isEmpty ? "ログインできませんでした。もう一度お試しください。" : raw
+    }
+
     private func finishSignIn(_ value: AuthSession) async throws {
-            guard let profile = try await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) else {
-                throw URLError(.userAuthenticationRequired)
+            let profile: Profile
+            do {
+                guard let loaded = try await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) else {
+                    authenticationError = "このアカウントのプロフィールが見つかりません。"
+                    throw URLError(.userAuthenticationRequired)
+                }
+                profile = loaded
+            } catch {
+                if authenticationError == nil {
+                    authenticationError = "ログインは確認できましたが、プロフィールを読み込めませんでした。"
+                }
+                throw error
             }
             // Commit the account change only after its profile is usable.
             // Otherwise a transient profile request failure overwrites the
