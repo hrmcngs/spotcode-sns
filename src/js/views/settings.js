@@ -885,7 +885,16 @@ export function bindSettings() {
       return;
     }
     setPrivateTasksEnabled(true);
-    try { await linkGithubForPrivateIssues(window.location.href); }
+    try {
+      const shared = await getGithubToken();
+      if (shared && await githubTokenCanReadPrivateRepos(shared) === true) {
+        privateIssueAuthError = '';
+        const app = document.getElementById('app');
+        if (app) { app.innerHTML = renderSettings(); bindSettings(); }
+        return;
+      }
+      await linkGithubForPrivateIssues(window.location.href);
+    }
     catch (error) { setPrivateTasksEnabled(false); alert(error?.message || String(error)); }
   });
 

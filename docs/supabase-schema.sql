@@ -1538,3 +1538,76 @@ create policy "users insert own issue preferences" on public.issue_display_prefe
   for insert with check (auth.uid() = user_id);
 create policy "users update own issue preferences" on public.issue_display_preferences
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ===================================================================
+-- Stage 34 — encrypted cross-device GitHub private-Issue grant
+-- ===================================================================
+create extension if not exists supabase_vault cascade;
+
+create table if not exists public.github_private_issue_grants (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  secret_id uuid not null unique,
+  updated_at timestamptz not null default now()
+);
+alter table public.github_private_issue_grants enable row level security;
+revoke all on public.github_private_issue_grants from public, anon, authenticated;
+
+create or replace function public.save_github_private_issue_token(p_token text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, vault
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_secret uuid;
+begin
+  if v_user is null then raise exception 'not authenticated'; end if;
+  if nullif(trim(p_token), '') is null then raise exception 'empty token'; end if;
+  select secret_id into v_secret from public.github_private_issue_grants where user_id = v_user;
+  if v_secret is null then
+    v_secret := vault.create_secret(p_token, 'spotcode-github-' || v_user::text, 'GitHub private Issue OAuth token');
+    insert into public.github_private_issue_grants(user_id, secret_id)
+    values (v_user, v_secret)
+    on conflict (user_id) do update set secret_id = excluded.secret_id, updated_at = now();
+  else
+    perform vault.update_secret(v_secret, p_token);
+    update public.github_private_issue_grants set updated_at = now() where user_id = v_user;
+  end if;
+  return true;
+end $$;
+
+create or replace function public.get_github_private_issue_token()
+returns text
+language sql
+stable
+security definer
+set search_path = public, vault
+as $$
+  select decrypted_secret
+  from vault.decrypted_secrets d
+  join public.github_private_issue_grants g on g.secret_id = d.id
+  where g.user_id = auth.uid()
+  limit 1;
+$$;
+
+create or replace function public.delete_github_private_issue_token()
+returns boolean
+language plpgsql
+security definer
+set search_path = public, vault
+as $$
+declare v_secret uuid;
+begin
+  if auth.uid() is null then raise exception 'not authenticated'; end if;
+  delete from public.github_private_issue_grants where user_id = auth.uid() returning secret_id into v_secret;
+  if v_secret is not null then delete from vault.secrets where id = v_secret; end if;
+  return true;
+end $$;
+
+revoke execute on function public.save_github_private_issue_token(text) from public, anon;
+revoke execute on function public.get_github_private_issue_token() from public, anon;
+revoke execute on function public.delete_github_private_issue_token() from public, anon;
+grant execute on function public.save_github_private_issue_token(text) to authenticated;
+grant execute on function public.get_github_private_issue_token() to authenticated;
+grant execute on function public.delete_github_private_issue_token() to authenticated;

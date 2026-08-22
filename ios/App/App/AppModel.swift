@@ -14,6 +14,7 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var authenticationError: String?
     @Published var requiresMFA = false
+    @Published var requiresReauthentication = false
     private var pendingMFASession: AuthSession?
     private var pendingMFAFactorID: String?
 
@@ -42,6 +43,26 @@ final class AppModel: ObservableObject {
         KeychainStore.delete(account: githubTokenPrefix + id.uuidString)
     }
 
+    func uploadPrivateIssueToken(_ token: String) async throws {
+        try await withRefreshedSession { accessToken in
+            try await SupabaseService.shared.saveSharedGithubPrivateIssueToken(token, token: accessToken)
+        }
+    }
+
+    func hydrateSharedPrivateIssueToken() async -> String? {
+        if let token = privateIssueToken {
+            try? await uploadPrivateIssueToken(token)
+            return token
+        }
+        do {
+            let token = try await withRefreshedSession { accessToken in
+                try await SupabaseService.shared.sharedGithubPrivateIssueToken(token: accessToken)
+            }
+            if let token { savePrivateIssueToken(token) }
+            return token
+        } catch { return nil }
+    }
+
     init() {
         if let data = UserDefaults.standard.data(forKey: savedAccountsKey) {
             savedAccounts = (try? JSONDecoder().decode([SavedAccount].self, from: data)) ?? []
@@ -57,7 +78,7 @@ final class AppModel: ObservableObject {
     func bootstrap() async {
         guard session != nil else { return }
         guard let current = try? await validSession() else {
-            errorMessage = "ログインの有効期限が切れました。もう一度ログインしてください。"
+            requiresReauthentication = true
             return
         }
         if let profile = try? await SupabaseService.shared.profile(id: current.user.id, token: current.accessToken) {
@@ -82,6 +103,7 @@ final class AppModel: ObservableObject {
                 persist(current)
                 if let profile = me { rememberAccount(session: current, profile: profile) }
             } catch {
+                requiresReauthentication = true
                 throw NSError(
                     domain: "SpotcodeAuth",
                     code: 401,
@@ -96,6 +118,7 @@ final class AppModel: ObservableObject {
         let value = error as NSError
         let message = error.localizedDescription.lowercased()
         return value.code == 401 || message.contains("pgrst303") || message.contains("jwt expired")
+            || message.contains("session_not_found") || message.contains("session from session_id")
     }
 
     func signIn(emailOrAlias: String, password: String) async -> Bool {
@@ -213,6 +236,7 @@ final class AppModel: ObservableObject {
             // Otherwise a transient profile request failure overwrites the
             // previous active session while the UI still shows that account.
             persist(value)
+            requiresReauthentication = false
             me = profile
             cacheProfile(profile)
             rememberAccount(session: value, profile: profile)
@@ -232,28 +256,49 @@ final class AppModel: ObservableObject {
     }
 
     func currentMFAFactor() async throws -> MFAFactor? {
-        guard let token = session?.accessToken else { throw URLError(.userAuthenticationRequired) }
-        return try await SupabaseService.shared.mfaFactors(token: token).first(where: { $0.status == "verified" })
+        try await withRefreshedSession { token in
+            try await SupabaseService.shared.mfaFactors(token: token).first(where: { $0.status == "verified" })
+        }
     }
 
     func beginMFAEnrollment() async throws -> MFAEnrollment {
-        guard let token = session?.accessToken else { throw URLError(.userAuthenticationRequired) }
-        let factors = try await SupabaseService.shared.allMFAFactors(token: token)
-        for factor in factors where factor.status != "verified" {
-            try? await SupabaseService.shared.disableMFA(factorID: factor.id, token: token)
+        try await withRefreshedSession { token in
+            let factors = try await SupabaseService.shared.allMFAFactors(token: token)
+            for factor in factors where factor.status != "verified" {
+                try? await SupabaseService.shared.disableMFA(factorID: factor.id, token: token)
+            }
+            return try await SupabaseService.shared.enrollMFA(token: token)
         }
-        return try await SupabaseService.shared.enrollMFA(token: token)
     }
 
     func confirmMFAEnrollment(_ enrollment: MFAEnrollment, code: String) async throws {
-        guard let token = session?.accessToken else { throw URLError(.userAuthenticationRequired) }
-        let verified = try await SupabaseService.shared.verifyMFA(factorID: enrollment.id, code: code, token: token)
+        let verified: AuthSession = try await withRefreshedSession { token in
+            try await SupabaseService.shared.verifyMFA(factorID: enrollment.id, code: code, token: token)
+        }
         persist(verified)
     }
 
     func disableMFA(_ factor: MFAFactor) async throws {
-        guard let token = session?.accessToken else { throw URLError(.userAuthenticationRequired) }
-        try await SupabaseService.shared.disableMFA(factorID: factor.id, token: token)
+        try await withRefreshedSession { token in
+            try await SupabaseService.shared.disableMFA(factorID: factor.id, token: token)
+        }
+    }
+
+    private func withRefreshedSession<T>(_ operation: (String) async throws -> T) async throws -> T {
+        var current = try await validSession()
+        do {
+            return try await operation(current.accessToken)
+        } catch where Self.isExpiredSessionError(error) {
+            current = try await validSession(forceRefresh: true)
+            do {
+                return try await operation(current.accessToken)
+            } catch where Self.isExpiredSessionError(error) {
+                throw NSError(
+                    domain: "SpotcodeAuth", code: 401,
+                    userInfo: [NSLocalizedDescriptionKey: "ログインセッションが無効になりました。もう一度ログインしてください。"]
+                )
+            }
+        }
     }
 
     func signOut() {

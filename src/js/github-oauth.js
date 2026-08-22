@@ -27,6 +27,20 @@ import { refreshProfile, currentUser } from './auth.js';
 
 const PRIVATE_ISSUE_SESSION_KEY = 'spotcode.private_issue_original_session';
 
+async function saveSharedGithubToken(token) {
+  if (!token) return;
+  const supa = await getClient();
+  const { error } = await supa.rpc('save_github_private_issue_token', { p_token: token });
+  if (error && !/save_github_private_issue_token/i.test(error.message || '')) throw new Error(error.message);
+}
+
+async function getSharedGithubToken() {
+  const supa = await getClient();
+  const { data, error } = await supa.rpc('get_github_private_issue_token');
+  if (error) return null; // Stage 34 not installed yet.
+  return typeof data === 'string' && data ? data : null;
+}
+
 // Kick off the link flow. Supabase-js redirects the browser to
 // github.com's consent page; when the user approves, GitHub bounces
 // them to the Supabase project's /auth/v1/callback, and Supabase
@@ -96,6 +110,7 @@ export async function finishPrivateIssueAuthorization() {
   if (providerToken) {
     const { setGithubApiToken } = await import('./language-stats.js');
     setGithubApiToken(providerToken, original.user_id);
+    await saveSharedGithubToken(providerToken);
   }
   const { error } = await supa.auth.setSession({
     access_token: original.access_token,
@@ -193,13 +208,21 @@ export async function getGithubToken() {
       const { setGithubApiToken } = await import('./language-stats.js');
       setGithubApiToken(fresh, ownerId);
     } catch {}
+    await saveSharedGithubToken(fresh).catch(() => {});
     return fresh;
   }
   // provider_token is commonly omitted after Supabase refreshes its session.
   // language-stats restores the last OAuth grant from localStorage.
   try {
     const { restoreGithubApiToken } = await import('./language-stats.js');
-    return restoreGithubApiToken(ownerId);
+    const local = restoreGithubApiToken(ownerId);
+    if (local) {
+      await saveSharedGithubToken(local).catch(() => {});
+      return local;
+    }
+    const shared = await getSharedGithubToken();
+    if (shared) setGithubApiToken(shared, ownerId);
+    return shared;
   } catch { return null; }
 }
 

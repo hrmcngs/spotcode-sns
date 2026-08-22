@@ -2,8 +2,16 @@ import Foundation
 
 actor SupabaseService {
     static let shared = SupabaseService()
-    private let baseURL = URL(string: "https://vkwdthjiyxrhskdlgexq.supabase.co")!
-    private let anonKey = "sb_publishable_xdAZG7yOOFKPXmugjhDWdQ_HJ7sGHIq"
+    static let defaultProjectURL = "https://vkwdthjiyxrhskdlgexq.supabase.co"
+    static let defaultPublishableKey = "sb_publishable_xdAZG7yOOFKPXmugjhDWdQ_HJ7sGHIq"
+    static let projectURLKey = "spotcode.native.supabase-url"
+    static let publishableKeyKey = "spotcode.native.supabase-key"
+    private var baseURL: URL {
+        URL(string: UserDefaults.standard.string(forKey: Self.projectURLKey) ?? Self.defaultProjectURL)!
+    }
+    private var anonKey: String {
+        UserDefaults.standard.string(forKey: Self.publishableKeyKey) ?? Self.defaultPublishableKey
+    }
     private var supportedPostMetadata = ["repo_full_name", "kind", "visibility", "event_url", "poll"]
     private let decoder: JSONDecoder = {
         let value = JSONDecoder()
@@ -66,7 +74,42 @@ actor SupabaseService {
             throw NSError(domain: "Supabase", code: (response as? HTTPURLResponse)?.statusCode ?? -1,
                           userInfo: [NSLocalizedDescriptionKey: message])
         }
+        if T.self == EmptyResponse.self, data.isEmpty || String(data: data, encoding: .utf8) == "null" {
+            return EmptyResponse() as! T
+        }
         return try decoder.decode(T.self, from: data)
+    }
+
+    func ensureDevAccount(password: String, token: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["new_pass": password])
+        let _: EmptyResponse = try await request("rest/v1/rpc/ensure_dev_account", method: "POST", token: token, body: body)
+    }
+
+    func testConnection(projectURL: String? = nil, publishableKey: String? = nil) async throws {
+        let urlText = projectURL ?? baseURL.absoluteString
+        let key = publishableKey ?? anonKey
+        guard let root = URL(string: urlText), let endpoint = URL(string: "auth/v1/settings", relativeTo: root) else {
+            throw URLError(.badURL)
+        }
+        var probe = URLRequest(url: endpoint)
+        probe.timeoutInterval = 15
+        probe.setValue(key, forHTTPHeaderField: "apikey")
+        let (data, response) = try await data(for: probe, retryable: true)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "接続できませんでした。"
+            throw NSError(domain: "Supabase", code: (response as? HTTPURLResponse)?.statusCode ?? -1,
+                          userInfo: [NSLocalizedDescriptionKey: message])
+        }
+    }
+
+    func saveConnection(projectURL: String, publishableKey: String) {
+        UserDefaults.standard.set(projectURL, forKey: Self.projectURLKey)
+        UserDefaults.standard.set(publishableKey, forKey: Self.publishableKeyKey)
+    }
+
+    func restoreDefaultConnection() {
+        UserDefaults.standard.removeObject(forKey: Self.projectURLKey)
+        UserDefaults.standard.removeObject(forKey: Self.publishableKeyKey)
     }
 
     func login(email: String, password: String) async throws -> AuthSession {
@@ -292,6 +335,21 @@ actor SupabaseService {
             "rest/v1/issue_display_preferences?on_conflict=user_id&select=user_id,hidden_repos,include_private",
             method: "POST", token: token, body: body,
             prefer: "resolution=merge-duplicates,return=representation"
+        )
+    }
+
+    func sharedGithubPrivateIssueToken(token: String) async throws -> String? {
+        let body = try JSONSerialization.data(withJSONObject: [:])
+        let value: String? = try await request(
+            "rest/v1/rpc/get_github_private_issue_token", method: "POST", token: token, body: body
+        )
+        return value
+    }
+
+    func saveSharedGithubPrivateIssueToken(_ githubToken: String, token: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["p_token": githubToken])
+        let _: Bool = try await request(
+            "rest/v1/rpc/save_github_private_issue_token", method: "POST", token: token, body: body
         )
     }
 

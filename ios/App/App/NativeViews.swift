@@ -123,6 +123,12 @@ struct RootView: View {
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
         )) { Button("OK") {} } message: { Text(model.errorMessage ?? "") }
+        .onChange(of: model.requiresReauthentication) { required in
+            if required {
+                showAccounts = false
+                showLogin = true
+            }
+        }
     }
 
     @ViewBuilder private var sectionView: some View {
@@ -784,6 +790,8 @@ private struct PollEditorSheet: View {
 }
 
 private struct LocationPickerSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @AppStorage("spotcode.native.dev-mode") private var developerMode = false
     @Binding var spot: Spot?
     @Binding var isPresented: Bool
     @StateObject private var location = ComposerLocationProvider()
@@ -814,7 +822,7 @@ private struct LocationPickerSheet: View {
                 }.foregroundColor(coordinate == nil ? SpotcodeTheme.muted : SpotcodeTheme.accent)
                     .padding(.horizontal, 16).padding(.vertical, 10).background(SpotcodeTheme.surface2)
                 ZStack(alignment: .trailing) {
-                    CurrentLocationMap(coordinate: $coordinate, currentCoordinate: currentCoordinate, region: $mapRegion, adjustmentDenied: $adjustmentDenied)
+                    CurrentLocationMap(coordinate: $coordinate, currentCoordinate: currentCoordinate, region: $mapRegion, adjustmentDenied: $adjustmentDenied, unrestricted: developerMode && model.me?.isAdmin == true)
                     VStack(spacing: 8) {
                         pickerMapButton("plus") { pickerZoom(0.5) }
                         pickerMapButton("minus") { pickerZoom(2) }
@@ -863,6 +871,7 @@ private struct LocationPickerSheet: View {
     }
 
     private var statusText: String {
+        if developerMode && model.me?.isAdmin == true { return "開発者モード: 地図上の任意の場所を選択できます。" }
         if locating { return "現在地を取得中… 取れるまで投稿はできません。" }
         if adjustmentDenied { return "現在地から300mを超えています。半径300m以内を選んでください。" }
         if coordinate != nil { return "現在地を基準に、地図タップで半径300m以内のポイントを調整できます。" }
@@ -903,6 +912,7 @@ private struct CurrentLocationMap: UIViewRepresentable {
     let currentCoordinate: CLLocationCoordinate2D?
     @Binding var region: MKCoordinateRegion
     @Binding var adjustmentDenied: Bool
+    let unrestricted: Bool
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
@@ -941,7 +951,7 @@ private struct CurrentLocationMap: UIViewRepresentable {
             let picked = map.convert(gesture.location(in: map), toCoordinateFrom: map)
             let distance = CLLocation(latitude: origin.latitude, longitude: origin.longitude)
                 .distance(from: CLLocation(latitude: picked.latitude, longitude: picked.longitude))
-            if distance <= 300 {
+            if parent.unrestricted || distance <= 300 {
                 parent.coordinate = picked
                 parent.adjustmentDenied = false
             } else {
@@ -998,11 +1008,12 @@ struct PostRow: View {
     @State private var confirmingDelete = false
     @State private var showSpotMap = false
     @ObservedObject private var locationGate = PostLocationGate.shared
+    @AppStorage("spotcode.native.dev-mode") private var developerMode = false
 
     private var canReadContent: Bool {
         guard let spot = post.spot else { return true }
         if post.authorID == model.me?.id { return true }
-        if model.me?.isAdmin == true { return true }
+        if model.me?.isAdmin == true && developerMode { return true }
         return locationGate.isNear(spot)
     }
 
@@ -1824,7 +1835,7 @@ struct ProfileView: View {
         counts = await stats
         if let handle = profile?.githubHandle {
             let mayReadPrivate = profile?.id == model.me?.id && UserDefaults.standard.bool(forKey: "spotcode.privateIssuesEnabled")
-            let githubToken = mayReadPrivate ? model.privateIssueToken : nil
+            let githubToken = mayReadPrivate ? await model.hydrateSharedPrivateIssueToken() : nil
             async let loadedRepos = SupabaseService.shared.repositories(handle: handle)
             async let loadedContributions = SupabaseService.shared.githubContributions(handle: handle)
             async let loadedIssues = SupabaseService.shared.githubOpenIssues(handle: handle, githubToken: githubToken, includePrivate: mayReadPrivate && githubToken != nil)
@@ -2189,8 +2200,8 @@ private struct OpenIssuesCard: View {
                         }
                         if expandedIssues.contains(issue.id) {
                             if let body = issue.body, !body.isEmpty {
-                                Text(issueMarkdown(body)).font(.caption).foregroundColor(SpotcodeTheme.text)
-                                    .lineSpacing(3).frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                                IssueMarkdownView(source: body)
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(12)
                                     .background(Color.black.opacity(0.22)).clipShape(RoundedRectangle(cornerRadius: 8))
                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border)).padding(.leading, 28)
                             }
@@ -2221,17 +2232,171 @@ private struct OpenIssuesCard: View {
         return .later
     }
 
-    private func issueMarkdown(_ body: String) -> AttributedString {
-        let cleaned = body.replacingOccurrences(of: "<!--(?:.|\\n)*?-->", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (try? AttributedString(markdown: cleaned)) ?? AttributedString(cleaned)
-    }
-
     private func collapseAll() {
         listExpanded = false
         expandedIssues.removeAll()
         selectedRepository = nil
     }
+}
+
+private enum IssueMarkdownBlock {
+    case heading(Int, String)
+    case paragraph(String)
+    case bullets([(checked: Bool?, text: String)])
+    case ordered([String])
+    case quote(String)
+    case code(String)
+    case table([[String]])
+}
+
+private struct IssueMarkdownView: View {
+    let source: String
+    private var blocks: [IssueMarkdownBlock] { parseIssueMarkdown(source) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                blockView(block)
+            }
+        }
+        .font(.caption)
+        .foregroundColor(SpotcodeTheme.text)
+    }
+
+    @ViewBuilder private func blockView(_ block: IssueMarkdownBlock) -> some View {
+        switch block {
+        case let .heading(level, value):
+            Text(issueInlineMarkdown(value))
+                .font(level == 1 ? .headline : (level == 2 ? .subheadline.bold() : .caption.bold()))
+                .padding(.top, level == 1 ? 5 : 2)
+        case let .paragraph(value):
+            Text(issueInlineMarkdown(value)).lineSpacing(3)
+        case let .bullets(items):
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        if let checked = item.checked {
+                            Image(systemName: checked ? "checkmark.square.fill" : "square")
+                                .foregroundColor(checked ? .green : SpotcodeTheme.muted)
+                        } else { Text("•").foregroundColor(SpotcodeTheme.muted) }
+                        Text(issueInlineMarkdown(item.text))
+                            .strikethrough(item.checked == true, color: SpotcodeTheme.muted)
+                    }
+                }
+            }.padding(.leading, 4)
+        case let .ordered(items):
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text("\(index + 1).").foregroundColor(SpotcodeTheme.muted).frame(minWidth: 17, alignment: .trailing)
+                        Text(issueInlineMarkdown(item))
+                    }
+                }
+            }
+        case let .quote(value):
+            Text(issueInlineMarkdown(value)).lineSpacing(3).padding(.leading, 10)
+                .overlay(alignment: .leading) { Rectangle().fill(SpotcodeTheme.muted).frame(width: 3) }
+                .foregroundColor(SpotcodeTheme.muted)
+        case let .code(value):
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(value).font(.system(.caption, design: .monospaced)).textSelection(.enabled).padding(9)
+            }.background(Color.black.opacity(0.35)).clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .table(rows):
+            ScrollView(.horizontal, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                        HStack(spacing: 0) {
+                            ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                                Text(issueInlineMarkdown(cell)).font(rowIndex == 0 ? .caption.bold() : .caption)
+                                    .frame(minWidth: 105, maxWidth: 190, alignment: .leading).padding(7)
+                                    .overlay(Rectangle().stroke(SpotcodeTheme.border, lineWidth: 0.5))
+                            }
+                        }.background(rowIndex == 0 ? SpotcodeTheme.surface2 : Color.clear)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private func issueInlineMarkdown(_ value: String) -> AttributedString {
+    (try? AttributedString(markdown: value, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+        ?? AttributedString(value)
+}
+
+private func parseIssueMarkdown(_ raw: String) -> [IssueMarkdownBlock] {
+    let cleaned = raw
+        .replacingOccurrences(of: "<!--[\\s\\S]*?-->", with: "", options: .regularExpression)
+        .replacingOccurrences(of: "<([a-zA-Z][a-zA-Z0-9]*)\\b[^>]*>([\\s\\S]*?)</\\1>", with: "$2", options: .regularExpression)
+        .replacingOccurrences(of: "</?[a-zA-Z][^>]*>", with: "", options: .regularExpression)
+    let lines = cleaned.components(separatedBy: .newlines)
+    var result: [IssueMarkdownBlock] = []
+    var index = 0
+    func cells(_ line: String) -> [String] {
+        var values = line.split(separator: "|", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
+        if values.first == "" { values.removeFirst() }
+        if values.last == "" { values.removeLast() }
+        return values
+    }
+    while index < lines.count {
+        let line = lines[index]
+        if line.trimmingCharacters(in: .whitespaces).isEmpty { index += 1; continue }
+        if line.hasPrefix("```") {
+            index += 1; var values: [String] = []
+            while index < lines.count && !lines[index].hasPrefix("```") { values.append(lines[index]); index += 1 }
+            if index < lines.count { index += 1 }
+            result.append(.code(values.joined(separator: "\n"))); continue
+        }
+        if let match = line.range(of: "^(#{1,3})\\s+", options: .regularExpression) {
+            let prefix = String(line[match]); let level = prefix.filter { $0 == "#" }.count
+            result.append(.heading(level, String(line[match.upperBound...]))); index += 1; continue
+        }
+        let header = cells(line)
+        if header.count > 1, index + 1 < lines.count {
+            let separator = cells(lines[index + 1])
+            if separator.count == header.count && separator.allSatisfy({ $0.range(of: "^:?-{3,}:?$", options: .regularExpression) != nil }) {
+                var rows = [header]; index += 2
+                while index < lines.count && lines[index].contains("|") && !lines[index].trimmingCharacters(in: .whitespaces).isEmpty {
+                    rows.append(cells(lines[index])); index += 1
+                }
+                result.append(.table(rows)); continue
+            }
+        }
+        if line.range(of: "^\\s*[-*]\\s+", options: .regularExpression) != nil {
+            var items: [(Bool?, String)] = []
+            while index < lines.count, let range = lines[index].range(of: "^\\s*[-*]\\s+", options: .regularExpression) {
+                var text = String(lines[index][range.upperBound...]); var checked: Bool?
+                if text.range(of: "^\\[[ xX]\\]\\s*", options: .regularExpression) != nil {
+                    checked = text.lowercased().hasPrefix("[x]")
+                    text = text.replacingOccurrences(of: "^\\[[ xX]\\]\\s*", with: "", options: .regularExpression)
+                }
+                items.append((checked, text)); index += 1
+            }
+            result.append(.bullets(items)); continue
+        }
+        if line.range(of: "^\\s*\\d+[.)]\\s+", options: .regularExpression) != nil {
+            var items: [String] = []
+            while index < lines.count, let range = lines[index].range(of: "^\\s*\\d+[.)]\\s+", options: .regularExpression) {
+                items.append(String(lines[index][range.upperBound...])); index += 1
+            }
+            result.append(.ordered(items)); continue
+        }
+        if line.range(of: "^\\s*>\\s?", options: .regularExpression) != nil {
+            var values: [String] = []
+            while index < lines.count {
+                guard let range = lines[index].range(of: "^\\s*>\\s?", options: .regularExpression) else { break }
+                values.append(String(lines[index][range.upperBound...])); index += 1
+            }
+            result.append(.quote(values.joined(separator: "\n"))); continue
+        }
+        var paragraph = [line]; index += 1
+        while index < lines.count && !lines[index].trimmingCharacters(in: .whitespaces).isEmpty {
+            if lines[index].range(of: "^(#{1,3})\\s+|^```|^\\s*[-*]\\s+|^\\s*\\d+[.)]\\s+|^\\s*>", options: .regularExpression) != nil { break }
+            paragraph.append(lines[index]); index += 1
+        }
+        result.append(.paragraph(paragraph.joined(separator: "\n")))
+    }
+    return result
 }
 
 private extension Text {
@@ -2266,10 +2431,14 @@ struct SettingsView: View {
                     SettingsTab(title: "アカウント", icon: "person", selected: tab == 0) { tab = 0 }
                     SettingsTab(title: "プライバシー", icon: "lock", selected: tab == 1) { tab = 1 }
                     SettingsTab(title: "表示", icon: "gearshape", selected: tab == 2) { tab = 2 }
+                    if model.me?.isAdmin == true {
+                        SettingsTab(title: "開発", icon: "hammer", selected: tab == 3) { tab = 3 }
+                    }
                 }
                 if tab == 0 { AccountSettings() }
                 else if tab == 1 { PrivacySettings() }
-                else { DisplaySettings() }
+                else if tab == 2 { DisplaySettings() }
+                else if model.me?.isAdmin == true { DeveloperSettings() }
             }.padding(16)
         }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
     }
@@ -2344,6 +2513,143 @@ private struct AccountSettings: View {
         if model.me?.isAdmin == true { return "すべての管理権限を持ちます。" }
         if model.me?.isOperator == true { return "通報対応・投稿管理・ピン管理を行えます。" }
         return "通常の投稿・フォロー・スポット機能を利用できます。"
+    }
+}
+
+private struct DeveloperSettings: View {
+    @EnvironmentObject private var model: AppModel
+    @AppStorage("spotcode.native.dev-mode") private var developerMode = false
+    @State private var password = ""
+    @State private var projectURL = UserDefaults.standard.string(forKey: SupabaseService.projectURLKey) ?? SupabaseService.defaultProjectURL
+    @State private var publishableKey = UserDefaults.standard.string(forKey: SupabaseService.publishableKeyKey) ?? SupabaseService.defaultPublishableKey
+    @State private var showOverride = false
+    @State private var busy = false
+    @State private var message = ""
+    @State private var messageIsError = false
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Text("この区画は管理者だけに表示されます。接続情報や内部IDは一般ユーザーには表示されません。")
+                .foregroundColor(SpotcodeTheme.muted)
+            SettingsCard("Developer mode") {
+                Toggle("開発者向けUIを表示", isOn: $developerMode)
+                Text("通知キューや内部IDなどの開発者向け表示を、この端末で切り替えます。")
+                    .foregroundColor(SpotcodeTheme.muted)
+                Text(developerMode ? "ON" : "OFF").font(.caption.bold())
+                    .foregroundColor(developerMode ? .green : SpotcodeTheme.muted)
+            }
+            SettingsCard("dev test アカウントのパスワード") {
+                Text("社内QA用の @spotcode_dev アカウントを作成し、パスワードを設定／変更します。")
+                    .foregroundColor(SpotcodeTheme.muted)
+                SecureField("新しいパスワード（8文字以上）", text: $password).spotcodeField()
+                Button("パスワードを設定") { setDevPassword() }
+                    .buttonStyle(OutlineButtonStyle(filled: true)).disabled(busy || password.count < 8)
+            }
+            SettingsCard("Supabase 接続") {
+                HStack {
+                    Text("CONNECTED").font(.caption.bold()).foregroundColor(.green)
+                    Spacer()
+                    Text(currentMode).font(.caption.bold()).foregroundColor(.green)
+                }
+                Text(URL(string: projectURL)?.host ?? projectURL).font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                HStack {
+                    Button("接続テスト") { testConnection() }.buttonStyle(OutlineButtonStyle())
+                    Button(showOverride ? "編集を閉じる" : "自分のSupabaseに上書き") { showOverride.toggle() }
+                        .buttonStyle(OutlineButtonStyle())
+                }
+                if showOverride {
+                    TextField("https://xxxx.supabase.co", text: $projectURL)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().spotcodeField()
+                    SecureField("anon / publishable key", text: $publishableKey).spotcodeField()
+                    HStack {
+                        Button("保存して上書き") { saveConnection() }
+                            .buttonStyle(OutlineButtonStyle(filled: true)).disabled(busy)
+                        Button("標準に戻す") { restoreDefault() }.buttonStyle(OutlineButtonStyle())
+                    }
+                    Text("⚠️ secret / service_role キーは保存できません。publishable key または旧形式の anon public JWT のみ使用できます。")
+                        .font(.caption).foregroundColor(SpotcodeTheme.warning)
+                }
+                if !message.isEmpty {
+                    Text(message).font(.caption).foregroundColor(messageIsError ? SpotcodeTheme.warning : .green)
+                }
+            }
+        }
+    }
+
+    private var currentMode: String {
+        projectURL == SupabaseService.defaultProjectURL ? "共有プロジェクト (DEFAULT)" : "CUSTOM"
+    }
+
+    private func setDevPassword() {
+        busy = true; message = "設定中…"; messageIsError = false
+        Task {
+            do {
+                let session = try await model.validSession()
+                try await SupabaseService.shared.ensureDevAccount(password: password, token: session.accessToken)
+                password = ""; message = "パスワードを設定しました。"
+            } catch { message = error.localizedDescription; messageIsError = true }
+            busy = false
+        }
+    }
+
+    private func testConnection() {
+        guard let normalized = validatedConnection() else { return }
+        busy = true; message = "接続を確認中…"; messageIsError = false
+        Task {
+            do {
+                try await SupabaseService.shared.testConnection(projectURL: normalized.0, publishableKey: normalized.1)
+                message = "接続できました。"
+            } catch { message = "接続できませんでした: \(error.localizedDescription)"; messageIsError = true }
+            busy = false
+        }
+    }
+
+    private func saveConnection() {
+        guard let normalized = validatedConnection() else { return }
+        busy = true
+        Task {
+            do {
+                try await SupabaseService.shared.testConnection(projectURL: normalized.0, publishableKey: normalized.1)
+                await SupabaseService.shared.saveConnection(projectURL: normalized.0, publishableKey: normalized.1)
+                projectURL = normalized.0; publishableKey = normalized.1
+                model.signOut()
+                message = "保存しました。新しい接続先へログインしてください。"; messageIsError = false
+            } catch { message = "保存できませんでした: \(error.localizedDescription)"; messageIsError = true }
+            busy = false
+        }
+    }
+
+    private func restoreDefault() {
+        Task {
+            await SupabaseService.shared.restoreDefaultConnection()
+            projectURL = SupabaseService.defaultProjectURL
+            publishableKey = SupabaseService.defaultPublishableKey
+            model.signOut()
+            message = "標準接続に戻しました。もう一度ログインしてください。"; messageIsError = false
+        }
+    }
+
+    private func validatedConnection() -> (String, String)? {
+        let url = projectURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let key = publishableKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsed = URL(string: url), parsed.scheme == "https", parsed.host?.contains(".supabase.") == true else {
+            message = "https://…supabase.co 形式のProject URLを入力してください。"; messageIsError = true; return nil
+        }
+        guard isPublicKey(key) else {
+            message = "publishable key または anon public JWT を入力してください。"; messageIsError = true; return nil
+        }
+        return (url, key)
+    }
+
+    private func isPublicKey(_ key: String) -> Bool {
+        if key.hasPrefix("sb_publishable_") { return true }
+        guard key.hasPrefix("eyJ"), let payload = key.split(separator: ".").dropFirst().first else { return false }
+        var encoded = String(payload).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        encoded += String(repeating: "=", count: (4 - encoded.count % 4) % 4)
+        guard let data = Data(base64Encoded: encoded),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return (json["role"] as? String) == "anon"
     }
 }
 
@@ -2481,8 +2787,14 @@ private struct DisplaySettings: View {
                         authorizingPrivateIssues = true
                         Task {
                             do {
-                                let token = try await GitHubPrivateIssueAuthorizer.shared.authorize()
+                                let token: String
+                                if let shared = await model.hydrateSharedPrivateIssueToken() {
+                                    token = shared
+                                } else {
+                                    token = try await GitHubPrivateIssueAuthorizer.shared.authorize()
+                                }
                                 model.savePrivateIssueToken(token)
+                                try await model.uploadPrivateIssueToken(token)
                                 privateIssuesEnabled = true
                                 await savePreferences()
                                 privateIssueMessage = "GitHubの非公開Issue表示を有効にしました。"
@@ -2528,6 +2840,7 @@ private struct DisplaySettings: View {
             if let value = try await SupabaseService.shared.issueDisplayPreferences(userID: id, token: session.accessToken) {
                 hiddenIssueReposJSON = encodeRepoSet(Set(value.hiddenRepos))
                 privateIssuesEnabled = value.includePrivate
+                if value.includePrivate { _ = await model.hydrateSharedPrivateIssueToken() }
             } else {
                 await savePreferences()
             }
@@ -2649,6 +2962,13 @@ struct LoginView: View {
         NavigationView {
             VStack(spacing: 14) {
                 Image(systemName: "chevron.left.forwardslash.chevron.right").font(.largeTitle)
+                if model.requiresReauthentication && !model.requiresMFA {
+                    Label("iPhoneのログインセッションが無効になりました。アカウントを継続するため、もう一度ログインしてください。", systemImage: "lock.rotation")
+                        .font(.footnote).foregroundColor(SpotcodeTheme.warning)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10).background(SpotcodeTheme.warning.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
                 if model.requiresMFA {
                     Text("2段階認証").font(.title3.bold())
                     Text("認証アプリに表示されている6桁コードを入力してください。")
