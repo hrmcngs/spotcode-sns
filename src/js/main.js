@@ -1099,6 +1099,10 @@ document.addEventListener('click', (e) => {
 // app doesn't flash a logged-out state to a returning user. Failures here
 // (Supabase down, no network) leave cachedUser null — the app still works
 // as a logged-out static site.
+try {
+  const { finishPrivateIssueAuthorization } = await import('./github-oauth.js');
+  await finishPrivateIssueAuthorization();
+} catch (err) { console.warn('private issue OAuth restore failed', err); }
 try { await initAuth(); } catch (err) { console.warn('initAuth failed', err); }
 // Post-redirect GitHub OAuth sync. If the user JUST returned from
 // linkGithub()'s redirect, the auth user carries a fresh `github`

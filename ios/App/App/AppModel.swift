@@ -22,8 +22,25 @@ final class AppModel: ObservableObject {
     private let savedSessionPrefix = "supabase-session."
     private let cachedProfileKey = "spotcode.native.cached-profile"
     private let cachedPostsKey = "spotcode.native.cached-posts"
+    private let githubTokenPrefix = "github-private-issues."
 
     var displayProfile: Profile? { isPostingAsOfficial ? officialProfile : me }
+
+    var privateIssueToken: String? {
+        guard let id = session?.user.id,
+              let data = KeychainStore.load(account: githubTokenPrefix + id.uuidString) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    func savePrivateIssueToken(_ token: String) {
+        guard let id = session?.user.id, let data = token.data(using: .utf8) else { return }
+        try? KeychainStore.save(data, account: githubTokenPrefix + id.uuidString)
+    }
+
+    func removePrivateIssueToken() {
+        guard let id = session?.user.id else { return }
+        KeychainStore.delete(account: githubTokenPrefix + id.uuidString)
+    }
 
     init() {
         if let data = UserDefaults.standard.data(forKey: savedAccountsKey) {
@@ -103,11 +120,8 @@ final class AppModel: ObservableObject {
                 )
             }
             if Self.assuranceLevel(of: value.accessToken) != "aal2" {
-                // MFA discovery is a post-login capability. If an older
-                // GoTrue deployment cannot serve this endpoint, accounts
-                // without MFA must still be able to sign in normally.
-                if let factors = try? await SupabaseService.shared.mfaFactors(token: value.accessToken),
-                   let factor = factors.first(where: { $0.status == "verified" }) {
+                let factors = try await SupabaseService.shared.mfaFactors(token: value.accessToken)
+                if let factor = factors.first {
                     pendingMFASession = value
                     pendingMFAFactorID = factor.id
                     requiresMFA = true
@@ -326,11 +340,11 @@ final class AppModel: ObservableObject {
         catch { errorMessage = error.localizedDescription }
     }
 
-    func publish(body: String, githubLink: String?, eventURL: String? = nil, spot: Spot? = nil, kind: String? = nil, visibility: String = "public", photos: [String]? = nil, poll: PostPoll? = nil) async -> Bool {
+    func publish(body: String, githubLink: String?, repoFullName: String? = nil, eventURL: String? = nil, spot: Spot? = nil, kind: String? = nil, visibility: String = "public", photos: [String]? = nil, poll: PostPoll? = nil) async -> Bool {
         guard let session, let authorID = displayProfile?.id else { return false }
         do {
             let post = try await SupabaseService.shared.createPost(
-                .init(authorID: authorID, body: body, githubLink: githubLink, eventURL: eventURL, spot: spot, kind: kind, visibility: visibility, photos: photos, poll: poll, status: "wip"),
+                .init(authorID: authorID, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, spot: spot, kind: kind, visibility: visibility, photos: photos, poll: poll, status: "wip"),
                 token: session.accessToken
             )
             posts.insert(post, at: 0)
@@ -341,11 +355,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func editPost(_ post: Post, body: String, githubLink: String?, eventURL: String?, kind: String?, visibility: String) async -> Post? {
+    func editPost(_ post: Post, body: String, githubLink: String?, repoFullName: String?, eventURL: String?, kind: String?, visibility: String) async -> Post? {
         guard let session, post.authorID == displayProfile?.id else { return nil }
         do {
             let updated = try await SupabaseService.shared.updatePost(
-                id: post.id, body: body, githubLink: githubLink, eventURL: eventURL,
+                id: post.id, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL,
                 kind: kind, visibility: visibility, token: session.accessToken
             )
             if let index = posts.firstIndex(where: { $0.id == post.id }) { posts[index] = updated }

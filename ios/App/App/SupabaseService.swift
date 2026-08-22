@@ -83,13 +83,13 @@ actor SupabaseService {
     }
 
     func mfaFactors(token: String) async throws -> [MFAFactor] {
-        let result: MFAFactorsResponse = try await request("auth/v1/factors", token: token)
-        return result.totp ?? []
+        let user: AuthUser = try await request("auth/v1/user", token: token)
+        return (user.factors ?? []).filter { $0.status == "verified" }
     }
 
     func allMFAFactors(token: String) async throws -> [MFAFactor] {
-        let result: MFAFactorsResponse = try await request("auth/v1/factors", token: token)
-        return result.all ?? result.totp ?? []
+        let user: AuthUser = try await request("auth/v1/user", token: token)
+        return user.factors ?? []
     }
 
     func enrollMFA(token: String) async throws -> MFAEnrollment {
@@ -188,14 +188,17 @@ actor SupabaseService {
         return post
     }
 
-    func updatePost(id: UUID, body text: String, githubLink: String?, eventURL: String?, kind: String?, visibility: String, token: String) async throws -> Post {
-        let payload: [String: Any] = [
+    func updatePost(id: UUID, body text: String, githubLink: String?, repoFullName: String?, eventURL: String?, kind: String?, visibility: String, token: String) async throws -> Post {
+        var payload: [String: Any] = [
             "body": text,
             "github_link": (githubLink as Any?) ?? NSNull(),
             "event_url": (eventURL as Any?) ?? NSNull(),
             "kind": (kind as Any?) ?? NSNull(),
             "visibility": visibility
         ]
+        if supportedPostMetadata.contains("repo_full_name") {
+            payload["repo_full_name"] = (repoFullName as Any?) ?? NSNull()
+        }
         let body = try JSONSerialization.data(withJSONObject: payload)
         let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
         let rows: [Post] = try await request(
@@ -236,19 +239,33 @@ actor SupabaseService {
         return try decoder.decode(GitHubContributionsResponse.self, from: data).contributions
     }
 
-    func githubOpenIssues(handle: String) async throws -> GitHubIssueSearchResponse {
+    func githubOpenIssues(handle: String, githubToken: String? = nil, includePrivate: Bool = false) async throws -> GitHubIssueSearchResponse {
         var components = URLComponents(string: "https://api.github.com/search/issues")!
         components.queryItems = [
-            .init(name: "q", value: "author:\(handle) type:issue state:open is:public"),
+            .init(name: "q", value: "author:\(handle) type:issue state:open\(includePrivate ? "" : " is:public")"),
             .init(name: "sort", value: "created"), .init(name: "order", value: "desc"),
             .init(name: "per_page", value: "30")
         ]
         var request = URLRequest(url: components.url!)
         request.timeoutInterval = 35
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        if let githubToken, !githubToken.isEmpty {
+            request.setValue("Bearer \(githubToken)", forHTTPHeaderField: "Authorization")
+        }
         let (data, response) = try await data(for: request, retryable: true)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
         return try decoder.decode(GitHubIssueSearchResponse.self, from: data)
+    }
+
+    func privateIssueAuthorizationURL() -> URL? {
+        var components = URLComponents(url: baseURL.appendingPathComponent("auth/v1/authorize"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [
+            .init(name: "provider", value: "github"),
+            .init(name: "redirect_to", value: "spotcode://github-oauth"),
+            .init(name: "scopes", value: "read:user repo"),
+            .init(name: "prompt", value: "consent")
+        ]
+        return components?.url
     }
 
     func followingProfiles(userID: UUID, token: String) async throws -> [Profile] {

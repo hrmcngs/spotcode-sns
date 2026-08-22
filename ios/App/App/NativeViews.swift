@@ -4,6 +4,7 @@ import CoreLocation
 import PhotosUI
 import UIKit
 import CoreImage
+import AuthenticationServices
 
 private enum SpotcodeTheme {
     static let background = Color(red: 13/255, green: 17/255, blue: 23/255)
@@ -387,6 +388,7 @@ private struct InlineComposer: View {
     @State private var draft = UserDefaults.standard.string(forKey: "spotcode.native.draft") ?? ""
     @State private var draftSaveTask: Task<Void, Never>?
     @State private var githubLink = ""
+    @State private var repoFullName = ""
     @State private var eventURL = ""
     @State private var sending = false
     @State private var showLink = false
@@ -420,6 +422,7 @@ private struct InlineComposer: View {
                 composerChips
                 if showLink {
                     TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
+                    TextField("owner/repository（任意）", text: $repoFullName).textInputAutocapitalization(.never).autocorrectionDisabled(true).spotcodeURLField()
                 }
                 if showEvent {
                     TextField("https://connpass.com/event/…", text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
@@ -518,8 +521,8 @@ private struct InlineComposer: View {
     private func publish() {
         sending = true
         Task {
-            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, eventURL: eventURL.isEmpty ? nil : eventURL, spot: selectedSpot, kind: isIdea ? "idea" : nil, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
-                draft = ""; githubLink = ""; eventURL = ""; showLink = false; showEvent = false
+            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, repoFullName: repoFullName.isEmpty ? nil : repoFullName, eventURL: eventURL.isEmpty ? nil : eventURL, spot: selectedSpot, kind: isIdea ? "idea" : nil, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
+                draft = ""; githubLink = ""; repoFullName = ""; eventURL = ""; showLink = false; showEvent = false
                 isIdea = false; visibility = "public"; selectedSpot = nil
                 photos = []; poll = nil
             }
@@ -545,6 +548,7 @@ private struct InlineComposer: View {
     private func applyRepositoryRequest(_ value: String?) {
         guard let value, !value.isEmpty else { return }
         githubLink = value
+        repoFullName = githubRepositoryName(from: value) ?? ""
         showLink = true
         editorFocused = true
         repositoryComposeURL = nil
@@ -1145,6 +1149,7 @@ private struct EditPostView: View {
     @Binding var isPresented: Bool
     @State private var bodyText: String
     @State private var githubLink: String
+    @State private var repoFullName: String
     @State private var eventURL: String
     @State private var isIdea: Bool
     @State private var visibility: String
@@ -1156,6 +1161,7 @@ private struct EditPostView: View {
         _isPresented = isPresented
         _bodyText = State(initialValue: post.body)
         _githubLink = State(initialValue: post.githubLink ?? "")
+        _repoFullName = State(initialValue: post.repoFullName ?? "")
         _eventURL = State(initialValue: post.eventURL ?? "")
         _isIdea = State(initialValue: post.kind == "idea")
         _visibility = State(initialValue: post.visibility ?? "public")
@@ -1171,6 +1177,11 @@ private struct EditPostView: View {
                     Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16)
                     TextField("https://github.com/…", text: $githubLink)
                         .textInputAutocapitalization(.never).keyboardType(.URL)
+                }.spotcodeURLField()
+                HStack {
+                    Image(systemName: "shippingbox")
+                    TextField("owner/repository（任意）", text: $repoFullName)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled(true)
                 }.spotcodeURLField()
                 HStack(spacing: 10) {
                     Button { isIdea.toggle() } label: {
@@ -1208,9 +1219,11 @@ private struct EditPostView: View {
                         Task {
                             let text = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
                             let link = githubLink.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let repository = repoFullName.trimmingCharacters(in: .whitespacesAndNewlines)
                             let event = eventURL.trimmingCharacters(in: .whitespacesAndNewlines)
                             if await model.editPost(
                                 post, body: text, githubLink: link.isEmpty ? nil : link,
+                                repoFullName: repository.isEmpty ? nil : repository,
                                 eventURL: event.isEmpty ? nil : event,
                                 kind: isIdea ? "idea" : nil, visibility: visibility
                             ) != nil {
@@ -1279,6 +1292,7 @@ struct ComposeView: View {
     @Binding var isPresented: Bool
     @State private var bodyText = ""
     @State private var githubLink = ""
+    @State private var repoFullName = ""
     @State private var eventURL = ""
     @State private var sending = false
     @State private var editorFocused = false
@@ -1296,6 +1310,7 @@ struct ComposeView: View {
     init(isPresented: Binding<Bool>, initialGitHubLink: String = "") {
         _isPresented = isPresented
         _githubLink = State(initialValue: initialGitHubLink)
+        _repoFullName = State(initialValue: githubRepositoryName(from: initialGitHubLink) ?? "")
         _showLink = State(initialValue: !initialGitHubLink.isEmpty)
     }
 
@@ -1334,6 +1349,10 @@ struct ComposeView: View {
                         HStack {
                             Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16)
                             TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL)
+                        }.spotcodeURLField()
+                        HStack {
+                            Image(systemName: "shippingbox")
+                            TextField("owner/repository（任意）", text: $repoFullName).textInputAutocapitalization(.never).autocorrectionDisabled(true)
                         }.spotcodeURLField()
                     }
                     if showEvent {
@@ -1417,10 +1436,12 @@ struct ComposeView: View {
         sending = true
         Task {
             let link = githubLink.trimmingCharacters(in: .whitespacesAndNewlines)
+            let repository = repoFullName.trimmingCharacters(in: .whitespacesAndNewlines)
             let event = eventURL.trimmingCharacters(in: .whitespacesAndNewlines)
             if await model.publish(
                 body: bodyText.trimmingCharacters(in: .whitespacesAndNewlines),
                 githubLink: link.isEmpty ? nil : link,
+                repoFullName: repository.isEmpty ? nil : repository,
                 eventURL: event.isEmpty ? nil : event,
                 spot: selectedSpot,
                 kind: isIdea ? "idea" : nil,
@@ -1802,9 +1823,11 @@ struct ProfileView: View {
         profilePosts = await posts ?? []
         counts = await stats
         if let handle = profile?.githubHandle {
+            let mayReadPrivate = profile?.id == model.me?.id && UserDefaults.standard.bool(forKey: "spotcode.privateIssuesEnabled")
+            let githubToken = mayReadPrivate ? model.privateIssueToken : nil
             async let loadedRepos = SupabaseService.shared.repositories(handle: handle)
             async let loadedContributions = SupabaseService.shared.githubContributions(handle: handle)
-            async let loadedIssues = SupabaseService.shared.githubOpenIssues(handle: handle)
+            async let loadedIssues = SupabaseService.shared.githubOpenIssues(handle: handle, githubToken: githubToken, includePrivate: mayReadPrivate && githubToken != nil)
             repositories = (try? await loadedRepos) ?? []
             contributions = (try? await loadedContributions) ?? []
             issueSearch = try? await loadedIssues
@@ -2166,7 +2189,7 @@ private struct OpenIssuesCard: View {
                         }
                         if expandedIssues.contains(issue.id) {
                             if let body = issue.body, !body.isEmpty {
-                                Text(cleanIssueBody(body)).font(.caption).foregroundColor(SpotcodeTheme.text)
+                                Text(issueMarkdown(body)).font(.caption).foregroundColor(SpotcodeTheme.text)
                                     .lineSpacing(3).frame(maxWidth: .infinity, alignment: .leading).padding(12)
                                     .background(Color.black.opacity(0.22)).clipShape(RoundedRectangle(cornerRadius: 8))
                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border)).padding(.leading, 28)
@@ -2198,10 +2221,10 @@ private struct OpenIssuesCard: View {
         return .later
     }
 
-    private func cleanIssueBody(_ body: String) -> String {
-        body.replacingOccurrences(of: "<!--(?:.|\\n)*?-->", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "**", with: "")
+    private func issueMarkdown(_ body: String) -> AttributedString {
+        let cleaned = body.replacingOccurrences(of: "<!--(?:.|\\n)*?-->", with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (try? AttributedString(markdown: cleaned)) ?? AttributedString(cleaned)
     }
 
     private func collapseAll() {
@@ -2444,10 +2467,40 @@ private struct DisplaySettings: View {
     @State private var compact = false
     @State private var issueRepositories: [String] = []
     @AppStorage("spotcode.hiddenIssueRepos") private var hiddenIssueReposJSON = "[]"
+    @AppStorage("spotcode.privateIssuesEnabled") private var privateIssuesEnabled = false
+    @State private var authorizingPrivateIssues = false
+    @State private var privateIssueMessage = ""
     var body: some View { VStack(spacing: 18) {
         SettingsCard("テーマ") { Label("ダーク", systemImage: "moon.fill"); Text("Webモバイル版と同じGitHubダークテーマです。").foregroundColor(SpotcodeTheme.muted) }
         SettingsCard("タイムライン") { Toggle("コンパクト表示", isOn: $compact) }
         SettingsCard("Open issues") {
+            Toggle("非公開Issueを表示", isOn: Binding(
+                get: { privateIssuesEnabled && model.privateIssueToken != nil },
+                set: { enabled in
+                    if enabled {
+                        authorizingPrivateIssues = true
+                        Task {
+                            do {
+                                let token = try await GitHubPrivateIssueAuthorizer.shared.authorize()
+                                model.savePrivateIssueToken(token)
+                                privateIssuesEnabled = true
+                                privateIssueMessage = "GitHubの非公開Issue表示を有効にしました。"
+                                await loadIssueRepositories()
+                            } catch {
+                                privateIssuesEnabled = false
+                                privateIssueMessage = error.localizedDescription
+                            }
+                            authorizingPrivateIssues = false
+                        }
+                    } else {
+                        privateIssuesEnabled = false
+                        model.removePrivateIssueToken()
+                        Task { await loadIssueRepositories() }
+                    }
+                }
+            )).disabled(authorizingPrivateIssues || model.me?.githubHandle == nil)
+            if authorizingPrivateIssues { ProgressView("GitHubで認証中…") }
+            if !privateIssueMessage.isEmpty { Text(privateIssueMessage).font(.caption).foregroundColor(SpotcodeTheme.muted) }
             Text("プロフィールに表示するリポジトリ").foregroundColor(SpotcodeTheme.muted)
             if issueRepositories.isEmpty { Text("Issue取得後に選択できます").font(.caption).foregroundColor(SpotcodeTheme.muted) }
             ForEach(issueRepositories, id: \.self) { repo in
@@ -2461,11 +2514,16 @@ private struct DisplaySettings: View {
                 )).font(.caption)
             }
         }
-    }.task {
-        guard let handle = model.me?.githubHandle,
-              let result = try? await SupabaseService.shared.githubOpenIssues(handle: handle) else { return }
+    }.task { await loadIssueRepositories() }}
+
+    private func loadIssueRepositories() async {
+        guard let handle = model.me?.githubHandle else { return }
+        let token = privateIssuesEnabled ? model.privateIssueToken : nil
+        guard let result = try? await SupabaseService.shared.githubOpenIssues(
+            handle: handle, githubToken: token, includePrivate: privateIssuesEnabled && token != nil
+        ) else { return }
         issueRepositories = Array(Set(result.items.map(\.repositoryName))).sorted()
-    }}
+    }
 }
 
 private func decodeRepoSet(_ value: String) -> Set<String> {
@@ -2476,6 +2534,57 @@ private func decodeRepoSet(_ value: String) -> Set<String> {
 private func encodeRepoSet(_ value: Set<String>) -> String {
     guard let data = try? JSONEncoder().encode(value.sorted()), let text = String(data: data, encoding: .utf8) else { return "[]" }
     return text
+}
+
+@MainActor
+private final class GitHubPrivateIssueAuthorizer: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let shared = GitHubPrivateIssueAuthorizer()
+    private var webSession: ASWebAuthenticationSession?
+
+    func authorize() async throws -> String {
+        guard let authorizationURL = await SupabaseService.shared.privateIssueAuthorizationURL() else {
+            throw URLError(.badURL)
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            let session = ASWebAuthenticationSession(url: authorizationURL, callbackURLScheme: "spotcode") { [weak self] callbackURL, error in
+                defer { self?.webSession = nil }
+                if let error { continuation.resume(throwing: error); return }
+                guard let callbackURL,
+                      let token = Self.callbackValues(callbackURL)["provider_token"], !token.isEmpty else {
+                    continuation.resume(throwing: NSError(
+                        domain: "GitHubOAuth", code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "GitHubの権限トークンを取得できませんでした。"]
+                    ))
+                    return
+                }
+                continuation.resume(returning: token)
+            }
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = false
+            webSession = session
+            if !session.start() {
+                webSession = nil
+                continuation.resume(throwing: NSError(
+                    domain: "GitHubOAuth", code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "GitHub認証画面を開けませんでした。"]
+                ))
+            }
+        }
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }.first ?? ASPresentationAnchor()
+    }
+
+    private static func callbackValues(_ url: URL) -> [String: String] {
+        let encoded = [url.query, url.fragment].compactMap { $0 }.joined(separator: "&")
+        return encoded.split(separator: "&").reduce(into: [:]) { values, pair in
+            let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return }
+            values[parts[0].removingPercentEncoding ?? parts[0]] = parts[1].removingPercentEncoding ?? parts[1]
+        }
+    }
 }
 
 private struct OutlineButtonStyle: ButtonStyle {
@@ -2621,4 +2730,12 @@ private func githubLinkLabel(_ value: String) -> String {
     }
     let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     return path.isEmpty ? "github.com" : path
+}
+
+private func githubRepositoryName(from value: String) -> String? {
+    guard let url = URL(string: value),
+          let host = url.host?.lowercased(), host == "github.com" || host == "www.github.com" else { return nil }
+    let parts = url.pathComponents.filter { $0 != "/" }
+    guard parts.count >= 2 else { return nil }
+    return "\(parts[0])/\(parts[1].replacingOccurrences(of: ".git", with: ""))"
 }

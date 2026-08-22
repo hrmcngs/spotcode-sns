@@ -155,7 +155,11 @@ struct GitHubIssueSearchResponse: Codable {
     enum CodingKeys: String, CodingKey { case items; case totalCount = "total_count" }
 }
 
-struct AuthUser: Codable { let id: UUID; let email: String? }
+struct AuthUser: Codable {
+    let id: UUID
+    let email: String?
+    let factors: [MFAFactor]?
+}
 
 struct AuthSession: Codable {
     let accessToken: String
@@ -209,6 +213,7 @@ struct PostDraft: Encodable {
     let authorID: UUID
     let body: String
     let githubLink: String?
+    let repoFullName: String?
     let eventURL: String?
     let spot: Spot?
     let kind: String?
@@ -221,6 +226,7 @@ struct PostDraft: Encodable {
         case body, status, spot, kind, visibility, photos, poll
         case authorID = "author_id"
         case githubLink = "github_link"
+        case repoFullName = "repo_full_name"
         case eventURL = "event_url"
     }
 }

@@ -25,6 +25,8 @@
 import { getClient } from './supa.js';
 import { refreshProfile, currentUser } from './auth.js';
 
+const PRIVATE_ISSUE_SESSION_KEY = 'spotcode.private_issue_original_session';
+
 // Kick off the link flow. Supabase-js redirects the browser to
 // github.com's consent page; when the user approves, GitHub bounces
 // them to the Supabase project's /auth/v1/callback, and Supabase
@@ -51,6 +53,15 @@ export async function linkGithub(redirectTo = window.location.href) {
 // `repo` is therefore requested only after the user enables this feature.
 export async function linkGithubForPrivateIssues(redirectTo = window.location.href) {
   const supa = await getClient();
+  const { data: before } = await supa.auth.getSession();
+  if (!before?.session) throw new Error('先にspotcodeへログインしてください');
+  try {
+    sessionStorage.setItem(PRIVATE_ISSUE_SESSION_KEY, JSON.stringify({
+      access_token: before.session.access_token,
+      refresh_token: before.session.refresh_token,
+      user_id: before.session.user.id,
+    }));
+  } catch {}
   const returnUrl = new URL(redirectTo, window.location.href);
   returnUrl.hash = '';
   returnUrl.search = '?spotcode_private_issues=1';
@@ -68,6 +79,31 @@ export async function linkGithubForPrivateIssues(redirectTo = window.location.hr
   });
   if (error) throw new Error(error.message);
   return data;
+}
+
+// signInWithOAuth temporarily installs the GitHub callback session as the
+// active Supabase session. Capture its provider token, then restore the
+// password/MFA session that was active before the redirect. This prevents a
+// private-Issue permission upgrade from looking like a logout/account switch.
+export async function finishPrivateIssueAuthorization() {
+  if (!new URLSearchParams(location.search).has('spotcode_private_issues')) return false;
+  let original = null;
+  try { original = JSON.parse(sessionStorage.getItem(PRIVATE_ISSUE_SESSION_KEY) || 'null'); } catch {}
+  if (!original?.access_token || !original?.refresh_token) return false;
+  const supa = await getClient();
+  const { data: callback } = await supa.auth.getSession();
+  const providerToken = callback?.session?.provider_token || null;
+  if (providerToken) {
+    const { setGithubApiToken } = await import('./language-stats.js');
+    setGithubApiToken(providerToken, original.user_id);
+  }
+  const { error } = await supa.auth.setSession({
+    access_token: original.access_token,
+    refresh_token: original.refresh_token,
+  });
+  if (error) throw new Error(error.message);
+  try { sessionStorage.removeItem(PRIVATE_ISSUE_SESSION_KEY); } catch {}
+  return !!providerToken;
 }
 
 // Idempotent post-redirect sync. Reads the current auth user's
