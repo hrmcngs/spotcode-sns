@@ -1472,7 +1472,7 @@ document.addEventListener('click', (e) => {
       '<div class="post__edit-meta">' +
         '<button type="button" class="post__edit-pill act--edit-toggle-idea' +
           (isIdea ? ' is-active' : '') + '" aria-pressed="' + (isIdea ? 'true' : 'false') + '">' +
-          'アイデア' +
+          escape(t('kind.idea')) +
         '</button>' +
         '<label class="post__edit-link">' +
           'GitHub link' +
@@ -1484,8 +1484,8 @@ document.addEventListener('click', (e) => {
         '</label>' +
       '</div>' +
       '<div class="post__edit-actions">' +
-        '<button type="button" class="btn btn--ghost btn--sm act--edit-cancel">キャンセル</button>' +
-        '<button type="button" class="btn btn--primary btn--sm act--edit-save">保存</button>' +
+        '<button type="button" class="btn btn--ghost btn--sm act--edit-cancel">' + escape(t('common.cancel')) + '</button>' +
+        '<button type="button" class="btn btn--primary btn--sm act--edit-save">' + escape(t('common.save')) + '</button>' +
       '</div>';
     const ta = body.querySelector('textarea');
     ta.focus();
@@ -1565,9 +1565,9 @@ document.addEventListener('click', (e) => {
             const existingIdea = head.querySelector('.post__kind--idea');
             if (ideaActive && !existingIdea) {
               head.querySelector('.post__time')?.insertAdjacentHTML('afterend',
-                ' <span class="post__kind post__kind--idea" title="アイデア">' +
+                ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">' +
                   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon--inline"><path d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>' +
-                  'アイデア' +
+                  escape(t('kind.idea')) +
                 '</span>');
             } else if (!ideaActive && existingIdea) {
               existingIdea.remove();

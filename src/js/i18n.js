@@ -7,7 +7,7 @@
 import { KEYS, read, write } from './storage.js';
 
 const SUPPORTED = ['ja', 'en'];
-const DEFAULT_LANG = 'ja';
+const DEFAULT_LANG = 'en';
 
 const DICT = {
   ja: {
@@ -267,6 +267,28 @@ const DICT = {
     'post.vis.friends':            '親しい友達のみ',
     'post.vis.org':                '同じ組織のみ',
     'post.vis.restricted':         '親しい友達 / 組織のみ',
+    'post.edited':                 '（編集済み）',
+    'post.action.reply':           'コメント',
+    'post.action.repost':          'リポスト / 引用',
+    'post.action.bookmark':        '保存',
+    'post.action.like':            'いいね',
+    'post.action.share':           '共有',
+    'post.action.analytics':       'アクティビティを見る',
+    'post.action.edit':            'この投稿を編集',
+    'post.action.delete':          'この投稿を削除',
+    'post.action.delete_other':    '他のユーザーの投稿を削除（dev）',
+    'post.spot.open':              'Spotsで開く',
+    'post.spot.open_address':      'Spotsで開く — {address}',
+    'post.spot.open_location':     'Spotsでこの場所を開く',
+    'post.spot.no_house_number':   '（番地情報なし）',
+    'post.spot.no_house_number_hint':'OpenStreetMap に番地データがありません',
+    'post.spot.locked':            'ここから半径 {r} m 以内に来ると中身が読めます',
+    'post.poll.closed':             '投票終了',
+    'post.poll.closing':            'まもなく終了',
+    'post.poll.minutes':            'あと {n} 分',
+    'post.poll.hours':              'あと {n} 時間',
+    'post.poll.days':               'あと {n} 日',
+    'post.poll.votes':              '{n} 票',
     'settings.dev.section':    'Developer settings',
     'settings.dev.section_hint':'この区画はホワイトリストに載っているアカウントだけに表示されます。一般ユーザーには Supabase の上書きや内部 DB の情報は出ません。',
     'settings.dev.title':      'Developer mode',
@@ -310,6 +332,20 @@ const DICT = {
     'settings.supa.err.connect_failed':'接続に失敗しました',
 
     // ---------------- common ----------------
+    'post.action.report':      '報告',
+    'report.title':            '投稿を報告',
+    'report.hint':             'どの理由が当てはまりますか？',
+    'report.reason.spam':      'スパム / 宣伝',
+    'report.reason.inappropriate':'不適切な内容',
+    'report.reason.harassment':'嫌がらせ / ヘイト',
+    'report.reason.misinfo':   '誤情報',
+    'report.reason.other':     'その他',
+    'report.comment':          '追加のコメント',
+    'report.optional':         '（任意・400字まで）',
+    'report.comment.placeholder':'運営に伝えたいことがあれば',
+    'report.submit':           '送信',
+    'report.done':             '報告を受け付けました。確認します。',
+    'report.already':          'この投稿は既に報告済みです。',
     'common.cancel':           'Cancel',
     'common.save':             'Save',
     'common.delete':           '削除',
@@ -599,6 +635,28 @@ const DICT = {
     'post.vis.friends':            'Close friends only',
     'post.vis.org':                'Same organization only',
     'post.vis.restricted':         'Friends / org only',
+    'post.edited':                 ' (edited)',
+    'post.action.reply':           'Comment',
+    'post.action.repost':          'Repost / quote',
+    'post.action.bookmark':        'Save',
+    'post.action.like':            'Like',
+    'post.action.share':           'Share',
+    'post.action.analytics':       'View activity',
+    'post.action.edit':            'Edit this post',
+    'post.action.delete':          'Delete this post',
+    'post.action.delete_other':    'Delete another user’s post (dev)',
+    'post.spot.open':              'Open in Spots',
+    'post.spot.open_address':      'Open in Spots — {address}',
+    'post.spot.open_location':     'Open this location in Spots',
+    'post.spot.no_house_number':   ' (street number unavailable)',
+    'post.spot.no_house_number_hint':'OpenStreetMap has no street-number data',
+    'post.spot.locked':            'Come within {r} m to read this post',
+    'post.poll.closed':             'Poll closed',
+    'post.poll.closing':            'Closing soon',
+    'post.poll.minutes':            '{n} min left',
+    'post.poll.hours':              '{n} hr left',
+    'post.poll.days':               '{n} days left',
+    'post.poll.votes':              '{n} votes',
     'settings.about.title':    'About',
     'settings.about.body':     'spotcode-sns is a prototype SNS for capturing ideas tied to the places where they happened. Accounts and posts are auto-saved to the bundled shared DB, so you can sign in from another device and find other users without configuring anything.',
     'settings.about.privacy':  'Privacy Policy',
@@ -643,6 +701,20 @@ const DICT = {
     'settings.supa.err.no_config':   'Save a URL / anon key first',
     'settings.supa.err.auth_failed': 'The anon key is invalid',
     'settings.supa.err.connect_failed':'Connection failed',
+    'post.action.report':      'Report',
+    'report.title':            'Report post',
+    'report.hint':             'Why are you reporting this post?',
+    'report.reason.spam':      'Spam / promotion',
+    'report.reason.inappropriate':'Inappropriate content',
+    'report.reason.harassment':'Harassment / hate',
+    'report.reason.misinfo':   'Misinformation',
+    'report.reason.other':     'Other',
+    'report.comment':          'Additional comment',
+    'report.optional':         '(optional, up to 400 characters)',
+    'report.comment.placeholder':'Anything you want the moderation team to know',
+    'report.submit':           'Submit',
+    'report.done':             'Your report was submitted for review.',
+    'report.already':          'You have already reported this post.',
     'common.cancel':           'Cancel',
     'common.save':             'Save',
     'common.delete':           'Delete',
@@ -704,13 +776,13 @@ export function setLang(lang) {
   return true;
 }
 
-// Look up a key. Falls back to the JA dictionary, then to the literal
+// Look up a key. Falls back to the default-language dictionary, then to the literal
 // key so missing translations are visible during development. An
 // optional second arg interpolates `{name}` placeholders in the
 // matched string.
 export function t(key, params) {
   const table = DICT[active] || DICT[DEFAULT_LANG];
-  const raw = (table && table[key]) || (DICT.ja && DICT.ja[key]) || key;
+  const raw = (table && table[key]) || (DICT[DEFAULT_LANG] && DICT[DEFAULT_LANG][key]) || key;
   if (!params) return raw;
   return raw.replace(/\{(\w+)\}/g, (_, name) =>
     params[name] != null ? String(params[name]) : '{' + name + '}'

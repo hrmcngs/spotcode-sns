@@ -5,17 +5,18 @@ import { currentUser }            from '../auth.js';
 import { reportPost, reportedByMe } from '../interactions.js';
 import { icon }                   from '../icons.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
+import { t }                      from '../i18n.js';
 
 let rootEl    = null;
 let activePostId = null;
 let resolveFn = null;
 
 const REASONS = [
-  { id: 'spam',         label: 'スパム / 宣伝' },
-  { id: 'inappropriate',label: '不適切な内容' },
-  { id: 'harassment',   label: '嫌がらせ / ヘイト' },
-  { id: 'misinfo',      label: '誤情報' },
-  { id: 'other',        label: 'その他' },
+  { id: 'spam',          key: 'report.reason.spam' },
+  { id: 'inappropriate', key: 'report.reason.inappropriate' },
+  { id: 'harassment',    key: 'report.reason.harassment' },
+  { id: 'misinfo',       key: 'report.reason.misinfo' },
+  { id: 'other',         key: 'report.reason.other' },
 ];
 
 function template() {
@@ -24,24 +25,24 @@ function template() {
       '<div class="modal__backdrop" data-report-close></div>' +
       '<div class="modal__card" role="dialog" aria-labelledby="report-title">' +
         '<button class="modal__close" data-report-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
-        '<h2 id="report-title" class="auth-form__h">投稿を報告</h2>' +
-        '<p class="report-hint">どの理由が当てはまりますか？</p>' +
+        '<h2 id="report-title" class="auth-form__h">' + t('report.title') + '</h2>' +
+        '<p class="report-hint">' + t('report.hint') + '</p>' +
         '<form class="auth-form" id="report-form">' +
           '<fieldset class="role-group">' +
             REASONS.map((r, i) => (
               '<label class="role-opt"><input type="radio" name="reason" value="' + r.id + '"' + (i === 0 ? ' checked' : '') + '>' +
-                '<span><b>' + r.label + '</b></span></label>'
+                '<span><b>' + t(r.key) + '</b></span></label>'
             )).join('') +
           '</fieldset>' +
-          '<label>追加のコメント <span class="hint">(任意・400 字まで)</span>' +
-            '<textarea name="comment" maxlength="400" rows="3" placeholder="運営に伝えたいことがあれば"></textarea>' +
+          '<label>' + t('report.comment') + ' <span class="hint">' + t('report.optional') + '</span>' +
+            '<textarea name="comment" maxlength="400" rows="3" placeholder="' + t('report.comment.placeholder') + '"></textarea>' +
           '</label>' +
           '<div class="edit-actions">' +
-            '<button type="button" class="btn btn--ghost" data-report-close>Cancel</button>' +
-            '<button type="submit" class="btn btn--primary">送信</button>' +
+            '<button type="button" class="btn btn--ghost" data-report-close>' + t('common.cancel') + '</button>' +
+            '<button type="submit" class="btn btn--primary">' + t('report.submit') + '</button>' +
           '</div>' +
           '<p class="auth-error" data-error></p>' +
-          '<p class="report-done" data-done hidden>報告を受け付けました。確認します。</p>' +
+          '<p class="report-done" data-done hidden>' + t('report.done') + '</p>' +
         '</form>' +
       '</div>' +
     '</div>'
@@ -111,7 +112,7 @@ export function openReport(postId) {
   if (me) {
     reportedByMe(postId).then((already) => {
       if (!already) return;
-      form.querySelector('[data-done]').textContent = 'この投稿は既に報告済みです（再送で上書きされます）';
+      form.querySelector('[data-done]').textContent = t('report.already');
       form.querySelector('[data-done]').hidden = false;
     });
   }

@@ -401,7 +401,8 @@ final class AppModel: ObservableObject {
     }
 
     func editPost(_ post: Post, body: String, githubLink: String?, repoFullName: String?, eventURL: String?, kind: String?, visibility: String) async -> Post? {
-        guard let session, post.authorID == displayProfile?.id else { return nil }
+        let mayModerate = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && (me?.isAdmin == true || me?.isOperator == true)
+        guard let session, post.authorID == displayProfile?.id || mayModerate else { return nil }
         do {
             let updated = try await SupabaseService.shared.updatePost(
                 id: post.id, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL,
@@ -417,7 +418,8 @@ final class AppModel: ObservableObject {
     }
 
     func deletePost(_ post: Post) async -> Bool {
-        guard let session, post.authorID == displayProfile?.id else { return false }
+        let mayModerate = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && (me?.isAdmin == true || me?.isOperator == true)
+        guard let session, post.authorID == displayProfile?.id || mayModerate else { return false }
         do {
             try await SupabaseService.shared.deletePost(id: post.id, token: session.accessToken)
             posts.removeAll { $0.id == post.id }

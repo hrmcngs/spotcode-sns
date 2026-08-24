@@ -83,6 +83,15 @@ struct Post: Codable, Identifiable, Hashable {
     }
 }
 
+struct PostInteractionRow: Codable {
+    let userID: UUID
+    enum CodingKeys: String, CodingKey { case userID = "user_id" }
+}
+
+struct ReportIdentifier: Codable {
+    let id: UUID
+}
+
 struct Repository: Codable, Identifiable, Hashable {
     let id: Int
     let name: String

@@ -231,6 +231,35 @@ actor SupabaseService {
         }
     }
 
+    func postInteractionState(table: String, postID: UUID, userID: UUID, token: String) async throws -> (mine: Bool, count: Int) {
+        guard ["likes", "reposts", "bookmarks"].contains(table) else { throw URLError(.badURL) }
+        let rows: [PostInteractionRow] = try await request(
+            "rest/v1/\(table)?post_id=eq.\(postID.uuidString)&select=user_id",
+            token: token
+        )
+        return (rows.contains { $0.userID == userID }, rows.count)
+    }
+
+    func togglePostInteraction(table: String, postID: UUID, userID: UUID, active: Bool, token: String) async throws -> Bool {
+        guard ["likes", "reposts", "bookmarks"].contains(table) else { throw URLError(.badURL) }
+        if active {
+            let _: EmptyResponse = try await request(
+                "rest/v1/\(table)?post_id=eq.\(postID.uuidString)&user_id=eq.\(userID.uuidString)",
+                method: "DELETE", token: token
+            )
+            return false
+        }
+        let body = try JSONSerialization.data(withJSONObject: [
+            "post_id": postID.uuidString,
+            "user_id": userID.uuidString
+        ])
+        let _: EmptyResponse = try await request(
+            "rest/v1/\(table)", method: "POST", token: token, body: body,
+            prefer: "resolution=ignore-duplicates,return=minimal"
+        )
+        return true
+    }
+
     func spottedPosts(token: String?) async throws -> [Post] {
         try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=60", token: token)
     }
@@ -300,6 +329,29 @@ actor SupabaseService {
             method: "DELETE", token: token, preferRepresentation: true
         )
         guard !rows.isEmpty else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を削除できません"]) }
+    }
+
+    func reportPost(postID: UUID, reporterID: UUID, reason: String, comment: String?, token: String) async throws {
+        let existing: [ReportIdentifier] = try await request(
+            "rest/v1/reports?post_id=eq.\(postID.uuidString)&reporter_id=eq.\(reporterID.uuidString)&select=id&limit=1",
+            token: token
+        )
+        if !existing.isEmpty { return }
+        var row: [String: Any] = [
+            "post_id": postID.uuidString,
+            "reporter_id": reporterID.uuidString,
+            "reason": reason
+        ]
+        let trimmed = comment?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        row["comment"] = trimmed.isEmpty ? NSNull() : String(trimmed.prefix(400))
+        let body = try JSONSerialization.data(withJSONObject: row)
+        let _: EmptyResponse = try await request(
+            "rest/v1/reports",
+            method: "POST",
+            token: token,
+            body: body,
+            prefer: "return=minimal"
+        )
     }
 
     func repositories(handle: String) async throws -> [Repository] {

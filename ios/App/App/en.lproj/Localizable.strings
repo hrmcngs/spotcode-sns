@@ -230,3 +230,14 @@
 "Spotcodeについて" = "About Spotcode";
 "Spotcodeは、コード・スポット・アイデアを共有するSNSです。" = "Spotcode is a social network for sharing code, spots, and ideas.";
 "プライバシーポリシー" = "Privacy policy";
+"投稿を報告" = "Report post";
+"報告する理由" = "Reason for report";
+"理由" = "Reason";
+"スパム / 宣伝" = "Spam / promotion";
+"不適切な内容" = "Inappropriate content";
+"嫌がらせ / ヘイト" = "Harassment / hate";
+"誤情報" = "Misinformation";
+"その他" = "Other";
+"追加のコメント（任意）" = "Additional comment (optional)";
+"400文字まで" = "Up to 400 characters";
+"送信" = "Submit";

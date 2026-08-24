@@ -1038,14 +1038,36 @@ struct PostRow: View {
     @State private var editing = false
     @State private var confirmingDelete = false
     @State private var showSpotMap = false
+    @State private var sharing = false
+    @State private var reporting = false
+    @State private var liked = false
+    @State private var reposted = false
+    @State private var bookmarked = false
+    @State private var likeCount = 0
+    @State private var repostCount: Int
+    @State private var bookmarkCount: Int
+    @State private var interactionInProgress: Set<String> = []
     @ObservedObject private var locationGate = PostLocationGate.shared
     @AppStorage("spotcode.native.dev-mode") private var developerMode = false
+
+    init(post: Post, opensDetail: Bool = true) {
+        self.post = post
+        self.opensDetail = opensDetail
+        _repostCount = State(initialValue: post.repostsCount ?? 0)
+        _bookmarkCount = State(initialValue: post.bookmarksCount ?? 0)
+    }
 
     private var canReadContent: Bool {
         guard let spot = post.spot else { return true }
         if post.authorID == model.me?.id { return true }
         if model.me?.isAdmin == true && developerMode { return true }
         return locationGate.isNear(spot)
+    }
+
+    private var canManagePost: Bool {
+        post.authorID == model.displayProfile?.id || (
+            developerMode && (model.me?.isAdmin == true || model.me?.isOperator == true)
+        )
     }
 
     var body: some View {
@@ -1118,13 +1140,34 @@ struct PostRow: View {
                 }
                 if canReadContent {
                     HStack(spacing: 0) {
-                        PostAction(icon: "bubble.left", count: post.commentsCount ?? 0); Spacer()
-                        PostAction(icon: "arrow.2.squarepath", count: post.repostsCount ?? 0); Spacer()
-                        PostAction(icon: "star", count: post.bookmarksCount ?? 0); Spacer()
-                        PostAction(icon: "heart", count: 0); Spacer()
-                        Image(systemName: "square.and.arrow.up"); Spacer()
-                        Image(systemName: "chart.bar")
-                        if post.authorID == model.displayProfile?.id {
+                        NavigationLink(destination: PostDetailView(post: post)) {
+                            PostAction(icon: "bubble.left", count: post.commentsCount ?? 0)
+                        }.buttonStyle(.plain); Spacer()
+                        Button { toggleInteraction("reposts") } label: {
+                            PostAction(icon: reposted ? "arrow.2.squarepath" : "arrow.2.squarepath", count: repostCount)
+                        }.buttonStyle(.plain).disabled(interactionInProgress.contains("reposts")); Spacer()
+                        Button { toggleInteraction("bookmarks") } label: {
+                            PostAction(icon: bookmarked ? "star.fill" : "star", count: bookmarkCount)
+                        }.buttonStyle(.plain).foregroundColor(bookmarked ? SpotcodeTheme.warning : SpotcodeTheme.muted)
+                            .disabled(interactionInProgress.contains("bookmarks")); Spacer()
+                        Button { toggleInteraction("likes") } label: {
+                            PostAction(icon: liked ? "heart.fill" : "heart", count: likeCount)
+                        }.buttonStyle(.plain).foregroundColor(liked ? .pink : SpotcodeTheme.muted)
+                            .disabled(interactionInProgress.contains("likes")); Spacer()
+                        Button { sharing = true } label: {
+                            Image(systemName: "square.and.arrow.up")
+                        }.buttonStyle(.plain)
+                        if post.authorID != model.me?.id {
+                            Spacer()
+                            Button { reporting = true } label: {
+                                Image(systemName: "flag")
+                            }.buttonStyle(.plain).accessibilityLabel("投稿を報告")
+                        }
+                        if canManagePost {
+                            Spacer()
+                            NavigationLink(destination: PostDetailView(post: post)) {
+                                Image(systemName: "chart.bar")
+                            }.buttonStyle(.plain).accessibilityLabel("投稿の分析")
                             Spacer()
                             Button { editing = true } label: { Image(systemName: "pencil") }
                                 .buttonStyle(.plain).accessibilityLabel("投稿を編集")
@@ -1161,7 +1204,14 @@ struct PostRow: View {
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { showSpotMap = false } } }
             }
         }
+        .sheet(isPresented: $sharing) {
+            ActivityShareSheet(items: [URL(string: "https://hrmc.ngs.computer/post/\(post.id.uuidString)")!])
+        }
+        .sheet(isPresented: $reporting) {
+            ReportPostView(post: post, isPresented: $reporting).environmentObject(model)
+        }
         .onAppear { if post.spot != nil { locationGate.request() } }
+        .task(id: post.id) { await loadInteractions() }
         .confirmationDialog("この投稿を削除しますか？", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("削除", role: .destructive) { Task { _ = await model.deletePost(post) } }
             Button("キャンセル", role: .cancel) {}
@@ -1177,6 +1227,111 @@ struct PostRow: View {
         default: return ("lock", "限定公開")
         }
     }
+
+    private func loadInteractions() async {
+        guard let token = model.session?.accessToken, let userID = model.me?.id else { return }
+        async let likeState = try? SupabaseService.shared.postInteractionState(table: "likes", postID: post.id, userID: userID, token: token)
+        async let repostState = try? SupabaseService.shared.postInteractionState(table: "reposts", postID: post.id, userID: userID, token: token)
+        async let bookmarkState = try? SupabaseService.shared.postInteractionState(table: "bookmarks", postID: post.id, userID: userID, token: token)
+        if let state = await likeState { liked = state.mine; likeCount = state.count }
+        if let state = await repostState { reposted = state.mine; repostCount = max(post.repostsCount ?? 0, state.count) }
+        if let state = await bookmarkState { bookmarked = state.mine; bookmarkCount = max(post.bookmarksCount ?? 0, state.count) }
+    }
+
+    private func toggleInteraction(_ table: String) {
+        guard let token = model.session?.accessToken, let userID = model.me?.id else {
+            model.errorMessage = "ログインしてください"
+            return
+        }
+        guard !interactionInProgress.contains(table) else { return }
+        interactionInProgress.insert(table)
+        Task {
+            defer { interactionInProgress.remove(table) }
+            do {
+                let current = table == "likes" ? liked : table == "reposts" ? reposted : bookmarked
+                let active = try await SupabaseService.shared.togglePostInteraction(
+                    table: table, postID: post.id, userID: userID, active: current, token: token
+                )
+                let delta = active ? 1 : -1
+                if table == "likes" { liked = active; likeCount = max(0, likeCount + delta) }
+                else if table == "reposts" { reposted = active; repostCount = max(0, repostCount + delta) }
+                else { bookmarked = active; bookmarkCount = max(0, bookmarkCount + delta) }
+            } catch {
+                model.errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+private struct ReportPostView: View {
+    @EnvironmentObject private var model: AppModel
+    let post: Post
+    @Binding var isPresented: Bool
+    @State private var reason = "spam"
+    @State private var comment = ""
+    @State private var submitting = false
+
+    private let reasons = [
+        ("spam", "スパム / 宣伝"),
+        ("inappropriate", "不適切な内容"),
+        ("harassment", "嫌がらせ / ヘイト"),
+        ("misinfo", "誤情報"),
+        ("other", "その他")
+    ]
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("報告する理由") {
+                    Picker("理由", selection: $reason) {
+                        ForEach(reasons, id: \.0) { value, label in
+                            Text(LocalizedStringKey(label)).tag(value)
+                        }
+                    }.pickerStyle(.inline).labelsHidden()
+                }
+                Section("追加のコメント（任意）") {
+                    TextEditor(text: $comment).frame(minHeight: 100)
+                    Text("400文字まで").font(.caption).foregroundColor(SpotcodeTheme.muted)
+                }
+            }
+            .navigationTitle("投稿を報告")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { isPresented = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("送信") { submit() }.disabled(submitting)
+                }
+            }
+        }
+    }
+
+    private func submit() {
+        guard let token = model.session?.accessToken, let reporterID = model.me?.id else {
+            model.errorMessage = "ログインしてください"
+            return
+        }
+        submitting = true
+        Task {
+            defer { submitting = false }
+            do {
+                try await SupabaseService.shared.reportPost(
+                    postID: post.id, reporterID: reporterID, reason: reason,
+                    comment: comment, token: token
+                )
+                isPresented = false
+            } catch {
+                model.errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+private struct ActivityShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 private struct PostAction: View {
@@ -1285,7 +1440,8 @@ private struct PostMetadataBadge: View {
     let text: String
     let color: Color
     var body: some View {
-        Label(text, systemImage: icon).font(.caption2.weight(.semibold)).foregroundColor(color)
+        Label { Text(LocalizedStringKey(text)) } icon: { Image(systemName: icon) }
+            .font(.caption2.weight(.semibold)).foregroundColor(color)
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(color.opacity(0.12)).overlay(Capsule().stroke(color.opacity(0.55))).clipShape(Capsule())
     }
@@ -1957,7 +2113,14 @@ struct ProfileView: View {
             }
         }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
          .background(SwipeBackEnabler())
-         .task { await loadProfile() }
+         .task(id: profile?.id) { await loadProfile() }
+         .onReceive(model.$posts) { timelinePosts in
+             guard let profileID = profile?.id else { return }
+             profilePosts = mergedProfilePosts(
+                 profilePosts,
+                 timelinePosts.filter { $0.authorID == profileID }
+             )
+         }
          .onReceive(model.$lastUpdatedPost) { updated in
              guard let updated = updated, let index = profilePosts.firstIndex(where: { $0.id == updated.id }) else { return }
              profilePosts[index] = updated
@@ -1968,7 +2131,9 @@ struct ProfileView: View {
         guard let id = profile?.id else { return }
         async let posts = try? SupabaseService.shared.posts(limit: 80, authorID: id, token: model.session?.accessToken)
         async let stats = SupabaseService.shared.profileCounts(userID: id, token: model.session?.accessToken)
-        profilePosts = await posts ?? []
+        let fetchedPosts = await posts ?? []
+        let timelinePosts = model.posts.filter { $0.authorID == id }
+        profilePosts = mergedProfilePosts(fetchedPosts, timelinePosts)
         counts = await stats
         if let handle = profile?.githubHandle {
             let mayReadPrivate = profile?.id == model.me?.id && UserDefaults.standard.bool(forKey: "spotcode.privateIssuesEnabled")
@@ -1981,6 +2146,15 @@ struct ProfileView: View {
             contributions = (try? await loadedContributions) ?? []
             issueSearch = try? await loadedIssues
             languageStats = (try? await loadedLanguages) ?? []
+        }
+    }
+
+    private func mergedProfilePosts(_ primary: [Post], _ fallback: [Post]) -> [Post] {
+        var postsByID: [UUID: Post] = [:]
+        for post in fallback { postsByID[post.id] = post }
+        for post in primary { postsByID[post.id] = post }
+        return postsByID.values.sorted {
+            ($0.createdAt ?? "") > ($1.createdAt ?? "")
         }
     }
 }

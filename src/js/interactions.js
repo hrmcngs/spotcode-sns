@@ -956,14 +956,19 @@ export async function reportPost({ postId, reason, comment }) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
   if (!user) throw new Error('ログインしてください');
+  const { data: existing } = await supa.from('reports')
+    .select('id')
+    .eq('post_id', postId)
+    .eq('reporter_id', user.id)
+    .maybeSingle();
+  if (existing) return;
   const row = {
     post_id:     postId,
     reporter_id: user.id,
     reason,
     comment:     comment ? String(comment).slice(0, 400) : null,
   };
-  const { error } = await supa.from('reports')
-    .upsert(row, { onConflict: 'post_id,reporter_id' });
+  const { error } = await supa.from('reports').insert(row);
   if (error) throw new Error(error.message);
 }
 

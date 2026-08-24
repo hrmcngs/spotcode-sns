@@ -58,11 +58,11 @@ function poll(p) {
   if (!p || !Array.isArray(p.options) || p.options.length < 2) return '';
   const remaining = p.deadlineAt - Date.now();
   const closed = remaining <= 0;
-  const deadlineText = closed ? '投票終了'
-    : remaining < 60_000 ? 'まもなく終了'
-    : remaining < 3600_000 ? 'あと ' + Math.floor(remaining / 60_000) + ' 分'
-    : remaining < 86400_000 ? 'あと ' + Math.floor(remaining / 3600_000) + ' 時間'
-    : 'あと ' + Math.floor(remaining / 86400_000) + ' 日';
+  const deadlineText = closed ? t('post.poll.closed')
+    : remaining < 60_000 ? t('post.poll.closing')
+    : remaining < 3600_000 ? t('post.poll.minutes', { n: Math.floor(remaining / 60_000) })
+    : remaining < 86400_000 ? t('post.poll.hours', { n: Math.floor(remaining / 3600_000) })
+    : t('post.poll.days', { n: Math.floor(remaining / 86400_000) });
   return (
     '<div class="poll" data-poll-closed="' + (closed ? '1' : '0') + '">' +
       '<div class="poll__q">' + escape(p.question || '') + '</div>' +
@@ -77,7 +77,7 @@ function poll(p) {
         ).join('') +
       '</div>' +
       '<div class="poll__meta">' +
-        '<span class="poll__total">0 票</span>' +
+        '<span class="poll__total">' + t('post.poll.votes', { n: 0 }) + '</span>' +
         '<span class="poll__sep">·</span>' +
         '<span class="poll__deadline">' + deadlineText + '</span>' +
       '</div>' +
@@ -120,7 +120,7 @@ function spotChip(spot, postId) {
   if (typeof spot === 'object') {
     const label = spot.label || (Number(spot.lat).toFixed(4) + ', ' + Number(spot.lng).toFixed(4));
     const mapUrl = spotMapUrl(spot, postId);
-    const title = spot.address ? 'Spotsで開く — ' + spot.address : 'Spotsで開く';
+    const title = spot.address ? t('post.spot.open_address', { address: spot.address }) : t('post.spot.open');
     return '<a class="spot-chip" href="' + escape(mapUrl) + '" title="' + escape(title) + '">' +
       pinIcon + escape(label) + '</a>';
   }
@@ -134,8 +134,8 @@ function spotAddress(spot, postId) {
   const d = spot.addressDetails || {};
   const hnNote = d.houseNumber
     ? ''
-    : ' <span class="post__addr-warn" title="OpenStreetMap に番地データがありません">(番地情報なし)</span>';
-  return '<a class="post__addr" href="' + escape(spotMapUrl(spot, postId)) + '" title="Spotsでこの場所を開く">' +
+    : ' <span class="post__addr-warn" title="' + escape(t('post.spot.no_house_number_hint')) + '">' + escape(t('post.spot.no_house_number')) + '</span>';
+  return '<a class="post__addr" href="' + escape(spotMapUrl(spot, postId)) + '" title="' + escape(t('post.spot.open_location')) + '">' +
     icon('pin', { size: 12, className: 'icon--inline' }) +
     escape(spot.address) + hnNote +
   '</a>';
@@ -169,7 +169,7 @@ function quoteCard(q) {
 // /post/<id>/analytics so they can see who liked / commented / reposted
 // / bookmarked / quoted their post.
 function analyticsLink(postId) {
-  return '<a class="act act--analytics" title="アクティビティを見る" href="' + url('/post/' + postId + '/analytics') + '">' +
+  return '<a class="act act--analytics" title="' + escape(t('post.action.analytics')) + '" href="' + url('/post/' + postId + '/analytics') + '">' +
     icon('chart', { size: 16 }) + '</a>';
 }
 
@@ -190,7 +190,7 @@ function lockedBanner() {
   return (
     '<div class="post__locked">' +
       icon('pin', { size: 14, className: 'icon--inline' }) +
-      'ここから半径 ' + getRadius() + ' m 以内に来ると中身が読めます' +
+      escape(t('post.spot.locked', { r: getRadius() })) +
     '</div>'
   );
 }
@@ -226,11 +226,11 @@ export function renderPost(p) {
   // posts; if the operator account doesn't have the matching
   // server-side flag, the call surfaces the existing "削除権限が
   // ありません" alert instead of silently no-op.
-  const canDelete = isOwn || isOperator();
-  // Editing is author-only — dev mode acts as a moderator and gets the
-  // delete (destructive, irreversible) hammer, but rewriting someone
-  // else's words is a different threat model so we don't expose it.
-  const canEdit = isOwn;
+  const canDelete = isOwn || (isDevMode() && isOperator());
+  // In developer mode the administrator can inspect and correct any
+  // post. Outside developer mode editing remains author-only.
+  const canEdit = isOwn || (isDevMode() && isOperator());
+  const canInspectAnalytics = canEdit;
   const wasEdited = p.editedAt && p.editedAt - (p.createdAt || 0) > 2000;
   const locked = isLockedBySpot(p, me);
   const displayName   = maskName(u.handle, u.name);
@@ -244,7 +244,7 @@ export function renderPost(p) {
           '<a class="post__handle" href="' + profileUrl + '">@' + escape(displayHandle) + '</a>' +
           '<span class="post__sep">·</span>' +
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
-          (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">（編集済み）</span>' : '') +
+          (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">' + escape(t('post.edited')) + '</span>' : '') +
           (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot, p.id) : '') +
           (p.kind === 'idea'
             ? ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">' +
@@ -317,23 +317,26 @@ export function renderPost(p) {
           )
         ) +
         '<div class="post__actions">' +
-          '<a class="act act--reply" title="コメント" href="' + url('/post/' + p.id) + '">' + icon('reply', { size: 16 }) + '<span>' + (a.replies || 0) + '</span></a>' +
-          '<button class="act act--fork' + (reposted ? ' is-on' : '') + '" title="リポスト / 引用" data-post-id="' + escape(p.id) + '">' +
+          '<a class="act act--reply" title="' + escape(t('post.action.reply')) + '" href="' + url('/post/' + p.id) + '">' + icon('reply', { size: 16 }) + '<span>' + (a.replies || 0) + '</span></a>' +
+          '<button class="act act--fork' + (reposted ? ' is-on' : '') + '" title="' + escape(t('post.action.repost')) + '" data-post-id="' + escape(p.id) + '">' +
             icon('fork',  { size: 16 }) + '<span>' + (a.forks || 0) + '</span></button>' +
-          '<button class="act act--star' + (bookmarked ? ' is-on' : '') + '" title="保存" data-post-id="' + escape(p.id) + '">' +
+          '<button class="act act--star' + (bookmarked ? ' is-on' : '') + '" title="' + escape(t('post.action.bookmark')) + '" data-post-id="' + escape(p.id) + '">' +
             icon('star',  { size: 16 }) + '<span>' + (a.stars || 0) + '</span></button>' +
-          '<button class="act act--like' + (liked ? ' is-liked' : '') + '" title="いいね" data-post-id="' + escape(p.id) + '">' +
+          '<button class="act act--like' + (liked ? ' is-liked' : '') + '" title="' + escape(t('post.action.like')) + '" data-post-id="' + escape(p.id) + '">' +
             icon('heart', { size: 16 }) + '<span>'  + likes + '</span></button>' +
-          '<button class="act act--share" title="共有" data-post-id="' + escape(p.id) + '">' + icon('share', { size: 16 }) + '</button>' +
-          (isOwn ? analyticsLink(p.id) : '') +
+          '<button class="act act--share" title="' + escape(t('post.action.share')) + '" data-post-id="' + escape(p.id) + '">' + icon('share', { size: 16 }) + '</button>' +
+          (!isOwn
+            ? '<button class="act act--report" title="' + escape(t('post.action.report')) + '">' + icon('flag', { size: 16 }) + '</button>'
+            : '') +
+          (canInspectAnalytics ? analyticsLink(p.id) : '') +
           (canEdit
-            ? '<button class="act act--edit" title="この投稿を編集">' + icon('pencil', { size: 16 }) + '</button>'
+            ? '<button class="act act--edit" title="' + escape(t('post.action.edit')) + '">' + icon('pencil', { size: 16 }) + '</button>'
             : '') +
           (canDelete
-            ? '<button class="act act--delete" title="' + (isOwn ? 'この投稿を削除' : '他のユーザーの投稿を削除（dev）') + '"' +
+            ? '<button class="act act--delete" title="' + escape(isOwn ? t('post.action.delete') : t('post.action.delete_other')) + '"' +
                 (isOwn ? '' : ' data-foreign-delete="1"') + '>' +
               icon('trash', { size: 16 }) + '</button>'
-            : '<button class="act act--report" title="report">' + icon('flag', { size: 16 }) + '</button>') +
+            : '') +
         '</div>' +
       '</div>' +
     '</article>'

@@ -12,6 +12,7 @@ import { renderAvatar }         from '../avatar.js';
 import { currentUser }          from '../auth.js';
 import { url }                  from '../router.js';
 import { icon }                 from '../icons.js';
+import { isDevMode, isOperator } from '../dev-mode.js';
 
 let renderVersion = 0;
 
@@ -66,7 +67,8 @@ export async function hydratePostAnalytics(id) {
   }
 
   const me = currentUser();
-  if (!me || me.handle !== post.authorHandle) {
+  const mayInspect = me && (me.handle === post.authorHandle || (isDevMode() && isOperator()));
+  if (!mayInspect) {
     root.innerHTML =
       '<div class="stub">' +
         '<h2 class="stub__title">権限がありません</h2>' +
