@@ -44,6 +44,11 @@ await send('Browser.grantPermissions', {
   origin: 'http://127.0.0.1:8080',
   permissions: ['geolocation'],
 });
+await send('Emulation.setGeolocationOverride', {
+  latitude: 35.613575,
+  longitude: 139.697789,
+  accuracy: 12,
+});
 await send('Page.navigate', { url: 'http://127.0.0.1:8080/' });
 await sleep(3000);
 
@@ -85,16 +90,12 @@ await sleep(2200);
 await run(`(() => { const style = document.createElement('style'); style.textContent = '.post__link{display:none!important}'; document.head.appendChild(style); })()`);
 
 const actions = new Map([
-  [25, `(() => { const el = document.querySelector('.composer textarea'); if (!el) return; el.focus(); el.value = '現在地で見つけた地域のアイデアを記録します。 #テック甲子園'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`],
+  [25, `(() => { const el = document.querySelector('.composer textarea'); if (!el) return; el.focus(); el.value = '今日は散歩日和でした。'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`],
   [48, `document.querySelector('#compose-spot-btn')?.click()`],
   [78, `document.querySelector('#picker-geo')?.click()`],
-  [105, `(() => { const label = document.querySelector('#picker-label'); if (label) { label.value = '現在地のアイデア'; label.dispatchEvent(new Event('input', { bubbles: true })); } document.querySelector('#picker-confirm:not([disabled])')?.click(); })()`],
+  [105, `(() => { const label = document.querySelector('#picker-label'); if (label) { label.value = 'いまここ'; label.dispatchEvent(new Event('input', { bubbles: true })); } document.querySelector('#picker-confirm:not([disabled])')?.click(); })()`],
   [128, `document.querySelector('#compose-kind-toggle')?.click()`],
   [145, `document.querySelector('.composer button[type="submit"]')?.click()`],
-  [180, `(() => { const text = '現在地で見つけた地域のアイデアを記録します。'; const post = [...document.querySelectorAll('[data-post-id]')].find(el => el.textContent.includes(text)); post?.querySelector('.act--edit')?.click(); })()`],
-  [205, `(() => { const el = document.querySelector('.post__edit-input'); if (!el) return; el.value = '現在地で見つけた地域のアイデアを記録し、開発につなげます。 #テック甲子園'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`],
-  [225, `document.querySelector('.act--edit-save')?.click()`],
-  [245, `[...document.querySelectorAll('.timeline__head a')].find(a => a.textContent.trim() === 'Spots')?.click()`],
 ]);
 
 for (let frame = 0; frame < 270; frame++) {

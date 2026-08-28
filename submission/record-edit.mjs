@@ -25,14 +25,25 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const run = expression => send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
 await send('Page.enable');
 await send('Runtime.enable');
+await send('Network.enable');
+await send('Network.setCacheDisabled', { cacheDisabled: true });
+await send('Emulation.setDeviceMetricsOverride', {
+  width: 1280, height: 720, deviceScaleFactor: 1, mobile: false,
+});
+await run(`Promise.all([
+  navigator.serviceWorker?.getRegistrations().then(items => Promise.all(items.map(item => item.unregister()))) || Promise.resolve(),
+  caches?.keys().then(keys => Promise.all(keys.map(key => caches.delete(key)))) || Promise.resolve()
+])`);
+await send('Page.navigate', { url: 'http://127.0.0.1:8080/' });
+await sleep(2500);
 await run(`document.querySelector('a[data-route="/"]')?.click()`);
 await sleep(1800);
 await run(`(() => { const style = document.createElement('style'); style.textContent = '.post__link{display:none!important}'; document.head.appendChild(style); })()`);
 
 const actions = new Map([
-  [18, `(() => { const text = '現在地で見つけた地域のアイデアを記録します。'; const post = [...document.querySelectorAll('[data-post-id]')].find(el => el.textContent.includes(text)); post?.querySelector('.act--edit')?.click(); })()`],
-  [42, `(() => { const el = document.querySelector('.post__edit-input'); if (!el) return; el.value = '現在地で見つけた地域のアイデアを記録し、開発につなげます。 #テック甲子園'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`],
-  [64, `document.querySelector('.act--edit-save')?.click()`],
+  [18, `(() => { const text = '今日はとてもいい天気でした。'; const post = [...document.querySelectorAll('[data-post-id]')].find(el => el.textContent.includes(text)); post?.querySelector('.act--edit')?.click(); setTimeout(() => post?.scrollIntoView({ behavior: 'instant', block: 'center' }), 350); })()`],
+  [42, `(() => { const el = document.querySelector('.post__edit-input'); if (!el) return; el.value = '今日はかなりいい天気でした。'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`],
+  [72, `document.querySelector('.act--edit-cancel')?.click()`],
   [88, `[...document.querySelectorAll('.timeline__head a')].find(a => a.textContent.trim() === 'Spots')?.click()`],
 ]);
 for (let frame = 0; frame < 110; frame++) {

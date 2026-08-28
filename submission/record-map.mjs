@@ -29,8 +29,17 @@ await send('Emulation.setDeviceMetricsOverride', {
   width: 1280, height: 720, deviceScaleFactor: 1, mobile: false,
 });
 await send('Browser.grantPermissions', { origin: 'http://127.0.0.1:8080', permissions: ['geolocation'] });
+// Reuse the exact location obtained from this Mac during the posting take.
+// This keeps the map centered on the same real current-location pin even in
+// headless Chrome, where Core Location may otherwise report permission off.
+await send('Emulation.setGeolocationOverride', {
+  latitude: 35.613575,
+  longitude: 139.697789,
+  accuracy: 12,
+});
 await run(`localStorage.setItem('spotcode:privacy-mode', '1')`);
 await run(`(() => { const style = document.createElement('style'); style.textContent = '.post__link,.map-popup__author{display:none!important}'; document.head.appendChild(style); })()`);
+await sleep(2500);
 await run(`[...document.querySelectorAll('.timeline__head a')].find(a => a.textContent.trim() === 'Spots')?.click()`);
 await sleep(3500);
 

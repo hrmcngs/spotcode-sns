@@ -994,17 +994,37 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   font-size: .8rem; color: var(--muted);
   flex: 1; min-width: 14rem;
 }
-.post__edit-link-input {
+.post__edit-link-input,
+.post__edit-repo-input {
   flex: 1; min-width: 0;
   padding: .25rem .55rem;
   font-size: .82rem; color: var(--text);
-  background: var(--bg);
+  background: var(--bg) !important;
+  color: var(--text) !important;
   border: 1px solid var(--border);
   border-radius: 6px;
+  font-family: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-text-fill-color: var(--text);
 }
-.post__edit-link-input:focus {
+.post__edit-repo-input {
+  height: 2rem;
+  line-height: 1.35;
+  resize: none;
+  overflow: hidden;
+}
+.post__edit-link-input:focus,
+.post__edit-repo-input:focus {
   outline: 0;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.post__edit-link-input:-webkit-autofill,
+.post__edit-repo-input:-webkit-autofill {
+  -webkit-text-fill-color: var(--text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
+  caret-color: var(--text);
 }
 
 /* Composer photo preview row — horizontal scroll-row of thumbnails

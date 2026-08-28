@@ -1480,7 +1480,8 @@ document.addEventListener('click', (e) => {
         '</label>' +
         '<label class="post__edit-link">' +
           'Repository' +
-          '<input type="text" class="post__edit-repo-input" placeholder="owner/repository" value="' + escAttr(repoFullName) + '">' +
+          '<textarea rows="1" class="post__edit-repo-input" placeholder="owner/repository" ' +
+            'autocomplete="off" autocapitalize="off" spellcheck="false">' + escAttr(repoFullName) + '</textarea>' +
         '</label>' +
       '</div>' +
       '<div class="post__edit-actions">' +
