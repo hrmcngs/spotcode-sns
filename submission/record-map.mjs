@@ -33,8 +33,9 @@ await send('Browser.grantPermissions', { origin: 'http://127.0.0.1:8080', permis
 // This keeps the map centered on the same real current-location pin even in
 // headless Chrome, where Core Location may otherwise report permission off.
 await send('Emulation.setGeolocationOverride', {
-  latitude: 35.613575,
-  longitude: 139.697789,
+  // Use a public landmark in the submission recording so no school is shown.
+  latitude: 35.681236,
+  longitude: 139.767125,
   accuracy: 12,
 });
 await run(`localStorage.setItem('spotcode:privacy-mode', '1')`);
@@ -42,6 +43,27 @@ await run(`(() => { const style = document.createElement('style'); style.textCon
 await sleep(2500);
 await run(`[...document.querySelectorAll('.timeline__head a')].find(a => a.textContent.trim() === 'Spots')?.click()`);
 await sleep(3500);
+// The normal street tiles and a stored spot label may contain a school name.
+// Use label-free aerial imagery and neutralise any such place label before
+// capturing the submission footage.
+await run(`(() => {
+  const scrub = () => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      if (/桜町|高等学校|高校/.test(walker.currentNode.nodeValue || '')) {
+        walker.currentNode.nodeValue = 'スポット';
+      }
+    }
+  };
+  new MutationObserver(scrub).observe(document.body, { childList: true, subtree: true, characterData: true });
+  scrub();
+  const layers = document.querySelector('.leaflet-control-layers');
+  layers?.classList.add('leaflet-control-layers-expanded');
+  const aerial = [...document.querySelectorAll('.leaflet-control-layers-base label')]
+    .find(label => label.textContent.includes('航空写真 (日本)'));
+  aerial?.querySelector('input')?.click();
+})()`);
+await sleep(2500);
 
 const actions = new Map([
   [28, `(() => { const pins = [...document.querySelectorAll('.leaflet-overlay-pane path.leaflet-interactive')].filter(el => (el.getAttribute('stroke') || '').toLowerCase() === '#f91880'); (pins[1] || pins[0])?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 640, clientY: 360 })); })()`],

@@ -45,8 +45,9 @@ await send('Browser.grantPermissions', {
   permissions: ['geolocation'],
 });
 await send('Emulation.setGeolocationOverride', {
-  latitude: 35.613575,
-  longitude: 139.697789,
+  // Use a public landmark in the submission recording so no school is shown.
+  latitude: 35.681236,
+  longitude: 139.767125,
   accuracy: 12,
 });
 await send('Page.navigate', { url: 'http://127.0.0.1:8080/' });
