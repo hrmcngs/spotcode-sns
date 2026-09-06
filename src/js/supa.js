@@ -10,6 +10,7 @@
 // Only "publishable" / anon keys ever live here; the secret/service_role
 // key must never reach the browser.
 
+import { isDevMode } from './dev-mode.js';
 import { KEYS, read, write, remove } from './storage.js';
 import { SUPA_URL as DEFAULT_URL, SUPA_ANON as DEFAULT_ANON } from './supa-config.js';
 
@@ -123,6 +124,15 @@ export async function getClient() {
     if (generation !== clientGeneration) throw new Error('CLIENT_RESET');
     const client = sdk.createClient(url, anonKey, {
       auth: { persistSession: true, autoRefreshToken: true },
+      global: {
+        fetch: (input, init = {}) => {
+          const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+          headers.delete('x-spotcode-dev-mode');
+          const method = init.method || (input instanceof Request ? input.method : 'GET');
+          if (method.toUpperCase() === 'GET' && isDevMode()) headers.set('x-spotcode-dev-mode', '1');
+          return fetch(input, { ...init, headers });
+        },
+      },
     });
     cachedClient = client;
     cachedConfigKey = configKey;

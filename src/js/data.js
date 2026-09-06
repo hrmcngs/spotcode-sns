@@ -1,3 +1,4 @@
+import { isDevMode } from './dev-mode.js';
 // Posts data layer — now backed by public.posts in Supabase so timelines
 // are shared across all devices. The functions stayed name-compatible
 // with the localStorage era but every one is async now.
@@ -426,7 +427,7 @@ const pendingDeletes = new Set();   // post ids
 export function canDisplayCachedPost(post) {
   if (post.visibility !== 'only_me') return true;
   const me = currentUser();
-  return !!me?.id && post.authorId === me.id;
+  return !!me?.id && (post.authorId === me.id || isDevMode());
 }
 
 function optimisticPostsForScope(scope) {
@@ -517,6 +518,7 @@ export function prependToTimelineCaches(post) {
 // default paint TTL — e.g. hydrateHome treats a <60s-old cache as
 // "fresh enough to skip the refetch entirely".
 export function cachedPosts(scope, maxAgeMs = POSTS_CACHE_TTL_MS) {
+  if (isDevMode()) return null; // Fetch the expanded audience after enabling developer mode.
   try {
     const e = postsCacheAll()[scope];
     if (!e || !e.posts) return null;

@@ -1,3 +1,6 @@
+import { isPostingAsOfficial } from '../posting-identity.js';
+import { isOfficialFollowing, isOfficialRequested, hydrateOfficialFollows } from '../interactions.js';
+import { OFFICIAL_HANDLE, getOfficialAccount } from '../official-account.js';
 // Following / Followers list page. Reached from the counts on a profile.
 // Same DOM shape as the right-rail Who-to-follow card so the existing
 // follow/unfollow event delegation in main.js still applies.
@@ -99,6 +102,10 @@ export async function hydrateFollowList(handle, kind) {
   if (!stillHere()) return;
   const list = slot();
   if (!list) return;
+  if (isPostingAsOfficial()) {
+    try { await hydrateOfficialFollows((await getOfficialAccount())?.id); } catch {}
+  }
+  if (!stillHere()) return;
   paintFollowUsers(list, users, kind);
 }
 
@@ -111,10 +118,13 @@ function paintFollowUsers(list, users, kind) {
     return;
   }
   const me = currentUser();
+  const official = !!me && isPostingAsOfficial();
+  const actorHandle = official ? OFFICIAL_HANDLE : me?.handle;
   list.innerHTML = '<div class="followlist followlist--page">' +
     users.map(u => {
-      const followed = me && me.handle !== u.handle && isFollowing(me.handle, u.handle);
-      const showBtn  = me && me.handle !== u.handle;
+      const followed = me && actorHandle !== u.handle && (official ? isOfficialFollowing(u.handle) : isFollowing(me.handle, u.handle));
+      const requested = official && isOfficialRequested(u.handle);
+      const showBtn  = me && actorHandle !== u.handle;
       const displayName   = maskName(u.handle, u.name);
       const displayHandle = maskHandle(u.handle);
       return (
@@ -126,8 +136,8 @@ function paintFollowUsers(list, users, kind) {
             (u.bio ? '<div class="followlist__bio">' + escape(maskMentionsInText(u.bio)) + '</div>' : '') +
           '</div>' +
           (showBtn
-            ? '<button class="followlist__follow' + (followed ? ' is-following' : '') + '" data-target="' + escape(u.handle) + '">' +
-                (followed ? t('profile.btn.following') : t('profile.btn.follow')) +
+            ? '<button class="followlist__follow' + (followed || requested ? ' is-following' : '') + '" data-target="' + escape(u.handle) + '">' +
+                (requested ? t('profile.btn.requested') : followed ? t('profile.btn.following') : t('profile.btn.follow')) +
               '</button>'
             : '') +
         '</div>'

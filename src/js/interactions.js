@@ -27,6 +27,7 @@ let followsMineLoaded = false;
 // Populated by hydrateOfficialFollows(), called when the overlay
 // turns on. Cleared by clearInteractionsCache.
 const officialFollows = new Set();
+const officialRequests = new Set();
 let officialFollowsLoaded = false;
 let officialFollowsOwnerId = null;
 
@@ -37,6 +38,7 @@ export function clearInteractionsCache() {
   requestsMine.clear();
   followsMineLoaded = false;
   officialFollows.clear();
+  officialRequests.clear();
   officialFollowsLoaded = false;
   officialFollowsOwnerId = null;
   reposts.clear();
@@ -161,12 +163,13 @@ export async function hydrateOfficialFollows(officialId) {
   const { data } = await supa
     .from('follows')
     .select('status, target:profiles!follows_target_id_fkey(handle)')
-    .eq('follower_id', officialId)
-    .eq('status', 'accepted');
+    .eq('follower_id', officialId);
   officialFollows.clear();
+  officialRequests.clear();
   for (const r of data || []) {
     const h = r.target?.handle;
-    if (h) officialFollows.add(h);
+    if (h && r.status === 'accepted') officialFollows.add(h);
+    if (h && r.status === 'pending') officialRequests.add(h);
   }
   officialFollowsLoaded = true;
   officialFollowsOwnerId = officialId;
@@ -174,6 +177,8 @@ export async function hydrateOfficialFollows(officialId) {
 
 // Synchronous read against the cache loaded above. Profile renders
 // call this when the overlay is on instead of isFollowing().
+export function isOfficialRequested(targetHandle) { return officialRequests.has(targetHandle); }
+
 export function isOfficialFollowing(targetHandle) {
   return officialFollows.has(targetHandle);
 }
@@ -275,11 +280,12 @@ export async function toggleFollow(myHandle, targetHandle, opts = {}) {
   // (follower_id, target_id).
   let wasAccepted, wasPending;
   if (asOverlay) {
-    const { data: existing } = await supa.from('follows')
+    const { data: existing, error } = await supa.from('follows')
       .select('status')
       .eq('follower_id', actorId)
       .eq('target_id', meta.id)
       .maybeSingle();
+    if (error) throw new Error(error.message);
     wasAccepted = !!(existing && existing.status === 'accepted');
     wasPending  = !!(existing && existing.status === 'pending');
   } else {
@@ -297,6 +303,7 @@ export async function toggleFollow(myHandle, targetHandle, opts = {}) {
       // the next renderProfile reads "Follow" without waiting for
       // a re-hydrate.
       officialFollows.delete(targetHandle);
+      officialRequests.delete(targetHandle);
     } else {
       followsMine.delete(targetHandle);
       requestsMine.delete(targetHandle);
@@ -324,6 +331,7 @@ export async function toggleFollow(myHandle, targetHandle, opts = {}) {
     // Counts on the target's profile repaint from the DB next
     // hydrateProfileFollow; we don't try to mirror them locally.
     if (status === 'accepted') officialFollows.add(targetHandle);
+    else officialRequests.add(targetHandle);
     return { state: status === 'accepted' ? 'following' : 'requested' };
   }
   if (status === 'accepted') {

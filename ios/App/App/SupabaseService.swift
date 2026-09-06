@@ -60,6 +60,10 @@ actor SupabaseService {
         guard let endpoint = URL(string: path, relativeTo: baseURL) else { throw URLError(.badURL) }
         var request = URLRequest(url: endpoint)
         request.httpMethod = method
+        if method == "GET" && UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") {
+            // PostgreSQL also verifies the authenticated user's admin role.
+            request.setValue("1", forHTTPHeaderField: "x-spotcode-dev-mode")
+        }
         request.timeoutInterval = 20
         request.httpBody = body
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -583,19 +587,19 @@ actor SupabaseService {
         }
     }
 
-    func followStatus(followerID: UUID, targetID: UUID, token: String) async throws -> Bool {
+    func followStatus(followerID: UUID, targetID: UUID, token: String) async throws -> String {
         let rows: [FollowRecord] = try await request(
-            "rest/v1/follows?follower_id=eq.\(followerID.uuidString)&target_id=eq.\(targetID.uuidString)&status=eq.accepted&select=follower_id,target_id,status&limit=1",
+            "rest/v1/follows?follower_id=eq.\(followerID.uuidString)&target_id=eq.\(targetID.uuidString)&select=follower_id,target_id,status&limit=1",
             token: token
         )
-        return !rows.isEmpty
+        return rows.first?.status ?? "none"
     }
 
-    func follow(followerID: UUID, targetID: UUID, token: String) async throws {
+    func follow(followerID: UUID, targetID: UUID, isPrivate: Bool = false, token: String) async throws {
         let payload = try JSONSerialization.data(withJSONObject: [
             "follower_id": followerID.uuidString,
             "target_id": targetID.uuidString,
-            "status": "accepted"
+            "status": isPrivate ? "pending" : "accepted"
         ])
         let _: [FollowRecord] = try await request(
             "rest/v1/follows?on_conflict=follower_id,target_id&select=follower_id,target_id,status",

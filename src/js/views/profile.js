@@ -7,7 +7,7 @@ import { OFFICIAL_HANDLE }         from '../official-account.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, isRequested, followerCount, followingCount,
          hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls,
-         hydrateProfileFollow, isOfficialFollowing } from '../interactions.js';
+         hydrateProfileFollow, isOfficialFollowing, isOfficialRequested } from '../interactions.js';
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
@@ -495,7 +495,7 @@ export function renderProfile(handle) {
   // executes as the auth user (overlay doesn't write follows on the
   // brand's behalf), but the visible badge has to match the role.
   const followed   = me && !isMe && (overlayOn ? isOfficialFollowing(u.handle) : isFollowing(me.handle, u.handle));
-  const requested  = me && !isMe && !overlayOn && isRequested(me.handle, u.handle);
+  const requested  = me && !isMe && (overlayOn ? isOfficialRequested(u.handle) : isRequested(me.handle, u.handle));
   // Follow-button text/style depends on (target privacy) × (current state).
   const followBtnLabel = followed   ? 'Following'
                        : requested  ? 'Requested'
@@ -516,17 +516,10 @@ export function renderProfile(handle) {
         '<div class="profile-top__actions">' +
           // Edit only fires when the row actually belongs to the
           // auth user AND the overlay is off (canEdit).
-          // Hide Follow / More for two "self" cases:
-          //   • viewingSelfRow — overlay-aware self (e.g. overlay
-          //     on + /spotcode_official, or overlay off + /hrmcngs).
-          //   • overlay ON + /hrmcngs (auth-self while overlay on)
-          //     — follow click would alert "自分自身はフォロー…" at
-          //     the auth layer, hide it to avoid the dead end.
-          // Everyone else gets Follow + More — clicks execute as
-          // the auth user (overlay doesn't affect follow inserts).
+          // Follow as the selected identity; only hide its own Follow button.
           (canEdit
             ? '<button class="btn btn--primary" id="edit-profile-btn" data-edit-profile-handle="' + u.handle + '">' + t('profile.btn.edit') + '</button>'
-            : (viewingSelfRow || (overlayOn && me && me.handle === u.handle))
+            : viewingSelfRow
               ? ''
               : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
                 '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +

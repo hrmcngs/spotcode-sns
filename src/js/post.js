@@ -240,10 +240,10 @@ export function renderPost(p) {
   // posts; if the operator account doesn't have the matching
   // server-side flag, the call surfaces the existing "削除権限が
   // ありません" alert instead of silently no-op.
-  const canDelete = isOwn || (isDevMode() && isOperator());
+  const canDelete = isOwn || (p.visibility !== 'only_me' && isDevMode() && isOperator());
   // In developer mode the administrator can inspect and correct any
   // post. Outside developer mode editing remains author-only.
-  const canEdit = isOwn || (isDevMode() && isOperator());
+  const canEdit = isOwn || (p.visibility !== 'only_me' && isDevMode() && isOperator());
   const canInspectAnalytics = canEdit;
   const wasEdited = p.editedAt && p.editedAt - (p.createdAt || 0) > 2000;
   const locked = isLockedBySpot(p, me);

@@ -1082,12 +1082,20 @@ struct PostRow: View {
     }
 
     private var canManagePost: Bool {
-        post.authorID == model.displayProfile?.id || (
+        if post.visibility == "only_me" { return post.authorID == model.session?.user.id }
+        return post.authorID == model.displayProfile?.id || (
             developerMode && (model.me?.isAdmin == true || model.me?.isOperator == true)
         )
     }
 
     var body: some View {
+        if post.visibility != "only_me" || post.authorID == model.session?.user.id ||
+            (developerMode && model.me?.isAdmin == true) {
+            postContent
+        }
+    }
+
+    private var postContent: some View {
         HStack(alignment: .top, spacing: 12) {
             NavigationLink(destination: ProfileLookupView(handle: post.author?.handle ?? "")) {
                 AvatarView(profile: post.author, size: 42)
@@ -2049,7 +2057,7 @@ struct ProfileView: View {
                             languageStats: languageStats,
                             contributions: contributions,
                             issueSearch: issueSearch,
-                            isOwn: profile.id == model.me?.id || (
+                            isOwn: (!model.isPostingAsOfficial && profile.id == model.me?.id) || (
                                 model.isPostingAsOfficial &&
                                 profile.id == model.officialProfile?.id &&
                                 (model.me?.isAdmin == true || model.me?.isOperator == true)
@@ -2199,7 +2207,8 @@ private struct ProfileHero: View {
     let issueSearch: GitHubIssueSearchResponse?
     let isOwn: Bool
     @State private var editing = false
-    @State private var isFollowing = false
+    @State private var followState = "none"
+    private var isFollowing: Bool { followState != "none" }
     @State private var followLoading = false
     @AppStorage("spotcode.hideBadges") private var hideBadges = false
     @AppStorage("spotcode.hideTasks") private var hideTasks = false
@@ -2224,7 +2233,7 @@ private struct ProfileHero: View {
                                     Link("GitHubで開く", destination: URL(string: "https://github.com/\(handle)")!)
                                 }
                             } label: { Text("More").profileActionCapsule(filled: false) }
-                            Button(followLoading ? "…" : (isFollowing ? "Following" : "Follow")) { toggleFollow() }
+                            Button(followLoading ? "…" : (followState == "pending" ? "Requested" : (isFollowing ? "Following" : "Follow"))) { toggleFollow() }
                                 .profileActionCapsule(filled: !isFollowing).disabled(followLoading)
                         }.padding(.top, 14)
                     }
@@ -2287,13 +2296,16 @@ private struct ProfileHero: View {
             }.padding(.horizontal, 18).padding(.bottom, 20)
         }.overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
          .sheet(isPresented: $editing) { EditProfileView(profile: profile, isPresented: $editing).environmentObject(model) }
-         .task { await loadFollowStatus() }
+         .task(id: model.displayProfile?.id) { await loadFollowStatus() }
     }
 
     private func loadFollowStatus() async {
+        followState = "none"
         guard !isOwn, let followerID = model.displayProfile?.id, let targetID = profile.id,
               let token = model.session?.accessToken else { return }
-        isFollowing = (try? await SupabaseService.shared.followStatus(followerID: followerID, targetID: targetID, token: token)) ?? false
+        let state = (try? await SupabaseService.shared.followStatus(followerID: followerID, targetID: targetID, token: token)) ?? "none"
+        guard model.displayProfile?.id == followerID else { return }
+        followState = state
     }
 
     private func toggleFollow() {
@@ -2303,8 +2315,9 @@ private struct ProfileHero: View {
         Task {
             do {
                 if isFollowing { try await SupabaseService.shared.unfollow(followerID: followerID, targetID: targetID, token: token) }
-                else { try await SupabaseService.shared.follow(followerID: followerID, targetID: targetID, token: token) }
-                isFollowing.toggle()
+                else { try await SupabaseService.shared.follow(followerID: followerID, targetID: targetID, isPrivate: profile.isPrivate == true, token: token) }
+                guard model.displayProfile?.id == followerID else { followLoading = false; return }
+                followState = isFollowing ? "none" : (profile.isPrivate == true ? "pending" : "accepted")
             } catch { model.errorMessage = error.localizedDescription }
             followLoading = false
         }
@@ -2953,6 +2966,7 @@ private struct DeveloperSettings: View {
                 .foregroundColor(SpotcodeTheme.muted)
             SettingsCard("Developer mode") {
                 Toggle("開発者向けUIを表示", isOn: $developerMode)
+                    .onChange(of: developerMode) { _ in Task { await model.loadTimeline() } }
                 Text("通知キューや内部IDなどの開発者向け表示を、この端末で切り替えます。")
                     .foregroundColor(SpotcodeTheme.muted)
                 Text(developerMode ? "ON" : "OFF").font(.caption.bold())
@@ -3336,6 +3350,7 @@ private struct DisplaySettings: View {
         }
         SettingsCard("Spotcodeについて") {
             Text("Spotcodeは、コード・スポット・アイデアを共有するSNSです。").foregroundColor(SpotcodeTheme.muted)
+            Link("利用規約", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
             Link("プライバシーポリシー", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
                 .foregroundColor(SpotcodeTheme.accent)
         }

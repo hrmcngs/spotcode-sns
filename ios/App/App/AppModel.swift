@@ -74,7 +74,8 @@ final class AppModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: cachedProfileKey) { me = try? JSONDecoder().decode(Profile.self, from: data) }
         if let data = UserDefaults.standard.data(forKey: cachedPostsKey) {
             let cached = (try? JSONDecoder().decode([Post].self, from: data)) ?? []
-            posts = cached.filter { $0.visibility != "only_me" || $0.authorID == session?.user.id }
+            let canInspect = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && me?.isAdmin == true && me?.id == session?.user.id
+            posts = cached.filter { $0.visibility != "only_me" || $0.authorID == session?.user.id || canInspect }
         }
     }
 
