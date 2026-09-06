@@ -439,7 +439,7 @@ function displaySection() {
   const tHidden = tasksHidden();
   const me = currentUser();
   if (taskRepoSearchOwner !== me?.id) { taskRepoSearchOwner = me?.id; taskRepoSearch = ''; }
-  const taskItems = cachedTasks(me?.github?.handle, privateTasksEnabled())?.items || [];
+  const taskItems = (cachedTasks(me?.github?.handle, privateTasksEnabled()) || cachedTasks(me?.github?.handle, false))?.items || [];
   const taskRepos = [...new Set(taskItems.map((item) => item.repo).filter(Boolean))].sort();
   const hiddenRepos = new Set(hiddenTaskRepos());
   const repoChoices = taskRepos.length
@@ -489,7 +489,8 @@ function displaySection() {
         '</button>' +
       '</div>' +
       '<h3>表示するリポジトリ</h3>' +
-      '<input type="search" id="task-repo-search" aria-label="リポジトリを検索" placeholder="リポジトリ名で検索（owner/repo）" value="' + attr(taskRepoSearch) + '">' +
+      '<input type="search" id="task-repo-search" autocomplete="off" aria-controls="task-repo-suggestions" aria-label="リポジトリを検索" placeholder="リポジトリ名で検索（owner/repo）" value="' + attr(taskRepoSearch) + '">' +
+      '<div id="task-repo-suggestions" class="settings-repo-suggestions" aria-label="リポジトリの候補" hidden></div>' +
       repoChoices + '<p id="task-repo-search-empty" class="settings__hint"' + (taskRepos.length && !taskRepos.some(repo => repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase())) ? '' : ' hidden') + '>一致するリポジトリがありません。</p>' +
       '<div class="settings-form__actions"><button type="button" class="btn btn--ghost" id="private-tasks-toggle">' +
         (privateTasksEnabled() ? '非公開Issue表示をOFF' : '非公開Issueを表示する（GitHub再認証）') +
@@ -765,6 +766,7 @@ export function bindSettings() {
           const permission = token ? await githubTokenCanReadPrivateRepos(token) : false;
           if (!token || permission === false) {
             privateIssueAuthError = '非公開Issueの表示には追加のrepo権限が必要です。Organization連携の成否とは別です。非公開Issueを表示する場合は「GitHubを再認証」を押してください。';
+            await fetchTasks(settingsGh, false);
           } else {
             // getGithubToken already restored/stored this account's token.
             setGithubApiToken(token, settingsUser.id);
@@ -928,19 +930,60 @@ export function bindSettings() {
     const app = document.getElementById('app');
     if (app) { app.innerHTML = renderSettings(); bindSettings(); }
   });
-  document.getElementById('task-repo-search')?.addEventListener('input', (event) => {
-    taskRepoSearch = event.target.value;
+  const repoSearch = document.getElementById('task-repo-search');
+  const suggestions = document.getElementById('task-repo-suggestions');
+  const showRepoSuggestions = () => {
+    if (!repoSearch || !suggestions) return;
+    taskRepoSearch = repoSearch.value;
     const query = taskRepoSearch.trim().toLowerCase();
-    let matches = 0;
+    const matches = [];
     const inputs = document.querySelectorAll('[data-task-repo]');
     inputs.forEach(input => {
       const visible = input.getAttribute('data-task-repo').toLowerCase().includes(query);
       input.closest('label').hidden = !visible;
-      if (visible) matches++;
+      if (visible) matches.push(input);
     });
     const empty = document.getElementById('task-repo-search-empty');
-    if (empty) empty.hidden = !inputs.length || matches > 0;
+    if (empty) empty.hidden = !inputs.length || matches.length > 0;
+    suggestions.replaceChildren();
+    for (const input of matches.slice(0, 8)) {
+      const repo = input.getAttribute('data-task-repo');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = repo;
+      button.addEventListener('click', () => {
+        input.checked = true;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        repoSearch.value = repo;
+        showRepoSuggestions();
+        repoSearch.focus();
+        suggestions.hidden = true;
+      });
+      suggestions.append(button);
+    }
+    suggestions.hidden = matches.length === 0;
+  };
+  repoSearch?.addEventListener('input', showRepoSuggestions);
+  repoSearch?.addEventListener('focus', showRepoSuggestions);
+  repoSearch?.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' && suggestions?.firstElementChild) {
+      event.preventDefault(); suggestions.firstElementChild.focus();
+    }
+    if (event.key === 'Escape' && suggestions) suggestions.hidden = true;
   });
+  suggestions?.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { repoSearch.focus(); suggestions.hidden = true; }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const next = event.key === 'ArrowDown' ? event.target.nextElementSibling : event.target.previousElementSibling;
+      (next || repoSearch).focus();
+    }
+  });
+  const closeRepoSuggestions = event => {
+    if (event.relatedTarget !== repoSearch && !suggestions?.contains(event.relatedTarget) && suggestions) suggestions.hidden = true;
+  };
+  repoSearch?.addEventListener('focusout', closeRepoSuggestions);
+  suggestions?.addEventListener('focusout', closeRepoSuggestions);
   document.querySelectorAll('[data-task-repo]').forEach((input) => {
     input.addEventListener('change', () => {
       setTaskRepoVisible(input.getAttribute('data-task-repo') || '', input.checked);
