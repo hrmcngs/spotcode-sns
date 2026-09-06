@@ -752,10 +752,24 @@ private struct DataURLImage: View {
     let value: String
     var body: some View {
         Group {
-            if let comma = value.firstIndex(of: ","), let data = Data(base64Encoded: String(value[value.index(after: comma)...])), let image = UIImage(data: data) {
+            if let image = decodedDataURLImage(value) {
                 Image(uiImage: image).resizable().scaledToFill()
-            } else { Color(white: 0.15).overlay(Image(systemName: "photo")) }
-        }
+            } else if let url = URL(string: value), ["https", "http"].contains(url.scheme?.lowercased() ?? "") {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image): image.resizable().scaledToFill()
+                    case .empty: ProgressView()
+                    default: placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }.clipped()
+    }
+
+    private var placeholder: some View {
+        Color(white: 0.15).overlay(Image(systemName: "photo"))
     }
 }
 

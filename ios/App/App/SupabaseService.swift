@@ -219,7 +219,7 @@ actor SupabaseService {
         return profile
     }
 
-    func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = false) async throws -> [Post] {
+    func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = true) async throws -> [Post] {
         let photoColumn = includePhotos ? ",photos" : ""
         let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count\(photoColumn),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
         while true {
@@ -265,7 +265,7 @@ actor SupabaseService {
     }
 
     func spottedPosts(token: String?) async throws -> [Post] {
-        try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=60", token: token)
+        try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,visibility,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=60", token: token)
     }
 
     func createPost(_ draft: PostDraft, token: String) async throws -> Post {
