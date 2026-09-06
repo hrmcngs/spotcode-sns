@@ -1782,6 +1782,29 @@ html[data-theme='light'] .profile-tasks__body {
 }
 .profile-tasks__row--overdue { border-left: 3px solid #ff6a6a; padding-left: .65rem; }
 .profile-tasks__row--soon    { border-left: 3px solid #f5a524; padding-left: .65rem; }
+#task-repo-search {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: .65rem .8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: max(1rem, 16px);
+}
+#task-repo-search::placeholder { color: var(--muted); opacity: 1; }
+#task-repo-search:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
 .settings-task-repos {
   display: grid; gap: .4rem; margin-top: .5rem;
   max-height: 16rem; overflow-y: auto;
