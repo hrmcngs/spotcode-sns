@@ -1794,6 +1794,8 @@ html[data-theme='light'] .profile-tasks__body {
   font-size: .82rem;
 }
 
+.settings-task-repos .settings-check[hidden] { display: none; }
+
 .settings-notification-types {
   display: grid;
   gap: 10px;

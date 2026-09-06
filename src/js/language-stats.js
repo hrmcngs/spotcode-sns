@@ -133,9 +133,10 @@ export function setGithubApiToken(token, ownerId = '') {
 }
 export function hasGithubApiToken() { return !!ghApiToken; }
 export function restoreGithubApiToken(ownerId) {
+  ghApiToken = null;
   try {
     const saved = JSON.parse(window.sessionStorage.getItem(GH_TOKEN_STORAGE_KEY) || 'null');
-    if (!saved?.token || saved.ownerId !== ownerId) return null;
+    if (!saved?.token || saved.ownerId !== ownerId) { ghApiToken = null; return null; }
     ghApiToken = saved.token;
     return ghApiToken;
   } catch { return null; }
@@ -150,13 +151,14 @@ export async function fetchJson(url, timeoutMs = 10000) {
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const headers = { 'Accept': 'application/vnd.github+json' };
-    if (ghApiToken) headers['Authorization'] = 'Bearer ' + ghApiToken;
+    const requestToken = ghApiToken;
+    if (requestToken) headers['Authorization'] = 'Bearer ' + requestToken;
     const r = await fetch(url, { headers, signal: ctl.signal });
     // 401 with a token typically means the token expired / was
     // revoked. Drop it so subsequent calls don't keep sending a
     // known-bad credential (which GitHub eventually rate-limits
     // separately from the anon budget).
-    if (r.status === 401 && ghApiToken) {
+    if (r.status === 401 && requestToken && ghApiToken === requestToken) {
       setGithubApiToken(null);
     }
     if (r.status === 403) {

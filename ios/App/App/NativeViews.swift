@@ -2954,7 +2954,10 @@ private struct GitHubOrganizationSettings: View {
         Task {
             defer { busy = false; authorizer = nil }
             do {
-                let token = try await flow.authorize(includePrivate: false)
+                let existing = await model.hydrateSharedPrivateIssueToken()
+                var includePrivate = UserDefaults.standard.bool(forKey: "spotcode.privateIssuesEnabled")
+                if let existing, (try? await SupabaseService.shared.githubTokenCanReadPrivateRepos(existing)) == true { includePrivate = true }
+                let token = try await flow.authorize(includePrivate: includePrivate)
                 model.savePrivateIssueToken(token)
                 try await model.uploadPrivateIssueToken(token)
                 try await model.syncGithubOrganizations()
@@ -3324,6 +3327,7 @@ private struct DisplaySettings: View {
     @AppStorage("spotcode.hideBadges") private var hideBadges = false
     @AppStorage("spotcode.hideTasks") private var hideTasks = false
     @State private var issueRepositories: [String] = []
+    @State private var issueRepositoryQuery = ""
     @AppStorage("spotcode.hiddenIssueRepos") private var hiddenIssueReposJSON = "[]"
     @AppStorage("spotcode.privateIssuesEnabled") private var privateIssuesEnabled = false
     @State private var authorizingPrivateIssues = false
@@ -3386,14 +3390,15 @@ private struct DisplaySettings: View {
         }
         SettingsCard("Open issues") {
             Toggle("非公開Issueを表示", isOn: Binding(
-                get: { privateIssuesEnabled && model.privateIssueToken != nil },
+                get: { privateIssuesEnabled },
                 set: { enabled in
                     if enabled {
                         authorizingPrivateIssues = true
                         Task {
                             do {
                                 let token: String
-                                if let shared = await model.hydrateSharedPrivateIssueToken() {
+                                if let shared = await model.hydrateSharedPrivateIssueToken(),
+                                   try await SupabaseService.shared.githubTokenCanReadPrivateRepos(shared) {
                                     token = shared
                                 } else {
                                     token = try await GitHubPrivateIssueAuthorizer.shared.authorize()
@@ -3412,7 +3417,6 @@ private struct DisplaySettings: View {
                         }
                     } else {
                         privateIssuesEnabled = false
-                        model.removePrivateIssueToken()
                         Task { await savePreferences(); await loadIssueRepositories() }
                     }
                 }
@@ -3421,7 +3425,16 @@ private struct DisplaySettings: View {
             if !privateIssueMessage.isEmpty { Text(privateIssueMessage).font(.caption).foregroundColor(SpotcodeTheme.muted) }
             Text("プロフィールに表示するリポジトリ").foregroundColor(SpotcodeTheme.muted)
             if issueRepositories.isEmpty { Text("Issue取得後に選択できます").font(.caption).foregroundColor(SpotcodeTheme.muted) }
-            ForEach(issueRepositories, id: \.self) { repo in
+            TextField("リポジトリを検索", text: $issueRepositoryQuery)
+                .textInputAutocapitalization(.never).autocorrectionDisabled(true)
+            let matchingRepos = issueRepositories.filter {
+                issueRepositoryQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                $0.localizedCaseInsensitiveContains(issueRepositoryQuery.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            if !issueRepositories.isEmpty && matchingRepos.isEmpty {
+                Text("一致するリポジトリがありません。").font(.caption).foregroundColor(SpotcodeTheme.muted)
+            }
+            ForEach(matchingRepos, id: \.self) { repo in
                 Toggle(repo, isOn: Binding(
                     get: { !decodeRepoSet(hiddenIssueReposJSON).contains(repo) },
                     set: { visible in
@@ -3514,7 +3527,7 @@ private struct DisplaySettings: View {
 
     private func loadIssueRepositories() async {
         guard let handle = model.me?.githubHandle else { return }
-        let token = privateIssuesEnabled ? model.privateIssueToken : nil
+        let token = privateIssuesEnabled ? await model.hydrateSharedPrivateIssueToken() : nil
         guard let result = try? await SupabaseService.shared.githubOpenIssues(
             handle: handle, githubToken: token, includePrivate: privateIssuesEnabled && token != nil
         ) else { return }

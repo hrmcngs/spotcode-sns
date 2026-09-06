@@ -275,3 +275,7 @@
 "自分と許可済みOrganizationのリポジトリ" = "Your repositories and authorized organization repositories";
 
 "連携済みOrganizationのメンバーがそのリポジトリを指定すると、組織アカウント名義で表示されます。" = "Members posting about a linked Organization’s repository appear under its organization account.";
+
+"リポジトリを検索" = "Search repositories";
+
+"一致するリポジトリがありません。" = "No matching repositories.";

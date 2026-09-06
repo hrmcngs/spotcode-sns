@@ -31,7 +31,7 @@ async function saveSharedGithubToken(token) {
   if (!token) return;
   const supa = await getClient();
   const { error } = await supa.rpc('save_github_private_issue_token', { p_token: token });
-  if (error && !/save_github_private_issue_token/i.test(error.message || '')) throw new Error(error.message);
+  if (error) throw new Error('GitHub連携の保存に失敗しました。' + error.message);
 }
 
 async function getSharedGithubToken() {
@@ -63,7 +63,7 @@ export async function linkGithub(redirectTo = window.location.href) {
 // Explicit opt-in for private issue display. GitHub's classic OAuth
 // scopes do not offer a narrower read-only private-issues permission;
 // `repo` is therefore requested only after the user enables this feature.
-export async function linkGithubForPrivateIssues(redirectTo = window.location.href, includePrivate = true) {
+export async function linkGithubForPrivateIssues(redirectTo = window.location.href, includePrivate = true, purpose = 'private_issues') {
   const supa = await getClient();
   const { data: before } = await supa.auth.getSession();
   if (!before?.session) throw new Error('先にspotcodeへログインしてください');
@@ -74,9 +74,14 @@ export async function linkGithubForPrivateIssues(redirectTo = window.location.hr
       user_id: before.session.user.id,
     }));
   } catch {}
+  if (!includePrivate) {
+    const existing = await getGithubToken();
+    const { privateTasksEnabled } = await import('./display-prefs.js');
+    includePrivate = privateTasksEnabled() || (existing ? await githubTokenCanReadPrivateRepos(existing) === true : false);
+  }
   const returnUrl = new URL(redirectTo, window.location.href);
   returnUrl.hash = '';
-  returnUrl.search = '?spotcode_private_issues=1';
+  returnUrl.search = purpose === 'organizations' ? '?spotcode_github_organizations=1' : '?spotcode_private_issues=1';
   // The identity is already linked, so linkIdentity would return
   // identity_already_exists. Re-authenticate through the same GitHub
   // identity instead; Supabase then returns a fresh provider_token
@@ -94,7 +99,14 @@ export async function linkGithubForPrivateIssues(redirectTo = window.location.hr
 }
 
 export function linkGithubForOrganizations(redirectTo = window.location.href) {
-  return linkGithubForPrivateIssues(redirectTo, false);
+  return linkGithubForPrivateIssues(redirectTo, false, 'organizations');
+}
+
+export function githubAuthorizationReturnPath(search) {
+  const params = new URLSearchParams(search);
+  if (params.has('spotcode_github_organizations')) return '/settings/account';
+  if (params.has('spotcode_private_issues') || params.get('error_code') === 'identity_already_exists') return '/settings/display';
+  return null;
 }
 
 // signInWithOAuth temporarily installs the GitHub callback session as the
@@ -102,7 +114,8 @@ export function linkGithubForOrganizations(redirectTo = window.location.href) {
 // password/MFA session that was active before the redirect. This prevents a
 // private-Issue permission upgrade from looking like a logout/account switch.
 export async function finishPrivateIssueAuthorization() {
-  if (!new URLSearchParams(location.search).has('spotcode_private_issues')) return false;
+  const params = new URLSearchParams(location.search);
+  if (!params.has('spotcode_private_issues') && !params.has('spotcode_github_organizations')) return false;
   let original = null;
   try { original = JSON.parse(sessionStorage.getItem(PRIVATE_ISSUE_SESSION_KEY) || 'null'); } catch {}
   if (!original?.access_token || !original?.refresh_token) return false;
@@ -194,38 +207,24 @@ export async function syncGithubIdentity() {
 // 5000 req/hr, and Search API from 10 → 30 req/min — big win for
 // language-stats / repos / tasks fetchers.
 //
-// Caveat: Supabase does NOT guarantee the provider_token survives
-// token refresh. In practice it's there for the first ~1h after the
-// grant, and the caller MUST tolerate a null return (fall back to
-// unauthenticated calls). Getting the token again requires the user
-// to re-link (linkIdentity), which is a full-page redirect — so we
-// don't auto-refresh silently.
+// Supabase session refresh may omit provider_token. The account's shared
+// Vault grant survives this; a device cache is used only when Vault is unavailable.
 export async function getGithubToken() {
   const supa = await getClient();
   const { data } = await supa.auth.getSession();
-  const ownerId = data?.session?.user?.id || '';
-  const fresh = data?.session?.provider_token || null;
-  if (fresh) {
-    try {
-      const { setGithubApiToken } = await import('./language-stats.js');
-      setGithubApiToken(fresh, ownerId);
-    } catch {}
-    await saveSharedGithubToken(fresh).catch(() => {});
-    return fresh;
-  }
-  // provider_token is commonly omitted after Supabase refreshes its session.
-  // language-stats restores the last OAuth grant from localStorage.
-  try {
-    const { restoreGithubApiToken, setGithubApiToken } = await import('./language-stats.js');
-    const local = restoreGithubApiToken(ownerId);
-    if (local) {
-      await saveSharedGithubToken(local).catch(() => {});
-      return local;
-    }
-    const shared = await getSharedGithubToken();
-    if (shared) setGithubApiToken(shared, ownerId);
-    return shared;
-  } catch { return null; }
+  const ownerId = data?.session?.user?.id;
+  if (!ownerId) return null;
+  const { restoreGithubApiToken, setGithubApiToken } = await import('./language-stats.js');
+  const local = restoreGithubApiToken(ownerId);
+  // A newer grant may have been saved on another device. Never overwrite it
+  // with an old provider_token or device cache while merely reading it.
+  const shared = await getSharedGithubToken();
+  const { data: latest } = await supa.auth.getSession();
+  if (latest?.session?.user?.id !== ownerId) return null;
+  const token = shared || local || data.session.provider_token || null;
+  if (token) setGithubApiToken(token, ownerId);
+  if (!shared && !local && token) await saveSharedGithubToken(token).catch(() => {});
+  return token;
 }
 
 export async function githubTokenCanReadPrivateRepos(token) {

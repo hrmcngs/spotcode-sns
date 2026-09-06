@@ -456,6 +456,18 @@ actor SupabaseService {
         return try decoder.decode(GitHubIssueSearchResponse.self, from: data)
     }
 
+    func githubTokenCanReadPrivateRepos(_ token: String) async throws -> Bool {
+        var request = URLRequest(url: URL(string: "https://api.github.com/user")!)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let (_, response) = try await data(for: request, retryable: true)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        if http.statusCode == 401 { return false }
+        guard http.statusCode == 200 else { throw URLError(.badServerResponse) }
+        return (http.value(forHTTPHeaderField: "x-oauth-scopes") ?? "")
+            .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.contains("repo")
+    }
+
     func privateIssueAuthorizationURL(includePrivate: Bool = true) -> URL? {
         var components = URLComponents(url: baseURL.appendingPathComponent("auth/v1/authorize"), resolvingAgainstBaseURL: false)
         components?.queryItems = [

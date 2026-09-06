@@ -28,6 +28,8 @@ import { withTimeout } from '../net-utils.js';
 const audienceState = { closeFriends: [], orgMembers: [] };
 const hydratedTaskSettings = new Set();
 let privateIssueAuthError = '';
+let taskRepoSearch = '';
+let taskRepoSearchOwner = null;
 
 // Password-shaped confirmation UI for sensitive settings. window.prompt()
 // would expose the password as plain text, so use the existing modal styles
@@ -436,17 +438,18 @@ function displaySection() {
   const hidden = badgesHidden();
   const tHidden = tasksHidden();
   const me = currentUser();
+  if (taskRepoSearchOwner !== me?.id) { taskRepoSearchOwner = me?.id; taskRepoSearch = ''; }
   const taskItems = cachedTasks(me?.github?.handle, privateTasksEnabled())?.items || [];
   const taskRepos = [...new Set(taskItems.map((item) => item.repo).filter(Boolean))].sort();
   const hiddenRepos = new Set(hiddenTaskRepos());
   const repoChoices = taskRepos.length
     ? '<div class="settings-task-repos">' + taskRepos.map((repo) =>
-        '<label class="settings-check"><input type="checkbox" data-task-repo="' + attr(repo) + '"' +
+        '<label class="settings-check"' + (repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase()) ? '' : ' hidden') + '><input type="checkbox" data-task-repo="' + attr(repo) + '"' +
           (hiddenRepos.has(repo) ? '' : ' checked') + '> <span>' + attr(repo) + '</span></label>'
       ).join('') + '</div>'
     : '<p class="settings__hint">Issue取得後に、ここで表示するリポジトリを選べます。</p>';
   const privateStatus = privateIssueAuthError
-    ? '<p class="settings-status is-bad">' + attr(privateIssueAuthError) + '</p>' : '';
+    ? '<p class="settings-status is-bad">' + attr(privateIssueAuthError) + '</p><button type="button" class="btn btn--ghost" id="private-tasks-reauthorize">GitHubを再認証</button>' : '';
   return (
     '<section class="settings-card">' +
       '<h2>' + t('settings.lang.title') + '</h2>' +
@@ -485,7 +488,9 @@ function displaySection() {
           (tHidden ? t('settings.display.tasks.show') : t('settings.display.tasks.hide')) +
         '</button>' +
       '</div>' +
-      '<h3>表示するリポジトリ</h3>' + repoChoices +
+      '<h3>表示するリポジトリ</h3>' +
+      '<input type="search" id="task-repo-search" aria-label="リポジトリを検索" placeholder="リポジトリ名で検索（owner/repo）" value="' + attr(taskRepoSearch) + '">' +
+      repoChoices + '<p id="task-repo-search-empty" class="settings__hint"' + (taskRepos.length && !taskRepos.some(repo => repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase())) ? '' : ' hidden') + '>一致するリポジトリがありません。</p>' +
       '<div class="settings-form__actions"><button type="button" class="btn btn--ghost" id="private-tasks-toggle">' +
         (privateTasksEnabled() ? '非公開Issue表示をOFF' : '非公開Issueを表示する（GitHub再認証）') +
       '</button></div>' +
@@ -694,6 +699,7 @@ export function bindSettings() {
     finally { orgBusy = false; }
   };
   document.getElementById('github-org-sync')?.addEventListener('click', () => syncOrg());
+  if (document.getElementById('github-org-choices') && currentUser()?.github?.handle) void syncOrg();
 
   // Populate the repo selector from GitHub itself. This is especially
   // important after private-repo consent: the private repo may never
@@ -758,7 +764,7 @@ export function bindSettings() {
           const token = await getGithubToken();
           const permission = token ? await githubTokenCanReadPrivateRepos(token) : false;
           if (!token || permission === false) {
-            privateIssueAuthError = 'GitHubの非公開Repo権限を確認できません。OFFにしてから再認証してください。';
+            privateIssueAuthError = '非公開Issueの表示には追加のrepo権限が必要です。Organization連携の成否とは別です。非公開Issueを表示する場合は「GitHubを再認証」を押してください。';
           } else {
             // getGithubToken already restored/stored this account's token.
             setGithubApiToken(token, settingsUser.id);
@@ -922,10 +928,27 @@ export function bindSettings() {
     const app = document.getElementById('app');
     if (app) { app.innerHTML = renderSettings(); bindSettings(); }
   });
+  document.getElementById('task-repo-search')?.addEventListener('input', (event) => {
+    taskRepoSearch = event.target.value;
+    const query = taskRepoSearch.trim().toLowerCase();
+    let matches = 0;
+    const inputs = document.querySelectorAll('[data-task-repo]');
+    inputs.forEach(input => {
+      const visible = input.getAttribute('data-task-repo').toLowerCase().includes(query);
+      input.closest('label').hidden = !visible;
+      if (visible) matches++;
+    });
+    const empty = document.getElementById('task-repo-search-empty');
+    if (empty) empty.hidden = !inputs.length || matches > 0;
+  });
   document.querySelectorAll('[data-task-repo]').forEach((input) => {
     input.addEventListener('change', () => {
       setTaskRepoVisible(input.getAttribute('data-task-repo') || '', input.checked);
     });
+  });
+  document.getElementById('private-tasks-reauthorize')?.addEventListener('click', async () => {
+    try { await linkGithubForPrivateIssues(window.location.href); }
+    catch (error) { alert(error?.message || String(error)); }
   });
   document.getElementById('private-tasks-toggle')?.addEventListener('click', async () => {
     if (privateTasksEnabled()) {

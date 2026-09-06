@@ -79,17 +79,18 @@ final class AppModel: ObservableObject {
     }
 
     func hydrateSharedPrivateIssueToken() async -> String? {
-        if let token = privateIssueToken {
-            try? await uploadPrivateIssueToken(token)
-            return token
-        }
+        guard let owner = session?.user.id else { return nil }
+        let local = privateIssueToken
         do {
             let token = try await withRefreshedSession { accessToken in
                 try await SupabaseService.shared.sharedGithubPrivateIssueToken(token: accessToken)
             }
-            if let token { savePrivateIssueToken(token) }
-            return token
-        } catch { return nil }
+            guard session?.user.id == owner else { return nil }
+            if let token { savePrivateIssueToken(token); return token }
+            return local
+        } catch {
+            return session?.user.id == owner ? local : nil
+        }
     }
 
     init() {
