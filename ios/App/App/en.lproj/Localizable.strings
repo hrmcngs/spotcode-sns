@@ -241,3 +241,13 @@
 "追加のコメント（任意）" = "Additional comment (optional)";
 "400文字まで" = "Up to 400 characters";
 "送信" = "Submit";
+
+"バグ" = "Bug";
+
+"投稿タグ" = "Post tag";
+
+"タグなし" = "No tag";
+
+"全員に公開" = "Everyone";
+
+"自分の GitHub リポジトリの動きを見る。" = "Activity in your GitHub repositories.";

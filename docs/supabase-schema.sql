@@ -480,7 +480,7 @@ create policy "voters can drop their own vote"
 -- A simple text column so a post can be marked as "an idea" vs. a
 -- regular note. NULL = regular. Kept open-ended on purpose so future
 -- additions (e.g. 'question', 'bug', 'release') don't need another
--- ALTER. The renderer only highlights 'idea' today.
+-- ALTER. The renderer supports 'idea' and 'bug'.
 
 alter table public.posts add column if not exists kind text;
 create index if not exists posts_kind_idx on public.posts (kind) where kind is not null;

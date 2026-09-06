@@ -195,14 +195,14 @@ function lockedBanner() {
   );
 }
 
-// Tiny lookup so we can stamp a small hint badge next to restricted
+// Tiny lookup so we can stamp a small hint badge on all
 // posts. The actual gating is enforced by Stage 18 RLS — by the time
 // a row arrives at this renderer it has already been allow-listed
 // for the viewer, so this is purely informational.
 //
 // Icon names match icons.js; the label is i18n-keyed.
 const VIS_HINT = {
-  public:    null,
+  public:    { ico: 'globe', labelKey: 'post.vis.public' },
   mutuals:   { ico: 'fork',        labelKey: 'post.vis.mutuals' },
   following: { ico: 'arrow_right', labelKey: 'post.vis.following' },
   friends:   { ico: 'heart',       labelKey: 'post.vis.friends' },
@@ -210,12 +210,18 @@ const VIS_HINT = {
   restricted:{ ico: 'lock',        labelKey: 'post.vis.restricted' },
 };
 
+export function renderKindBadge(kind) {
+  if (!['idea', 'bug'].includes(kind)) return '';
+  return ' <span class="post__kind post__kind--' + kind + '" title="' + escape(t('kind.' + kind + '.title')) + '">' +
+    icon(kind === 'bug' ? 'bug' : 'spark', { size: 12, className: 'icon--inline' }) + escape(t('kind.' + kind)) + '</span>';
+}
+
 export function renderPost(p) {
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
   const profileUrl = url('/' + u.handle);
   const me = currentUser();
-  const visHint = VIS_HINT[p.visibility] || null;
+  const visHint = VIS_HINT[p.visibility || 'public'] || VIS_HINT.restricted;
   const liked      = me && isLiked(p.id);
   const reposted   = me && isReposted(p.id);
   const bookmarked = me && isBookmarked(p.id);
@@ -246,11 +252,7 @@ export function renderPost(p) {
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">' + escape(t('post.edited')) + '</span>' : '') +
           (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot, p.id) : '') +
-          (p.kind === 'idea'
-            ? ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">' +
-                icon('spark', { size: 12, className: 'icon--inline' }) + escape(t('kind.idea')) +
-              '</span>'
-            : '') +
+          renderKindBadge(p.kind) +
           (visHint
             ? ' <span class="post__vis" title="' + escape(t(visHint.labelKey)) + '">' +
                 icon(visHint.ico, { size: 12, className: 'icon--inline' }) + escape(t(visHint.labelKey)) +

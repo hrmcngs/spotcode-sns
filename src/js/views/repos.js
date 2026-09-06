@@ -1,4 +1,4 @@
-// /repos — GitHub repositories owned by you + the people you follow,
+// /repos — GitHub repositories owned by the signed-in user,
 // merged into one timeline-style list sorted by most-recently-pushed.
 //
 // Each card shows:
@@ -10,36 +10,24 @@
 //     via Stage 30's posts.repo_full_name. Empty state when no posts
 //     are tagged (the compose-side tagging UI ships in a follow-up).
 //
-// Speed strategy (same shape as the profile language-medal hydration):
-//   1. Synchronously read cached repo lists for self + every followed
-//      user → paint whatever we have *before* any await. On a repeat
-//      visit this means the list is filled the moment the JS runs.
-//   2. Kick off `fetchUserRepos(handle)` per uncached handle in
-//      parallel. As each one resolves, splice its repos into the
-//      already-rendered list and re-sort. No `Promise.all` blocking
-//      the first paint behind the slowest user.
-//   3. Share `fetchJson` (rate-limit cooldown) with language-stats so
-//      both views back off together when the public API 403s.
+// Paint the signed-in user's cached repositories immediately, then fetch
+// on a cache miss. Share the GitHub rate-limit cooldown with language stats.
 //
 // Per-handle repo lists cache 1h in localStorage (mirroring
 // language-stats.js's TTL). Cache key is namespaced so future schema
 // bumps don't collide with the live entries.
 
 import { currentUser }       from '../auth.js';
-import { getClient }         from '../supa.js';
-import { hydrateMyFollows, myFollowingHandles } from '../interactions.js';
 import { langColor, fetchJson, isRateLimited } from '../language-stats.js';
 import { postsWithGithubRefs, relTime } from '../data.js';
 import { parseGithubLink } from '../gh-link.js';
 import { icon }              from '../icons.js';
 import { t }                 from '../i18n.js';
 import { currentPath }       from '../router.js';
-import { withTimeout }       from '../net-utils.js';
 
 const REPOS_CACHE_KEY = 'spotcode:gh-repos-cache:v1';
 const REPOS_TTL_MS    = 60 * 60 * 1000;       // 1 h
 const MAX_REPOS_PER_USER = 12;
-const REPOS_TIMEOUT_MS = 10 * 1000;
 
 function escape(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -97,23 +85,6 @@ async function fetchUserRepos(ghHandle) {
     .map((r) => shapeRepo(r, ghHandle));
   storeUserRepos(ghHandle, repos);
   return repos;
-}
-
-// Pull github_handle for the given app handles in one round trip.
-// Returns { appHandle → githubHandle | null }.
-async function ghHandlesForUsers(appHandles) {
-  const out = {};
-  if (!appHandles.length) return out;
-  let supa; try { supa = await getClient(); } catch { return out; }
-  const { data, error } = await supa
-    .from('profiles')
-    .select('handle, github_handle')
-    .in('handle', appHandles);
-  if (error || !data) return out;
-  for (const row of data) {
-    out[row.handle] = row.github_handle || null;
-  }
-  return out;
 }
 
 // Per-hydrate map of fullName (lower-cased) → posts[]. Filled once
@@ -304,47 +275,8 @@ export async function hydrateRepos() {
     return;
   }
 
-  // The signed-in user's GitHub handle is already in currentUser(). Paint
-  // their cached repos immediately, or start that public GitHub request now,
-  // instead of blocking the whole page behind two Supabase lookups for the
-  // follow graph and linked handles.
-  postsByFullName = new Map();
-  postsLoaded = false;
-  const ownGhHandle = me.github?.handle || null;
-  if (ownGhHandle) {
-    const ownCached = cachedUserRepos(ownGhHandle);
-    if (ownCached?.length) {
-      paintListNow(list, ownCached.slice().sort((a, b) => b.pushedAt - a.pushedAt));
-    } else {
-      fetchUserRepos(ownGhHandle).then((repos) => {
-        if (stillHere() && repos.length) {
-          paintListNow(list, repos.slice().sort((a, b) => b.pushedAt - a.pushedAt));
-        }
-      }).catch(() => {});
-    }
-  }
-
-  // Warm followsMine before reading it. Cheap no-op if it already ran
-  // for this user since the last cache clear.
-  try { await withTimeout(hydrateMyFollows(), REPOS_TIMEOUT_MS, 'フォロー取得'); } catch {}
-  if (!stillHere()) return;
-
-  // Self + people you follow. Self is always first in the lookup so
-  // their repos sort naturally with everyone else's by pushed_at.
-  const appHandles = Array.from(new Set([me.handle, ...myFollowingHandles()].filter(Boolean)));
-  let ghMap = {};
-  try {
-    ghMap = await withTimeout(ghHandlesForUsers(appHandles), REPOS_TIMEOUT_MS, 'GitHub連携取得');
-  } catch {
-    // Own GitHub handle is already present in the authenticated profile,
-    // so /repos can still show the user's repositories when Supabase is slow.
-  }
-  if (me.github?.handle) ghMap[me.handle] = me.github.handle;
-  if (!stillHere()) return;
-
-  const ghHandles = appHandles
-    .map((h) => ghMap[h])
-    .filter(Boolean);
+  // Only the authenticated profile selects whose repositories appear.
+  const ghHandles = me.github?.handle ? [me.github.handle] : [];
   if (!ghHandles.length) {
     list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('repos.empty.no_gh') + '</p></div>';
     return;
@@ -361,7 +293,7 @@ export async function hydrateRepos() {
   postsLoaded = false;
 
   // Kick off the single posts round-trip immediately, parallel with
-  // the github_handle lookup below. It rarely beats the GitHub repo
+  // the repository fetch below. It rarely beats the GitHub repo
   // fetches, but on a warm GitHub cache it's the limiting step, so
   // starting it first matters.
   postsWithGithubRefs({ limit: 200 })

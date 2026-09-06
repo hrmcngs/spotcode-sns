@@ -59,12 +59,13 @@ export function renderIdeaForm({ user = null } = {}) {
             icon('calendar', { size: 12, className: 'icon--inline' }) +
             '<span>' + t('home.composer.add_event') + '</span>' +
           '</button>' +
-          // Idea tag toggle. Active = post will be saved with kind="idea"
-          // and rendered with an idea badge. Off = regular note.
-          '<button type="button" class="compose-kind-toggle" id="compose-kind-toggle" aria-pressed="false" data-kind="off">' +
-            icon('spark', { size: 12, className: 'icon--inline' }) +
-            '<span class="compose-kind-toggle__label">' + t('kind.idea') + '</span>' +
-          '</button>' +
+          // Pick one optional post kind; pressing the active tag clears it.
+          ['idea', 'bug'].map((kind) =>
+            '<button type="button" class="compose-kind-toggle" data-compose-kind="' + kind + '" aria-pressed="false">' +
+              icon(kind === 'bug' ? 'bug' : 'spark', { size: 12, className: 'icon--inline' }) +
+              '<span class="compose-kind-toggle__label">' + t('kind.' + kind) + '</span>' +
+            '</button>'
+          ).join('') +
           // Audience picker — 5 options, RLS enforced server-side.
           // Native <select> overlay for the OS picker; visible display
           // shows only the icon + current selection (no "Audience" /

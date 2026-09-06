@@ -254,10 +254,10 @@ function shapePost(row) {
     // contend with each other. Null when no poll attached or column
     // not migrated yet.
     poll:          row.poll && typeof row.poll === 'object' ? row.poll : null,
-    // Post kind tag. Currently 'idea' or null (= regular note). Read
+    // Post kind tag. Currently 'idea', 'bug' or null (= regular note). Read
     // as a single source of truth so the composer toggle, the badge
     // renderer and any future "Ideas only" filter all agree.
-    kind:          row.kind === 'idea' ? 'idea' : null,
+    kind:          ['idea', 'bug'].includes(row.kind) ? row.kind : null,
     // Audience for the post. One of:
     //   'public' (default), 'mutuals', 'following', 'friends', 'org',
     //   or the legacy 'restricted' (= friends OR org).
@@ -841,7 +841,7 @@ export async function addPost(post) {
     status:      post.status || 'wip',
   };
   if (wantsPhotos) row.photos = post.photos;
-  if (post.kind === 'idea' && hasKind) row.kind = 'idea';
+  if (['idea', 'bug'].includes(post.kind) && hasKind) row.kind = post.kind;
   if (hasEventUrl && post.eventUrl) row.event_url = post.eventUrl;
   if (hasVisibility && typeof post.visibility === 'string' &&
       ['mutuals','following','friends','org','restricted'].includes(post.visibility)) {
@@ -899,8 +899,8 @@ export async function updatePost(postId, fields) {
   const supa = await getClient();
   const patch = {};
   if (typeof fields.body === 'string') patch.body = fields.body;
-  // `kind` accepts the string 'idea' to tag, or null to untag.
-  if (fields.kind === 'idea' || fields.kind === null) {
+  // `kind` accepts 'idea' or 'bug' to tag, or null to untag.
+  if (['idea', 'bug'].includes(fields.kind) || fields.kind === null) {
     if (hasKind) patch.kind = fields.kind;
   }
   // `githubLink` is always optional — undefined means "leave alone",

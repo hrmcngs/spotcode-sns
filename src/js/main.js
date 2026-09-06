@@ -1,3 +1,4 @@
+import { renderKindBadge } from './post.js';
 import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate, currentPath } from './router.js';
@@ -572,9 +573,9 @@ let pendingPhotos = [];
 // pendingPhotos — lives in memory while composing, included on
 // addPost, cleared on submit / discard.
 let pendingPoll = null;
-// `idea` tag toggle. Mirrors the .compose-kind-toggle button state and
+// Post kind toggles. Mirror the .compose-kind-toggle button states and
 // rides on addPost / updatePost.
-let pendingKind = null; // null | 'idea'
+let pendingKind = null; // null | 'idea' | 'bug'
 // One of: 'public' | 'mutuals' | 'following' | 'friends' | 'org'.
 // The actual gating happens server-side via Stage 18 RLS — this
 // value just rides on the addPost payload.
@@ -885,11 +886,9 @@ function clearComposerUI() {
 // Safe to call when the button isn't in the DOM — e.g. logged-out
 // composer-gate has no toggle to update.
 function syncKindToggle() {
-  const btn = document.getElementById('compose-kind-toggle');
-  if (!btn) return;
-  const on = pendingKind === 'idea';
-  btn.setAttribute('aria-pressed', String(on));
-  btn.dataset.kind = on ? 'idea' : 'off';
+  document.querySelectorAll('[data-compose-kind]').forEach((btn) => {
+    btn.setAttribute('aria-pressed', String(pendingKind === btn.dataset.composeKind));
+  });
 }
 
 // Push the pendingVisibility back onto the <select> so a draft restore
@@ -1065,8 +1064,8 @@ function restoreComposerDraft() {
     pendingSpot = d.spot;
     syncSpotChip(d.spot);
   }
-  if (d.kind === 'idea') {
-    pendingKind = 'idea';
+  if (['idea', 'bug'].includes(d.kind)) {
+    pendingKind = d.kind;
     syncKindToggle();
   }
   if (typeof d.visibility === 'string' && d.visibility !== 'public') {
@@ -1454,10 +1453,10 @@ document.addEventListener('click', (e) => {
     body.dataset.originalHtml = body.innerHTML;
     // Seed the edit-mode metadata fields from what's already visible
     // on the post card so the user can rotate / clear values without
-    // re-typing. Idea badge: `.post__kind--idea` on the head.
+    // re-typing. Kind badges live in the post head.
     // GitHub link: `.post__meta > .post__link` sibling of the body
     // (NOT inside the body — escape() in renderPost puts it after).
-    const isIdea = !!post.querySelector('.post__kind--idea');
+    const selectedKind = post.querySelector('.post__kind--bug') ? 'bug' : post.querySelector('.post__kind--idea') ? 'idea' : null;
     const ghLink = post.querySelector('.post__meta .post__link')?.getAttribute('href') || '';
     const repoFullName = post.getAttribute('data-repo-full-name') || '';
     const escAttr = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -1470,10 +1469,11 @@ document.addEventListener('click', (e) => {
         String(original).replace(/&/g, '&amp;').replace(/</g, '&lt;') +
       '</textarea>' +
       '<div class="post__edit-meta">' +
-        '<button type="button" class="post__edit-pill act--edit-toggle-idea' +
-          (isIdea ? ' is-active' : '') + '" aria-pressed="' + (isIdea ? 'true' : 'false') + '">' +
-          escape(t('kind.idea')) +
-        '</button>' +
+        ['idea', 'bug'].map((kind) =>
+          '<button type="button" class="post__edit-pill act--edit-toggle-kind' +
+            (selectedKind === kind ? ' is-active' : '') + '" data-edit-kind="' + kind + '" aria-pressed="' + (selectedKind === kind) + '">' +
+            escape(t('kind.' + kind)) + '</button>'
+        ).join('') +
         '<label class="post__edit-link">' +
           'GitHub link' +
           '<input type="url" class="post__edit-link-input" placeholder="https://github.com/owner/repo" value="' + escAttr(ghLink) + '">' +
@@ -1493,12 +1493,16 @@ document.addEventListener('click', (e) => {
     ta.setSelectionRange(ta.value.length, ta.value.length);
     return;
   }
-  // Toggle the idea pill in-place (no save until the Save button).
-  const ideaToggleBtn = e.target.closest('.act--edit-toggle-idea');
-  if (ideaToggleBtn) {
+  // Keep Idea and Bug mutually exclusive, with an optional untagged state.
+  const kindToggleBtn = e.target.closest('.act--edit-toggle-kind');
+  if (kindToggleBtn) {
     e.preventDefault();
-    const active = ideaToggleBtn.classList.toggle('is-active');
-    ideaToggleBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    const active = !kindToggleBtn.classList.contains('is-active');
+    kindToggleBtn.closest('.post__body').querySelectorAll('.act--edit-toggle-kind').forEach((btn) => {
+      const selected = btn === kindToggleBtn && active;
+      btn.classList.toggle('is-active', selected);
+      btn.setAttribute('aria-pressed', String(selected));
+    });
     return;
   }
   const cancelBtn = e.target.closest('.act--edit-cancel');
@@ -1522,10 +1526,10 @@ document.addEventListener('click', (e) => {
     if (!ta) return;
     const newBody = ta.value.trim();
     if (!newBody) { alert('本文を入力してください'); return; }
-    // Pull the metadata fields from the inline editor. Idea toggle
+    // Pull the metadata fields from the inline editor. Kind toggle
     // state lives on the pill (.is-active class); the link input is
     // text, trimmed; empty → null so the backing column gets cleared.
-    const ideaActive = !!body.querySelector('.act--edit-toggle-idea.is-active');
+    const selectedKind = body.querySelector('.act--edit-toggle-kind.is-active')?.dataset.editKind || null;
     const linkInput = body.querySelector('.post__edit-link-input');
     const newLink = linkInput ? linkInput.value.trim() : '';
     const repoInput = body.querySelector('.post__edit-repo-input');
@@ -1536,7 +1540,7 @@ document.addEventListener('click', (e) => {
     if (repoInput) repoInput.disabled = true;
     updatePost(post.getAttribute('data-post-id'), {
       body:       newBody,
-      kind:       ideaActive ? 'idea' : null,
+      kind:       selectedKind,
       githubLink: newLink || null,
       repoFullName: newRepo || null,
     })
@@ -1557,22 +1561,10 @@ document.addEventListener('click', (e) => {
             head.querySelector('.post__time')?.insertAdjacentHTML('afterend',
               '<span class="post__edited">（編集済み）</span>');
           }
-          // Patch the idea badge in the head: add it if newly tagged,
-          // remove it if untagged. Cheaper than a full re-render and
-          // keeps the rest of the head (spot chip, time, visibility
-          // pill) untouched. The badge HTML matches renderPost's
-          // template so a follow-up refresh() wouldn't see a delta.
+          // Match the badge used by a full render after changing the tag.
           if (head) {
-            const existingIdea = head.querySelector('.post__kind--idea');
-            if (ideaActive && !existingIdea) {
-              head.querySelector('.post__time')?.insertAdjacentHTML('afterend',
-                ' <span class="post__kind post__kind--idea" title="' + escape(t('kind.idea.title')) + '">' +
-                  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon--inline"><path d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>' +
-                  escape(t('kind.idea')) +
-                '</span>');
-            } else if (!ideaActive && existingIdea) {
-              existingIdea.remove();
-            }
+            head.querySelectorAll('.post__kind').forEach((badge) => badge.remove());
+            head.querySelector('.post__time')?.insertAdjacentHTML('afterend', renderKindBadge(selectedKind));
           }
           // Patch the github_link chip (sibling of .post__body inside
           // .post__main). Three transitions to handle:
@@ -1892,13 +1884,14 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  // Idea tag toggle — flips pendingKind between null and 'idea' and
+  // Post kind toggle — selects Idea, Bug, or no tag and
   // syncs the button's pressed/data-kind state so the next submit
   // picks up the new value.
-  const kindBtn = e.target.closest('#compose-kind-toggle');
+  const kindBtn = e.target.closest('[data-compose-kind]');
   if (kindBtn) {
     e.preventDefault();
-    pendingKind = pendingKind === 'idea' ? null : 'idea';
+    const kind = kindBtn.dataset.composeKind;
+    pendingKind = pendingKind === kind ? null : kind;
     syncKindToggle();
     autosaveComposerDraft();
     return;

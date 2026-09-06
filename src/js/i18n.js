@@ -116,6 +116,8 @@ const DICT = {
     // ---------------- post kind tag ----------------
     'kind.idea':               'アイデア',
     'kind.idea.title':         'アイデアタグ',
+    'kind.bug':                'バグ',
+    'kind.bug.title':          'バグ報告タグ',
 
     // ---------------- notifications ----------------
     'notif.page.title':        '通知',
@@ -262,6 +264,7 @@ const DICT = {
     'compose.vis.following':       'フォローしている人',
     'compose.vis.friends':         '親しい友達',
     'compose.vis.org':             '同じ組織の人',
+    'post.vis.public':             '全員に公開',
     'post.vis.mutuals':            '相互フォローのみ',
     'post.vis.following':          'フォロー中のみ',
     'post.vis.friends':            '親しい友達のみ',
@@ -361,11 +364,11 @@ const DICT = {
     'rail.who_to_follow':      'Who to follow',
 
     'repos.title':             'Repos',
-    'repos.subtitle':          'GitHub と紐づくリポジトリ単位で動きを見る。',
+    'repos.subtitle':          '自分の GitHub リポジトリの動きを見る。',
     'repos.loading':           'リポジトリを読み込み中…',
     'repos.signin':            'リポジトリを見るにはログインしてください。',
-    'repos.empty.no_gh':       'あなたとフォロー中のユーザーに GitHub ハンドルが設定されていません。Edit profile から登録してください。',
-    'repos.empty.no_repos':    '対象のユーザーに公開リポジトリが見つかりませんでした。',
+    'repos.empty.no_gh':       'GitHub ハンドルが設定されていません。Edit profile から登録してください。',
+    'repos.empty.no_repos':    'あなたの公開リポジトリが見つかりませんでした。',
     'repos.posts.loading':     '関連投稿を読み込み中…',
     'repos.posts.empty':       'このリポに紐づく投稿はまだありません。',
     'repos.posts.heading':     'spotcode-sns 内の投稿 ({n})',
@@ -488,6 +491,8 @@ const DICT = {
     // ---------------- post kind tag ----------------
     'kind.idea':               'idea',
     'kind.idea.title':         'Idea tag',
+    'kind.bug':                'bug',
+    'kind.bug.title':          'Bug report tag',
 
     // ---------------- notifications ----------------
     'notif.page.title':        'Notifications',
@@ -630,8 +635,9 @@ const DICT = {
     'compose.vis.following':       'People I follow',
     'compose.vis.friends':         'Close friends',
     'compose.vis.org':             'Same organization',
+    'post.vis.public':             'Everyone',
     'post.vis.mutuals':            'Mutuals only',
-    'post.vis.following':          'Followers (one-way) only',
+    'post.vis.following':          'People the author follows',
     'post.vis.friends':            'Close friends only',
     'post.vis.org':                'Same organization only',
     'post.vis.restricted':         'Friends / org only',
@@ -729,11 +735,11 @@ const DICT = {
     'rail.who_to_follow':      'Who to follow',
 
     'repos.title':             'Repos',
-    'repos.subtitle':          'Activity per GitHub repository, for you and the people you follow.',
+    'repos.subtitle':          'Activity in your GitHub repositories.',
     'repos.loading':           'Loading repositories…',
     'repos.signin':            'Sign in to see repositories.',
-    'repos.empty.no_gh':       'Neither you nor the people you follow have a GitHub handle on file. Add one from Edit profile.',
-    'repos.empty.no_repos':    'No public repositories found for those users.',
+    'repos.empty.no_gh':       'You don’t have a GitHub handle on file. Add one from Edit profile.',
+    'repos.empty.no_repos':    'No public repositories found for your account.',
     'repos.posts.loading':     'Loading related posts…',
     'repos.posts.empty':       'No posts tagged with this repo yet.',
     'repos.posts.heading':     'spotcode-sns posts ({n})',

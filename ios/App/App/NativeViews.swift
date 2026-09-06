@@ -423,7 +423,7 @@ private struct InlineComposer: View {
     @State private var sending = false
     @State private var showLink = false
     @State private var showEvent = false
-    @State private var isIdea = false
+    @State private var postKind: String? = nil
     @State private var visibility = "public"
     @State private var photos: [String] = []
     @State private var poll: PostPoll?
@@ -499,11 +499,11 @@ private struct InlineComposer: View {
 
     @ViewBuilder private var composerChips: some View {
         if horizontalSizeClass == .regular {
-            HStack(spacing: 8) { locationChip; linkChip; eventChip; ideaChip; audienceChip }
+            HStack(spacing: 8) { locationChip; linkChip; eventChip; kindChip; audienceChip }
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) { locationChip; linkChip }
-                HStack(spacing: 8) { eventChip; ideaChip }
+                HStack(spacing: 8) { eventChip; kindChip }
                 audienceChip
             }
         }
@@ -516,7 +516,7 @@ private struct InlineComposer: View {
     }
     private var linkChip: some View { Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加", active: showLink) } }
     private var eventChip: some View { Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: "イベントを追加", active: showEvent) } }
-    private var ideaChip: some View { Button { isIdea.toggle() } label: { ComposerChip(icon: "sparkles", title: "アイデア", active: isIdea) } }
+    private var kindChip: some View { PostKindPicker(kind: $postKind) }
     private var audienceChip: some View {
         Menu {
             audienceButton("全員", value: "public")
@@ -551,9 +551,9 @@ private struct InlineComposer: View {
     private func publish() {
         sending = true
         Task {
-            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, repoFullName: repoFullName.isEmpty ? nil : repoFullName, eventURL: eventURL.isEmpty ? nil : eventURL, spot: selectedSpot, kind: isIdea ? "idea" : nil, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
+            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, repoFullName: repoFullName.isEmpty ? nil : repoFullName, eventURL: eventURL.isEmpty ? nil : eventURL, spot: selectedSpot, kind: postKind, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
                 draft = ""; githubLink = ""; repoFullName = ""; eventURL = ""; showLink = false; showEvent = false
-                isIdea = false; visibility = "public"; selectedSpot = nil
+                postKind = nil; visibility = "public"; selectedSpot = nil
                 photos = []; poll = nil
             }
             sending = false
@@ -602,6 +602,24 @@ private struct InlineComposer: View {
     private func persistDraftImmediately() {
         draftSaveTask?.cancel()
         UserDefaults.standard.set(draft, forKey: "spotcode.native.draft")
+    }
+}
+
+private struct PostKindPicker: View {
+    @Binding var kind: String?
+
+    var body: some View {
+        Menu {
+            Picker("投稿タグ", selection: $kind) {
+                Text("タグなし").tag(String?.none)
+                Label("アイデア", systemImage: "sparkles").tag(String?.some("idea"))
+                Label("バグ", systemImage: "ladybug").tag(String?.some("bug"))
+            }
+        } label: {
+            ComposerChip(icon: kind == "bug" ? "ladybug" : "sparkles",
+                         title: kind == "bug" ? "バグ" : kind == "idea" ? "アイデア" : "投稿タグ",
+                         active: kind != nil)
+        }
     }
 }
 
@@ -1086,19 +1104,16 @@ struct PostRow: View {
                         .padding(.horizontal, 9).padding(.vertical, 4)
                         .background((post.status ?? "wip") == "active" ? Color.cyan : SpotcodeTheme.warning).clipShape(Capsule())
                 }
-                if post.spot != nil || post.kind == "idea" || (post.visibility ?? "public") != "public" {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            if let spot = post.spot {
-                                Button { showSpotMap = true } label: {
-                                    PostMetadataBadge(icon: "mappin", text: spot.label ?? spot.address ?? "選択した場所", color: SpotcodeTheme.accent)
-                                }.buttonStyle(.plain)
-                            }
-                            if post.kind == "idea" { PostMetadataBadge(icon: "sparkles", text: "アイデア", color: SpotcodeTheme.warning) }
-                            if let visibility = post.visibility, visibility != "public" {
-                                PostMetadataBadge(icon: visibilityBadge(visibility).icon, text: visibilityBadge(visibility).text, color: SpotcodeTheme.muted)
-                            }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        if let spot = post.spot {
+                            Button { showSpotMap = true } label: {
+                                PostMetadataBadge(icon: "mappin", text: spot.label ?? spot.address ?? "選択した場所", color: SpotcodeTheme.accent)
+                            }.buttonStyle(.plain)
                         }
+                        if post.kind == "idea" { PostMetadataBadge(icon: "sparkles", text: "アイデア", color: SpotcodeTheme.warning) }
+                        if post.kind == "bug" { PostMetadataBadge(icon: "ladybug", text: "バグ", color: .red) }
+                        PostMetadataBadge(icon: visibilityBadge(post.visibility ?? "public").icon, text: visibilityBadge(post.visibility ?? "public").text, color: SpotcodeTheme.muted)
                     }
                 }
                 if !canReadContent {
@@ -1220,6 +1235,7 @@ struct PostRow: View {
 
     private func visibilityBadge(_ value: String) -> (icon: String, text: String) {
         switch value {
+        case "public": return ("globe", "全員に公開")
         case "mutuals": return ("arrow.2.squarepath", "相互フォロー")
         case "following": return ("person.badge.plus", "フォロー中")
         case "friends": return ("heart", "親しい友達")
@@ -1348,7 +1364,7 @@ private struct EditPostView: View {
     @State private var githubLink: String
     @State private var repoFullName: String
     @State private var eventURL: String
-    @State private var isIdea: Bool
+    @State private var postKind: String?
     @State private var visibility: String
     @State private var saving = false
     @State private var editorFocused = false
@@ -1360,7 +1376,7 @@ private struct EditPostView: View {
         _githubLink = State(initialValue: post.githubLink ?? "")
         _repoFullName = State(initialValue: post.repoFullName ?? "")
         _eventURL = State(initialValue: post.eventURL ?? "")
-        _isIdea = State(initialValue: post.kind == "idea")
+        _postKind = State(initialValue: post.kind)
         _visibility = State(initialValue: post.visibility ?? "public")
     }
 
@@ -1381,15 +1397,7 @@ private struct EditPostView: View {
                         .textInputAutocapitalization(.never).autocorrectionDisabled(true)
                 }.spotcodeURLField()
                 HStack(spacing: 10) {
-                    Button { isIdea.toggle() } label: {
-                        Label("アイデア", systemImage: "sparkles")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundColor(isIdea ? SpotcodeTheme.warning : SpotcodeTheme.muted)
-                            .padding(.horizontal, 13).padding(.vertical, 9)
-                            .background(isIdea ? SpotcodeTheme.warning.opacity(0.14) : Color.clear)
-                            .overlay(Capsule().stroke(isIdea ? SpotcodeTheme.warning : SpotcodeTheme.border))
-                            .clipShape(Capsule())
-                    }.buttonStyle(.plain)
+                    PostKindPicker(kind: $postKind)
                     Picker("公開範囲", selection: $visibility) {
                         Text("全員").tag("public")
                         Text("フォロー中").tag("following")
@@ -1422,7 +1430,7 @@ private struct EditPostView: View {
                                 post, body: text, githubLink: link.isEmpty ? nil : link,
                                 repoFullName: repository.isEmpty ? nil : repository,
                                 eventURL: event.isEmpty ? nil : event,
-                                kind: isIdea ? "idea" : nil, visibility: visibility
+                                kind: postKind, visibility: visibility
                             ) != nil {
                                 isPresented = false
                             }
@@ -1496,7 +1504,7 @@ struct ComposeView: View {
     @State private var editorFocused = false
     @State private var showLink = false
     @State private var showEvent = false
-    @State private var isIdea = false
+    @State private var postKind: String? = nil
     @State private var visibility = "public"
     @State private var selectedSpot: Spot?
     @State private var photos: [String] = []
@@ -1538,7 +1546,7 @@ struct ComposeView: View {
                         }
                         HStack(spacing: 8) {
                             Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: "イベントを追加", active: showEvent) }
-                            Button { isIdea.toggle() } label: { ComposerChip(icon: "sparkles", title: "アイデア", active: isIdea) }
+                            PostKindPicker(kind: $postKind)
                             audienceMenu
                         }
                     }
@@ -1646,7 +1654,7 @@ struct ComposeView: View {
                 repoFullName: repository.isEmpty ? nil : repository,
                 eventURL: event.isEmpty ? nil : event,
                 spot: selectedSpot,
-                kind: isIdea ? "idea" : nil,
+                kind: postKind,
                 visibility: visibility,
                 photos: photos.isEmpty ? nil : photos,
                 poll: poll
@@ -1796,7 +1804,7 @@ struct RepositoriesView: View {
                 VStack(spacing: 6) {
                     RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 22, height: 22).foregroundColor(SpotcodeTheme.accent)
                     Text("Repos").font(.title3).fontWeight(.bold)
-                    Text("GitHub と紐づくリポジトリ単位で動きを見る。")
+                    Text("自分の GitHub リポジトリの動きを見る。")
                         .font(.subheadline).foregroundColor(SpotcodeTheme.muted)
                 }.frame(maxWidth: .infinity).padding(.vertical, 22)
                 if loading && repositories.isEmpty { ProgressView("リポジトリを読み込み中…").padding(.top, 50) }
@@ -1867,18 +1875,8 @@ struct RepositoriesView: View {
     private func load() async {
         guard let handle = model.me?.githubHandle else { return }
         loading = true; defer { loading = false }
-        var handles = [handle]
-        if let session = model.session, let userID = model.me?.id,
-           let following = try? await SupabaseService.shared.followingProfiles(userID: userID, token: session.accessToken) {
-            handles += following.compactMap(\.githubHandle)
-        }
-        var loaded: [Repository] = []
-        await withTaskGroup(of: [Repository].self) { group in
-            for value in Array(Set(handles)) { group.addTask { (try? await SupabaseService.shared.repositories(handle: value)) ?? [] } }
-            for await values in group { loaded += values }
-        }
-        repositories = Dictionary(grouping: loaded, by: \.fullName).compactMap(\.value.first)
-            .sorted { ($0.pushedAt ?? "") > ($1.pushedAt ?? "") }
+        let loaded = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []
+        repositories = loaded.sorted { ($0.pushedAt ?? "") > ($1.pushedAt ?? "") }
         relatedPosts = (try? await SupabaseService.shared.posts(limit: 200, token: model.session?.accessToken)) ?? []
     }
 

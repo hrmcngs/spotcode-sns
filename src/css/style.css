@@ -880,6 +880,12 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
   color: #febc2e;
   border: 1px solid color-mix(in srgb, #febc2e 40%, transparent);
 }
+.post__kind--bug {
+  background: color-mix(in srgb, #f85149 18%, transparent);
+  color: #f85149;
+  border: 1px solid color-mix(in srgb, #f85149 40%, transparent);
+}
+
 /* `display: flex` below is an AUTHOR rule, so it beats the UA
    stylesheet's `[hidden] { display: none }` no matter the
    specificity — without this line the collapsed link / event rows
