@@ -49,6 +49,19 @@ actor SupabaseService {
         .dataNotAllowed
     ]
 
+    // Only a rejected schema query is retried. Auth/network errors never trigger this fallback.
+    static func legacyOrganizationPath(_ path: String, error: String) -> String? {
+        guard path.hasPrefix("rest/v1/posts?"), path.contains("organization_author_id") else { return nil }
+        let message = error.lowercased()
+        let schemaError = message.contains("pgrst200") || message.contains("pgrst204") || message.contains("42703")
+        guard schemaError && (message.contains("organization_author") ||
+            (message.contains("pgrst200") && message.contains("'posts'") && message.contains("'profiles'"))) else { return nil }
+        var result = path.replacingOccurrences(of: #",organization_author:profiles!posts_organization_author_id_fkey\([^)]*\)"#, with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"or=\(author_id\.eq\.([^,)]+),organization_author_id\.eq\.[^,)]+\)"#, with: "author_id=eq.$1", options: .regularExpression)
+        result = result.replacingOccurrences(of: ",organization_author_id", with: "")
+        return result == path ? nil : result
+    }
+
     private func request<T: Decodable>(
         _ path: String,
         method: String = "GET",
@@ -75,6 +88,11 @@ actor SupabaseService {
         let (data, response) = try await data(for: request, retryable: method == "GET" || method == "HEAD" || isAuthRequest)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let message = String(data: data, encoding: .utf8) ?? "通信エラー"
+            if (response as? HTTPURLResponse)?.statusCode == 400,
+               let fallback = Self.legacyOrganizationPath(path, error: message) {
+                return try await self.request(fallback, method: method, token: token, body: body,
+                                              preferRepresentation: preferRepresentation, prefer: prefer)
+            }
             throw NSError(domain: "Supabase", code: (response as? HTTPURLResponse)?.statusCode ?? -1,
                           userInfo: [NSLocalizedDescriptionKey: message])
         }
@@ -637,8 +655,14 @@ actor SupabaseService {
         value.setValue("Bearer \(token ?? anonKey)", forHTTPHeaderField: "Authorization")
         value.setValue("count=exact", forHTTPHeaderField: "Prefer")
         value.setValue("0-0", forHTTPHeaderField: "Range")
-        let (_, response) = try await data(for: value, retryable: true)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+        let (payload, response) = try await data(for: value, retryable: true)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            if (response as? HTTPURLResponse)?.statusCode == 400,
+               let fallback = Self.legacyOrganizationPath(path, error: String(data: payload, encoding: .utf8) ?? "") {
+                return try await count(fallback, token: token)
+            }
+            throw URLError(.badServerResponse)
+        }
         let range = http.value(forHTTPHeaderField: "Content-Range") ?? "*/0"
         return Int(range.split(separator: "/").last ?? "0") ?? 0
     }

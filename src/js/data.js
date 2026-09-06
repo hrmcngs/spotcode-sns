@@ -137,6 +137,9 @@ function persistSchemaCache() {
   } catch {}
 }
 
+let hasOrganizationAttribution = true; // Retry after a page reload; never persist deployment gaps.
+let hasGithubOrgId = true;
+
 function postCols() {
   const extras = [];
   if (hasCommentsCount)  extras.push('comments_count');
@@ -147,17 +150,19 @@ function postCols() {
   if (hasPhotos)         extras.push('photos');
   if (hasPoll)           extras.push('poll');
   if (hasKind)           extras.push('kind');
-  if (hasVisibility)     extras.push('visibility', 'github_org_id');
+  if (hasVisibility)     extras.push('visibility');
+  if (hasGithubOrgId) extras.push('github_org_id');
+  if (hasOrganizationAttribution) extras.push('organization_author_id');
   if (hasRepoFullName)   extras.push('repo_full_name');
   if (hasEventUrl)       extras.push('event_url');
   const head =
-    'id, author_id, organization_author_id, body, github_link, spot, status, created_at' +
+    'id, author_id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
   // Embedded author select. Kept minimal — the visibility audience
   // check (close_friends / organization) is enforced server-side via
   // Stage 18 RLS, so we don't need to leak those onto the API
   // response anymore.
-  return head + ', author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape), organization_author:profiles!posts_organization_author_id_fkey(handle, name, avatar_url, avatar_shape)';
+  return head + ', author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)' + (hasOrganizationAttribution ? ', organization_author:profiles!posts_organization_author_id_fkey(handle, name, avatar_url, avatar_shape)' : '');
 }
 
 // Optional-column / table degradation map. Each entry: a substring
@@ -181,6 +186,20 @@ const OPTIONAL = [
 ];
 function isMissingOptionalColumn(error) {
   const msg = String(error?.message || '').toLowerCase();
+  const detail = [error?.message, error?.details, error?.hint].join(' ').toLowerCase();
+  const schemaError = ['PGRST200', 'PGRST204', '42703'].includes(error?.code)
+    || msg.includes('does not exist') || msg.includes('schema cache');
+  if (schemaError && (detail.includes('organization_author') ||
+      (error?.code === 'PGRST200' && detail.includes("'posts'") && detail.includes("'profiles'")))) {
+    if (!hasOrganizationAttribution) return false;
+    hasOrganizationAttribution = false;
+    return true;
+  }
+  if (schemaError && detail.includes('github_org_id')) {
+    if (!hasGithubOrgId) return false;
+    hasGithubOrgId = false;
+    return true;
+  }
   if (!msg.includes('does not exist')) return false;
   // Two booleans: `matched` is whether the error CALLS OUT a known
   // optional column (retry-worthy), `flipped` is whether we actually
@@ -643,7 +662,7 @@ export async function followingPosts({ limit = 100 } = {}) {
   if (!targetIds.length) return [];
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols)
-      .or('author_id.in.(' + targetIds.join(',') + '),organization_author_id.in.(' + targetIds.join(',') + ')')
+      .or('author_id.in.(' + targetIds.join(',') + ')' + (hasOrganizationAttribution ? ',organization_author_id.in.(' + targetIds.join(',') + ')' : ''))
       .order('created_at', { ascending: false })
       .limit(limit)
   );
@@ -674,7 +693,7 @@ export async function postsByHandle(handle) {
   }
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols)
-      .or('author_id.eq.' + userId + ',organization_author_id.eq.' + userId)
+      .or('author_id.eq.' + userId + (hasOrganizationAttribution ? ',organization_author_id.eq.' + userId : ''))
       .order('created_at', { ascending: false })
   );
   if (error) throw new Error(error.message);
@@ -886,7 +905,8 @@ export async function addPost(post) {
   if (wantsPhotos || wantsPoll) {
     if (wantsPhotos) hasPhotos = true;
     if (wantsPoll)   hasPoll   = true;
-    const { data, error } = await supa.from('posts').insert(row).select(postCols()).single();
+    const { data, error } = await withResilientCols(cols =>
+      supa.from('posts').insert(row).select(cols).single());
     if (error) {
       const msg = String(error.message || '').toLowerCase();
       if (wantsPhotos && msg.includes('photos') && msg.includes('does not exist')) {

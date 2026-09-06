@@ -31,7 +31,9 @@ async function asUser(i,dev=false) {
 }
 await db.exec("reset role; alter table posts add column repo_full_name text; alter table posts add column github_link text; alter table posts add column created_at timestamptz default now()");
 const migration = fs.readFileSync(process.cwd()+'/docs/migrations/039-organization-post-attribution.sql','utf8');
+await db.exec('alter table posts add column organization_author_id uuid'); // interrupted/partial setup
 await db.exec(migration);
+assert.equal((await db.query("select count(*)::int as count from pg_constraint where conrelid='posts'::regclass and conname='posts_organization_author_id_fkey'")).rows[0].count,1);
 await db.exec(migration); // safe SQL Editor rerun
 async function insert(id, author, repository, link, visibility='public', spoof=null) {
   return db.query(`insert into posts(id,author_id,body,visibility,repo_full_name,github_link,organization_author_id)

@@ -118,3 +118,9 @@ Stage 38 の後に `docs/migrations/039-organization-post-attribution.sql` 全�
 GitHub のメンバー確認が有効なユーザーが、連携先 Organization の `owner/repository` または `https://github.com/owner/repository` を付けて新規投稿すると、組織アカウントの名前・アイコンで表示され、組織プロフィールにも掲載されます。リンク先リポジトリの実在確認はせず、Organization の所有者名と確認済みメンバー情報で判定します。
 実際の投稿者は `author_id`、表示先の組織は `organization_author_id` に記録します。編集・削除権限と公開範囲は実際の投稿者を基準に維持し、「自分のみ」は組織の他のメンバーには公開しません。メンバーも対象リポジトリを指定して「GitHub Organizationのみ」を選べます。
 同じ Organization に複数の組織アカウントが連携している場合は、誤ったアカウントに掲載しないよう投稿を止めます。設定で連携先を一つにしてください。既存投稿の一括変更は行わず、本文だけの編集や脱退・連携解除では過去の表示名義を変更しません。
+
+#### 投稿一覧に relationship / schema cache エラーが出る場合
+
+Stage 38 の実行後、更新版 `docs/migrations/039-organization-post-attribution.sql` の全文を再実行してください。既存列の外部キーが欠けている場合も補完し、最後に `NOTIFY pgrst, 'reload schema';` で API のスキーマキャッシュを更新します。その後ページを再読み込みします。キャッシュのみ更新する場合はこの NOTIFY 文だけを SQL Editor で実行できます（列や外部キーが未作成の場合には Stage 39 が必要です）。
+Web / iOS の更新版は、新しい組織関連付けが未認識の場合に従来の投稿者情報で取得を再試行します。公開範囲と写真の取得は維持します。組織名義の表示を有効にするには SQL の反映が必要です。
+参考: https://postgrest.org/en/stable/references/schema_cache.html

@@ -3,6 +3,15 @@
 begin;
 alter table public.posts add column if not exists organization_author_id uuid
   references public.profiles(id) on delete set null;
+-- Also repair installations where the column existed without its foreign key.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'public.posts'::regclass
+    and conname = 'posts_organization_author_id_fkey') then
+    alter table public.posts add constraint posts_organization_author_id_fkey
+      foreign key (organization_author_id) references public.profiles(id) on delete set null;
+  end if;
+end $$;
 create index if not exists posts_organization_author_idx
   on public.posts(organization_author_id, created_at desc) where organization_author_id is not null;
 
@@ -71,4 +80,5 @@ begin
   end if;
   return new;
 end $$;
+notify pgrst, 'reload schema';
 commit;
