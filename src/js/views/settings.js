@@ -1,3 +1,4 @@
+import { publicTaskRepositories } from '../task-repositories.js';
 import { syncGithubOrganizations } from '../github-organizations.js';
 import { linkGithubForOrganizations } from '../github-oauth.js';
 import { loadMaps } from '../gmap.js';
@@ -30,6 +31,7 @@ const hydratedTaskSettings = new Set();
 let privateIssueAuthError = '';
 let taskRepoSearch = '';
 let taskRepoSearchOwner = null;
+let taskRepoCandidates = { owner: null, names: [], error: '' };
 
 // Password-shaped confirmation UI for sensitive settings. window.prompt()
 // would expose the password as plain text, so use the existing modal styles
@@ -440,14 +442,14 @@ function displaySection() {
   const me = currentUser();
   if (taskRepoSearchOwner !== me?.id) { taskRepoSearchOwner = me?.id; taskRepoSearch = ''; }
   const taskItems = (cachedTasks(me?.github?.handle, privateTasksEnabled()) || cachedTasks(me?.github?.handle, false))?.items || [];
-  const taskRepos = [...new Set(taskItems.map((item) => item.repo).filter(Boolean))].sort();
+  const taskRepos = [...new Set([...taskItems.map((item) => item.repo).filter(Boolean), ...(taskRepoCandidates.owner === me?.id ? taskRepoCandidates.names : [])])].sort();
   const hiddenRepos = new Set(hiddenTaskRepos());
   const repoChoices = taskRepos.length
     ? '<div class="settings-task-repos">' + taskRepos.map((repo) =>
         '<label class="settings-check"' + (repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase()) ? '' : ' hidden') + '><input type="checkbox" data-task-repo="' + attr(repo) + '"' +
           (hiddenRepos.has(repo) ? '' : ' checked') + '> <span>' + attr(repo) + '</span></label>'
       ).join('') + '</div>'
-    : '<p class="settings__hint">Issue取得後に、ここで表示するリポジトリを選べます。</p>';
+    : '<p class="settings__hint">' + (taskRepoCandidates.owner === me?.id ? '表示できるリポジトリがありません。' : 'リポジトリ一覧を取得しています…') + '</p>';
   const privateStatus = privateIssueAuthError
     ? '<p class="settings-status is-bad">' + attr(privateIssueAuthError) + '</p><button type="button" class="btn btn--ghost" id="private-tasks-reauthorize">GitHubを再認証</button>' : '';
   return (
@@ -491,7 +493,7 @@ function displaySection() {
       '<h3>表示するリポジトリ</h3>' +
       '<input type="search" id="task-repo-search" autocomplete="off" aria-controls="task-repo-suggestions" aria-label="リポジトリを検索" placeholder="リポジトリ名で検索（owner/repo）" value="' + attr(taskRepoSearch) + '">' +
       '<div id="task-repo-suggestions" class="settings-repo-suggestions" aria-label="リポジトリの候補" hidden></div>' +
-      repoChoices + '<p id="task-repo-search-empty" class="settings__hint"' + (taskRepos.length && !taskRepos.some(repo => repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase())) ? '' : ' hidden') + '>一致するリポジトリがありません。</p>' +
+      repoChoices + (taskRepoCandidates.owner === me?.id && taskRepoCandidates.error ? '<p class="settings__hint">' + attr(taskRepoCandidates.error) + '</p>' : '') + '<p id="task-repo-search-empty" class="settings__hint"' + (taskRepos.length && !taskRepos.some(repo => repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase())) ? '' : ' hidden') + '>一致するリポジトリがありません。</p>' +
       '<div class="settings-form__actions"><button type="button" class="btn btn--ghost" id="private-tasks-toggle">' +
         (privateTasksEnabled() ? '非公開Issue表示をOFF' : '非公開Issueを表示する（GitHub再認証）') +
       '</button></div>' +
@@ -757,10 +759,25 @@ export function bindSettings() {
   }
   if (currentSettingsTab() === 'display' && settingsGh) {
     const includePrivate = privateTasksEnabled();
-    const hydrationKey = settingsGh.toLowerCase() + (includePrivate ? ':private' : ':public');
+    const hydrationKey = settingsUser.id + ':' + settingsGh.toLowerCase() + (includePrivate ? ':private' : ':public');
     if (!hydratedTaskSettings.has(hydrationKey)) {
       hydratedTaskSettings.add(hydrationKey);
       (async () => {
+        let names = [], repoError = '';
+        try {
+          const token = await getGithubToken();
+          if (token) {
+            try {
+              const result = await syncGithubOrganizations({ repositories: true });
+              names = (result.repositories || []).map(repo => repo.full_name).filter(Boolean);
+            } catch {
+              names = await publicTaskRepositories(settingsGh);
+              repoError = '自分の公開リポジトリを表示しています。組織・非公開リポジトリはGitHub連携を確認してください。';
+            }
+          } else { names = await publicTaskRepositories(settingsGh); }
+        } catch (error) { repoError = error.message; }
+        if (currentUser()?.id !== settingsUser.id) return;
+        taskRepoCandidates = { owner: settingsUser.id, names, error: repoError };
         if (includePrivate) {
           const token = await getGithubToken();
           const permission = token ? await githubTokenCanReadPrivateRepos(token) : false;
@@ -780,7 +797,11 @@ export function bindSettings() {
           await fetchTasks(settingsGh, false);
         }
         const app = document.getElementById('app');
-        if (app && currentSettingsTab() === 'display') { app.innerHTML = renderSettings(); bindSettings(); }
+        if (app && currentUser()?.id === settingsUser.id && currentSettingsTab() === 'display') {
+          const wasSearching = document.activeElement?.id === 'task-repo-search';
+          app.innerHTML = renderSettings(); bindSettings();
+          if (wasSearching) document.getElementById('task-repo-search')?.focus();
+        }
       })().catch(() => hydratedTaskSettings.delete(hydrationKey));
     }
   }
@@ -946,7 +967,7 @@ export function bindSettings() {
     const empty = document.getElementById('task-repo-search-empty');
     if (empty) empty.hidden = !inputs.length || matches.length > 0;
     suggestions.replaceChildren();
-    for (const input of matches.slice(0, 8)) {
+    for (const input of matches) {
       const repo = input.getAttribute('data-task-repo');
       const button = document.createElement('button');
       button.type = 'button';

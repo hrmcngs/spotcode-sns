@@ -3526,13 +3526,21 @@ private struct DisplaySettings: View {
     }
 
     private func loadIssueRepositories() async {
-        guard let handle = model.me?.githubHandle else { return }
+        guard let handle = model.me?.githubHandle, let owner = model.session?.user.id else { return }
+        var repositories: [Repository] = []
+        if let result = try? await model.syncGithubOrganizations(includeRepositories: true) {
+            repositories = result.repositories ?? []
+        } else {
+            repositories = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []
+        }
         let token = privateIssuesEnabled ? await model.hydrateSharedPrivateIssueToken() : nil
-        guard let result = try? await SupabaseService.shared.githubOpenIssues(
+        let result = try? await SupabaseService.shared.githubOpenIssues(
             handle: handle, githubToken: token, includePrivate: privateIssuesEnabled && token != nil
-        ) else { return }
-        issueRepositories = Array(Set(result.items.map(\.repositoryName))).sorted()
+        )
+        guard model.session?.user.id == owner else { return }
+        issueRepositories = Array(Set(repositories.map(\.fullName) + (result?.items.map(\.repositoryName) ?? []))).sorted()
     }
+
 }
 
 private func decodeRepoSet(_ value: String) -> Set<String> {

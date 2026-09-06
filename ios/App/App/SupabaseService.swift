@@ -387,14 +387,20 @@ actor SupabaseService {
     }
 
     func repositories(handle: String) async throws -> [Repository] {
-        var components = URLComponents(string: "https://api.github.com/users/\(handle)/repos")!
-        components.queryItems = [.init(name: "sort", value: "pushed"), .init(name: "type", value: "owner"), .init(name: "per_page", value: "30")]
-        var request = URLRequest(url: components.url!)
-        request.timeoutInterval = 35
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await data(for: request, retryable: true)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
-        return try decoder.decode([Repository].self, from: data)
+        var repositories: [Repository] = []
+        for page in 1...100 {
+            var components = URLComponents(string: "https://api.github.com/users/\(handle)/repos")!
+            components.queryItems = [.init(name: "sort", value: "pushed"), .init(name: "type", value: "owner"), .init(name: "per_page", value: "100"), .init(name: "page", value: String(page))]
+            var request = URLRequest(url: components.url!)
+            request.timeoutInterval = 35
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            let (data, response) = try await data(for: request, retryable: true)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
+            let batch = try decoder.decode([Repository].self, from: data)
+            repositories.append(contentsOf: batch)
+            if batch.count < 100 { return repositories }
+        }
+        throw URLError(.dataLengthExceedsMaximum)
     }
 
     func githubContributions(handle: String) async throws -> [GitHubContribution] {

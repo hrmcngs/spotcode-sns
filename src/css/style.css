@@ -3468,10 +3468,12 @@ html.account-menu-locked { overflow: hidden; }
 
 .settings-repo-suggestions {
   display: grid;
+  max-height: 20rem;
+  overflow-y: auto;
   margin-top: .35rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: hidden;
   background: var(--surface);
 }
 .settings-repo-suggestions[hidden] { display: none; }
