@@ -843,9 +843,10 @@ export async function addPost(post) {
   if (wantsPhotos) row.photos = post.photos;
   if (['idea', 'bug'].includes(post.kind) && hasKind) row.kind = post.kind;
   if (hasEventUrl && post.eventUrl) row.event_url = post.eventUrl;
-  if (hasVisibility && typeof post.visibility === 'string' &&
+  if (typeof post.visibility === 'string' &&
       ['mutuals','following','friends','org','restricted'].includes(post.visibility)) {
     row.visibility = post.visibility;
+    hasVisibility = true;
   }
   if (wantsPoll) {
     // Stamp createdAt on the poll for ordering on the renderer.
@@ -898,6 +899,14 @@ export async function addPost(post) {
 export async function updatePost(postId, fields) {
   const supa = await getClient();
   const patch = {};
+  if (Object.prototype.hasOwnProperty.call(fields, 'visibility')) {
+    if (!['public', 'mutuals', 'following', 'friends', 'org', 'restricted'].includes(fields.visibility)) {
+      throw new Error('表示先が正しくありません');
+    }
+    // Never omit an explicitly selected audience because of a stale schema cache.
+    patch.visibility = fields.visibility;
+    hasVisibility = true;
+  }
   if (typeof fields.body === 'string') patch.body = fields.body;
   // `kind` accepts 'idea' or 'bug' to tag, or null to untag.
   if (['idea', 'bug'].includes(fields.kind) || fields.kind === null) {
@@ -928,7 +937,10 @@ export async function updatePost(postId, fields) {
   if (!data || data.length === 0) {
     throw new Error('編集権限がありません（RLS により拒否）');
   }
-  return shapePost(data[0]);
+  const updated = shapePost(data[0]);
+  // Evict old audience/body snapshots so navigation cannot restore stale metadata.
+  removeFromTimelineCaches(postId);
+  return updated;
 }
 
 export async function removePost(postId) {

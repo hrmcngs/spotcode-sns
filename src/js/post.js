@@ -216,12 +216,17 @@ export function renderKindBadge(kind) {
     icon(kind === 'bug' ? 'bug' : 'spark', { size: 12, className: 'icon--inline' }) + escape(t('kind.' + kind)) + '</span>';
 }
 
+export function renderVisibilityBadge(visibility) {
+  const hint = VIS_HINT[visibility || 'public'] || VIS_HINT.restricted;
+  return ' <span class="post__vis" title="' + escape(t(hint.labelKey)) + '">' +
+    icon(hint.ico, { size: 12, className: 'icon--inline' }) + escape(t(hint.labelKey)) + '</span>';
+}
+
 export function renderPost(p) {
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
   const profileUrl = url('/' + u.handle);
   const me = currentUser();
-  const visHint = VIS_HINT[p.visibility || 'public'] || VIS_HINT.restricted;
   const liked      = me && isLiked(p.id);
   const reposted   = me && isReposted(p.id);
   const bookmarked = me && isBookmarked(p.id);
@@ -242,7 +247,7 @@ export function renderPost(p) {
   const displayName   = maskName(u.handle, u.name);
   const displayHandle = maskHandle(u.handle);
   return (
-    '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '" data-repo-full-name="' + escape(p.repoFullName || '') + '">' +
+    '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '" data-visibility="' + escape(p.visibility || 'public') + '" data-repo-full-name="' + escape(p.repoFullName || '') + '">' +
       renderAvatar(u, { tag: 'a', href: profileUrl }) +
       '<div class="post__main">' +
         '<div class="post__head">' +
@@ -253,11 +258,7 @@ export function renderPost(p) {
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">' + escape(t('post.edited')) + '</span>' : '') +
           (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot, p.id) : '') +
           renderKindBadge(p.kind) +
-          (visHint
-            ? ' <span class="post__vis" title="' + escape(t(visHint.labelKey)) + '">' +
-                icon(visHint.ico, { size: 12, className: 'icon--inline' }) + escape(t(visHint.labelKey)) +
-              '</span>'
-            : '') +
+          renderVisibilityBadge(p.visibility) +
           (p.status ? ' ' + statusBadge(p.status) : '') +
         '</div>' +
         (locked

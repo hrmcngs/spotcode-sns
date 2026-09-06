@@ -621,19 +621,19 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 .compose-vis-select__caption { color: var(--muted); }
 .compose-vis-select__current { color: var(--text); }
 .compose-vis-select__caret   { color: var(--muted); font-size: .85em; line-height: 1; }
-/* The native <select> covers the whole pill invisibly. Clicking the
-   pill triggers the OS picker; the visible label is the
-   .compose-vis-select__current span which mirrors the selection.
-   This way the pill width follows the currently-selected text
-   instead of being padded out to the widest option's width. */
+/* Keep the native control visible: the selected option is the displayed value. */
 .compose-vis-select select {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  margin: 0; padding: 0; border: 0;
-  background: transparent; color: transparent;
+  position: relative;
+  max-width: 100%;
+  margin: 0; padding: .1em .2em; border: 0;
+  background: transparent; color: var(--text);
   font: inherit; cursor: pointer;
-  appearance: none; -webkit-appearance: none;
-  opacity: 0;
+}
+.post__edit-vis-input {
+  padding: .35em .5em;
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px;
+  font: inherit;
 }
 .compose-vis-select select option { color: var(--text); background: var(--surface); }
 

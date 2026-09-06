@@ -517,15 +517,7 @@ private struct InlineComposer: View {
     private var linkChip: some View { Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加", active: showLink) } }
     private var eventChip: some View { Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: "イベントを追加", active: showEvent) } }
     private var kindChip: some View { PostKindPicker(kind: $postKind) }
-    private var audienceChip: some View {
-        Menu {
-            audienceButton("全員", value: "public")
-            audienceButton("相互フォロー", value: "mutuals")
-            audienceButton("フォロー中", value: "following")
-            audienceButton("親しい友達", value: "friends")
-            audienceButton("同じ組織", value: "org")
-        } label: { ComposerChip(icon: visibilityIcon, title: visibilityLabel, strong: true, active: visibility != "public") }
-    }
+    private var audienceChip: some View { PostAudiencePicker(visibility: $visibility) }
 
     private var composerTools: some View {
         HStack(spacing: 24) {
@@ -565,21 +557,6 @@ private struct InlineComposer: View {
         editorFocused = true
     }
 
-    private func audienceButton(_ title: String, value: String) -> some View {
-        Button { visibility = value } label: {
-            if visibility == value {
-                Label { Text(LocalizedStringKey(title)) } icon: { Image(systemName: "checkmark") }
-            } else {
-                Text(LocalizedStringKey(title))
-            }
-        }
-    }
-    private var visibilityLabel: String {
-        ["public":"全員", "mutuals":"相互フォロー", "following":"フォロー中", "friends":"親しい友達", "org":"同じ組織"][visibility] ?? "全員"
-    }
-    private var visibilityIcon: String {
-        ["public":"globe", "mutuals":"arrow.2.squarepath", "following":"person.badge.plus", "friends":"heart", "org":"building.2"][visibility] ?? "globe"
-    }
 
     private func applyRepositoryRequest(_ value: String?) {
         guard let value, !value.isEmpty else { return }
@@ -602,6 +579,27 @@ private struct InlineComposer: View {
     private func persistDraftImmediately() {
         draftSaveTask?.cancel()
         UserDefaults.standard.set(draft, forKey: "spotcode.native.draft")
+    }
+}
+
+private struct PostAudiencePicker: View {
+    @Binding var visibility: String
+
+    var body: some View {
+        Picker("公開範囲", selection: $visibility) {
+            Label("全員", systemImage: "globe").tag("public")
+            Label("相互フォロー", systemImage: "arrow.2.squarepath").tag("mutuals")
+            Label("フォロー中", systemImage: "person.badge.plus").tag("following")
+            Label("親しい友達", systemImage: "heart").tag("friends")
+            Label("同じ組織", systemImage: "building.2").tag("org")
+            if visibility == "restricted" {
+                Label("限定公開", systemImage: "lock").tag("restricted")
+            }
+        }
+        .pickerStyle(.menu)
+        .font(.caption.weight(.semibold))
+        .tint(SpotcodeTheme.accent)
+        .accessibilityLabel("公開範囲")
     }
 }
 
@@ -1398,13 +1396,7 @@ private struct EditPostView: View {
                 }.spotcodeURLField()
                 HStack(spacing: 10) {
                     PostKindPicker(kind: $postKind)
-                    Picker("公開範囲", selection: $visibility) {
-                        Text("全員").tag("public")
-                        Text("フォロー中").tag("following")
-                        Text("相互フォロー").tag("mutuals")
-                        Text("親しい友達").tag("friends")
-                        Text("同じ組織").tag("org")
-                    }.pickerStyle(.menu)
+                    PostAudiencePicker(visibility: $visibility)
                     Spacer()
                 }
                 HStack {
@@ -1606,35 +1598,7 @@ struct ComposeView: View {
         .sheet(isPresented: $showPollEditor) { PollEditorSheet(poll: $poll, isPresented: $showPollEditor) }
     }
 
-    private var audienceMenu: some View {
-        Menu {
-            audienceButton("全員", value: "public")
-            audienceButton("相互フォロー", value: "mutuals")
-            audienceButton("フォロー中", value: "following")
-            audienceButton("親しい友達", value: "friends")
-            audienceButton("同じ組織", value: "org")
-        } label: {
-            ComposerChip(icon: visibilityIcon, title: visibilityLabel, strong: true, active: visibility != "public")
-        }
-    }
-
-    private func audienceButton(_ title: String, value: String) -> some View {
-        Button { visibility = value } label: {
-            if visibility == value {
-                Label { Text(LocalizedStringKey(title)) } icon: { Image(systemName: "checkmark") }
-            } else {
-                Text(LocalizedStringKey(title))
-            }
-        }
-    }
-
-    private var visibilityLabel: String {
-        ["public":"全員", "mutuals":"相互フォロー", "following":"フォロー中", "friends":"親しい友達", "org":"同じ組織"][visibility] ?? "全員"
-    }
-
-    private var visibilityIcon: String {
-        ["public":"globe", "mutuals":"arrow.2.squarepath", "following":"person.badge.plus", "friends":"heart", "org":"building.2"][visibility] ?? "globe"
-    }
+    private var audienceMenu: some View { PostAudiencePicker(visibility: $visibility) }
 
     private func insertCodeBlock() {
         if !bodyText.isEmpty && !bodyText.hasSuffix("\n") { bodyText += "\n" }

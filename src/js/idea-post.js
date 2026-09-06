@@ -66,17 +66,11 @@ export function renderIdeaForm({ user = null } = {}) {
               '<span class="compose-kind-toggle__label">' + t('kind.' + kind) + '</span>' +
             '</button>'
           ).join('') +
-          // Audience picker — 5 options, RLS enforced server-side.
-          // Native <select> overlay for the OS picker; visible display
-          // shows only the icon + current selection (no "Audience" /
-          // "表示する人" caption) so the pill stays the same width in
-          // every language. The full label lives in the title tooltip
-          // and the select's aria-label for accessibility.
+          // Show the native selection directly so its label cannot go stale.
           '<label class="compose-vis-select" title="' + t('compose.vis.label') + ' — ' + t('compose.vis.hint') + '">' +
             '<span class="compose-vis-select__icon" data-vis-icon>' +
               icon('globe', { size: 12, className: 'icon--inline' }) +
             '</span>' +
-            '<span class="compose-vis-select__current" data-vis-current>' + t('compose.vis.public') + '</span>' +
             '<select id="compose-vis-select" name="visibility" aria-label="' + t('compose.vis.label') + '">' +
               '<option value="public">' + t('compose.vis.public') + '</option>' +
               '<option value="mutuals">' + t('compose.vis.mutuals') + '</option>' +

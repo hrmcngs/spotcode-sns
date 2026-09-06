@@ -1,4 +1,4 @@
-import { renderKindBadge } from './post.js';
+import { renderKindBadge, renderVisibilityBadge } from './post.js';
 import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate, currentPath } from './router.js';
@@ -843,7 +843,7 @@ function readComposerState() {
     eventUrl:   ev ? ev.value : '',
     spot:       pendingSpot,
     kind:       pendingKind,
-    visibility: pendingVisibility,
+    visibility: form.elements.namedItem('visibility')?.value || pendingVisibility,
   };
 }
 
@@ -892,16 +892,12 @@ function syncKindToggle() {
 }
 
 // Push the pendingVisibility back onto the <select> so a draft restore
-// or a clear-after-submit reflects the right option. Also re-mirrors
-// the option text onto the visible display span.
+// or a clear-after-submit reflects the right option and icon.
 function syncVisToggle() {
   const sel = document.getElementById('compose-vis-select');
   if (!sel) return;
   sel.value = pendingVisibility;
-  const display = document.querySelector('[data-vis-current]');
   const iconEl  = document.querySelector('[data-vis-icon]');
-  const picked  = sel.options[sel.selectedIndex];
-  if (display && picked) display.textContent = picked.textContent;
   if (iconEl) iconEl.innerHTML = icon(VIS_ICONS[pendingVisibility] || 'globe', { size: 12, className: 'icon--inline' });
 }
 
@@ -950,19 +946,13 @@ function renderPhotoPreviews() {
 document.addEventListener('change', async (e) => {
   // Audience picker — store the selection so the next addPost knows
   // who the post is for. Allowed values match the Stage 18 CHECK.
-  // Also mirror the picked option's display text + matching SVG icon
-  // onto the visible spans (the native <select> sits invisibly over).
   if (e.target?.id === 'compose-vis-select') {
-    const sel = e.target;
-    const v = String(sel.value || 'public');
-    const ALLOWED = new Set(['public', 'mutuals', 'following', 'friends', 'org']);
-    pendingVisibility = ALLOWED.has(v) ? v : 'public';
-    const display = document.querySelector('[data-vis-current]');
-    const iconEl  = document.querySelector('[data-vis-icon]');
-    const picked  = sel.options[sel.selectedIndex];
-    if (display && picked) display.textContent = picked.textContent;
-    if (iconEl) iconEl.innerHTML = icon(VIS_ICONS[pendingVisibility] || 'globe', { size: 12, className: 'icon--inline' });
+    const value = e.target.value;
+    pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org'].includes(value) ? value : 'public';
+    syncVisToggle();
     autosaveComposerDraft();
+    // A navigation immediately after choosing must preserve the new audience.
+    autosaveComposerDraft.flush();
     return;
   }
   if (e.target?.id !== 'compose-photo-input') return;
@@ -1068,13 +1058,9 @@ function restoreComposerDraft() {
     pendingKind = d.kind;
     syncKindToggle();
   }
-  if (typeof d.visibility === 'string' && d.visibility !== 'public') {
-    const ALLOWED = new Set(['mutuals', 'following', 'friends', 'org', 'restricted']);
-    if (ALLOWED.has(d.visibility)) {
-      pendingVisibility = d.visibility;
-      syncVisToggle();
-    }
-  }
+  pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org'].includes(d.visibility)
+    ? d.visibility : 'public';
+  syncVisToggle();
   showDraftBanner();
 }
 
@@ -1459,6 +1445,7 @@ document.addEventListener('click', (e) => {
     const selectedKind = post.querySelector('.post__kind--bug') ? 'bug' : post.querySelector('.post__kind--idea') ? 'idea' : null;
     const ghLink = post.querySelector('.post__meta .post__link')?.getAttribute('href') || '';
     const repoFullName = post.getAttribute('data-repo-full-name') || '';
+    const visibility = post.getAttribute('data-visibility') || 'public';
     const escAttr = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
       '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
     }[c]));
@@ -1474,6 +1461,14 @@ document.addEventListener('click', (e) => {
             (selectedKind === kind ? ' is-active' : '') + '" data-edit-kind="' + kind + '" aria-pressed="' + (selectedKind === kind) + '">' +
             escape(t('kind.' + kind)) + '</button>'
         ).join('') +
+        '<label class="post__edit-link">' + escape(t('compose.vis.label')) +
+          '<select class="post__edit-vis-input">' +
+            ['public', 'mutuals', 'following', 'friends', 'org', ...(visibility === 'restricted' ? ['restricted'] : [])].map((value) =>
+              '<option value="' + value + '"' + (value === visibility ? ' selected' : '') + '>' +
+                escape(t(value === 'restricted' ? 'post.vis.restricted' : 'compose.vis.' + value)) + '</option>'
+            ).join('') +
+          '</select>' +
+        '</label>' +
         '<label class="post__edit-link">' +
           'GitHub link' +
           '<input type="url" class="post__edit-link-input" placeholder="https://github.com/owner/repo" value="' + escAttr(ghLink) + '">' +
@@ -1534,18 +1529,23 @@ document.addEventListener('click', (e) => {
     const newLink = linkInput ? linkInput.value.trim() : '';
     const repoInput = body.querySelector('.post__edit-repo-input');
     const newRepo = repoInput ? repoInput.value.trim() : '';
+    const visInput = body.querySelector('.post__edit-vis-input');
+    const newVisibility = visInput.value;
     saveBtn.disabled = true;
     ta.disabled = true;
     if (linkInput) linkInput.disabled = true;
     if (repoInput) repoInput.disabled = true;
+    visInput.disabled = true;
     updatePost(post.getAttribute('data-post-id'), {
       body:       newBody,
       kind:       selectedKind,
+      visibility: newVisibility,
       githubLink: newLink || null,
       repoFullName: newRepo || null,
     })
-      .then(() => {
+      .then((updated) => {
         post.setAttribute('data-repo-full-name', newRepo);
+        post.setAttribute('data-visibility', updated.visibility);
         // Re-render the body inline — keep the post card in place so
         // scroll position / surrounding cards don't jump.
         // inlineFormat lives in post.js; cheaper than a full refresh().
@@ -1563,6 +1563,8 @@ document.addEventListener('click', (e) => {
           }
           // Match the badge used by a full render after changing the tag.
           if (head) {
+            head.querySelectorAll('.post__vis').forEach((badge) => badge.remove());
+            head.insertAdjacentHTML('beforeend', renderVisibilityBadge(updated.visibility));
             head.querySelectorAll('.post__kind').forEach((badge) => badge.remove());
             head.querySelector('.post__time')?.insertAdjacentHTML('afterend', renderKindBadge(selectedKind));
           }
@@ -1600,6 +1602,8 @@ document.addEventListener('click', (e) => {
       })
       .catch((err) => {
         alert('編集に失敗しました: ' + err.message);
+        visInput.disabled = false;
+        if (repoInput) repoInput.disabled = false;
         saveBtn.disabled = false;
         ta.disabled = false;
         if (linkInput) linkInput.disabled = false;
@@ -1847,7 +1851,7 @@ document.addEventListener('click', (e) => {
       // The body is INCLUDED so clicking anywhere on the text navigates
       // to the detail page; drag-select stays safe via the getSelection
       // check below.
-      'a, button, input, textarea, label, ' +
+      'a, button, input, textarea, select, option, label, ' +
       '.post__photo, .md-task__box, .poll, .quote-card, .post__edit-input'
     )) {
       const sel = window.getSelection && window.getSelection();
@@ -2124,7 +2128,7 @@ document.addEventListener('submit', (e) => {
   if (pendingPhotos.length) post.photos = pendingPhotos.slice();
   if (pendingPoll) post.poll = pendingPoll;
   if (pendingKind) post.kind = pendingKind;
-  if (pendingVisibility && pendingVisibility !== 'public') post.visibility = pendingVisibility;
+  post.visibility = form.elements.namedItem('visibility')?.value || pendingVisibility;
 
   const submitBtn = form.querySelector('button[type="submit"]');
   form.dataset.posting = '1';

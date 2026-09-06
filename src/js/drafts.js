@@ -4,7 +4,7 @@
 // "guest" slot so a draft written before signing in survives the auth
 // modal round-trip.
 //
-// Shape: { body, githubLink, spot, savedAt }
+// Shape: { body, githubLink, eventUrl, spot, kind, visibility, savedAt }
 //   - body:       string (textarea contents)
 //   - githubLink: string | ''
 //   - spot:       { lat, lng, label, address?, addressDetails? } | null
@@ -21,15 +21,19 @@ export function saveDraft(handle, draft) {
   const body = (draft.body || '').trim();
   const link = (draft.githubLink || '').trim();
   const spot = draft.spot || null;
+  const eventUrl = (draft.eventUrl || '').trim();
+  const kind = ['idea', 'bug'].includes(draft.kind) ? draft.kind : null;
+  const visibility = ['public', 'mutuals', 'following', 'friends', 'org', 'restricted'].includes(draft.visibility)
+    ? draft.visibility : 'public';
   // Don't persist a draft that has nothing in it — clear instead so
   // the "Draft restored" banner doesn't appear on an empty form.
-  if (!body && !link && !spot) {
+  if (!body && !link && !spot && !eventUrl && !kind && visibility === 'public') {
     clearDraft(handle);
     return;
   }
   try {
     localStorage.setItem(keyFor(handle), JSON.stringify({
-      body, githubLink: link, spot, savedAt: Date.now(),
+      body, githubLink: link, eventUrl, spot, kind, visibility, savedAt: Date.now(),
     }));
   } catch {}
 }

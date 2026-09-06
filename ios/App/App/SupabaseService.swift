@@ -318,7 +318,10 @@ actor SupabaseService {
 
     private func removeMissingPostMetadata(from error: Error) -> Bool {
         let message = error.localizedDescription.lowercased()
-        guard let missing = supportedPostMetadata.first(where: { message.contains($0) }) else { return false }
+        // Only retry actual missing-column errors. A visibility constraint or
+        // permission error must never turn a restricted post into a public one.
+        guard message.contains("does not exist") || (message.contains("could not find") && message.contains("schema cache")) else { return false }
+        guard let missing = supportedPostMetadata.first(where: { message.contains($0) }), missing != "visibility" else { return false }
         supportedPostMetadata.removeAll { $0 == missing }
         return true
     }
