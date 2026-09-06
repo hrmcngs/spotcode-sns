@@ -453,6 +453,7 @@ private struct InlineComposer: View {
                 if showLink {
                     TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
                     TextField("owner/repository（任意）", text: $repoFullName).textInputAutocapitalization(.never).autocorrectionDisabled(true).spotcodeURLField()
+                    Text("連携済みOrganizationのメンバーがそのリポジトリを指定すると、組織アカウント名義で表示されます。").font(.caption).foregroundColor(SpotcodeTheme.muted)
                 }
                 if showEvent {
                     TextField("https://connpass.com/event/…", text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
@@ -583,6 +584,7 @@ private struct InlineComposer: View {
 }
 
 private struct PostAudiencePicker: View {
+    @EnvironmentObject private var model: AppModel
     @Binding var visibility: String
 
     var body: some View {
@@ -592,6 +594,9 @@ private struct PostAudiencePicker: View {
             Label("フォロー中", systemImage: "person.badge.plus").tag("following")
             Label("親しい友達", systemImage: "heart").tag("friends")
             Label("同じ組織", systemImage: "building.2").tag("org")
+            if model.displayProfile?.isOrg == true || !model.githubOrganizations.isEmpty || visibility == "github_org" {
+                Label("GitHub Organizationのみ", systemImage: "building.2").tag("github_org")
+            }
             Label("自分だけ", systemImage: "lock").tag("only_me")
             if visibility == "restricted" {
                 Label("限定公開", systemImage: "lock").tag("restricted")
@@ -1103,21 +1108,20 @@ struct PostRow: View {
     }
 
     var body: some View {
-        if post.visibility != "only_me" || post.authorID == model.session?.user.id ||
-            (developerMode && model.me?.isAdmin == true) {
+        if model.canReadPostAudience(post) {
             postContent
         }
     }
 
     private var postContent: some View {
         HStack(alignment: .top, spacing: 12) {
-            NavigationLink(destination: ProfileLookupView(handle: post.author?.handle ?? "")) {
-                AvatarView(profile: post.author, size: 42)
-            }.buttonStyle(.plain).disabled(post.author?.handle == nil)
+            NavigationLink(destination: ProfileLookupView(handle: post.displayAuthor?.handle ?? "")) {
+                AvatarView(profile: post.displayAuthor, size: 42)
+            }.buttonStyle(.plain).disabled(post.displayAuthor?.handle == nil)
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 5) {
-                    Text(post.author?.name ?? "User").fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
-                    Text("@\(post.author?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
+                    Text(post.displayAuthor?.name ?? "User").fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
+                    Text("@\(post.displayAuthor?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
                     Text("· \(relativeTime(post.createdAt))").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
                     Spacer(minLength: 2)
                     Text((post.status ?? "wip").uppercased()).font(.caption.weight(.bold))
@@ -1258,6 +1262,7 @@ struct PostRow: View {
         switch value {
         case "public": return ("globe", "全員に公開")
         case "only_me": return ("lock", "自分だけ")
+        case "github_org": return ("building.2", "GitHub Organizationのみ")
         case "mutuals": return ("arrow.2.squarepath", "相互フォロー")
         case "following": return ("person.badge.plus", "フォロー中")
         case "friends": return ("heart", "親しい友達")
@@ -1576,6 +1581,7 @@ struct ComposeView: View {
                             Image(systemName: "shippingbox")
                             TextField("owner/repository（任意）", text: $repoFullName).textInputAutocapitalization(.never).autocorrectionDisabled(true)
                         }.spotcodeURLField()
+                        Text("連携済みOrganizationのメンバーがそのリポジトリを指定すると、組織アカウント名義で表示されます。").font(.caption).foregroundColor(SpotcodeTheme.muted)
                     }
                     if showEvent {
                         HStack {
@@ -1773,7 +1779,7 @@ private struct ClusteredPostMap: UIViewRepresentable {
 private final class PostMapAnnotation: NSObject, MKAnnotation {
     let post: Post
     let coordinate: CLLocationCoordinate2D
-    var title: String? { post.spot?.label ?? post.author?.name ?? "Spot" }
+    var title: String? { post.spot?.label ?? post.displayAuthor?.name ?? "Spot" }
     // Never expose the protected post body in an annotation callout.
     // PostDetailView applies the 100m gate after the user opens it.
     var subtitle: String? { "この場所の投稿" }
@@ -1783,6 +1789,7 @@ private final class PostMapAnnotation: NSObject, MKAnnotation {
 struct RepositoriesView: View {
     @EnvironmentObject private var model: AppModel
     let onCompose: (URL) -> Void
+    @State private var repositoryOwner: UUID?
     @State private var repositories: [Repository] = []
     @State private var relatedPosts: [Post] = []
     @State private var loading = false
@@ -1792,20 +1799,20 @@ struct RepositoriesView: View {
                 VStack(spacing: 6) {
                     RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 22, height: 22).foregroundColor(SpotcodeTheme.accent)
                     Text("Repos").font(.title3).fontWeight(.bold)
-                    Text("自分の GitHub リポジトリの動きを見る。")
+                    Text("自分と許可済みOrganizationのリポジトリ")
                         .font(.subheadline).foregroundColor(SpotcodeTheme.muted)
                 }.frame(maxWidth: .infinity).padding(.vertical, 22)
                 if loading && repositories.isEmpty { ProgressView("リポジトリを読み込み中…").padding(.top, 50) }
             else if model.me?.githubHandle == nil { Spacer(); ContentUnavailableViewCompat(title: "GitHubをプロフィールに連携してください", icon: "link"); Spacer() }
             else {
                 LazyVStack(spacing: 12) {
-                    ForEach(repositories) { repo in
+                    ForEach(repositoryOwner == model.session?.user.id ? repositories : []) { repo in
                         repositoryCard(repo)
                     }
                 }.padding(.horizontal, 10).padding(.bottom, 20)
             }
             }.refreshable { await load() }
-        }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task { await load() }
+        }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task(id: model.session?.user.id) { await load() }
     }
 
     @ViewBuilder private func repositoryCard(_ repo: Repository) -> some View {
@@ -1847,7 +1854,7 @@ struct RepositoriesView: View {
                 ForEach(posts.prefix(4)) { post in
                     NavigationLink(destination: PostDetailView(post: post)) {
                         HStack(spacing: 8) {
-                            AvatarView(profile: post.author, size: 24)
+                            AvatarView(profile: post.displayAuthor, size: 24)
                             Text(post.body).font(.caption).lineLimit(1).foregroundColor(SpotcodeTheme.text)
                             Spacer()
                             Image(systemName: "chevron.right").font(.caption2).foregroundColor(SpotcodeTheme.muted)
@@ -1861,11 +1868,23 @@ struct RepositoriesView: View {
     }
 
     private func load() async {
-        guard let handle = model.me?.githubHandle else { return }
+        repositories = []; relatedPosts = []; repositoryOwner = nil
+        guard let handle = model.me?.githubHandle, let session = model.session else { return }
         loading = true; defer { loading = false }
-        let loaded = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []
-        repositories = loaded.sorted { ($0.pushedAt ?? "") > ($1.pushedAt ?? "") }
-        relatedPosts = (try? await SupabaseService.shared.posts(limit: 200, token: model.session?.accessToken)) ?? []
+        do {
+            let loaded: [Repository]
+            if await model.hydrateSharedPrivateIssueToken() != nil {
+                loaded = try await model.syncGithubOrganizations(includeRepositories: true).repositories ?? []
+            } else {
+                loaded = try await SupabaseService.shared.repositories(handle: handle)
+            }
+            guard session.user.id == model.session?.user.id else { return }
+            repositoryOwner = session.user.id
+            repositories = loaded.sorted { ($0.pushedAt ?? "") > ($1.pushedAt ?? "") }
+            let posts = (try? await SupabaseService.shared.posts(limit: 200, token: session.accessToken)) ?? []
+            guard session.user.id == model.session?.user.id else { return }
+            relatedPosts = posts
+        } catch { model.errorMessage = error.localizedDescription }
     }
 
     private func repositoryName(for post: Post) -> String? {
@@ -2104,12 +2123,16 @@ struct ProfileView: View {
              guard let profileID = profile?.id else { return }
              profilePosts = mergedProfilePosts(
                  profilePosts,
-                 timelinePosts.filter { $0.authorID == profileID }
+                 timelinePosts.filter { ($0.authorID == profileID || $0.organizationAuthorID == profileID) }
              )
          }
          .onReceive(model.$lastUpdatedPost) { updated in
              guard let updated = updated, let index = profilePosts.firstIndex(where: { $0.id == updated.id }) else { return }
-             profilePosts[index] = updated
+             if updated.authorID == profile?.id || updated.organizationAuthorID == profile?.id {
+                 profilePosts[index] = updated
+             } else {
+                 profilePosts.remove(at: index)
+             }
          }
     }
 
@@ -2118,7 +2141,7 @@ struct ProfileView: View {
         async let posts = try? SupabaseService.shared.posts(limit: 80, authorID: id, token: model.session?.accessToken)
         async let stats = SupabaseService.shared.profileCounts(userID: id, token: model.session?.accessToken)
         let fetchedPosts = await posts ?? []
-        let timelinePosts = model.posts.filter { $0.authorID == id }
+        let timelinePosts = model.posts.filter { ($0.authorID == id || $0.organizationAuthorID == id) }
         profilePosts = mergedProfilePosts(fetchedPosts, timelinePosts)
         counts = await stats
         if let handle = profile?.githubHandle {
@@ -2890,6 +2913,57 @@ private struct SettingsStatusTag: View {
     }
 }
 
+private struct GitHubOrganizationSettings: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var busy = false
+    @State private var message = ""
+    @State private var authorizer: GitHubPrivateIssueAuthorizer?
+
+    var body: some View {
+        SettingsCard("GitHub Organization") {
+            Text("GitHubで許可したOrganizationの所属を確認します。組織アカウントは管理者を務めるOrganizationを共有先に設定できます。")
+                .foregroundColor(SpotcodeTheme.muted)
+            Button("Organizationを許可") { authorize() }.disabled(busy)
+            Button("所属を確認・更新") { synchronize() }.disabled(busy)
+            if let linked = model.linkedGithubOrganization { Text(linked.login).fontWeight(.bold) }
+            ForEach(model.githubOrganizations) { org in
+                HStack {
+                    Text(org.login)
+                    if model.me?.isOrg == true && org.role == "admin" {
+                        Button("共有先に設定") { synchronize(org.id) }.disabled(busy)
+                    }
+                }
+            }
+            Text("所属確認は1時間有効です。非公開リポジトリは、GitHubの追加権限を許可すると利用できます。")
+                .font(.caption).foregroundColor(SpotcodeTheme.muted)
+            if !message.isEmpty { Text(message).font(.caption) }
+        }
+    }
+    private func synchronize(_ orgID: Int64? = nil) {
+        busy = true
+        Task {
+            defer { busy = false }
+            do { try await model.syncGithubOrganizations(organizationID: orgID); message = "更新しました" }
+            catch { message = error.localizedDescription }
+        }
+    }
+    private func authorize() {
+        busy = true
+        let flow = GitHubPrivateIssueAuthorizer()
+        authorizer = flow
+        Task {
+            defer { busy = false; authorizer = nil }
+            do {
+                let token = try await flow.authorize(includePrivate: false)
+                model.savePrivateIssueToken(token)
+                try await model.uploadPrivateIssueToken(token)
+                try await model.syncGithubOrganizations()
+                message = "更新しました"
+            } catch { message = error.localizedDescription }
+        }
+    }
+}
+
 private struct AccountSettings: View {
     @EnvironmentObject private var model: AppModel
     @State private var showAddAccount = false
@@ -2940,6 +3014,7 @@ private struct AccountSettings: View {
                     isOrg.toggle(); saveIdentity()
                 }.buttonStyle(OutlineButtonStyle(filled: !isOrg)).disabled(savingIdentity)
             }
+            GitHubOrganizationSettings()
             SettingsCard("所属・組織名") {
                 Text("プロフィールに表示する会社・学校・コミュニティ名を設定します。").foregroundColor(SpotcodeTheme.muted)
                 TextField("所属名", text: $organization).spotcodeField()
@@ -3462,8 +3537,8 @@ private final class GitHubPrivateIssueAuthorizer: NSObject, ASWebAuthenticationP
     static let shared = GitHubPrivateIssueAuthorizer()
     private var webSession: ASWebAuthenticationSession?
 
-    func authorize() async throws -> String {
-        guard let authorizationURL = await SupabaseService.shared.privateIssueAuthorizationURL() else {
+    func authorize(includePrivate: Bool = true) async throws -> String {
+        guard let authorizationURL = await SupabaseService.shared.privateIssueAuthorizationURL(includePrivate: includePrivate) else {
             throw URLError(.badURL)
         }
         return try await withCheckedThrowingContinuation { continuation in

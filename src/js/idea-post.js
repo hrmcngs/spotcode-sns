@@ -77,6 +77,7 @@ export function renderIdeaForm({ user = null } = {}) {
               '<option value="following">' + t('compose.vis.following') + '</option>' +
               '<option value="friends">' + t('compose.vis.friends') + '</option>' +
               '<option value="org">' + t('compose.vis.org') + '</option>' +
+              ((user.isOrg || user.github?.handle) ? '<option value="github_org">' + t('compose.vis.github_org') + '</option>' : '') +
               '<option value="only_me">' + t('compose.vis.only_me') + '</option>' +
             '</select>' +
           '</label>' +
@@ -84,6 +85,7 @@ export function renderIdeaForm({ user = null } = {}) {
         '<div class="compose-link" id="compose-link-row" hidden>' +
           '<label class="compose-link__label" for="compose-github-input">' + t('home.composer.url') + '</label>' +
           '<input name="github" id="compose-github-input" type="url" placeholder="https://github.com/owner/repo/blob/...">' +
+          '<small>' + t('compose.org_attribution') + '</small>' +
         '</div>' +
         '<div class="compose-link" id="compose-event-row" hidden>' +
           '<label class="compose-link__label" for="compose-event-input">' + t('home.composer.event_url') + '</label>' +

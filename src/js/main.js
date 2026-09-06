@@ -591,6 +591,7 @@ const VIS_ICONS = {
   friends:   'heart',
   org:       'building',
   only_me:   'lock',
+  github_org: 'building',
   restricted:'lock',
 };
 
@@ -949,7 +950,7 @@ document.addEventListener('change', async (e) => {
   // who the post is for. Allowed values match the Stage 18 CHECK.
   if (e.target?.id === 'compose-vis-select') {
     const value = e.target.value;
-    pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me'].includes(value) ? value : 'public';
+    pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'github_org'].includes(value) ? value : 'public';
     syncVisToggle();
     autosaveComposerDraft();
     // A navigation immediately after choosing must preserve the new audience.
@@ -1059,7 +1060,7 @@ function restoreComposerDraft() {
     pendingKind = d.kind;
     syncKindToggle();
   }
-  pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me'].includes(d.visibility)
+  pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'github_org'].includes(d.visibility)
     ? d.visibility : 'public';
   syncVisToggle();
   showDraftBanner();
@@ -1110,7 +1111,12 @@ if (currentUser()) {
     syncGithubIdentity().catch((err) => console.warn('syncGithubIdentity', err));
     // getGithubToken also restores the account-bound API token into the
     // shared GitHub client; no second write is needed here.
-    getGithubToken().catch(() => {});
+    getGithubToken().then(async token => {
+      if (!token) return;
+      const { syncGithubOrganizations } = await import('./github-organizations.js');
+      await syncGithubOrganizations();
+      refresh();
+    }).catch(() => {});
   });
 }
 // Warm the official-account cache for admins / operators so the
@@ -1464,7 +1470,7 @@ document.addEventListener('click', (e) => {
         ).join('') +
         '<label class="post__edit-link">' + escape(t('compose.vis.label')) +
           '<select class="post__edit-vis-input">' +
-            ['public', 'mutuals', 'following', 'friends', 'org', 'only_me', ...(visibility === 'restricted' ? ['restricted'] : [])].map((value) =>
+            ['public', 'mutuals', 'following', 'friends', 'org', 'only_me', ...((currentUser()?.isOrg || currentUser()?.github?.handle || visibility === 'github_org') ? ['github_org'] : []), ...(visibility === 'restricted' ? ['restricted'] : [])].map((value) =>
               '<option value="' + value + '"' + (value === visibility ? ' selected' : '') + '>' +
                 escape(t(value === 'restricted' ? 'post.vis.restricted' : 'compose.vis.' + value)) + '</option>'
             ).join('') +

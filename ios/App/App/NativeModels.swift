@@ -60,6 +60,10 @@ struct Post: Codable, Identifiable, Hashable {
     let eventURL: String?
     let kind: String?
     let visibility: String?
+    var githubOrgID: Int64? = nil
+    var organizationAuthorID: UUID? = nil
+    var organizationAuthor: Profile? = nil
+    var displayAuthor: Profile? { organizationAuthor ?? author }
     let spot: Spot?
     let status: String?
     let createdAt: String?
@@ -72,6 +76,9 @@ struct Post: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, body, spot, status, author, photos, poll, kind, visibility
+        case githubOrgID = "github_org_id"
+        case organizationAuthorID = "organization_author_id"
+        case organizationAuthor = "organization_author"
         case authorID = "author_id"
         case githubLink = "github_link"
         case repoFullName = "repo_full_name"
@@ -349,3 +356,19 @@ struct FollowingProfile: Codable {
 }
 
 struct FollowerProfile: Codable { let follower: Profile }
+
+struct GitHubOrganization: Codable, Identifiable {
+    let id: Int64
+    let login: String
+    let role: String
+}
+struct GitHubOrganizationLink: Codable {
+    let orgID: Int64
+    let login: String
+    enum CodingKeys: String, CodingKey { case orgID = "org_id", login }
+}
+struct GitHubOrganizationResult: Codable {
+    let organizations: [GitHubOrganization]
+    let linked: GitHubOrganizationLink?
+    let repositories: [Repository]?
+}

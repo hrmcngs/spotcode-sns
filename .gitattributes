@@ -2,6 +2,8 @@
 *.yaml linguist-detectable=true
 *.yml linguist-detectable=true
 *.json linguist-detectable=true
-*.sql linguist-detectable=sql
 *.md linguist-language=Markdown
 *.yaml linguist-language=yml
+
+*.sql linguist-detectable=true
+*.sql linguist-language=sql

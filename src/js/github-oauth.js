@@ -48,15 +48,13 @@ async function getSharedGithubToken() {
 // the URL fragment. The default `redirectTo` is the current URL so
 // the user lands right back where they were (the edit-profile modal).
 //
-// Scope: `read:user` gets us `user_name` + `avatar_url` and nothing
-// else. We intentionally do NOT request `repo` — this is an identity
-// link, not a permission grant, and asking for more read access would
-// scare users off the consent screen for no gain.
+// Scope: read:user identifies the user; read:org verifies organization membership. We intentionally do NOT request `repo` — this is an identity
+// link and organization-membership grant. Private repository access is optional.
 export async function linkGithub(redirectTo = window.location.href) {
   const supa = await getClient();
   const { data, error } = await supa.auth.linkIdentity({
     provider: 'github',
-    options: { redirectTo, scopes: 'read:user' },
+    options: { redirectTo, scopes: 'read:user read:org' },
   });
   if (error) throw new Error(error.message);
   return data;
@@ -65,7 +63,7 @@ export async function linkGithub(redirectTo = window.location.href) {
 // Explicit opt-in for private issue display. GitHub's classic OAuth
 // scopes do not offer a narrower read-only private-issues permission;
 // `repo` is therefore requested only after the user enables this feature.
-export async function linkGithubForPrivateIssues(redirectTo = window.location.href) {
+export async function linkGithubForPrivateIssues(redirectTo = window.location.href, includePrivate = true) {
   const supa = await getClient();
   const { data: before } = await supa.auth.getSession();
   if (!before?.session) throw new Error('先にspotcodeへログインしてください');
@@ -87,12 +85,16 @@ export async function linkGithubForPrivateIssues(redirectTo = window.location.hr
     provider: 'github',
     options: {
       redirectTo: returnUrl.href,
-      scopes: 'read:user repo',
+      scopes: includePrivate ? 'read:user read:org repo' : 'read:user read:org',
       queryParams: { prompt: 'consent' },
     },
   });
   if (error) throw new Error(error.message);
   return data;
+}
+
+export function linkGithubForOrganizations(redirectTo = window.location.href) {
+  return linkGithubForPrivateIssues(redirectTo, false);
 }
 
 // signInWithOAuth temporarily installs the GitHub callback session as the
@@ -110,13 +112,13 @@ export async function finishPrivateIssueAuthorization() {
   if (providerToken) {
     const { setGithubApiToken } = await import('./language-stats.js');
     setGithubApiToken(providerToken, original.user_id);
-    await saveSharedGithubToken(providerToken);
   }
   const { error } = await supa.auth.setSession({
     access_token: original.access_token,
     refresh_token: original.refresh_token,
   });
   if (error) throw new Error(error.message);
+  if (providerToken) await saveSharedGithubToken(providerToken);
   try { sessionStorage.removeItem(PRIVATE_ISSUE_SESSION_KEY); } catch {}
   return !!providerToken;
 }
@@ -214,7 +216,7 @@ export async function getGithubToken() {
   // provider_token is commonly omitted after Supabase refreshes its session.
   // language-stats restores the last OAuth grant from localStorage.
   try {
-    const { restoreGithubApiToken } = await import('./language-stats.js');
+    const { restoreGithubApiToken, setGithubApiToken } = await import('./language-stats.js');
     const local = restoreGithubApiToken(ownerId);
     if (local) {
       await saveSharedGithubToken(local).catch(() => {});

@@ -255,3 +255,23 @@
 "自分だけ" = "Only me";
 
 "利用規約" = "Terms of Use";
+
+"GitHub Organizationのみ" = "GitHub Organization only";
+
+"GitHub Organizationを連携してください" = "Connect your GitHub organization.";
+
+"GitHubで許可したOrganizationの所属を確認します。組織アカウントは管理者を務めるOrganizationを共有先に設定できます。" = "Verify authorized GitHub organization memberships. Organization accounts can select an organization they administer for sharing.";
+
+"Organizationを許可" = "Authorize organizations";
+
+"所属を確認・更新" = "Refresh memberships";
+
+"共有先に設定" = "Use for sharing";
+
+"所属確認は1時間有効です。非公開リポジトリは、GitHubの追加権限を許可すると利用できます。" = "Membership verification is valid for one hour. Private repositories require additional GitHub permission.";
+
+"更新しました" = "Updated.";
+
+"自分と許可済みOrganizationのリポジトリ" = "Your repositories and authorized organization repositories";
+
+"連携済みOrganizationのメンバーがそのリポジトリを指定すると、組織アカウント名義で表示されます。" = "Members posting about a linked Organization’s repository appear under its organization account.";

@@ -1,3 +1,4 @@
+import { canReadGithubOrganization, refreshGithubMembershipsIfNeeded } from './github-organizations.js';
 import { isDevMode } from './dev-mode.js';
 // Posts data layer — now backed by public.posts in Supabase so timelines
 // are shared across all devices. The functions stayed name-compatible
@@ -146,17 +147,17 @@ function postCols() {
   if (hasPhotos)         extras.push('photos');
   if (hasPoll)           extras.push('poll');
   if (hasKind)           extras.push('kind');
-  if (hasVisibility)     extras.push('visibility');
+  if (hasVisibility)     extras.push('visibility', 'github_org_id');
   if (hasRepoFullName)   extras.push('repo_full_name');
   if (hasEventUrl)       extras.push('event_url');
   const head =
-    'id, author_id, body, github_link, spot, status, created_at' +
+    'id, author_id, organization_author_id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
   // Embedded author select. Kept minimal — the visibility audience
   // check (close_friends / organization) is enforced server-side via
   // Stage 18 RLS, so we don't need to leak those onto the API
   // response anymore.
-  return head + ', author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape)';
+  return head + ', author:profiles!posts_author_id_fkey(handle, name, avatar_url, avatar_shape), organization_author:profiles!posts_organization_author_id_fkey(handle, name, avatar_url, avatar_shape)';
 }
 
 // Optional-column / table degradation map. Each entry: a substring
@@ -211,7 +212,7 @@ function shapeAuthor(a) {
 }
 
 function shapePost(row) {
-  const author = shapeAuthor(row.author);
+  const author = shapeAuthor(row.organization_author || row.author);
   // Side-effect: cache the joined author so renderPost's sync getUser()
   // can find them on subsequent renders. ALWAYS merge — the previous
   // "skip if already cached" branch made another user's uploaded
@@ -234,6 +235,8 @@ function shapePost(row) {
   return {
     id:            row.id,
     authorId:      row.author_id,
+    organizationAuthorId: row.organization_author_id || null,
+    githubOrgId:   row.github_org_id || null,
     authorHandle:  author?.handle || '?',
     author,
     body:          row.body,
@@ -266,7 +269,7 @@ function shapePost(row) {
     // RLS (Stage 18) does the actual gating server-side — by the time
     // this row arrives at the renderer it has already been allow-
     // listed for the current viewer.
-    visibility:    (['public','mutuals','following','friends','org','only_me','restricted'].includes(row.visibility)
+    visibility:    (['public','mutuals','following','friends','org','only_me','github_org','restricted'].includes(row.visibility)
                       ? row.visibility : 'public'),
     quoteOfPostId: row.quote_of_post_id || null,
     // GitHub repo this post is "about", as owner/repo (Stage 30).
@@ -298,6 +301,7 @@ export async function addQuote(post, quotedPostId) {
     author_id:   user.id,
     body:        post.body,
     github_link: post.githubLink || null,
+    repo_full_name: post.repoFullName || null,
     spot:        post.spot || null,
     status:      post.status || 'wip',
   };
@@ -326,6 +330,7 @@ export async function addQuote(post, quotedPostId) {
 // non-recoverable error. Capped at OPTIONAL.length + 1 so a buggy
 // matcher can't spin forever.
 async function withResilientCols(build) {
+  await refreshGithubMembershipsIfNeeded();
   let res = await build(postCols());
   for (let i = 0; i < OPTIONAL.length && res.error && isMissingOptionalColumn(res.error); i++) {
     res = await build(postCols());
@@ -425,6 +430,7 @@ const pendingDeletes = new Set();   // post ids
 // The database enforces access. This also hides local snapshots after an
 // account switch, before the next authenticated request replaces the cache.
 export function canDisplayCachedPost(post) {
+  if (post.visibility === 'github_org') return !!currentUser()?.id && (post.authorId === currentUser().id || isDevMode() || canReadGithubOrganization(post.githubOrgId));
   if (post.visibility !== 'only_me') return true;
   const me = currentUser();
   return !!me?.id && (post.authorId === me.id || isDevMode());
@@ -637,7 +643,7 @@ export async function followingPosts({ limit = 100 } = {}) {
   if (!targetIds.length) return [];
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols)
-      .in('author_id', targetIds)
+      .or('author_id.in.(' + targetIds.join(',') + '),organization_author_id.in.(' + targetIds.join(',') + ')')
       .order('created_at', { ascending: false })
       .limit(limit)
   );
@@ -668,7 +674,7 @@ export async function postsByHandle(handle) {
   }
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols)
-      .eq('author_id', userId)
+      .or('author_id.eq.' + userId + ',organization_author_id.eq.' + userId)
       .order('created_at', { ascending: false })
   );
   if (error) throw new Error(error.message);
@@ -829,6 +835,8 @@ export async function addPost(post) {
   // validates the JWT and RLS server-side, so this does not weaken auth.
   const me = currentUser();
   if (!me?.id) throw new Error('ログイン情報を確認できません。もう一度ログインしてください');
+  await refreshGithubMembershipsIfNeeded({ required: !!me.github?.handle && !!(post.githubLink || post.repoFullName) });
+  if (currentUser()?.id !== me.id) throw new Error("アカウントが変更されました");
   const wantsPhotos = Array.isArray(post.photos) && post.photos.length > 0;
   const wantsPoll = post.poll && Array.isArray(post.poll.options) && post.poll.options.length >= 2;
 
@@ -847,6 +855,7 @@ export async function addPost(post) {
     author_id:   authorId,
     body:        post.body,
     github_link: post.githubLink || null,
+    repo_full_name: post.repoFullName || null,
     spot:        post.spot || null,
     status:      post.status || 'wip',
   };
@@ -854,7 +863,7 @@ export async function addPost(post) {
   if (['idea', 'bug'].includes(post.kind) && hasKind) row.kind = post.kind;
   if (hasEventUrl && post.eventUrl) row.event_url = post.eventUrl;
   if (typeof post.visibility === 'string' &&
-      ['mutuals','following','friends','org','only_me','restricted'].includes(post.visibility)) {
+      ['mutuals','following','friends','org','only_me','github_org','restricted'].includes(post.visibility)) {
     row.visibility = post.visibility;
     hasVisibility = true;
   }
@@ -907,10 +916,13 @@ export async function addPost(post) {
 // updated row so an RLS reject (not author / not dev with admin SQL)
 // surfaces as an empty array instead of looking like success.
 export async function updatePost(postId, fields) {
+  if (currentUser()?.github?.handle && (fields.githubLink || fields.repoFullName || fields.visibility === 'github_org')) {
+    await refreshGithubMembershipsIfNeeded({ required: true });
+  }
   const supa = await getClient();
   const patch = {};
   if (Object.prototype.hasOwnProperty.call(fields, 'visibility')) {
-    if (!['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'restricted'].includes(fields.visibility)) {
+    if (!['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'github_org', 'restricted'].includes(fields.visibility)) {
       throw new Error('表示先が正しくありません');
     }
     // Never omit an explicitly selected audience because of a stale schema cache.

@@ -1,3 +1,5 @@
+import { syncGithubOrganizations } from '../github-organizations.js';
+import { linkGithubForOrganizations } from '../github-oauth.js';
 import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping, getClient } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
@@ -127,6 +129,14 @@ function privacyCard() {
 // Switch an existing account between 個人 and 組織. Visually surfaces
 // the Organization badge on the profile page; doesn't change any RLS
 // rule (visibility is still about close_friends / org_members lists).
+function githubOrganizationCard() {
+  return '<section class="settings-card"><h2>GitHub Organization</h2>' +
+    '<p>' + t('settings.github_org.hint') + '</p>' +
+    '<button type="button" class="btn btn--ghost" id="github-org-authorize">' + t('settings.github_org.authorize') + '</button> ' +
+    '<button type="button" class="btn btn--ghost" id="github-org-sync">' + t('settings.github_org.sync') + '</button>' +
+    '<div id="github-org-choices"></div><p id="github-org-status" role="status"></p></section>';
+}
+
 function accountTypeCard() {
   const me = currentUser();
   if (!me) return '';
@@ -334,7 +344,7 @@ function accountSection() {
   // orgLabelCard moved in here after the "profile" tab was retired —
   // the free-text affiliation is a small enough card to ride with
   // the account-identity group.
-  return accountsCard() + mfaCard() + roleCard() + accountTypeCard() + orgLabelCard()
+  return accountsCard() + mfaCard() + roleCard() + accountTypeCard() + githubOrganizationCard() + orgLabelCard()
        + pushNotifyCard();
 }
 
@@ -654,6 +664,37 @@ export function renderSettings() {
 }
 
 export function bindSettings() {
+  document.getElementById('github-org-authorize')?.addEventListener('click', () => {
+    linkGithubForOrganizations().catch(error => { document.getElementById('github-org-status').textContent = error.message; });
+  });
+  let orgBusy = false;
+  const syncOrg = async (options = {}) => {
+    if (orgBusy) return;
+    orgBusy = true;
+    const status = document.getElementById('github-org-status');
+    const choices = document.getElementById('github-org-choices');
+    try {
+      status.textContent = t('repos.loading');
+      const result = await syncGithubOrganizations(options);
+      status.textContent = result.linked ? result.linked.login : t('settings.github_org.unlinked');
+      choices.replaceChildren();
+      for (const org of result.organizations) {
+        const row = document.createElement('p');
+        row.textContent = org.login;
+        if (currentUser()?.isOrg && org.role === 'admin') {
+          const button = document.createElement('button');
+          button.type = 'button'; button.className = 'btn btn--ghost';
+          button.textContent = t('settings.github_org.select');
+          button.addEventListener('click', () => syncOrg({ organization_id: org.id }));
+          row.append(' ', button);
+        }
+        choices.append(row);
+      }
+    } catch (error) { status.textContent = error.message; }
+    finally { orgBusy = false; }
+  };
+  document.getElementById('github-org-sync')?.addEventListener('click', () => syncOrg());
+
   // Populate the repo selector from GitHub itself. This is especially
   // important after private-repo consent: the private repo may never
   // have appeared in a public profile cache, so Settings must discover

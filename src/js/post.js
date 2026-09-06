@@ -182,7 +182,7 @@ function analyticsLink(postId) {
 //   3. Post has no spot — nothing to gate against, always readable.
 function isLockedBySpot(p, me) {
   if (!p.spot || p.spot.lat == null || p.spot.lng == null) return false;
-  if (me && p.authorHandle === me.handle) return false;
+  if (me && (p.authorId ? p.authorId === me.id : p.authorHandle === me.handle)) return false;
   if (isDevMode()) return false;
   return isNearSpotSync(p.spot.lat, p.spot.lng) !== true;
 }
@@ -209,6 +209,7 @@ const VIS_HINT = {
   friends:   { ico: 'heart',       labelKey: 'post.vis.friends' },
   org:       { ico: 'building',    labelKey: 'post.vis.org' },
   only_me:   { ico: 'lock',        labelKey: 'post.vis.only_me' },
+  github_org: { ico: 'building', labelKey: 'post.vis.github_org' },
   restricted:{ ico: 'lock',        labelKey: 'post.vis.restricted' },
 };
 
@@ -234,7 +235,7 @@ export function renderPost(p) {
   const reposted   = me && isReposted(p.id);
   const bookmarked = me && isBookmarked(p.id);
   const likes = likeCount(p.id);
-  const isOwn  = me && p.authorHandle === me.handle;
+  const isOwn  = me && (p.authorId ? p.authorId === me.id : p.authorHandle === me.handle);
   // Operators (and the admin) can delete anyone's post — moderation
   // duty. The backend still enforces RLS via the is_admin policy on
   // posts; if the operator account doesn't have the matching

@@ -12,7 +12,7 @@ actor SupabaseService {
     private var anonKey: String {
         UserDefaults.standard.string(forKey: Self.publishableKeyKey) ?? Self.defaultPublishableKey
     }
-    private var supportedPostMetadata = ["repo_full_name", "kind", "visibility", "event_url", "poll"]
+    private var supportedPostMetadata = ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "poll"]
     private let decoder: JSONDecoder = {
         let value = JSONDecoder()
         return value
@@ -221,11 +221,11 @@ actor SupabaseService {
 
     func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = true) async throws -> [Post] {
         let photoColumn = includePhotos ? ",photos" : ""
-        let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count\(photoColumn),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
+        let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count\(photoColumn),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
         while true {
             let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
             var path = "rest/v1/posts?select=\(common)\(extras)&order=created_at.desc&limit=\(limit)"
-            if let authorID { path += "&author_id=eq.\(authorID.uuidString)" }
+            if let authorID { path += "&or=(author_id.eq.\(authorID.uuidString),organization_author_id.eq.\(authorID.uuidString))" }
             do { return try await request(path, token: token) }
             catch {
                 let message = error.localizedDescription.lowercased()
@@ -265,7 +265,7 @@ actor SupabaseService {
     }
 
     func spottedPosts(token: String?) async throws -> [Post] {
-        try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,visibility,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=60", token: token)
+        try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,visibility,github_org_id,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=60", token: token)
     }
 
     func createPost(_ draft: PostDraft, token: String) async throws -> Post {
@@ -273,14 +273,14 @@ actor SupabaseService {
         let original = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] ?? [:]
         while true {
             var payload = original
-            for column in ["repo_full_name", "kind", "visibility", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
+            for column in ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
                 payload.removeValue(forKey: column)
             }
             let body = try JSONSerialization.data(withJSONObject: payload)
             let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
             do {
                 let rows: [Post] = try await request(
-                    "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+                    "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
                     method: "POST", token: token, body: body, preferRepresentation: true
                 )
                 guard let post = rows.first else { throw NSError(domain: "Supabase", code: -2, userInfo: [NSLocalizedDescriptionKey: "投稿結果が空です"]) }
@@ -302,14 +302,14 @@ actor SupabaseService {
         ]
         while true {
             var payload = original
-            for column in ["repo_full_name", "kind", "visibility", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
+            for column in ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
                 payload.removeValue(forKey: column)
             }
             let body = try JSONSerialization.data(withJSONObject: payload)
             let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
             do {
                 let rows: [Post] = try await request(
-                    "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+                    "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
                     method: "PATCH", token: token, body: body, preferRepresentation: true
                 )
                 guard let post = rows.first else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を編集できません"]) }
@@ -332,7 +332,7 @@ actor SupabaseService {
 
     func deletePost(id: UUID, token: String) async throws {
         let rows: [Post] = try await request(
-            "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
+            "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
             method: "DELETE", token: token, preferRepresentation: true
         )
         guard !rows.isEmpty else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を削除できません"]) }
@@ -359,6 +359,13 @@ actor SupabaseService {
             body: body,
             prefer: "return=minimal"
         )
+    }
+
+    func githubOrganizations(githubToken: String, token: String, organizationID: Int64? = nil, includeRepositories: Bool = false) async throws -> GitHubOrganizationResult {
+        var payload: [String: Any] = ["github_token": githubToken, "repositories": includeRepositories]
+        if let organizationID { payload["organization_id"] = organizationID }
+        return try await request("functions/v1/github-organizations", method: "POST", token: token,
+                                 body: JSONSerialization.data(withJSONObject: payload))
     }
 
     func repositories(handle: String) async throws -> [Repository] {
@@ -431,7 +438,7 @@ actor SupabaseService {
         return try decoder.decode(GitHubIssueSearchResponse.self, from: data)
     }
 
-    func privateIssueAuthorizationURL() -> URL? {
+    func privateIssueAuthorizationURL(includePrivate: Bool = true) -> URL? {
         var components = URLComponents(url: baseURL.appendingPathComponent("auth/v1/authorize"), resolvingAgainstBaseURL: false)
         components?.queryItems = [
             .init(name: "provider", value: "github"),
@@ -440,7 +447,7 @@ actor SupabaseService {
             // fallback to the project's localhost Site URL when custom
             // schemes are rejected by hosted Auth configuration.
             .init(name: "redirect_to", value: "https://hrmcngs.github.io/spotcode-sns/?spotcode_ios_private_issues=1"),
-            .init(name: "scopes", value: "read:user repo"),
+            .init(name: "scopes", value: includePrivate ? "read:user read:org repo" : "read:user read:org"),
             .init(name: "prompt", value: "consent")
         ]
         return components?.url
@@ -569,7 +576,7 @@ actor SupabaseService {
 
     private func notificationPostMentions(handle: String, excluding userID: UUID, token: String) async throws -> [NotificationMentionPostRow] {
         let term = "%@\(handle)%".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "%@\(handle)%"
-        return try await request("rest/v1/posts?body=ilike.\(term)&author_id=neq.\(userID.uuidString)&select=id,body,created_at,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=30", token: token)
+        return try await request("rest/v1/posts?body=ilike.\(term)&author_id=neq.\(userID.uuidString)&select=id,body,created_at,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=30", token: token)
     }
 
     private func notificationCommentMentions(handle: String, excluding userID: UUID, token: String) async throws -> [NotificationCommentRow] {
@@ -617,7 +624,7 @@ actor SupabaseService {
     func profileCounts(userID: UUID, token: String?) async -> (following: Int, followers: Int, posts: Int) {
         async let followingRows = try? following(userID: userID, token: token)
         async let followerRows = try? followers(userID: userID, token: token)
-        async let postCount = try? count("rest/v1/posts?author_id=eq.\(userID.uuidString)&select=id", token: token)
+        async let postCount = try? count("rest/v1/posts?or=(author_id.eq.\(userID.uuidString),organization_author_id.eq.\(userID.uuidString))&select=id", token: token)
         return await (followingRows?.count ?? 0, followerRows?.count ?? 0, postCount ?? 0)
     }
 

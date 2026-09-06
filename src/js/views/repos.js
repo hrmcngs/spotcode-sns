@@ -1,3 +1,5 @@
+import { syncGithubOrganizations } from '../github-organizations.js';
+import { getGithubToken } from '../github-oauth.js';
 // /repos — GitHub repositories owned by the signed-in user,
 // merged into one timeline-style list sorted by most-recently-pushed.
 //
@@ -272,6 +274,35 @@ export async function hydrateRepos() {
   const me = currentUser();
   if (!me) {
     list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('repos.signin') + '</p></div>';
+    return;
+  }
+
+  // Authenticated repository results can include private organization repos.
+  // Keep them out of the public per-handle localStorage cache.
+  if (await getGithubToken()) {
+    try {
+      const result = await syncGithubOrganizations({ repositories: true });
+      if (!stillHere() || currentUser()?.id !== me.id || !list.isConnected) return;
+      const repos = (result.repositories || []).map(r => shapeRepo(r, me.github?.handle || ''));
+      repos.sort((a, b) => b.pushedAt - a.pushedAt);
+      postsByFullName = new Map();
+      postsLoaded = false;
+      paintListNow(list, repos);
+      if (!repos.length) list.innerHTML = '<p>' + escape(t('repos.empty.no_repos')) + '</p>';
+      postsWithGithubRefs({ limit: 200 }).then(posts => {
+        if (currentUser()?.id !== me.id || !list.isConnected) return;
+        for (const post of posts) {
+          const key = repoFullNameForPost(post);
+          if (!key) continue;
+          if (!postsByFullName.has(key)) postsByFullName.set(key, []);
+          postsByFullName.get(key).push(post);
+        }
+        postsLoaded = true;
+        refreshAllPostsSections(list);
+      }).catch(() => { postsLoaded = true; refreshAllPostsSections(list); });
+    } catch (error) {
+      if (list.isConnected) list.innerHTML = '<p>' + escape(error.message) + '</p>';
+    }
     return;
   }
 

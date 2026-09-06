@@ -47,7 +47,7 @@ function githubVerifyBlock(u) {
         'GitHub と連携' +
       '</div>' +
       '<p class="verify-row__hint">' +
-        'GitHub OAuth で連携します。<code>read:user</code> のみ要求するので、あなたのリポジトリには一切アクセスしません。連携後、プロフィールに GitHub アイコンと本人確認済みバッジが付きます。' +
+        'GitHub OAuthでプロフィールとOrganizationの所属を連携します。非公開リポジトリへのアクセスは、別途許可した場合のみ利用します。連携後、プロフィールに GitHub アイコンと本人確認済みバッジが付きます。' +
       '</p>' +
       '<div class="edit-actions">' +
         '<button type="button" class="btn btn--primary btn--sm" id="verify-link">' +

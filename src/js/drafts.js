@@ -23,7 +23,7 @@ export function saveDraft(handle, draft) {
   const spot = draft.spot || null;
   const eventUrl = (draft.eventUrl || '').trim();
   const kind = ['idea', 'bug'].includes(draft.kind) ? draft.kind : null;
-  const visibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'restricted'].includes(draft.visibility)
+  const visibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'github_org', 'restricted'].includes(draft.visibility)
     ? draft.visibility : 'public';
   // Don't persist a draft that has nothing in it — clear instead so
   // the "Draft restored" banner doesn't appear on an empty form.

@@ -25,6 +25,35 @@ final class AppModel: ObservableObject {
     private let cachedPostsKey = "spotcode.native.cached-posts"
     private let githubTokenPrefix = "github-private-issues."
 
+    @Published private(set) var githubOrganizations: [GitHubOrganization] = []
+    @Published private(set) var linkedGithubOrganization: GitHubOrganizationLink?
+    private var githubOrganizationOwner: UUID?
+    private var githubOrganizationExpiry = Date.distantPast
+
+    func canReadPostAudience(_ post: Post) -> Bool {
+        guard post.visibility == "github_org" || post.visibility == "only_me" else { return true }
+        if post.authorID == session?.user.id { return true }
+        if me?.id == session?.user.id && me?.isAdmin == true && UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") { return true }
+        return post.visibility == "github_org" && githubOrganizationOwner == session?.user.id && githubOrganizationExpiry > Date()
+            && githubOrganizations.contains { $0.id == post.githubOrgID }
+    }
+
+    @discardableResult
+    func syncGithubOrganizations(organizationID: Int64? = nil, includeRepositories: Bool = false) async throws -> GitHubOrganizationResult {
+        guard let owner = session?.user.id, let githubToken = await hydrateSharedPrivateIssueToken() else {
+            throw NSError(domain: "GitHub", code: 401, userInfo: [NSLocalizedDescriptionKey: "GitHub Organizationを連携してください"])
+        }
+        let result = try await withRefreshedSession { token in
+            try await SupabaseService.shared.githubOrganizations(githubToken: githubToken, token: token, organizationID: organizationID, includeRepositories: includeRepositories)
+        }
+        guard session?.user.id == owner else { throw CancellationError() }
+        githubOrganizations = result.organizations
+        linkedGithubOrganization = result.linked
+        githubOrganizationOwner = owner
+        githubOrganizationExpiry = Date().addingTimeInterval(55 * 60)
+        return result
+    }
+
     var displayProfile: Profile? { isPostingAsOfficial ? officialProfile : me }
 
     var privateIssueToken: String? {
@@ -75,7 +104,7 @@ final class AppModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: cachedPostsKey) {
             let cached = (try? JSONDecoder().decode([Post].self, from: data)) ?? []
             let canInspect = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && me?.isAdmin == true && me?.id == session?.user.id
-            posts = cached.filter { $0.visibility != "only_me" || $0.authorID == session?.user.id || canInspect }
+            posts = cached.filter { !["only_me", "github_org"].contains($0.visibility ?? "public") || $0.authorID == session?.user.id || canInspect }
         }
     }
 
@@ -307,6 +336,7 @@ final class AppModel: ObservableObject {
 
     func signOut() {
         if let id = session?.user.id { forgetAccount(id) }
+        clearGithubOrganizations()
         session = nil
         me = nil
         officialProfile = nil
@@ -379,6 +409,9 @@ final class AppModel: ObservableObject {
     func loadTimeline() async {
         isLoading = true
         defer { isLoading = false }
+        if me?.githubHandle != nil && (githubOrganizationOwner != session?.user.id || githubOrganizationExpiry <= Date()) {
+            try? await syncGithubOrganizations()
+        }
         do {
             posts = try await SupabaseService.shared.posts(token: session?.accessToken)
             if let data = try? JSONEncoder().encode(posts) { UserDefaults.standard.set(data, forKey: cachedPostsKey) }
@@ -392,6 +425,10 @@ final class AppModel: ObservableObject {
     func publish(body: String, githubLink: String?, repoFullName: String? = nil, eventURL: String? = nil, spot: Spot? = nil, kind: String? = nil, visibility: String = "public", photos: [String]? = nil, poll: PostPoll? = nil) async -> Bool {
         guard let session, let authorID = displayProfile?.id else { return false }
         do {
+            if me?.githubHandle != nil && (githubLink != nil || repoFullName != nil) {
+                _ = try await syncGithubOrganizations()
+            }
+            guard self.session?.user.id == session.user.id else { return false }
             let post = try await SupabaseService.shared.createPost(
                 .init(authorID: authorID, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, spot: spot, kind: kind, visibility: visibility, photos: photos, poll: poll, status: "wip"),
                 token: session.accessToken
@@ -408,6 +445,10 @@ final class AppModel: ObservableObject {
         let mayModerate = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && (me?.isAdmin == true || me?.isOperator == true)
         guard let session, post.authorID == displayProfile?.id || mayModerate else { return nil }
         do {
+            if me?.githubHandle != nil && (githubLink != post.githubLink || repoFullName != post.repoFullName || visibility == "github_org") {
+                _ = try await syncGithubOrganizations()
+            }
+            guard self.session?.user.id == session.user.id else { return nil }
             let updated = try await SupabaseService.shared.updatePost(
                 id: post.id, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL,
                 kind: kind, visibility: visibility, token: session.accessToken
@@ -478,7 +519,15 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func clearGithubOrganizations() {
+        githubOrganizations = []
+        linkedGithubOrganization = nil
+        githubOrganizationOwner = nil
+        githubOrganizationExpiry = .distantPast
+    }
+
     private func persist(_ value: AuthSession) {
+        if session?.user.id != value.user.id { clearGithubOrganizations() }
         session = value
         if let data = try? JSONEncoder().encode(value) {
             try? KeychainStore.save(data, account: sessionAccount)
