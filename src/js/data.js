@@ -149,7 +149,7 @@ function postCols() {
   if (hasRepoFullName)   extras.push('repo_full_name');
   if (hasEventUrl)       extras.push('event_url');
   const head =
-    'id, body, github_link, spot, status, created_at' +
+    'id, author_id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
   // Embedded author select. Kept minimal — the visibility audience
   // check (close_friends / organization) is enforced server-side via
@@ -232,6 +232,7 @@ function shapePost(row) {
   }
   return {
     id:            row.id,
+    authorId:      row.author_id,
     authorHandle:  author?.handle || '?',
     author,
     body:          row.body,
@@ -264,7 +265,7 @@ function shapePost(row) {
     // RLS (Stage 18) does the actual gating server-side — by the time
     // this row arrives at the renderer it has already been allow-
     // listed for the current viewer.
-    visibility:    (['public','mutuals','following','friends','org','restricted'].includes(row.visibility)
+    visibility:    (['public','mutuals','following','friends','org','only_me','restricted'].includes(row.visibility)
                       ? row.visibility : 'public'),
     quoteOfPostId: row.quote_of_post_id || null,
     // GitHub repo this post is "about", as owner/repo (Stage 30).
@@ -420,12 +421,21 @@ const optimisticPosts = new Map();   // id → { at, post }
 // failed-delete unmarks it so the next render restores the post.
 const pendingDeletes = new Set();   // post ids
 
+// The database enforces access. This also hides local snapshots after an
+// account switch, before the next authenticated request replaces the cache.
+export function canDisplayCachedPost(post) {
+  if (post.visibility !== 'only_me') return true;
+  const me = currentUser();
+  return !!me?.id && post.authorId === me.id;
+}
+
 function optimisticPostsForScope(scope) {
   const now = Date.now();
   const out = [];
   for (const [id, entry] of optimisticPosts) {
     if (now - entry.at > OPTIMISTIC_TTL_MS) { optimisticPosts.delete(id); continue; }
     const p = entry.post;
+    if (!canDisplayCachedPost(p)) continue;
     if (scope === 'home') out.push(p);
     else if (scope.startsWith('handle:') && ('handle:' + p.authorHandle) === scope) out.push(p);
     else if (scope.startsWith('city:')) {
@@ -511,9 +521,7 @@ export function cachedPosts(scope, maxAgeMs = POSTS_CACHE_TTL_MS) {
     const e = postsCacheAll()[scope];
     if (!e || !e.posts) return null;
     if (Date.now() - (e.at || 0) > maxAgeMs) return null;
-    return pendingDeletes.size
-      ? e.posts.filter((p) => !pendingDeletes.has(p.id))
-      : e.posts;
+    return e.posts.filter((p) => !pendingDeletes.has(p.id) && canDisplayCachedPost(p));
   } catch { return null; }
 }
 
@@ -844,7 +852,7 @@ export async function addPost(post) {
   if (['idea', 'bug'].includes(post.kind) && hasKind) row.kind = post.kind;
   if (hasEventUrl && post.eventUrl) row.event_url = post.eventUrl;
   if (typeof post.visibility === 'string' &&
-      ['mutuals','following','friends','org','restricted'].includes(post.visibility)) {
+      ['mutuals','following','friends','org','only_me','restricted'].includes(post.visibility)) {
     row.visibility = post.visibility;
     hasVisibility = true;
   }
@@ -900,7 +908,7 @@ export async function updatePost(postId, fields) {
   const supa = await getClient();
   const patch = {};
   if (Object.prototype.hasOwnProperty.call(fields, 'visibility')) {
-    if (!['public', 'mutuals', 'following', 'friends', 'org', 'restricted'].includes(fields.visibility)) {
+    if (!['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'restricted'].includes(fields.visibility)) {
       throw new Error('表示先が正しくありません');
     }
     // Never omit an explicitly selected audience because of a stale schema cache.

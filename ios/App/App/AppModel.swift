@@ -72,7 +72,10 @@ final class AppModel: ObservableObject {
             session = saved
         }
         if let data = UserDefaults.standard.data(forKey: cachedProfileKey) { me = try? JSONDecoder().decode(Profile.self, from: data) }
-        if let data = UserDefaults.standard.data(forKey: cachedPostsKey) { posts = (try? JSONDecoder().decode([Post].self, from: data)) ?? [] }
+        if let data = UserDefaults.standard.data(forKey: cachedPostsKey) {
+            let cached = (try? JSONDecoder().decode([Post].self, from: data)) ?? []
+            posts = cached.filter { $0.visibility != "only_me" || $0.authorID == session?.user.id }
+        }
     }
 
     func bootstrap() async {

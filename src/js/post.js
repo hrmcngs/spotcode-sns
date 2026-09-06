@@ -1,7 +1,7 @@
 // Shared rendering for a single post card (used by home & profile timelines).
 import { renderFileBadge } from './file-size-viz.js';
 import { statusBadge }     from './status-badges.js';
-import { getUser, relTime } from './data.js';
+import { getUser, relTime, canDisplayCachedPost } from './data.js';
 import { url }              from './router.js';
 import { icon }             from './icons.js';
 import { isLiked, likeCount, isReposted, isBookmarked } from './interactions.js';
@@ -146,6 +146,7 @@ function spotAddress(spot, postId) {
 // Compact, non-interactive — clicking the card navigates to the quoted
 // post's own detail page so users can interact there.
 function quoteCard(q) {
+  if (q && !canDisplayCachedPost(q)) return '';
   if (!q) return '';
   const u = q.author || { name: q.authorHandle || '?', handle: q.authorHandle || '?', avatar: '?' };
   const displayName   = maskName(u.handle, u.name);
@@ -207,6 +208,7 @@ const VIS_HINT = {
   following: { ico: 'arrow_right', labelKey: 'post.vis.following' },
   friends:   { ico: 'heart',       labelKey: 'post.vis.friends' },
   org:       { ico: 'building',    labelKey: 'post.vis.org' },
+  only_me:   { ico: 'lock',        labelKey: 'post.vis.only_me' },
   restricted:{ ico: 'lock',        labelKey: 'post.vis.restricted' },
 };
 
@@ -223,6 +225,7 @@ export function renderVisibilityBadge(visibility) {
 }
 
 export function renderPost(p) {
+  if (!canDisplayCachedPost(p)) return '';
   const u = getUser(p.authorHandle) || { name: p.authorHandle, avatar: '?', handle: p.authorHandle };
   const a = p.actions || {};
   const profileUrl = url('/' + u.handle);

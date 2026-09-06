@@ -590,6 +590,7 @@ const VIS_ICONS = {
   following: 'arrow_right',
   friends:   'heart',
   org:       'building',
+  only_me:   'lock',
   restricted:'lock',
 };
 
@@ -948,7 +949,7 @@ document.addEventListener('change', async (e) => {
   // who the post is for. Allowed values match the Stage 18 CHECK.
   if (e.target?.id === 'compose-vis-select') {
     const value = e.target.value;
-    pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org'].includes(value) ? value : 'public';
+    pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me'].includes(value) ? value : 'public';
     syncVisToggle();
     autosaveComposerDraft();
     // A navigation immediately after choosing must preserve the new audience.
@@ -1058,7 +1059,7 @@ function restoreComposerDraft() {
     pendingKind = d.kind;
     syncKindToggle();
   }
-  pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org'].includes(d.visibility)
+  pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me'].includes(d.visibility)
     ? d.visibility : 'public';
   syncVisToggle();
   showDraftBanner();
@@ -1463,7 +1464,7 @@ document.addEventListener('click', (e) => {
         ).join('') +
         '<label class="post__edit-link">' + escape(t('compose.vis.label')) +
           '<select class="post__edit-vis-input">' +
-            ['public', 'mutuals', 'following', 'friends', 'org', ...(visibility === 'restricted' ? ['restricted'] : [])].map((value) =>
+            ['public', 'mutuals', 'following', 'friends', 'org', 'only_me', ...(visibility === 'restricted' ? ['restricted'] : [])].map((value) =>
               '<option value="' + value + '"' + (value === visibility ? ' selected' : '') + '>' +
                 escape(t(value === 'restricted' ? 'post.vis.restricted' : 'compose.vis.' + value)) + '</option>'
             ).join('') +

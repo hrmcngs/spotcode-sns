@@ -592,6 +592,7 @@ private struct PostAudiencePicker: View {
             Label("フォロー中", systemImage: "person.badge.plus").tag("following")
             Label("親しい友達", systemImage: "heart").tag("friends")
             Label("同じ組織", systemImage: "building.2").tag("org")
+            Label("自分だけ", systemImage: "lock").tag("only_me")
             if visibility == "restricted" {
                 Label("限定公開", systemImage: "lock").tag("restricted")
             }
@@ -1234,6 +1235,7 @@ struct PostRow: View {
     private func visibilityBadge(_ value: String) -> (icon: String, text: String) {
         switch value {
         case "public": return ("globe", "全員に公開")
+        case "only_me": return ("lock", "自分だけ")
         case "mutuals": return ("arrow.2.squarepath", "相互フォロー")
         case "following": return ("person.badge.plus", "フォロー中")
         case "friends": return ("heart", "親しい友達")

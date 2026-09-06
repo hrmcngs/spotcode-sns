@@ -77,6 +77,7 @@ export function renderIdeaForm({ user = null } = {}) {
               '<option value="following">' + t('compose.vis.following') + '</option>' +
               '<option value="friends">' + t('compose.vis.friends') + '</option>' +
               '<option value="org">' + t('compose.vis.org') + '</option>' +
+              '<option value="only_me">' + t('compose.vis.only_me') + '</option>' +
             '</select>' +
           '</label>' +
         '</div>' +
