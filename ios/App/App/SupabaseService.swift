@@ -491,20 +491,21 @@ actor SupabaseService {
 
     func issueDisplayPreferences(userID: UUID, token: String) async throws -> IssueDisplayPreferences? {
         let rows: [IssueDisplayPreferences] = try await request(
-            "rest/v1/issue_display_preferences?user_id=eq.\(userID.uuidString)&select=user_id,hidden_repos,include_private",
+            "rest/v1/issue_display_preferences?user_id=eq.\(userID.uuidString)&select=*",
             token: token
         )
         return rows.first
     }
 
-    func saveIssueDisplayPreferences(userID: UUID, hiddenRepos: [String], includePrivate: Bool, token: String) async throws {
+    func saveIssueDisplayPreferences(userID: UUID, hiddenRepos: [String], selectedRepos: [String], includePrivate: Bool, token: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: [
             "user_id": userID.uuidString,
             "hidden_repos": hiddenRepos,
+            "selected_repos": selectedRepos,
             "include_private": includePrivate
         ])
         let _: [IssueDisplayPreferences] = try await request(
-            "rest/v1/issue_display_preferences?on_conflict=user_id&select=user_id,hidden_repos,include_private",
+            "rest/v1/issue_display_preferences?on_conflict=user_id&select=*",
             method: "POST", token: token, body: body,
             prefer: "resolution=merge-duplicates,return=representation"
         )

@@ -1,3 +1,4 @@
+import { currentUser } from './auth.js';
 // User-facing display toggles that affect rendering globally via
 // data-attributes on <html>. Stored in localStorage so the choice
 // survives reloads / new tabs.
@@ -17,18 +18,21 @@ const KEY = 'spotcode:hide-badges';
 const KEY_TASKS_HIDDEN = 'spotcode:hide-tasks';
 const KEY_TASK_REPOS = 'spotcode:hidden-task-repos';
 const KEY_PRIVATE_TASKS = 'spotcode:private-tasks';
-let syncedUserId = '';
+let preferenceWrites = Promise.resolve();
+let selectionRevision = 0;
 
 export async function hydrateIssueDisplayPrefs(userId) {
   if (!userId) return;
+  const revision = selectionRevision;
   const { getClient } = await import('./supa.js');
   const supa = await getClient();
   const { data, error } = await supa.from('issue_display_preferences')
-    .select('hidden_repos,include_private').eq('user_id', userId).maybeSingle();
+    .select('*').eq('user_id', userId).maybeSingle();
+  if (currentUser()?.id !== userId) return;
   if (error) return; // Stage 33 not installed yet: retain device-local values.
-  syncedUserId = userId;
   if (data) {
     try {
+      if (selectionRevision === revision && Array.isArray(data.selected_repos)) localStorage.setItem('spotcode:selected-task-repos:' + userId, JSON.stringify(data.selected_repos));
       localStorage.setItem(KEY_TASK_REPOS, JSON.stringify(data.hidden_repos || []));
       data.include_private ? localStorage.setItem(KEY_PRIVATE_TASKS, '1') : localStorage.removeItem(KEY_PRIVATE_TASKS);
     } catch {}
@@ -37,18 +41,24 @@ export async function hydrateIssueDisplayPrefs(userId) {
   }
 }
 
-async function persistIssueDisplayPrefs() {
-  if (!syncedUserId) return;
-  try {
+function persistIssueDisplayPrefs() {
+  const owner = currentUser()?.id;
+  if (!owner) return Promise.resolve();
+  const row = {
+    user_id: owner,
+    selected_repos: selectedTaskRepos(),
+    hidden_repos: hiddenTaskRepos(),
+    include_private: privateTasksEnabled(),
+    updated_at: new Date().toISOString(),
+  };
+  // Preserve checkbox order even when requests take different amounts of time.
+  preferenceWrites = preferenceWrites.catch(() => {}).then(async () => {
+    if (currentUser()?.id !== owner) return;
     const { getClient } = await import('./supa.js');
     const supa = await getClient();
-    await supa.from('issue_display_preferences').upsert({
-      user_id: syncedUserId,
-      hidden_repos: hiddenTaskRepos(),
-      include_private: privateTasksEnabled(),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' });
-  } catch {}
+    await supa.from('issue_display_preferences').upsert(row, { onConflict: 'user_id' });
+  }).catch(() => {});
+  return preferenceWrites;
 }
 
 export function badgesHidden() {
@@ -82,10 +92,22 @@ export function hiddenTaskRepos() {
   } catch { return []; }
 }
 
+export function selectedTaskRepos() {
+  const owner = currentUser()?.id;
+  if (!owner) return [];
+  try {
+    const value = JSON.parse(localStorage.getItem('spotcode:selected-task-repos:' + owner) || '[]');
+    return Array.isArray(value) ? value.map(v => String(v).toLowerCase()) : [];
+  } catch { return []; }
+}
+
 export function setTaskRepoVisible(repo, visible) {
-  const hidden = new Set(hiddenTaskRepos());
-  if (visible) hidden.delete(repo); else hidden.add(repo);
-  try { localStorage.setItem(KEY_TASK_REPOS, JSON.stringify([...hidden])); } catch {}
+  const owner = currentUser()?.id;
+  if (!owner || !repo) return;
+  selectionRevision++;
+  const selected = new Set(selectedTaskRepos());
+  if (visible) selected.add(repo.toLowerCase()); else selected.delete(repo.toLowerCase());
+  try { localStorage.setItem('spotcode:selected-task-repos:' + owner, JSON.stringify([...selected])); } catch {}
   persistIssueDisplayPrefs();
 }
 

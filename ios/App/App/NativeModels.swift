@@ -242,10 +242,12 @@ struct MFAChallenge: Codable { let id: String }
 struct IssueDisplayPreferences: Codable {
     let userID: UUID
     let hiddenRepos: [String]
+    var selectedRepos: [String]? = nil
     let includePrivate: Bool
     enum CodingKeys: String, CodingKey {
         case userID = "user_id"
         case hiddenRepos = "hidden_repos"
+        case selectedRepos = "selected_repos"
         case includePrivate = "include_private"
     }
 }

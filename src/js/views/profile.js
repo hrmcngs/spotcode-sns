@@ -21,7 +21,7 @@ import { maskHandle, maskName } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
 import { fetchTasks, cachedTasks } from '../github-tasks.js';
 import { renderMarkdown } from '../markdown.js';
-import { tasksHidden, hiddenTaskRepos, privateTasksEnabled } from '../display-prefs.js';
+import { tasksHidden, selectedTaskRepos, privateTasksEnabled } from '../display-prefs.js';
 
 // (Previously a `let renderVersion = 0` lived here as the freshness
 //  flag for async hydrations. It's been replaced with path-based
@@ -312,8 +312,8 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = fals
       '</div>'
     );
   }
-  const hiddenRepos = new Set(hiddenTaskRepos().map((value) => value.toLowerCase()));
-  const all = (tasks.items || []).filter((item) => !hiddenRepos.has(String(item.repo || '').toLowerCase()));
+  const selectedRepos = new Set(selectedTaskRepos());
+  const all = (tasks.items || []).filter((item) => selectedRepos.has(String(item.repo || '').toLowerCase()));
   const totalCount = all.length;
 
   // Repo filter chips — one per distinct repo, plus an "All" chip

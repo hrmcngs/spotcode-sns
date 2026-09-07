@@ -8,7 +8,7 @@ import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode, maskHandle, maskName 
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange, verifyCurrentPassword, mfaStatus, beginMfaEnrollment, confirmMfaEnrollment, disableMfa } from '../auth.js';
 import { openAuth } from './auth-modal.js';
-import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, hiddenTaskRepos, setTaskRepoVisible, privateTasksEnabled, setPrivateTasksEnabled } from '../display-prefs.js';
+import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, selectedTaskRepos, setTaskRepoVisible, privateTasksEnabled, setPrivateTasksEnabled } from '../display-prefs.js';
 import { linkGithubForPrivateIssues, getGithubToken, githubTokenCanReadPrivateRepos } from '../github-oauth.js';
 import { cachedTasks, fetchTasks } from '../github-tasks.js';
 import { setGithubApiToken } from '../language-stats.js';
@@ -443,11 +443,11 @@ function displaySection() {
   if (taskRepoSearchOwner !== me?.id) { taskRepoSearchOwner = me?.id; taskRepoSearch = ''; }
   const taskItems = (cachedTasks(me?.github?.handle, privateTasksEnabled()) || cachedTasks(me?.github?.handle, false))?.items || [];
   const taskRepos = [...new Set([...taskItems.map((item) => item.repo).filter(Boolean), ...(taskRepoCandidates.owner === me?.id ? taskRepoCandidates.names : [])])].sort();
-  const hiddenRepos = new Set(hiddenTaskRepos());
+  const selectedRepos = new Set(selectedTaskRepos());
   const repoChoices = taskRepos.length
     ? '<div class="settings-task-repos">' + taskRepos.map((repo) =>
         '<label class="settings-check"' + (repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase()) ? '' : ' hidden') + '><input type="checkbox" data-task-repo="' + attr(repo) + '"' +
-          (hiddenRepos.has(repo) ? '' : ' checked') + '> <span>' + attr(repo) + '</span></label>'
+          (selectedRepos.has(repo.toLowerCase()) ? ' checked' : '') + '> <span>' + attr(repo) + '</span></label>'
       ).join('') + '</div>'
     : '<p class="settings__hint">' + (taskRepoCandidates.owner === me?.id ? '表示できるリポジトリがありません。' : 'リポジトリ一覧を取得しています…') + '</p>';
   const privateStatus = privateIssueAuthError

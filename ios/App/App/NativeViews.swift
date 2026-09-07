@@ -2542,15 +2542,17 @@ private struct GitHubActivity: View {
 private enum IssueDueStatus { case overdue, soon, later }
 
 private struct OpenIssuesCard: View {
+    @EnvironmentObject private var model: AppModel
     let handle: String
     let result: GitHubIssueSearchResponse?
     @AppStorage("spotcode.hiddenIssueRepos") private var hiddenIssueReposJSON = "[]"
+    @AppStorage("spotcode.selectedIssueReposByUser") private var selectedIssueReposJSON = "{}"
     @State private var listExpanded = false
     @State private var expandedIssues: Set<Int> = []
     @State private var selectedRepository: String?
     private var allowedIssues: [GitHubIssue] {
-        let hidden = decodeRepoSet(hiddenIssueReposJSON)
-        return (result?.items ?? []).filter { !$0.isHiddenFromSpotcode && !hidden.contains($0.repositoryName) }
+        let selected = selectedRepoSet(selectedIssueReposJSON, owner: model.session?.user.id)
+        return (result?.items ?? []).filter { !$0.isHiddenFromSpotcode && selected.contains($0.repositoryName.lowercased()) }
     }
     private var total: Int { allowedIssues.count }
     private var issueGroups: [(key: String, value: [GitHubIssue])] {
@@ -3337,6 +3339,7 @@ private struct DisplaySettings: View {
     @State private var issueRepositories: [String] = []
     @State private var issueRepositoryQuery = ""
     @AppStorage("spotcode.hiddenIssueRepos") private var hiddenIssueReposJSON = "[]"
+    @AppStorage("spotcode.selectedIssueReposByUser") private var selectedIssueReposJSON = "{}"
     @AppStorage("spotcode.privateIssuesEnabled") private var privateIssuesEnabled = false
     @State private var authorizingPrivateIssues = false
     @State private var privateIssueMessage = ""
@@ -3444,11 +3447,11 @@ private struct DisplaySettings: View {
             }
             ForEach(matchingRepos, id: \.self) { repo in
                 Toggle(repo, isOn: Binding(
-                    get: { !decodeRepoSet(hiddenIssueReposJSON).contains(repo) },
+                    get: { selectedRepoSet(selectedIssueReposJSON, owner: model.session?.user.id).contains(repo.lowercased()) },
                     set: { visible in
-                        var hidden = decodeRepoSet(hiddenIssueReposJSON)
-                        if visible { hidden.remove(repo) } else { hidden.insert(repo) }
-                        hiddenIssueReposJSON = encodeRepoSet(hidden)
+                        var selected = selectedRepoSet(selectedIssueReposJSON, owner: model.session?.user.id)
+                        if visible { selected.insert(repo.lowercased()) } else { selected.remove(repo.lowercased()) }
+                        selectedIssueReposJSON = storingSelectedRepos(selected, in: selectedIssueReposJSON, owner: model.session?.user.id)
                         Task { await savePreferences() }
                     }
                 )).font(.caption)
@@ -3507,6 +3510,10 @@ private struct DisplaySettings: View {
         do {
             let session = try await model.validSession()
             if let value = try await SupabaseService.shared.issueDisplayPreferences(userID: id, token: session.accessToken) {
+                guard model.session?.user.id == id else { return }
+                if let selected = value.selectedRepos {
+                    selectedIssueReposJSON = storingSelectedRepos(Set(selected.map { $0.lowercased() }), in: selectedIssueReposJSON, owner: id)
+                }
                 hiddenIssueReposJSON = encodeRepoSet(Set(value.hiddenRepos))
                 privateIssuesEnabled = value.includePrivate
                 if value.includePrivate { _ = await model.hydrateSharedPrivateIssueToken() }
@@ -3525,6 +3532,7 @@ private struct DisplaySettings: View {
             try await SupabaseService.shared.saveIssueDisplayPreferences(
                 userID: id,
                 hiddenRepos: Array(decodeRepoSet(hiddenIssueReposJSON)).sorted(),
+                selectedRepos: Array(selectedRepoSet(selectedIssueReposJSON, owner: id)).sorted(),
                 includePrivate: privateIssuesEnabled,
                 token: session.accessToken
             )
@@ -3822,4 +3830,18 @@ private func githubRepositoryName(from value: String) -> String? {
     let parts = url.pathComponents.filter { $0 != "/" }
     guard parts.count >= 2 else { return nil }
     return "\(parts[0])/\(parts[1].replacingOccurrences(of: ".git", with: ""))"
+}
+
+private func selectedRepoSet(_ value: String, owner: UUID?) -> Set<String> {
+    guard let owner, let data = value.data(using: .utf8),
+          let map = try? JSONDecoder().decode([String: [String]].self, from: data) else { return [] }
+    return Set((map[owner.uuidString] ?? []).map { $0.lowercased() })
+}
+
+private func storingSelectedRepos(_ repos: Set<String>, in value: String, owner: UUID?) -> String {
+    guard let owner else { return value }
+    var map = value.data(using: .utf8).flatMap { try? JSONDecoder().decode([String: [String]].self, from: $0) } ?? [:]
+    map[owner.uuidString] = repos.sorted()
+    guard let data = try? JSONEncoder().encode(map) else { return value }
+    return String(data: data, encoding: .utf8) ?? value
 }

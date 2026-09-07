@@ -135,3 +135,8 @@ npx supabase functions deploy github-organizations --project-ref vkwdthjiyxrhskd
 ```
 
 Stage 38 のDB更新も必要です。Function内でSupabaseのJWTとGitHubの本人確認を実施しています。更新版Web/iOSは、サービスに接続できない間も自分の公開リポジトリを表示します。Organization・非公開リポジトリの表示にはFunctionの配置が必要です。
+
+### Stage 40: リポジトリを自分で選択して表示
+
+`docs/migrations/040-explicit-repository-selection.sql` 全文をSQL Editorで実行してから、Web / iOSを更新します。
+初期状態と新しく取得したリポジトリは未選択になります。選択したリポジトリだけをプロフィールのOpen issuesに表示し、`selected_repos` に保存します。旧設定は非表示の一覧しか記録しておらず、手動選択と自動選択を区別できないため、初回は表示するリポジトリを選び直してください。検索候補を押して選ぶ操作は維持します。
