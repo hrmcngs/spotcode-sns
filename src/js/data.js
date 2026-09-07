@@ -615,6 +615,25 @@ export async function getPost(id) {
   return data ? shapePost(data) : null;
 }
 
+// Stable cursor preserves posts sharing a timestamp and tolerates new inserts.
+export async function forYouPage({ limit = 40, before = null } = {}) {
+  const supa = await getClient();
+  const { data, error } = await withResilientCols(cols => {
+    let query = supa.from('posts').select(cols)
+      .order('created_at', { ascending: false }).order('id', { ascending: false });
+    if (before) query = query.or('created_at.lt.' + before.createdAt +
+      ',and(created_at.eq.' + before.createdAt + ',id.lt.' + before.id + ')');
+    return query.limit(limit);
+  });
+  if (error) throw new Error(error.message);
+  const rows = data || [];
+  const last = rows.at(-1);
+  const posts = before ? rows.map(shapePost) : mergeOptimistic(rows.map(shapePost), 'home');
+  if (!before) savePostsCache('home', posts);
+  return { posts, hasMore: rows.length === limit,
+    cursor: last ? { createdAt: last.created_at, id: last.id } : null };
+}
+
 export async function allPosts({ limit = 100 } = {}) {
   const supa = await getClient();
   const { data, error } = await withResilientCols((cols) =>

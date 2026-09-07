@@ -99,7 +99,14 @@ struct ReportIdentifier: Codable {
     let id: UUID
 }
 
+struct GitHubRepositoryOwner: Codable, Hashable {
+    let id: Int64
+    let login: String
+    let type: String?
+}
+
 struct Repository: Codable, Identifiable, Hashable {
+    var owner: GitHubRepositoryOwner? = nil
     let id: Int
     let name: String
     let fullName: String
@@ -111,7 +118,7 @@ struct Repository: Codable, Identifiable, Hashable {
     let pushedAt: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, description, language
+        case id, name, description, language, owner
         case fullName = "full_name"
         case htmlURL = "html_url"
         case stars = "stargazers_count"

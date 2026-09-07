@@ -1,5 +1,5 @@
 import { publicRepositories } from '../task-repositories.js';
-import { syncGithubOrganizations } from '../github-organizations.js';
+import { githubRepositories } from '../github-repositories.js';
 import { getGithubToken } from '../github-oauth.js';
 // /repos — GitHub repositories owned by the signed-in user,
 // merged into one timeline-style list sorted by most-recently-pushed.
@@ -271,10 +271,11 @@ export async function hydrateRepos() {
   // Authenticated repository results can include private organization repos.
   // Keep them out of the public per-handle localStorage cache.
   try {
-    if (await getGithubToken()) {
-      const result = await syncGithubOrganizations({ repositories: true });
+    const token = await getGithubToken();
+    if (token) {
+      const repositories = await githubRepositories(token, me.github?.handle);
       if (!stillHere() || currentUser()?.id !== me.id || !list.isConnected) return;
-      const repos = (result.repositories || []).map(r => shapeRepo(r, me.github?.handle || ''));
+      const repos = repositories.map(r => shapeRepo(r, me.github?.handle || ''));
       repos.sort((a, b) => b.pushedAt - a.pushedAt);
       postsByFullName = new Map();
       postsLoaded = false;
@@ -293,13 +294,13 @@ export async function hydrateRepos() {
       }).catch(() => { postsLoaded = true; refreshAllPostsSections(list); });
       return;
     }
-  } catch {
+  } catch (error) {
     if (!list.isConnected || currentUser()?.id !== me.id) return;
     const notice = document.createElement('p');
     notice.className = 'settings__hint';
     notice.setAttribute('role', 'status');
     notice.dataset.reposConnection = '1';
-    notice.textContent = 'Organizationの取得サービスに接続できないため、自分の公開リポジトリを表示しています。';
+    notice.textContent = (error.message || 'GitHubに接続できません。') + ' 自分の公開リポジトリを表示しています。';
     list.before(notice);
   }
   if (!list.isConnected || currentUser()?.id !== me.id) return;

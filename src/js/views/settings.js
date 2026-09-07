@@ -1,3 +1,4 @@
+import { githubRepositories } from '../github-repositories.js';
 import { publicTaskRepositories } from '../task-repositories.js';
 import { syncGithubOrganizations } from '../github-organizations.js';
 import { linkGithubForOrganizations } from '../github-oauth.js';
@@ -768,11 +769,11 @@ export function bindSettings() {
           const token = await getGithubToken();
           if (token) {
             try {
-              const result = await syncGithubOrganizations({ repositories: true });
-              names = (result.repositories || []).map(repo => repo.full_name).filter(Boolean);
-            } catch {
+              const repositories = await githubRepositories(token, settingsGh);
+              names = repositories.map(repo => repo.full_name).filter(Boolean);
+            } catch (error) {
               names = await publicTaskRepositories(settingsGh);
-              repoError = '自分の公開リポジトリを表示しています。組織・非公開リポジトリはGitHub連携を確認してください。';
+              repoError = error.message + ' 自分の公開リポジトリを表示しています。';
             }
           } else { names = await publicTaskRepositories(settingsGh); }
         } catch (error) { repoError = error.message; }

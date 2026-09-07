@@ -281,3 +281,7 @@
 "一致するリポジトリがありません。" = "No matching repositories.";
 
 "Organizationの取得サービスに接続できないため、自分の公開リポジトリを表示しています。" = "The Organization service is unavailable. Showing your public repositories.";
+
+"もっと見る" = "Load more";
+
+"続きを取得できませんでした。再試行してください。" = "Could not load more posts. Please try again.";

@@ -3496,3 +3496,6 @@ html.account-menu-locked { overflow: hidden; }
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
+[data-timeline-more][hidden],
+[data-timeline-end][hidden] { display: none; }

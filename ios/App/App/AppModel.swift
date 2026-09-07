@@ -11,6 +11,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var officialProfile: Profile?
     @Published private(set) var isPostingAsOfficial = false
     @Published var isLoading = false
+    @Published private(set) var hasMoreTimelinePosts = false
+    @Published private(set) var isLoadingMoreTimeline = false
+    @Published private(set) var timelinePageError: String?
+    private var timelineCursor: Post?
+    private var timelineGeneration = UUID()
     @Published var errorMessage: String?
     @Published var authenticationError: String?
     @Published var requiresMFA = false
@@ -408,19 +413,44 @@ final class AppModel: ObservableObject {
     }
 
     func loadTimeline() async {
+        let generation = UUID()
+        timelineGeneration = generation
+        hasMoreTimelinePosts = false; isLoadingMoreTimeline = false; timelinePageError = nil
         isLoading = true
-        defer { isLoading = false }
+        defer { if timelineGeneration == generation { isLoading = false } }
         if me?.githubHandle != nil && (githubOrganizationOwner != session?.user.id || githubOrganizationExpiry <= Date()) {
             _ = try? await syncGithubOrganizations()
         }
         do {
-            posts = try await SupabaseService.shared.posts(token: session?.accessToken)
+            guard timelineGeneration == generation else { return }
+            let page = try await SupabaseService.shared.posts(token: session?.accessToken)
+            guard timelineGeneration == generation else { return }
+            posts = page
+            timelineCursor = page.last
+            hasMoreTimelinePosts = page.count == 24
             if let data = try? JSONEncoder().encode(posts) { UserDefaults.standard.set(data, forKey: cachedPostsKey) }
         }
         catch is CancellationError { return }
         catch let error as URLError where error.code == .cancelled { return }
         catch let error as URLError where Self.isTransientNetworkError(error) { return }
-        catch { errorMessage = error.localizedDescription }
+        catch { if timelineGeneration == generation { errorMessage = error.localizedDescription } }
+    }
+
+    func loadMoreTimeline() async {
+        guard hasMoreTimelinePosts, !isLoading, !isLoadingMoreTimeline, let cursor = timelineCursor else { return }
+        let generation = timelineGeneration
+        isLoadingMoreTimeline = true; timelinePageError = nil
+        defer { if generation == timelineGeneration { isLoadingMoreTimeline = false } }
+        do {
+            let page = try await SupabaseService.shared.posts(token: session?.accessToken, before: cursor)
+            guard generation == timelineGeneration else { return }
+            let known = Set(posts.map(\.id))
+            posts.append(contentsOf: page.filter { !known.contains($0.id) })
+            timelineCursor = page.last
+            hasMoreTimelinePosts = page.count == 24 && page.last?.createdAt != nil
+        } catch {
+            if generation == timelineGeneration { timelinePageError = "続きを取得できませんでした。再試行してください。" }
+        }
     }
 
     func publish(body: String, githubLink: String?, repoFullName: String? = nil, eventURL: String? = nil, spot: Spot? = nil, kind: String? = nil, visibility: String = "public", photos: [String]? = nil, poll: PostPoll? = nil) async -> Bool {
@@ -521,6 +551,8 @@ final class AppModel: ObservableObject {
     }
 
     private func clearGithubOrganizations() {
+        timelineGeneration = UUID(); timelineCursor = nil; isLoading = false
+        hasMoreTimelinePosts = false; isLoadingMoreTimeline = false; timelinePageError = nil
         githubOrganizations = []
         linkedGithubOrganization = nil
         githubOrganizationOwner = nil

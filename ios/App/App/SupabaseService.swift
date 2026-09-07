@@ -237,12 +237,15 @@ actor SupabaseService {
         return profile
     }
 
-    func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = true) async throws -> [Post] {
+    func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = true, before: Post? = nil) async throws -> [Post] {
         let photoColumn = includePhotos ? ",photos" : ""
         let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count\(photoColumn),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
         while true {
             let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
-            var path = "rest/v1/posts?select=\(common)\(extras)&order=created_at.desc&limit=\(limit)"
+            var path = "rest/v1/posts?select=\(common)\(extras)&order=created_at.desc,id.desc&limit=\(limit)"
+            if let before, let createdAt = before.createdAt?.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
+                path += "&or=(created_at.lt.\(createdAt),and(created_at.eq.\(createdAt),id.lt.\(before.id.uuidString)))"
+            }
             if let authorID { path += "&or=(author_id.eq.\(authorID.uuidString),organization_author_id.eq.\(authorID.uuidString))" }
             do { return try await request(path, token: token) }
             catch {
@@ -384,6 +387,33 @@ actor SupabaseService {
         if let organizationID { payload["organization_id"] = organizationID }
         return try await request("functions/v1/github-organizations", method: "POST", token: token,
                                  body: JSONSerialization.data(withJSONObject: payload))
+    }
+
+    private func githubRepositoryRequest<T: Decodable>(_ path: String, githubToken: String) async throws -> T {
+        var request = URLRequest(url: URL(string: "https://api.github.com" + path)!)
+        request.setValue("Bearer \(githubToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let (payload, response) = try await data(for: request, retryable: true)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            let message = status == 401 ? "GitHub認証が無効です。GitHubを再認証してください。" : "GitHubのリポジトリを取得できません。OrganizationのOAuth許可・SSO、またはAPIの利用制限を確認してください。"
+            throw NSError(domain: "GitHubRepositories", code: status, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        return try decoder.decode(T.self, from: payload)
+    }
+
+    func authorizedGithubRepositories(handle: String, githubToken: String) async throws -> [Repository] {
+        let user: GitHubRepositoryOwner = try await githubRepositoryRequest("/user", githubToken: githubToken)
+        guard user.login.lowercased() == handle.lowercased() else {
+            throw NSError(domain: "GitHubRepositories", code: 401, userInfo: [NSLocalizedDescriptionKey: "プロフィールに連携したGitHubアカウントで再認証してください。"])
+        }
+        var repositories: [Int: Repository] = [:]
+        for page in 1...100 {
+            let batch: [Repository] = try await githubRepositoryRequest("/user/repos?affiliation=owner,organization_member&sort=pushed&per_page=100&page=\(page)", githubToken: githubToken)
+            for repo in batch where repo.owner?.id == user.id || repo.owner?.type == "Organization" { repositories[repo.id] = repo }
+            if batch.count < 100 { return Array(repositories.values) }
+        }
+        throw URLError(.dataLengthExceedsMaximum)
     }
 
     func repositories(handle: String) async throws -> [Repository] {

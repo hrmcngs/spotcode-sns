@@ -364,7 +364,21 @@ struct TimelineView: View {
                     LazyVStack(spacing: 0) {
                         InlineComposer(repositoryComposeURL: $repositoryComposeURL)
                         ForEach(model.posts) { post in
-                            PostRow(post: post)
+                            PostRow(post: post).onAppear {
+                                if post.id == model.posts.last?.id && model.timelinePageError == nil {
+                                    Task { await model.loadMoreTimeline() }
+                                }
+                            }
+                        }
+                        if model.hasMoreTimelinePosts {
+                            VStack {
+                                if let error = model.timelinePageError {
+                                    Text(LocalizedStringKey(error)).font(.caption)
+                                    Button("再試行") { Task { await model.loadMoreTimeline() } }
+                                } else { ProgressView("読み込み中…") }
+                            }.padding().onAppear {
+                                if model.timelinePageError == nil { Task { await model.loadMoreTimeline() } }
+                            }
                         }
                     }
                 }.refreshable { await model.loadTimeline() }
@@ -1875,13 +1889,13 @@ struct RepositoriesView: View {
         loading = true; defer { loading = false }
         do {
             let loaded: [Repository]
-            if await model.hydrateSharedPrivateIssueToken() != nil {
+            if let githubToken = await model.hydrateSharedPrivateIssueToken() {
                 do {
-                    loaded = try await model.syncGithubOrganizations(includeRepositories: true).repositories ?? []
+                    loaded = try await SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: githubToken)
                 } catch {
                     loaded = try await SupabaseService.shared.repositories(handle: handle)
                     guard session.user.id == model.session?.user.id else { return }
-                    repositoryNotice = String(localized: "Organizationの取得サービスに接続できないため、自分の公開リポジトリを表示しています。")
+                    repositoryNotice = error.localizedDescription
                 }
             } else {
                 loaded = try await SupabaseService.shared.repositories(handle: handle)
@@ -3544,8 +3558,9 @@ private struct DisplaySettings: View {
     private func loadIssueRepositories() async {
         guard let handle = model.me?.githubHandle, let owner = model.session?.user.id else { return }
         var repositories: [Repository] = []
-        if let result = try? await model.syncGithubOrganizations(includeRepositories: true) {
-            repositories = result.repositories ?? []
+        if let token = await model.hydrateSharedPrivateIssueToken(),
+           let result = try? await SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: token) {
+            repositories = result
         } else {
             repositories = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []
         }

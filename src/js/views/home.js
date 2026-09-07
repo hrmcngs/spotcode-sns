@@ -1,5 +1,6 @@
+import { watchTimelineEnd } from '../timeline-scroll.js';
 import { renderIdeaForm } from '../idea-post.js';
-import { allPosts, followingPosts, hydrateQuotedPosts, cachedPosts } from '../data.js';
+import { allPosts, forYouPage, followingPosts, hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
 import { displayUser }    from '../posting-identity.js';
@@ -22,6 +23,7 @@ const TIMELINE_TIMEOUT_MS = 45 * 1000;
 // dispatch could overwrite the freshly-rendered timeline from a newer
 // dispatch, making posts visibly disappear "sometimes".
 let renderVersion = 0;
+let timelineObserver = null;
 
 // Per-tab cache scope keys for the timeline localStorage cache.
 const SCOPE = { foryou: 'home', following: 'following' };
@@ -81,6 +83,8 @@ function errorTimeline(msg) {
 // compat with any caller that doesn't pass the arg.
 export function renderHome(tab = 'foryou') {
   renderVersion++;
+  timelineObserver?.disconnect();
+  timelineObserver = null;
   return [
     timelineTabs(tab),
     renderIdeaForm({ user: displayUser(currentUser()) }),
@@ -100,6 +104,7 @@ export async function hydrateHome(tab = 'foryou') {
   if (!list) return;
 
   const me = currentUser();
+  if (tab === 'foryou') return hydrateForYou(list, myVersion, me?.id);
   // Logged-out Following tab — skip the network round trip, show
   // the sign-in CTA directly.
   if (tab === 'following' && !me) {
@@ -165,4 +170,59 @@ export async function hydrateHome(tab = 'foryou') {
   if (myVersion !== renderVersion) return;
   list.innerHTML = posts.map(renderPost).join('');
   hydratePolls(posts).catch(() => {});
+}
+
+async function hydrateForYou(list, version, owner) {
+  let cursor = null, loading = false, first = true, hasMore = true;
+  const seen = new Set();
+  const active = () => version === renderVersion && list.isConnected && currentUser()?.id === owner;
+  let feed, button, status, sentinel, watcher;
+  let autoPaused = false;
+  const load = async () => {
+    if (loading || !hasMore || !active()) return;
+    loading = true;
+    if (button) { button.hidden = true; status.textContent = '読み込み中…'; }
+    try {
+      const page = await withTimeout(forYouPage({ before: cursor }), TIMELINE_TIMEOUT_MS, 'タイムライン取得');
+      if (!active()) return;
+      if (first) {
+        list.innerHTML = '<div data-timeline-feed></div><p data-timeline-status role="status"></p><div data-timeline-end aria-hidden="true" style="height:1px"></div><button type="button" class="btn btn--ghost" data-timeline-more hidden>再試行</button>';
+        feed = list.querySelector('[data-timeline-feed]');
+        button = list.querySelector('[data-timeline-more]');
+        status = list.querySelector('[data-timeline-status]');
+        sentinel = list.querySelector('[data-timeline-end]');
+        button.addEventListener('click', () => { autoPaused = false; void load(); });
+        first = false;
+      }
+      cursor = page.cursor;
+      hasMore = page.hasMore && !!cursor;
+      const added = page.posts.filter(post => { if (seen.has(post.id)) return false; seen.add(post.id); return true; });
+      const batch = document.createElement('div');
+      batch.innerHTML = added.map(renderPost).join('');
+      feed.append(batch);
+      if (!seen.size && !hasMore) feed.innerHTML = emptyTimeline('foryou', !!owner);
+      autoPaused = false;
+      status.textContent = '';
+      sentinel.hidden = !hasMore;
+      // Update only this page so editing/expanded content in older pages survives.
+      const ids = added.map(p => p.id);
+      Promise.all([hydratePostLikes(ids), hydrateRepostsMine(ids), hydrateBookmarksMine(ids), hydrateQuotedPosts(added)])
+        .then(() => { if (active() && batch.isConnected) { batch.innerHTML = added.map(renderPost).join(''); hydratePolls(added).catch(() => {}); } })
+        .catch(() => {});
+    } catch (error) {
+      if (!active()) return;
+      if (first) { list.innerHTML = errorTimeline(error.message || '通信エラー'); return; }
+      autoPaused = true;
+      status.textContent = '続きを取得できませんでした。再試行してください。';
+    } finally {
+      loading = false;
+      if (active() && button) { button.disabled = false; button.hidden = !autoPaused; }
+      if (active() && hasMore && !autoPaused) watcher?.check();
+    }
+  };
+  await load();
+  if (active() && sentinel && hasMore) {
+    watcher = watchTimelineEnd(sentinel, { active, load: () => { if (!autoPaused) void load(); } });
+    timelineObserver = watcher;
+  }
 }
