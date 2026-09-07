@@ -319,3 +319,23 @@
 "このOrganizationと連携" = "Link this organization";
 
 "連携するOrganizationを選んでください。" = "Select the organization to link.";
+
+"公開の.githubリポジトリに確認ファイルを追加して承認します。承認後もファイルは残してください。" = "Verify by adding a file to the public .github repository. Keep the file after verification.";
+
+"Organization名（Drowse-Lab）" = "Organization name (Drowse-Lab)";
+
+"確認コードを発行" = "Generate verification code";
+
+"次の内容をファイルに保存してください。有効期限は24時間です。" = "Save this content in the file. The code expires in 24 hours.";
+
+"確認コードをコピー" = "Copy verification code";
+
+"GitHubでファイルを追加" = "Add file on GitHub";
+
+"確認して承認" = "Verify and approve";
+
+"連携状態を確認" = "Check connection";
+
+"確認ファイルをコミットしてください。" = "Commit the verification file.";
+
+"Organizationを承認しました。" = "Organization verified.";

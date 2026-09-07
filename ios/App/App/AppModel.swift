@@ -58,9 +58,10 @@ final class AppModel: ObservableObject {
     }
 
     func syncGithubOrganizations(organizationID: Int64? = nil, includeRepositories: Bool = false) async throws -> GitHubOrganizationResult {
-        guard let owner = session?.user.id, let githubToken = await hydrateSharedPrivateIssueToken() else {
+        guard let owner = session?.user.id else {
             throw NSError(domain: "GitHub", code: 401, userInfo: [NSLocalizedDescriptionKey: "GitHub Organizationを連携してください"])
         }
+        let githubToken = me?.isOrg == true ? "" : await hydrateSharedPrivateIssueToken() ?? ""
         let result = try await withRefreshedSession { token in
             try await SupabaseService.shared.githubOrganizations(githubToken: githubToken, token: token, organizationID: organizationID, includeRepositories: includeRepositories)
         }

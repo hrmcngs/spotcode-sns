@@ -382,6 +382,20 @@ actor SupabaseService {
         )
     }
 
+    struct OrganizationFileChallenge: Decodable {
+        let login: String
+        let content: String
+        let create_url: URL
+    }
+    func issueOrganizationFile(login: String, token: String) async throws -> OrganizationFileChallenge {
+        try await request("functions/v1/github-organizations", method: "POST", token: token,
+            body: JSONSerialization.data(withJSONObject: ["action": "issue_file", "organization_login": login]))
+    }
+    func confirmOrganizationFile(token: String) async throws -> GitHubOrganizationResult {
+        try await request("functions/v1/github-organizations", method: "POST", token: token,
+            body: JSONSerialization.data(withJSONObject: ["action": "confirm_file"]))
+    }
+
     func githubOrganizations(githubToken: String, token: String, organizationID: Int64? = nil, includeRepositories: Bool = false) async throws -> GitHubOrganizationResult {
         var payload: [String: Any] = ["github_token": githubToken, "repositories": includeRepositories]
         if let organizationID { payload["organization_id"] = organizationID }

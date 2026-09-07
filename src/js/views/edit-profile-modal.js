@@ -232,7 +232,7 @@ export function openEditProfile(profile) {
         // Redirects the browser away — after return, syncGithubIdentity()
         // in main.js writes the profile row and refreshProfile() picks
         // it up so the next modal open shows the linked state.
-        if (currentUser()?.isOrg) await linkGithubForOrganizations(window.location.href);
+        if (currentUser()?.isOrg) { close(); navigate('/settings/account'); }
         else await linkGithub(window.location.href);
       } catch (ex) {
         showVerify(ex.message, 'bad');
@@ -243,7 +243,10 @@ export function openEditProfile(profile) {
       const button = event.currentTarget;
       button.disabled = true;
       showVerify('GitHub に移動します…');
-      try { await linkGithubForOrganizations(window.location.href); }
+      try {
+        if (currentUser()?.isOrg) { close(); navigate('/settings/account'); }
+        else await linkGithubForOrganizations(window.location.href);
+      }
       catch (ex) { showVerify(ex.message, 'bad'); button.disabled = false; }
     });
     document.getElementById('verify-organization')?.addEventListener('click', () => {

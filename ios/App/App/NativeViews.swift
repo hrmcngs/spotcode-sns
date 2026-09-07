@@ -1889,12 +1889,13 @@ struct RepositoriesView: View {
         loading = true; defer { loading = false }
         do {
             let loaded: [Repository]
-            if let githubToken = await model.hydrateSharedPrivateIssueToken() {
+            let githubToken = await model.hydrateSharedPrivateIssueToken()
+            if githubToken != nil || model.me?.isOrg == true {
                 do {
                     if model.me?.isOrg == true {
                         loaded = try await model.syncGithubOrganizations(includeRepositories: true).repositories ?? []
                     } else {
-                        loaded = try await SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: githubToken)
+                        loaded = try await SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: githubToken ?? "")
                     }
                 } catch {
                     loaded = try await SupabaseService.shared.repositories(handle: handle)
@@ -2492,7 +2493,7 @@ private struct EditProfileView: View {
                         .font(.footnote).foregroundColor(SpotcodeTheme.warning)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                GitHubConnectionPermissions()
+                if model.me?.isOrg != true { GitHubConnectionPermissions() }
                 if model.me?.isOrg == true {
                     GitHubOrganizationSettings()
                 }
@@ -2949,34 +2950,61 @@ private struct GitHubOrganizationSettings: View {
     @EnvironmentObject private var model: AppModel
     @State private var busy = false
     @State private var message = ""
+    @State private var login = ""
+    @State private var challenge: SupabaseService.OrganizationFileChallenge?
 
     var body: some View {
         SettingsCard("GitHub Organization") {
-            Text("Organizationへのアクセスは最初のGitHub連携時に許可します。連携権限の更新はプロフィール編集から行えます。組織アカウントは管理者を務めるOrganizationを共有先に設定できます。")
-                .foregroundColor(SpotcodeTheme.muted)
-            Button("所属を確認・更新") { synchronize() }.disabled(busy)
-            if let linked = model.linkedGithubOrganization { Text(linked.login).fontWeight(.bold) }
-            ForEach(model.githubOrganizations) { org in
-                HStack {
-                    Text(org.login)
-                    if model.me?.isOrg == true && org.role == "admin" {
-                        Button("このOrganizationと連携") { synchronize(org.id) }.disabled(busy)
-                    }
+            if model.me?.isOrg == true {
+                Text("公開の.githubリポジトリに確認ファイルを追加して承認します。承認後もファイルは残してください。")
+                    .foregroundColor(SpotcodeTheme.muted)
+                TextField("Organization名（Drowse-Lab）", text: $login)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().spotcodeField()
+                Button("確認コードを発行") { perform(issue: true) }.disabled(busy)
+                if let challenge {
+                    Text(challenge.login + "/.github → spotcode-verification.txt")
+                        .font(.caption).textSelection(.enabled)
+                    Text("次の内容をファイルに保存してください。有効期限は24時間です。")
+                    Text(challenge.content).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    Button("確認コードをコピー") { UIPasteboard.general.string = challenge.content }
+                    Link("GitHubでファイルを追加", destination: challenge.create_url)
+                    Button("確認して承認") { perform(issue: false) }.disabled(busy)
                 }
             }
-            Text("所属確認は1時間有効です。非公開リポジトリは、GitHubの追加権限を許可すると利用できます。")
-                .font(.caption).foregroundColor(SpotcodeTheme.muted)
+            Button("連携状態を確認") { synchronize() }.disabled(busy)
+            if let linked = model.linkedGithubOrganization { Text(linked.login).fontWeight(.bold) }
+            if busy { ProgressView() }
             if !message.isEmpty { Text(message).font(.caption) }
         }
-        .task(id: model.me?.id) {
-            if model.me?.isOrg == true && model.me?.githubHandle != nil { synchronize() }
+    }
+    private func perform(issue: Bool) {
+        busy = true
+        if issue { challenge = nil }
+        Task {
+            defer { busy = false }
+            do {
+                let session = try await model.validSession()
+                if issue {
+                    let result = try await SupabaseService.shared.issueOrganizationFile(login: login.trimmingCharacters(in: .whitespacesAndNewlines), token: session.accessToken)
+                    guard model.session?.user.id == session.user.id else { return }
+                    challenge = result
+                    message = "確認ファイルをコミットしてください。"
+                } else {
+                    _ = try await SupabaseService.shared.confirmOrganizationFile(token: session.accessToken)
+                    guard model.session?.user.id == session.user.id else { return }
+                    try await model.syncGithubOrganizations()
+                    await model.bootstrap()
+                    challenge = nil
+                    message = "Organizationを承認しました。"
+                }
+            } catch { message = error.localizedDescription }
         }
     }
-    private func synchronize(_ orgID: Int64? = nil) {
+    private func synchronize() {
         busy = true
         Task {
             defer { busy = false }
-            do { try await model.syncGithubOrganizations(organizationID: orgID); message = "更新しました" }
+            do { try await model.syncGithubOrganizations(); message = "更新しました" }
             catch { message = error.localizedDescription }
         }
     }
@@ -3659,10 +3687,11 @@ private struct DisplaySettings: View {
     private func loadIssueRepositories() async {
         guard let handle = model.me?.githubHandle, let owner = model.session?.user.id else { return }
         var repositories: [Repository] = []
-        if let token = await model.hydrateSharedPrivateIssueToken(),
+        let repositoryToken = await model.hydrateSharedPrivateIssueToken()
+        if repositoryToken != nil || model.me?.isOrg == true,
            let result = try? await (model.me?.isOrg == true
                ? model.syncGithubOrganizations(includeRepositories: true).repositories ?? []
-               : SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: token)) {
+               : SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: repositoryToken ?? "")) {
             repositories = result
         } else {
             repositories = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []

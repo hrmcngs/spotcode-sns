@@ -11,8 +11,9 @@ export function canReadGithubOrganization(orgId) {
 export async function syncGithubOrganizations(options = {}) {
   const owner = currentUser()?.id;
   if (!owner) throw new Error('ログインしてください');
-  const token = await getGithubToken();
-  if (!token) throw new Error('GitHub Organizationを連携してください');
+  const organizationAccount = currentUser()?.isOrg === true;
+  const token = organizationAccount ? null : await getGithubToken();
+  if (!token && !organizationAccount) throw new Error('GitHub Organizationを連携してください');
   const client = await getClient();
   const { data, error } = await client.functions.invoke('github-organizations', { body: { ...options, github_token: token } });
   if (error || data?.error) {
@@ -24,7 +25,8 @@ export async function syncGithubOrganizations(options = {}) {
     throw new Error(message || 'Organizationの確認に失敗しました');
   }
   if (currentUser()?.id !== owner) throw new Error('アカウントが変更されました');
-  if (options.organization_id != null) await refreshProfile();
+  if (options.action === 'issue_file') return data;
+  if (options.organization_id != null || options.action === 'confirm_file') await refreshProfile();
   if (currentUser()?.id !== owner) throw new Error('アカウントが変更されました');
   snapshot = { owner, organizations: data.organizations || [], expires: Date.now() + 55 * 60 * 1000 };
   return data;

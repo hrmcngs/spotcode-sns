@@ -158,3 +158,11 @@ npx supabase functions deploy github-organizations --project-ref vkwdthjiyxrhskd
 #### `github_org_memberships does not exist` と表示された場合
 
 Stage 38が未適用です。`docs/repairs/github-organization-setup.sql` の中身全体をSupabase SQL Editorへ貼り付けて実行してください。Stage 38・39・41を依存順に一つのトランザクションで適用します。既存のプロフィールと投稿は保持し、適用済みでも再実行できます。ファイル名やMarkdown見出しではなく、SQLの中身を実行します。その後、上記のEdge Functionのデプロイも必要です。
+
+### Stage 42: Organizationを確認ファイルで承認
+
+現在の組織アカウントの連携はファイル方式です。`docs/repairs/github-organization-file-setup.sql` の中身全体をSQL Editorで実行してください（Stage 38・39・41・42を含みます）。その後 `github-organizations` FunctionとWeb/iOSを更新します。既にStage 41まで適用済みなら `docs/migrations/042-organization-file-verification.sql` のみでも構いません。
+
+Organization名を入力し「確認コードを発行」を押します。例えばDrowse-Labでは、公開の `Drowse-Lab/.github` リポジトリのデフォルトブランチのルートに `spotcode-verification.txt` を追加し、表示されたコードを保存・コミットします。リポジトリが無い場合は公開で作成してください。Forkは使えません。24時間以内に「確認して承認」を押してください。
+
+コードはSpotcodeアカウント・Organizationに紐づき、再発行で旧コードが無効になります。承認後も確認ファイルを残してください。所属更新時に再確認し、失敗すると組織アカウントの確認済み所属を取り消します（既存の確認は最大1時間有効）。ファイル方式はこの専用リポジトリへコミットできることを所有確認とし、GitHubの管理者roleを証明する方式ではありません。個人メンバーの所属確認は従来のGitHub OAuthを維持します。非公開リポジトリへのアクセスには別途GitHubの権限が必要です。

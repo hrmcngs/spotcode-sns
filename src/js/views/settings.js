@@ -134,6 +134,16 @@ function privacyCard() {
 // the Organization badge on the profile page; doesn't change any RLS
 // rule (visibility is still about close_friends / org_members lists).
 function githubOrganizationCard() {
+  if (currentUser()?.isOrg) return '<section class="settings-card"><h2>GitHub Organization</h2>' +
+    '<p>公開の.githubリポジトリに確認ファイルを追加して、Organizationを連携します。</p>' +
+    '<label>Organization名<input id="github-org-login" placeholder="Drowse-Lab" autocapitalize="none" spellcheck="false"></label>' +
+    '<button type="button" class="btn btn--ghost" id="github-org-issue">確認コードを発行</button>' +
+    '<div id="github-org-file" hidden><p>.githubリポジトリのルートに spotcode-verification.txt を作成し、次の内容を保存してください。有効期限は24時間です。</p>' +
+    '<textarea id="github-org-code" readonly aria-label="確認ファイルの内容"></textarea>' +
+    '<a id="github-org-create" target="_blank" rel="noopener">GitHubでファイルを追加</a> ' +
+    '<button type="button" class="btn btn--primary" id="github-org-confirm">確認して承認</button></div>' +
+    '<button type="button" class="btn btn--ghost" id="github-org-sync">連携状態を確認</button>' +
+    '<div id="github-org-choices"></div><p id="github-org-status" role="status"></p></section>';
   return '<section class="settings-card"><h2>GitHub Organization</h2>' +
     '<p>' + t('settings.github_org.hint') + '</p>' +
     '<button type="button" class="btn btn--ghost" id="github-org-sync">' + t('settings.github_org.sync') + '</button>' +
@@ -697,6 +707,23 @@ export function bindSettings() {
     } catch (error) { status.textContent = error.message; }
     finally { orgBusy = false; }
   };
+  document.getElementById('github-org-issue')?.addEventListener('click', async () => {
+    if (orgBusy) return;
+    orgBusy = true;
+    const status = document.getElementById('github-org-status');
+    const panel = document.getElementById('github-org-file');
+    panel.hidden = true;
+    try {
+      const result = await syncGithubOrganizations({ action: 'issue_file', organization_login: document.getElementById('github-org-login').value });
+      if (!panel.isConnected) return;
+      document.getElementById('github-org-code').value = result.content;
+      document.getElementById('github-org-create').href = result.create_url;
+      panel.hidden = false;
+      status.textContent = 'ファイルをコミットしたら「確認して承認」を押してください。承認後もファイルは残してください。';
+    } catch (error) { if (status.isConnected) status.textContent = error.message; }
+    finally { orgBusy = false; }
+  });
+  document.getElementById('github-org-confirm')?.addEventListener('click', () => syncOrg({ action: 'confirm_file' }));
   document.getElementById('github-org-sync')?.addEventListener('click', () => syncOrg());
   if (document.getElementById('github-org-choices') && currentUser()?.isOrg) void syncOrg();
 
@@ -762,7 +789,7 @@ export function bindSettings() {
         let names = [], repoError = '';
         try {
           const token = await getGithubToken();
-          if (token) {
+          if (token || settingsUser.isOrg) {
             try {
               const repositories = settingsUser.isOrg
                 ? (await syncGithubOrganizations({ repositories: true })).repositories || []

@@ -273,7 +273,7 @@ export async function hydrateRepos() {
   // Keep them out of the public per-handle localStorage cache.
   try {
     const token = await getGithubToken();
-    if (token) {
+    if (token || me.isOrg) {
       const repositories = me.isOrg
         ? (await syncGithubOrganizations({ repositories: true })).repositories || []
         : await githubRepositories(token, me.github?.handle);
