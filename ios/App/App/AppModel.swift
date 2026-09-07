@@ -411,7 +411,7 @@ final class AppModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         if me?.githubHandle != nil && (githubOrganizationOwner != session?.user.id || githubOrganizationExpiry <= Date()) {
-            try? await syncGithubOrganizations()
+            _ = try? await syncGithubOrganizations()
         }
         do {
             posts = try await SupabaseService.shared.posts(token: session?.accessToken)
