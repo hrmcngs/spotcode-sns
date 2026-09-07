@@ -1,3 +1,4 @@
+import { publicRepositories } from '../task-repositories.js';
 import { syncGithubOrganizations } from '../github-organizations.js';
 import { getGithubToken } from '../github-oauth.js';
 // /repos — GitHub repositories owned by the signed-in user,
@@ -20,16 +21,15 @@ import { getGithubToken } from '../github-oauth.js';
 // bumps don't collide with the live entries.
 
 import { currentUser }       from '../auth.js';
-import { langColor, fetchJson, isRateLimited } from '../language-stats.js';
+import { langColor } from '../language-stats.js';
 import { postsWithGithubRefs, relTime } from '../data.js';
 import { parseGithubLink } from '../gh-link.js';
 import { icon }              from '../icons.js';
 import { t }                 from '../i18n.js';
 import { currentPath }       from '../router.js';
 
-const REPOS_CACHE_KEY = 'spotcode:gh-repos-cache:v1';
+const REPOS_CACHE_KEY = 'spotcode:gh-repos-cache:v2';
 const REPOS_TTL_MS    = 60 * 60 * 1000;       // 1 h
-const MAX_REPOS_PER_USER = 12;
 
 function escape(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -71,20 +71,10 @@ function shapeRepo(r, fallbackOwner) {
   };
 }
 
-// Public fetcher — reuses language-stats's fetchJson so the
-// app-wide rate-limit cooldown propagates here. Returns [] (and
-// caches []) on any failure so a single 404 / network blip doesn't
-// keep retrying every render.
+// Fetch every page without authentication; only public data enters this cache.
 async function fetchUserRepos(ghHandle) {
-  if (isRateLimited()) return cachedUserRepos(ghHandle) || [];
-  const url = 'https://api.github.com/users/' + encodeURIComponent(ghHandle) +
-              '/repos?sort=pushed&type=owner&per_page=' + MAX_REPOS_PER_USER;
-  let raw;
-  try { raw = await fetchJson(url); }
-  catch { return cachedUserRepos(ghHandle) || []; }
-  const repos = (raw || [])
-    .filter((r) => !r.fork && !r.private)
-    .map((r) => shapeRepo(r, ghHandle));
+  const raw = await publicRepositories(ghHandle);
+  const repos = raw.map(r => shapeRepo(r, ghHandle));
   storeUserRepos(ghHandle, repos);
   return repos;
 }
@@ -270,6 +260,7 @@ export async function hydrateRepos() {
   resetPaintScheduler();
   const list = document.getElementById('repos-list');
   if (!list) return;
+  document.querySelectorAll('[data-repos-connection]').forEach(el => el.remove());
 
   const me = currentUser();
   if (!me) {
@@ -279,8 +270,8 @@ export async function hydrateRepos() {
 
   // Authenticated repository results can include private organization repos.
   // Keep them out of the public per-handle localStorage cache.
-  if (await getGithubToken()) {
-    try {
+  try {
+    if (await getGithubToken()) {
       const result = await syncGithubOrganizations({ repositories: true });
       if (!stillHere() || currentUser()?.id !== me.id || !list.isConnected) return;
       const repos = (result.repositories || []).map(r => shapeRepo(r, me.github?.handle || ''));
@@ -300,11 +291,18 @@ export async function hydrateRepos() {
         postsLoaded = true;
         refreshAllPostsSections(list);
       }).catch(() => { postsLoaded = true; refreshAllPostsSections(list); });
-    } catch (error) {
-      if (list.isConnected) list.innerHTML = '<p>' + escape(error.message) + '</p>';
+      return;
     }
-    return;
+  } catch {
+    if (!list.isConnected || currentUser()?.id !== me.id) return;
+    const notice = document.createElement('p');
+    notice.className = 'settings__hint';
+    notice.setAttribute('role', 'status');
+    notice.dataset.reposConnection = '1';
+    notice.textContent = 'Organizationの取得サービスに接続できないため、自分の公開リポジトリを表示しています。';
+    list.before(notice);
   }
+  if (!list.isConnected || currentUser()?.id !== me.id) return;
 
   // Only the authenticated profile selects whose repositories appear.
   const ghHandles = me.github?.handle ? [me.github.handle] : [];
@@ -329,6 +327,7 @@ export async function hydrateRepos() {
   // starting it first matters.
   postsWithGithubRefs({ limit: 200 })
     .then((posts) => {
+      if (!list.isConnected || currentUser()?.id !== me.id) return;
       const map = new Map();
       for (const p of posts) {
         const key = repoFullNameForPost(p);
@@ -372,13 +371,16 @@ export async function hydrateRepos() {
   for (const gh of needFetch) {
     fetchUserRepos(gh).then((repos) => {
       landed++;
-      if (!stillHere()) return;
+      if (!stillHere() || !list.isConnected || currentUser()?.id !== me.id) return;
       for (const r of repos) working.set(r.fullName, r);
       if (working.size === 0 && landed === needFetch.length) {
         list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('repos.empty.no_repos') + '</p></div>';
         return;
       }
       schedulePaint(list, working);
-    }).catch(() => { landed++; });
+    }).catch(error => {
+      landed++;
+      if (list.isConnected && currentUser()?.id === me.id && working.size === 0) list.innerHTML = '<p>' + escape(error.message) + '</p>';
+    });
   }
 }

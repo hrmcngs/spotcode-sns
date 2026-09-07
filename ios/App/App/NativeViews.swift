@@ -1789,6 +1789,7 @@ private final class PostMapAnnotation: NSObject, MKAnnotation {
 struct RepositoriesView: View {
     @EnvironmentObject private var model: AppModel
     let onCompose: (URL) -> Void
+    @State private var repositoryNotice = ""
     @State private var repositoryOwner: UUID?
     @State private var repositories: [Repository] = []
     @State private var relatedPosts: [Post] = []
@@ -1802,6 +1803,7 @@ struct RepositoriesView: View {
                     Text("自分と許可済みOrganizationのリポジトリ")
                         .font(.subheadline).foregroundColor(SpotcodeTheme.muted)
                 }.frame(maxWidth: .infinity).padding(.vertical, 22)
+                if !repositoryNotice.isEmpty { Text(repositoryNotice).font(.caption).foregroundColor(SpotcodeTheme.muted).padding(.horizontal) }
                 if loading && repositories.isEmpty { ProgressView("リポジトリを読み込み中…").padding(.top, 50) }
             else if model.me?.githubHandle == nil { Spacer(); ContentUnavailableViewCompat(title: "GitHubをプロフィールに連携してください", icon: "link"); Spacer() }
             else {
@@ -1868,13 +1870,19 @@ struct RepositoriesView: View {
     }
 
     private func load() async {
-        repositories = []; relatedPosts = []; repositoryOwner = nil
+        repositories = []; relatedPosts = []; repositoryOwner = nil; repositoryNotice = ""
         guard let handle = model.me?.githubHandle, let session = model.session else { return }
         loading = true; defer { loading = false }
         do {
             let loaded: [Repository]
             if await model.hydrateSharedPrivateIssueToken() != nil {
-                loaded = try await model.syncGithubOrganizations(includeRepositories: true).repositories ?? []
+                do {
+                    loaded = try await model.syncGithubOrganizations(includeRepositories: true).repositories ?? []
+                } catch {
+                    loaded = try await SupabaseService.shared.repositories(handle: handle)
+                    guard session.user.id == model.session?.user.id else { return }
+                    repositoryNotice = String(localized: "Organizationの取得サービスに接続できないため、自分の公開リポジトリを表示しています。")
+                }
             } else {
                 loaded = try await SupabaseService.shared.repositories(handle: handle)
             }

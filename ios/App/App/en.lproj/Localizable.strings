@@ -279,3 +279,5 @@
 "リポジトリを検索" = "Search repositories";
 
 "一致するリポジトリがありません。" = "No matching repositories.";
+
+"Organizationの取得サービスに接続できないため、自分の公開リポジトリを表示しています。" = "The Organization service is unavailable. Showing your public repositories.";

@@ -124,3 +124,14 @@ GitHub のメンバー確認が有効なユーザーが、連携先 Organization
 Stage 38 の実行後、更新版 `docs/migrations/039-organization-post-attribution.sql` の全文を再実行してください。既存列の外部キーが欠けている場合も補完し、最後に `NOTIFY pgrst, 'reload schema';` で API のスキーマキャッシュを更新します。その後ページを再読み込みします。キャッシュのみ更新する場合はこの NOTIFY 文だけを SQL Editor で実行できます（列や外部キーが未作成の場合には Stage 39 が必要です）。
 Web / iOS の更新版は、新しい組織関連付けが未認識の場合に従来の投稿者情報で取得を再試行します。公開範囲と写真の取得は維持します。組織名義の表示を有効にするには SQL の反映が必要です。
 参考: https://postgrest.org/en/stable/references/schema_cache.html
+
+#### Reposで「Failed to send a request to the Edge Function」が出る場合
+
+2026-09-07 に既定プロジェクトの `github-organizations` の OPTIONS 応答を確認したところ、404 / `Requested function was not found` でした。GitHubの再認証では解消しないため、リポジトリのルートで以下を実行します。
+
+```sh
+npx supabase login
+npx supabase functions deploy github-organizations --project-ref vkwdthjiyxrhskdlgexq --no-verify-jwt
+```
+
+Stage 38 のDB更新も必要です。Function内でSupabaseのJWTとGitHubの本人確認を実施しています。更新版Web/iOSは、サービスに接続できない間も自分の公開リポジトリを表示します。Organization・非公開リポジトリの表示にはFunctionの配置が必要です。

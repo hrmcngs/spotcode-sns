@@ -18,6 +18,9 @@ export async function syncGithubOrganizations(options = {}) {
   if (error || data?.error) {
     let message = data?.error || error?.message;
     try { message = (await error.context.json()).error || message; } catch {}
+    if (error?.name === 'FunctionsFetchError' || /Failed to (send|fetch)|Failed to send a request/i.test(message || '')) {
+      message = 'Organizationの取得サービスに接続できません。時間をおいて再試行してください。';
+    }
     throw new Error(message || 'Organizationの確認に失敗しました');
   }
   if (currentUser()?.id !== owner) throw new Error('アカウントが変更されました');
