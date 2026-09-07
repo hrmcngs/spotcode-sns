@@ -698,6 +698,7 @@ export function bindSettings() {
     finally { orgBusy = false; }
   };
   document.getElementById('github-org-sync')?.addEventListener('click', () => syncOrg());
+  if (document.getElementById('github-org-choices') && currentUser()?.isOrg) void syncOrg();
 
   // Populate the repo selector from GitHub itself. This is especially
   // important after private-repo consent: the private repo may never
@@ -763,7 +764,9 @@ export function bindSettings() {
           const token = await getGithubToken();
           if (token) {
             try {
-              const repositories = await githubRepositories(token, settingsGh);
+              const repositories = settingsUser.isOrg
+                ? (await syncGithubOrganizations({ repositories: true })).repositories || []
+                : await githubRepositories(token, settingsGh);
               names = repositories.map(repo => repo.full_name).filter(Boolean);
             } catch (error) {
               names = await publicTaskRepositories(settingsGh);

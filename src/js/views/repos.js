@@ -1,3 +1,4 @@
+import { syncGithubOrganizations } from '../github-organizations.js';
 import { publicRepositories } from '../task-repositories.js';
 import { githubRepositories } from '../github-repositories.js';
 import { getGithubToken } from '../github-oauth.js';
@@ -273,7 +274,9 @@ export async function hydrateRepos() {
   try {
     const token = await getGithubToken();
     if (token) {
-      const repositories = await githubRepositories(token, me.github?.handle);
+      const repositories = me.isOrg
+        ? (await syncGithubOrganizations({ repositories: true })).repositories || []
+        : await githubRepositories(token, me.github?.handle);
       if (!stillHere() || currentUser()?.id !== me.id || !list.isConnected) return;
       const repos = repositories.map(r => shapeRepo(r, me.github?.handle || ''));
       repos.sort((a, b) => b.pushedAt - a.pushedAt);

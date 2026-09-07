@@ -21,16 +21,16 @@ export async function githubPages(path: string, token: string, fetcher = fetch) 
   throw new Error('GitHubの取得件数が上限を超えました');
 }
 
-export async function verifiedOrganizations(token: string, identityIDs: string[], fetcher = fetch) {
+export async function verifiedOrganizations(token: string, identityIDs: string[], fetcher = fetch, organizationAccount = false) {
   const user = await githubJSON('/user', token, fetcher);
-  if (!identityIDs.includes(String(user.id))) throw new Error('連携済みのGitHubアカウントで認証してください');
+  if (!organizationAccount && !identityIDs.includes(String(user.id))) throw new Error('連携済みのGitHubアカウントで認証してください');
   const [allowed, memberships] = await Promise.all([
     githubPages('/user/orgs', token, fetcher),
     githubPages('/user/memberships/orgs?state=active', token, fetcher),
   ]);
   const allowedIDs = new Set(allowed.map(org => org.id));
   const organizations: Organization[] = memberships
-    .filter(m => m.state === 'active' && allowedIDs.has(m.organization.id))
+    .filter(m => m.state === 'active' && allowedIDs.has(m.organization.id) && (!organizationAccount || m.role === 'admin'))
     .map(m => ({ id: m.organization.id, login: m.organization.login, role: m.role }));
   return { user, organizations };
 }

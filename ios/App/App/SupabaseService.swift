@@ -504,6 +504,42 @@ actor SupabaseService {
             .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.contains("repo")
     }
 
+    func githubLinkAuthorizationURL(token: String) async throws -> URL {
+        struct LinkResponse: Decodable { let url: URL }
+        var query = URLComponents()
+        query.queryItems = [
+            .init(name: "provider", value: "github"),
+            .init(name: "scopes", value: "read:user read:org"),
+            .init(name: "redirect_to", value: "https://hrmcngs.github.io/spotcode-sns/?spotcode_ios_private_issues=1"),
+            .init(name: "skip_http_redirect", value: "true")
+        ]
+        let result: LinkResponse = try await request("auth/v1/user/identities/authorize?" + (query.percentEncodedQuery ?? ""), token: token)
+        return result.url
+    }
+
+    func syncLinkedGithubProfile(userID: UUID, token: String) async throws -> Profile {
+        struct LinkedUser: Decodable {
+            struct Identity: Decodable {
+                struct IdentityData: Decodable { let user_name: String?; let preferred_username: String? }
+                let provider: String
+                let identity_data: IdentityData?
+            }
+            let id: UUID
+            let identities: [Identity]?
+        }
+        let user: LinkedUser = try await request("auth/v1/user", token: token)
+        guard user.id == userID,
+              let identity = user.identities?.first(where: { $0.provider == "github" }),
+              let handle = identity.identity_data?.user_name ?? identity.identity_data?.preferred_username,
+              !handle.isEmpty else {
+            throw NSError(domain: "GitHubOAuth", code: 401, userInfo: [NSLocalizedDescriptionKey: "GitHubの連携を確認できませんでした。もう一度連携してください。"])
+        }
+        let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(userID.uuidString)", method: "PATCH", token: token,
+            body: JSONSerialization.data(withJSONObject: ["github_handle": handle, "github_verified": true, "github_verify_token": NSNull()]), preferRepresentation: true)
+        guard let profile = rows.first else { throw URLError(.cannotParseResponse) }
+        return profile
+    }
+
     func privateIssueAuthorizationURL(includePrivate: Bool = true) -> URL? {
         var components = URLComponents(url: baseURL.appendingPathComponent("auth/v1/authorize"), resolvingAgainstBaseURL: false)
         components?.queryItems = [

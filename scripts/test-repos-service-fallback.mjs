@@ -20,3 +20,11 @@ await ctx.hydrateRepos();assert.equal(publicCalls,1);assert.equal(shown[0].fullN
 ctx.githubRepositories=async()=>{user={id:'other'};throw new Error('network');};
 await ctx.hydrateRepos();assert.equal(publicCalls,1);
 console.log('PASS failed GitHub request falls back to public repos including Forks; success keeps org repos; account switch cancels fallback');
+user={id:'org-account',isOrg:true,github:{handle:'Drowse-Lab'}};
+ctx.githubRepositories=async()=>{throw new Error('Organization must use its verified link');};
+ctx.syncGithubOrganizations=async options=>{
+ assert.equal(options.repositories,true);
+ return {repositories:[{full_name:'Drowse-Lab/project',owner:{login:'Drowse-Lab'}}]};
+};
+await ctx.hydrateRepos();assert.equal(shown[0].fullName,'Drowse-Lab/project');assert.equal(publicCalls,1);
+console.log('PASS organization Repos uses the selected organization through the verified service');

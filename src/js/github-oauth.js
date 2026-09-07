@@ -155,6 +155,7 @@ export async function finishPrivateIssueAuthorization() {
 // safely no-op without ever talking to Supabase.
 export async function syncGithubIdentity() {
   const cached = currentUser();
+  if (cached?.isOrg) return null; // Organization profiles display the selected organization.
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return null;

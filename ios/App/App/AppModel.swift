@@ -44,6 +44,19 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
+    func completeGithubLink(owner: UUID, githubToken: String) async throws {
+        guard session?.user.id == owner else { throw CancellationError() }
+        let profile = try await withRefreshedSession { token in
+            try await SupabaseService.shared.syncLinkedGithubProfile(userID: owner, token: token)
+        }
+        guard session?.user.id == owner else { throw CancellationError() }
+        me = profile
+        cacheProfile(profile)
+        if let session { rememberAccount(session: session, profile: profile) }
+        savePrivateIssueToken(githubToken)
+        try await uploadPrivateIssueToken(githubToken)
+    }
+
     func syncGithubOrganizations(organizationID: Int64? = nil, includeRepositories: Bool = false) async throws -> GitHubOrganizationResult {
         guard let owner = session?.user.id, let githubToken = await hydrateSharedPrivateIssueToken() else {
             throw NSError(domain: "GitHub", code: 401, userInfo: [NSLocalizedDescriptionKey: "GitHub Organizationを連携してください"])
@@ -52,6 +65,13 @@ final class AppModel: ObservableObject {
             try await SupabaseService.shared.githubOrganizations(githubToken: githubToken, token: token, organizationID: organizationID, includeRepositories: includeRepositories)
         }
         guard session?.user.id == owner else { throw CancellationError() }
+        if organizationID != nil {
+            let profile = try await withRefreshedSession { token in
+                try await SupabaseService.shared.profile(id: owner, token: token)
+            }
+            guard session?.user.id == owner else { throw CancellationError() }
+            if let profile { me = profile; cacheProfile(profile) }
+        }
         githubOrganizations = result.organizations
         linkedGithubOrganization = result.linked
         githubOrganizationOwner = owner

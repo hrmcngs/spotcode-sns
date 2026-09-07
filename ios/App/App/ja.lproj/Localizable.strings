@@ -302,3 +302,33 @@
 "GitHubの連携権限を更新" = "GitHubの連携権限を更新";
 "Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。" = "Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。";
 "Organizationへのアクセスは最初のGitHub連携時に許可します。連携権限の更新はプロフィール編集から行えます。組織アカウントは管理者を務めるOrganizationを共有先に設定できます。" = "Organizationへのアクセスは最初のGitHub連携時に許可します。連携権限の更新はプロフィール編集から行えます。組織アカウントは管理者を務めるOrganizationを共有先に設定できます。";
+
+"GitHubと連携" = "GitHubと連携";
+"GitHubと連携しました。" = "GitHubと連携しました。";
+"GitHubの連携を確認できませんでした。もう一度連携してください。" = "GitHubの連携を確認できませんでした。もう一度連携してください。";
+
+"プロフィールに Open issue (task) を表示" = "プロフィールに Open issue (task) を表示";
+
+"プロフィールページの下に「Open issues」カード (GitHub の未クローズ issue = task 一覧) を出します。OFF にするとカード自体が消え、GitHub Search API の呼び出しもスキップします。" = "プロフィールページの下に「Open issues」カード (GitHub の未クローズ issue = task 一覧) を出します。OFF にするとカード自体が消え、GitHub Search API の呼び出しもスキップします。";
+
+"タスクを表示する" = "タスクを表示する";
+
+"タスクを非表示にする" = "タスクを非表示にする";
+
+"表示するリポジトリ" = "表示するリポジトリ";
+
+"リポジトリ名で検索（owner/repo）" = "リポジトリ名で検索（owner/repo）";
+
+"表示できるリポジトリがありません。" = "表示できるリポジトリがありません。";
+
+"非公開Issue表示をOFF" = "非公開Issue表示をOFF";
+
+"非公開Issue表示をON" = "非公開Issue表示をON";
+
+"選択済み" = "選択済み";
+
+"未選択" = "未選択";
+
+"このOrganizationと連携" = "このOrganizationと連携";
+
+"連携するOrganizationを選んでください。" = "連携するOrganizationを選んでください。";

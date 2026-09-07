@@ -289,3 +289,33 @@
 "GitHubの連携権限を更新" = "Update GitHub connection permissions";
 "Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。" = "Authorize organization access on GitHub during the initial connection. Organization owner approval may be required.";
 "Organizationへのアクセスは最初のGitHub連携時に許可します。連携権限の更新はプロフィール編集から行えます。組織アカウントは管理者を務めるOrganizationを共有先に設定できます。" = "Authorize organization access during the initial GitHub connection. Update permissions from Edit profile. Organization accounts can select an organization they administer for sharing.";
+
+"GitHubと連携" = "Connect GitHub";
+"GitHubと連携しました。" = "GitHub connected.";
+"GitHubの連携を確認できませんでした。もう一度連携してください。" = "Could not verify the GitHub connection. Please connect again.";
+
+"プロフィールに Open issue (task) を表示" = "Show Open issues (task) card on profiles";
+
+"プロフィールページの下に「Open issues」カード (GitHub の未クローズ issue = task 一覧) を出します。OFF にするとカード自体が消え、GitHub Search API の呼び出しもスキップします。" = "Toggles the \"Open issues\" card (unclosed GitHub issues = tasks) below each profile. When hidden, the card is skipped entirely — no GitHub Search API call either.";
+
+"タスクを表示する" = "Show tasks";
+
+"タスクを非表示にする" = "Hide tasks";
+
+"表示するリポジトリ" = "Repositories to display";
+
+"リポジトリ名で検索（owner/repo）" = "Search repositories (owner/repo)";
+
+"表示できるリポジトリがありません。" = "No repositories to display.";
+
+"非公開Issue表示をOFF" = "Hide private issues";
+
+"非公開Issue表示をON" = "Show private issues";
+
+"選択済み" = "Selected";
+
+"未選択" = "Not selected";
+
+"このOrganizationと連携" = "Link this organization";
+
+"連携するOrganizationを選んでください。" = "Select the organization to link.";

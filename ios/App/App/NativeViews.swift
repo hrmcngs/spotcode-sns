@@ -1891,7 +1891,11 @@ struct RepositoriesView: View {
             let loaded: [Repository]
             if let githubToken = await model.hydrateSharedPrivateIssueToken() {
                 do {
-                    loaded = try await SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: githubToken)
+                    if model.me?.isOrg == true {
+                        loaded = try await model.syncGithubOrganizations(includeRepositories: true).repositories ?? []
+                    } else {
+                        loaded = try await SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: githubToken)
+                    }
                 } catch {
                     loaded = try await SupabaseService.shared.repositories(handle: handle)
                     guard session.user.id == model.session?.user.id else { return }
@@ -2488,7 +2492,10 @@ private struct EditProfileView: View {
                         .font(.footnote).foregroundColor(SpotcodeTheme.warning)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if profile.githubHandle != nil { GitHubConnectionPermissions() }
+                GitHubConnectionPermissions()
+                if model.me?.isOrg == true {
+                    GitHubOrganizationSettings()
+                }
                 TextField("Twitter / X", text: $twitter)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).spotcodeField()
                 TextField("Instagram", text: $instagram)
@@ -2953,13 +2960,16 @@ private struct GitHubOrganizationSettings: View {
                 HStack {
                     Text(org.login)
                     if model.me?.isOrg == true && org.role == "admin" {
-                        Button("共有先に設定") { synchronize(org.id) }.disabled(busy)
+                        Button("このOrganizationと連携") { synchronize(org.id) }.disabled(busy)
                     }
                 }
             }
             Text("所属確認は1時間有効です。非公開リポジトリは、GitHubの追加権限を許可すると利用できます。")
                 .font(.caption).foregroundColor(SpotcodeTheme.muted)
             if !message.isEmpty { Text(message).font(.caption) }
+        }
+        .task(id: model.me?.id) {
+            if model.me?.isOrg == true && model.me?.githubHandle != nil { synchronize() }
         }
     }
     private func synchronize(_ orgID: Int64? = nil) {
@@ -2982,7 +2992,9 @@ private struct GitHubConnectionPermissions: View {
         SettingsCard("GitHub") {
             Text("Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。")
                 .font(.caption).foregroundColor(SpotcodeTheme.muted)
-            Button("GitHubの連携権限を更新") { authorize() }.disabled(busy)
+            if let handle = model.me?.githubHandle { Text("@" + handle).fontWeight(.semibold) }
+            Button(model.me?.githubHandle == nil ? "GitHubと連携" : "GitHubの連携権限を更新") { authorize() }.disabled(busy)
+            if busy { ProgressView("GitHubで認証中…") }
             if !message.isEmpty { Text(message).font(.caption) }
         }
     }
@@ -2993,10 +3005,33 @@ private struct GitHubConnectionPermissions: View {
         Task {
             defer { busy = false; authorizer = nil }
             do {
+                let session = try await model.validSession()
+                let owner = session.user.id
+                if model.me?.isOrg == true {
+                    let existing = await model.hydrateSharedPrivateIssueToken()
+                    var includePrivate = UserDefaults.standard.bool(forKey: "spotcode.privateIssuesEnabled")
+                    if let existing, (try? await SupabaseService.shared.githubTokenCanReadPrivateRepos(existing)) == true { includePrivate = true }
+                    let token = try await flow.authorize(includePrivate: includePrivate)
+                    guard model.session?.user.id == owner else { throw CancellationError() }
+                    model.savePrivateIssueToken(token)
+                    try await model.uploadPrivateIssueToken(token)
+                    try await model.syncGithubOrganizations()
+                    message = "連携するOrganizationを選んでください。"
+                    return
+                }
+                if model.me?.githubHandle == nil {
+                    let url = try await SupabaseService.shared.githubLinkAuthorizationURL(token: session.accessToken)
+                    guard model.session?.user.id == owner else { throw CancellationError() }
+                    let token = try await flow.authorize(url: url)
+                    try await model.completeGithubLink(owner: owner, githubToken: token)
+                    message = "GitHubと連携しました。"
+                    return
+                }
                 let existing = await model.hydrateSharedPrivateIssueToken()
                 var includePrivate = UserDefaults.standard.bool(forKey: "spotcode.privateIssuesEnabled")
                 if let existing, (try? await SupabaseService.shared.githubTokenCanReadPrivateRepos(existing)) == true { includePrivate = true }
                 let token = try await flow.authorize(includePrivate: includePrivate)
+                guard model.session?.user.id == owner else { throw CancellationError() }
                 model.savePrivateIssueToken(token)
                 try await model.uploadPrivateIssueToken(token)
                 _ = try? await model.syncGithubOrganizations()
@@ -3394,12 +3429,7 @@ private struct DisplaySettings: View {
             Button(hideBadges ? "バッジを表示する" : "バッジを非表示にする") { hideBadges.toggle() }
                 .buttonStyle(OutlineButtonStyle(filled: hideBadges))
         }
-        SettingsCard("Open issues (task)") {
-            SettingsStatusTag(text: hideTasks ? "OFF" : "ON", enabled: !hideTasks)
-            Text("プロフィールのOpen issuesカードを表示するかどうかを切り替えます。").foregroundColor(SpotcodeTheme.muted)
-            Button(hideTasks ? "Issueカードを表示する" : "Issueカードを非表示にする") { hideTasks.toggle() }
-                .buttonStyle(OutlineButtonStyle(filled: hideTasks))
-        }
+        issueDisplayCard
         SettingsCard("通知") {
             HStack {
                 Label { Text(LocalizedStringKey(notificationStatusText)) } icon: { Image(systemName: notificationStatus == .authorized ? "bell.badge.fill" : "bell.slash") }
@@ -3428,8 +3458,25 @@ private struct DisplaySettings: View {
             Text("種類別の設定はSpotcode内の通知一覧に適用されます。通知音やバナー表示は上の「iPhoneの通知設定」で変更できます。")
                 .font(.caption).foregroundColor(SpotcodeTheme.muted)
         }
-        SettingsCard("Open issues") {
-            Toggle("非公開Issueを表示", isOn: Binding(
+        SettingsCard("地図") {
+            Text("スポット機能で使用するApple Mapsと位置情報を確認します。").foregroundColor(SpotcodeTheme.muted)
+            Button("地図をテスト") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
+        }
+        SettingsCard("Spotcodeについて") {
+            Text("Spotcodeは、コード・スポット・アイデアを共有するSNSです。").foregroundColor(SpotcodeTheme.muted)
+            Link("利用規約", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
+            Link("プライバシーポリシー", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
+                .foregroundColor(SpotcodeTheme.accent)
+        }
+    }.task {
+        await refreshNotificationStatus()
+        await hydratePreferences()
+        await loadIssueRepositories()
+    }}
+
+    private var privateIssueDisplayBinding: Binding<Bool> {
+        Binding(
+
                 get: { privateIssuesEnabled },
                 set: { enabled in
                     if enabled {
@@ -3460,47 +3507,86 @@ private struct DisplaySettings: View {
                         Task { await savePreferences(); await loadIssueRepositories() }
                     }
                 }
-            )).disabled(authorizingPrivateIssues || model.me?.githubHandle == nil)
-            if authorizingPrivateIssues { ProgressView("GitHubで認証中…") }
-            if !privateIssueMessage.isEmpty { Text(privateIssueMessage).font(.caption).foregroundColor(SpotcodeTheme.muted) }
-            Text("プロフィールに表示するリポジトリ").foregroundColor(SpotcodeTheme.muted)
-            if issueRepositories.isEmpty { Text("Issue取得後に選択できます").font(.caption).foregroundColor(SpotcodeTheme.muted) }
-            TextField("リポジトリを検索", text: $issueRepositoryQuery)
+
+        )
+    }
+
+    private var matchingIssueRepositories: [String] {
+        let query = issueRepositoryQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return issueRepositories.filter { query.isEmpty || $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    private var issueDisplayCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("プロフィールに Open issue (task) を表示").font(.headline)
+                Text(hideTasks ? "非表示" : "表示")
+                    .font(.caption.bold()).foregroundColor(SpotcodeTheme.muted)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .overlay(Capsule().stroke(SpotcodeTheme.border))
+                    .fixedSize()
+            }
+            Text("プロフィールページの下に「Open issues」カード (GitHub の未クローズ issue = task 一覧) を出します。OFF にするとカード自体が消え、GitHub Search API の呼び出しもスキップします。")
+                .foregroundColor(SpotcodeTheme.muted)
+            Button(hideTasks ? "タスクを表示する" : "タスクを非表示にする") { hideTasks.toggle() }
+                .buttonStyle(OutlineButtonStyle())
+            Text("表示するリポジトリ").font(.headline)
+            TextField("リポジトリ名で検索（owner/repo）", text: $issueRepositoryQuery)
                 .textInputAutocapitalization(.never).autocorrectionDisabled(true)
-            let matchingRepos = issueRepositories.filter {
-                issueRepositoryQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                $0.localizedCaseInsensitiveContains(issueRepositoryQuery.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-            if !issueRepositories.isEmpty && matchingRepos.isEmpty {
+                .spotcodeField()
+                .accessibilityLabel(Text("表示するリポジトリ"))
+            if issueRepositories.isEmpty {
+                Text("表示できるリポジトリがありません。").font(.caption).foregroundColor(SpotcodeTheme.muted)
+            } else if matchingIssueRepositories.isEmpty {
                 Text("一致するリポジトリがありません。").font(.caption).foregroundColor(SpotcodeTheme.muted)
-            }
-            ForEach(matchingRepos, id: \.self) { repo in
-                Toggle(repo, isOn: Binding(
-                    get: { selectedRepoSet(selectedIssueReposJSON, owner: model.session?.user.id).contains(repo.lowercased()) },
-                    set: { visible in
-                        var selected = selectedRepoSet(selectedIssueReposJSON, owner: model.session?.user.id)
-                        if visible { selected.insert(repo.lowercased()) } else { selected.remove(repo.lowercased()) }
-                        selectedIssueReposJSON = storingSelectedRepos(selected, in: selectedIssueReposJSON, owner: model.session?.user.id)
-                        Task { await savePreferences() }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(matchingIssueRepositories, id: \.self) { repo in
+                            issueRepositoryRow(repo)
+                        }
                     }
-                )).font(.caption)
+                }.frame(maxHeight: 280)
+            }
+            Button(privateIssuesEnabled ? "非公開Issue表示をOFF" : "非公開Issue表示をON") {
+                privateIssueDisplayBinding.wrappedValue.toggle()
+            }
+            .buttonStyle(OutlineButtonStyle())
+            .disabled(authorizingPrivateIssues || model.me?.githubHandle == nil)
+            if authorizingPrivateIssues { ProgressView("GitHubで認証中…") }
+            if !privateIssueMessage.isEmpty {
+                Text(privateIssueMessage).font(.caption).foregroundColor(SpotcodeTheme.muted)
             }
         }
-        SettingsCard("地図") {
-            Text("スポット機能で使用するApple Mapsと位置情報を確認します。").foregroundColor(SpotcodeTheme.muted)
-            Button("地図をテスト") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(SpotcodeTheme.border))
+    }
+
+    private func issueRepositoryRow(_ repo: String) -> some View {
+        let selected = selectedRepoSet(selectedIssueReposJSON, owner: model.session?.user.id).contains(repo.lowercased())
+        return Button {
+            var repos = selectedRepoSet(selectedIssueReposJSON, owner: model.session?.user.id)
+            if selected { repos.remove(repo.lowercased()) } else { repos.insert(repo.lowercased()) }
+            selectedIssueReposJSON = storingSelectedRepos(repos, in: selectedIssueReposJSON, owner: model.session?.user.id)
+            Task { await savePreferences() }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: selected ? "checkmark.square.fill" : "square")
+                    .foregroundColor(selected ? SpotcodeTheme.accent : SpotcodeTheme.muted)
+                Text(repo).font(.system(.body, design: .monospaced))
+                    .foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(SpotcodeTheme.border))
         }
-        SettingsCard("Spotcodeについて") {
-            Text("Spotcodeは、コード・スポット・アイデアを共有するSNSです。").foregroundColor(SpotcodeTheme.muted)
-            Link("利用規約", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
-            Link("プライバシーポリシー", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
-                .foregroundColor(SpotcodeTheme.accent)
-        }
-    }.task {
-        await refreshNotificationStatus()
-        await hydratePreferences()
-        await loadIssueRepositories()
-    }}
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(repo))
+        .accessibilityValue(Text(selected ? "選択済み" : "未選択"))
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
 
     private var notificationStatusText: String {
         switch notificationStatus {
@@ -3574,7 +3660,9 @@ private struct DisplaySettings: View {
         guard let handle = model.me?.githubHandle, let owner = model.session?.user.id else { return }
         var repositories: [Repository] = []
         if let token = await model.hydrateSharedPrivateIssueToken(),
-           let result = try? await SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: token) {
+           let result = try? await (model.me?.isOrg == true
+               ? model.syncGithubOrganizations(includeRepositories: true).repositories ?? []
+               : SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: token)) {
             repositories = result
         } else {
             repositories = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []
@@ -3608,11 +3696,20 @@ private final class GitHubPrivateIssueAuthorizer: NSObject, ASWebAuthenticationP
         guard let authorizationURL = await SupabaseService.shared.privateIssueAuthorizationURL(includePrivate: includePrivate) else {
             throw URLError(.badURL)
         }
+        return try await authorize(url: authorizationURL)
+    }
+
+    func authorize(url authorizationURL: URL) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(url: authorizationURL, callbackURLScheme: "spotcode") { [weak self] callbackURL, error in
                 defer { self?.webSession = nil }
                 if let error { continuation.resume(throwing: error); return }
+                if let callbackURL, let message = Self.callbackValues(callbackURL)["error_description"] {
+                    continuation.resume(throwing: NSError(domain: "GitHubOAuth", code: -3, userInfo: [NSLocalizedDescriptionKey: message]))
+                    return
+                }
                 guard let callbackURL,
+                      callbackURL.scheme == "spotcode", callbackURL.host == "github-oauth",
                       let token = Self.callbackValues(callbackURL)["provider_token"], !token.isEmpty else {
                     continuation.resume(throwing: NSError(
                         domain: "GitHubOAuth", code: -1,

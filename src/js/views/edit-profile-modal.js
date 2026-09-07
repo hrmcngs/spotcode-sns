@@ -1,3 +1,4 @@
+import { navigate } from '../router.js';
 // Edit-profile modal. Pre-fills with the current user, lets them
 // change display name, avatar (image upload or 1-2 char fallback),
 // avatar shape (round / square), bio, and location label.
@@ -35,6 +36,7 @@ function githubVerifyBlock(u) {
         '</div>' +
         '<div class="edit-actions">' +
           '<button type="button" class="btn btn--ghost btn--sm" id="verify-permissions">GitHubの連携権限を更新</button>' +
+          (u.isOrg ? '<button type="button" class="btn btn--ghost btn--sm" id="verify-organization">Organizationと連携</button>' : '') +
           '<button type="button" class="btn btn--ghost btn--sm" id="verify-unlink">連携を解除</button>' +
           '<span class="verify-row__status" id="verify-status"></span>' +
         '</div>' +
@@ -230,7 +232,8 @@ export function openEditProfile(profile) {
         // Redirects the browser away — after return, syncGithubIdentity()
         // in main.js writes the profile row and refreshProfile() picks
         // it up so the next modal open shows the linked state.
-        await linkGithub(window.location.href);
+        if (currentUser()?.isOrg) await linkGithubForOrganizations(window.location.href);
+        else await linkGithub(window.location.href);
       } catch (ex) {
         showVerify(ex.message, 'bad');
         vLink.disabled = false;
@@ -242,6 +245,10 @@ export function openEditProfile(profile) {
       showVerify('GitHub に移動します…');
       try { await linkGithubForOrganizations(window.location.href); }
       catch (ex) { showVerify(ex.message, 'bad'); button.disabled = false; }
+    });
+    document.getElementById('verify-organization')?.addEventListener('click', () => {
+      close();
+      navigate('/settings/account');
     });
     vUnlink?.addEventListener('click', async () => {
       if (!confirm('GitHub との連携を解除しますか？ アイコンと本人確認済みバッジが消えます。')) return;

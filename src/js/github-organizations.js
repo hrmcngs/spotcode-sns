@@ -1,4 +1,4 @@
-import { currentUser } from './auth.js';
+import { currentUser, refreshProfile } from './auth.js';
 import { getClient } from './supa.js';
 import { getGithubToken } from './github-oauth.js';
 
@@ -23,6 +23,8 @@ export async function syncGithubOrganizations(options = {}) {
     }
     throw new Error(message || 'Organizationの確認に失敗しました');
   }
+  if (currentUser()?.id !== owner) throw new Error('アカウントが変更されました');
+  if (options.organization_id != null) await refreshProfile();
   if (currentUser()?.id !== owner) throw new Error('アカウントが変更されました');
   snapshot = { owner, organizations: data.organizations || [], expires: Date.now() + 55 * 60 * 1000 };
   return data;

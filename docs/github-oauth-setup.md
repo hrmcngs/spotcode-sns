@@ -140,3 +140,17 @@ Stage 38 のDB更新も必要です。Function内でSupabaseのJWTとGitHubの�
 
 `docs/migrations/040-explicit-repository-selection.sql` 全文をSQL Editorで実行してから、Web / iOSを更新します。
 初期状態と新しく取得したリポジトリは未選択になります。選択したリポジトリだけをプロフィールのOpen issuesに表示し、`selected_repos` に保存します。旧設定は非表示の一覧しか記録しておらず、手動選択と自動選択を区別できないため、初回は表示するリポジトリを選び直してください。検索候補を押して選ぶ操作は維持します。
+
+### Stage 41: 組織アカウントにGitHub Organizationを連携
+
+`docs/migrations/041-organization-account-github-grant.sql` をSQL Editorで実行し、更新した `github-organizations` Functionをデプロイしてください（Stage 38・39適用済みが前提）。
+
+```sh
+npx supabase functions deploy github-organizations --project-ref vkwdthjiyxrhskdlgexq --no-verify-jwt
+```
+
+例えばSpotcodeのDrowse-Labアカウントでプロフィール編集からGitHubの連携・権限更新を開始し、GitHub Organization Drowse-Labの管理者で認証します。Webは設定→アカウントのOrganization一覧、iOSはプロフィール編集のOrganization一覧でDrowse-Labを選びます。名前の一致だけでは連携しません。
+
+組織アカウントはGitHubの個人identityを重複して紐づけずに、管理者のOAuthトークンで許可を確認します。個人のSpotcodeアカウントに連携済みのGitHubでも利用できます。プロフィールのGitHubリンクは選択したOrganizationになり、ReposにはそのOrganizationのリポジトリだけを取得します。組織アカウントに同期する所属は選択先だけで、GitHubでのアクティブな管理者権限と1時間の有効期限を確認します。一般メンバーのトークンでは組織アカウントへの連携を許可しません。
+
+検証: `node scripts/test-github-organizations.mjs`、`PGLITE_MODULE=<pgliteのパス> node scripts/test-organization-account-grant.mjs`。
