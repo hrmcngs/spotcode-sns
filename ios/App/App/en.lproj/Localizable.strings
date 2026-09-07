@@ -285,3 +285,7 @@
 "もっと見る" = "Load more";
 
 "続きを取得できませんでした。再試行してください。" = "Could not load more posts. Please try again.";
+
+"GitHubの連携権限を更新" = "Update GitHub connection permissions";
+"Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。" = "Authorize organization access on GitHub during the initial connection. Organization owner approval may be required.";
+"Organizationへのアクセスは最初のGitHub連携時に許可します。連携権限の更新はプロフィール編集から行えます。組織アカウントは管理者を務めるOrganizationを共有先に設定できます。" = "Authorize organization access during the initial GitHub connection. Update permissions from Edit profile. Organization accounts can select an organization they administer for sharing.";

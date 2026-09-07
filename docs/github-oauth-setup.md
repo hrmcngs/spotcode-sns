@@ -96,8 +96,8 @@ Redirect URLs に spotcode-sns のホストが登録されているか確認。�
    この関数は冒頭で Supabase Auth の `getUser(jwt)` を使って呼び出し元を認証します。
    サービスロールキーは関数内だけで使用し、クライアントには渡しません。
 3. Web・iOSを更新します。
-4. プロフィールにGitHubを連携済みのアカウントで、設定 → アカウント → GitHub Organization →「Organizationを許可」を実行します。
-5. GitHub側で対象Organizationへのアクセスを許可し、「所属を確認・更新」を押します。
+4. プロフィール編集 →「GitHub で連携する」から、初回のGitHub認証画面でOrganizationへのアクセスも許可します。既に連携済みの場合は、プロフィール編集 →「GitHubの連携権限を更新」から更新できます。
+5. GitHub側で対象Organizationへのアクセスを許可します。管理者承認が必要な場合はRequestで申請します。組織限定共有を使う場合は、設定 → アカウント → GitHub Organization →「所属を確認・更新」を押します。
 6. 組織アカウントでは、自分がGitHub上で管理者を務めるOrganizationの「共有先に設定」を押します。
 7. 投稿の表示先で「GitHub Organizationのみ」を選びます。閲覧するメンバー側も同じGitHub連携と所属確認が必要です。
 
@@ -134,7 +134,7 @@ npx supabase login
 npx supabase functions deploy github-organizations --project-ref vkwdthjiyxrhskdlgexq --no-verify-jwt
 ```
 
-Stage 38 のDB更新も必要です。Function内でSupabaseのJWTとGitHubの本人確認を実施しています。更新版Web/iOSは、サービスに接続できない間も自分の公開リポジトリを表示します。Organization・非公開リポジトリの表示にはFunctionの配置が必要です。
+Stage 38 のDB更新も必要です。Function内でSupabaseのJWTとGitHubの本人確認を実施しています。更新版Web/iOSは、サービスに接続できない間も自分の公開リポジトリを表示します。現在のWeb/iOSのReposと設定の候補一覧は、GitHubの `/user/repos?affiliation=owner,organization_member` から全ページを直接取得します。本人確認後に本人所有・Organization所有のリポジトリを表示するため、一覧取得はFunctionやDBの同期成功に依存しません。組織限定投稿の権限確認と組織アカウントへの紐付けには、引き続きFunctionとStage 38が必要です。
 
 ### Stage 40: リポジトリを自分で選択して表示
 

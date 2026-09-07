@@ -2488,6 +2488,7 @@ private struct EditProfileView: View {
                         .font(.footnote).foregroundColor(SpotcodeTheme.warning)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                if profile.githubHandle != nil { GitHubConnectionPermissions() }
                 TextField("Twitter / X", text: $twitter)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).spotcodeField()
                 TextField("Instagram", text: $instagram)
@@ -2941,13 +2942,11 @@ private struct GitHubOrganizationSettings: View {
     @EnvironmentObject private var model: AppModel
     @State private var busy = false
     @State private var message = ""
-    @State private var authorizer: GitHubPrivateIssueAuthorizer?
 
     var body: some View {
         SettingsCard("GitHub Organization") {
-            Text("GitHubで許可したOrganizationの所属を確認します。組織アカウントは管理者を務めるOrganizationを共有先に設定できます。")
+            Text("Organizationへのアクセスは最初のGitHub連携時に許可します。連携権限の更新はプロフィール編集から行えます。組織アカウントは管理者を務めるOrganizationを共有先に設定できます。")
                 .foregroundColor(SpotcodeTheme.muted)
-            Button("Organizationを許可") { authorize() }.disabled(busy)
             Button("所属を確認・更新") { synchronize() }.disabled(busy)
             if let linked = model.linkedGithubOrganization { Text(linked.login).fontWeight(.bold) }
             ForEach(model.githubOrganizations) { org in
@@ -2971,6 +2970,22 @@ private struct GitHubOrganizationSettings: View {
             catch { message = error.localizedDescription }
         }
     }
+}
+
+private struct GitHubConnectionPermissions: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var busy = false
+    @State private var message = ""
+    @State private var authorizer: GitHubPrivateIssueAuthorizer?
+
+    var body: some View {
+        SettingsCard("GitHub") {
+            Text("Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。")
+                .font(.caption).foregroundColor(SpotcodeTheme.muted)
+            Button("GitHubの連携権限を更新") { authorize() }.disabled(busy)
+            if !message.isEmpty { Text(message).font(.caption) }
+        }
+    }
     private func authorize() {
         busy = true
         let flow = GitHubPrivateIssueAuthorizer()
@@ -2984,7 +2999,7 @@ private struct GitHubOrganizationSettings: View {
                 let token = try await flow.authorize(includePrivate: includePrivate)
                 model.savePrivateIssueToken(token)
                 try await model.uploadPrivateIssueToken(token)
-                try await model.syncGithubOrganizations()
+                _ = try? await model.syncGithubOrganizations()
                 message = "更新しました"
             } catch { message = error.localizedDescription }
         }

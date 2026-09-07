@@ -6,7 +6,7 @@ import { currentUser, updateProfile, updatePassword } from '../auth.js';
 import { icon }                       from '../icons.js';
 import { fileToAvatarDataUrl, renderAvatar } from '../avatar.js';
 import { lockBodyScroll, unlockBodyScroll } from '../body-scroll-lock.js';
-import { linkGithub, unlinkGithub } from '../github-oauth.js';
+import { linkGithub, linkGithubForOrganizations, unlinkGithub } from '../github-oauth.js';
 import { isPostingAsOfficial } from '../posting-identity.js';
 
 let rootEl = null;
@@ -34,6 +34,7 @@ function githubVerifyBlock(u) {
           '@' + attr(u.github.handle) + ' と連携済み ✓' +
         '</div>' +
         '<div class="edit-actions">' +
+          '<button type="button" class="btn btn--ghost btn--sm" id="verify-permissions">GitHubの連携権限を更新</button>' +
           '<button type="button" class="btn btn--ghost btn--sm" id="verify-unlink">連携を解除</button>' +
           '<span class="verify-row__status" id="verify-status"></span>' +
         '</div>' +
@@ -47,7 +48,7 @@ function githubVerifyBlock(u) {
         'GitHub と連携' +
       '</div>' +
       '<p class="verify-row__hint">' +
-        'GitHub OAuthでプロフィールとOrganizationの所属を連携します。非公開リポジトリへのアクセスは、別途許可した場合のみ利用します。連携後、プロフィールに GitHub アイコンと本人確認済みバッジが付きます。' +
+        '最初のGitHub連携で、プロフィールとOrganizationへのアクセスをまとめて許可します。GitHubの認証画面で、連携するOrganizationの「Grant」または「Request」を選んでください。Organizationの設定によっては管理者の承認が必要です。非公開リポジトリへのアクセスは、別途許可した場合のみ利用します。連携後、プロフィールに GitHub アイコンと本人確認済みバッジが付きます。' +
       '</p>' +
       '<div class="edit-actions">' +
         '<button type="button" class="btn btn--primary btn--sm" id="verify-link">' +
@@ -234,6 +235,13 @@ export function openEditProfile(profile) {
         showVerify(ex.message, 'bad');
         vLink.disabled = false;
       }
+    });
+    document.getElementById('verify-permissions')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      showVerify('GitHub に移動します…');
+      try { await linkGithubForOrganizations(window.location.href); }
+      catch (ex) { showVerify(ex.message, 'bad'); button.disabled = false; }
     });
     vUnlink?.addEventListener('click', async () => {
       if (!confirm('GitHub との連携を解除しますか？ アイコンと本人確認済みバッジが消えます。')) return;

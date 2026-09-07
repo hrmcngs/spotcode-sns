@@ -7,7 +7,7 @@ const ctx=vm.createContext({URL,URLSearchParams,location:{search:''},window:{loc
  sessionStorage:{setItem:(key,value)=>storage.set(key,value),getItem:key=>storage.get(key),removeItem:key=>storage.delete(key)},
  tokenModule:{restoreGithubApiToken:()=>null,setGithubApiToken(){}},prefModule:{privateTasksEnabled:()=>false},
  getClient:async()=>({
-  auth:{getSession:async()=>({data:{session:active}}),signInWithOAuth:async options=>{oauthOptions=options;return {data:{}};},
+  auth:{linkIdentity:async options=>{oauthOptions=options;return {data:{}};},getSession:async()=>({data:{session:active}}),signInWithOAuth:async options=>{oauthOptions=options;return {data:{}};},
    setSession:async tokens=>{active={...tokens,user:{id:'spotcode-user'}};return {};}}
   ,rpc:async(name,args)=>{if(name.startsWith('get_'))return {data:null};savedToken=args.p_token;savedUnder=active.user.id;return {};}
  }),
@@ -15,6 +15,9 @@ const ctx=vm.createContext({URL,URLSearchParams,location:{search:''},window:{loc
 const source=fs.readFileSync('src/js/github-oauth.js','utf8').replace(/^import .*;\n/gm,'').replace(/^export /gm,'')
  .replaceAll("import('./language-stats.js')",'Promise.resolve(tokenModule)').replaceAll("import('./display-prefs.js')",'Promise.resolve(prefModule)');
 vm.runInContext(source,ctx);
+await ctx.linkGithub('https://example.com/profile');
+assert.equal(oauthOptions.options.scopes,'read:user read:org');
+assert.equal(oauthOptions.options.redirectTo,'https://example.com/profile');
 await ctx.linkGithubForOrganizations();
 assert.equal(oauthOptions.options.scopes,'read:user read:org');
 const orgReturn=new URL(oauthOptions.options.redirectTo).search;

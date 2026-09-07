@@ -1,7 +1,6 @@
 import { githubRepositories } from '../github-repositories.js';
 import { publicTaskRepositories } from '../task-repositories.js';
 import { syncGithubOrganizations } from '../github-organizations.js';
-import { linkGithubForOrganizations } from '../github-oauth.js';
 import { loadMaps } from '../gmap.js';
 import { getConfig, getOverride, setConfig, isConfigured, isUsingOverride, ping, getClient } from '../supa.js';
 import { canBeDev, isDevMode, setDevMode, currentRole } from '../dev-mode.js';
@@ -137,7 +136,6 @@ function privacyCard() {
 function githubOrganizationCard() {
   return '<section class="settings-card"><h2>GitHub Organization</h2>' +
     '<p>' + t('settings.github_org.hint') + '</p>' +
-    '<button type="button" class="btn btn--ghost" id="github-org-authorize">' + t('settings.github_org.authorize') + '</button> ' +
     '<button type="button" class="btn btn--ghost" id="github-org-sync">' + t('settings.github_org.sync') + '</button>' +
     '<div id="github-org-choices"></div><p id="github-org-status" role="status"></p></section>';
 }
@@ -673,9 +671,6 @@ export function renderSettings() {
 }
 
 export function bindSettings() {
-  document.getElementById('github-org-authorize')?.addEventListener('click', () => {
-    linkGithubForOrganizations().catch(error => { document.getElementById('github-org-status').textContent = error.message; });
-  });
   let orgBusy = false;
   const syncOrg = async (options = {}) => {
     if (orgBusy) return;
@@ -703,7 +698,6 @@ export function bindSettings() {
     finally { orgBusy = false; }
   };
   document.getElementById('github-org-sync')?.addEventListener('click', () => syncOrg());
-  if (document.getElementById('github-org-choices') && currentUser()?.github?.handle) void syncOrg();
 
   // Populate the repo selector from GitHub itself. This is especially
   // important after private-repo consent: the private repo may never
