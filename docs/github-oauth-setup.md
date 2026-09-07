@@ -154,3 +154,7 @@ npx supabase functions deploy github-organizations --project-ref vkwdthjiyxrhskd
 組織アカウントはGitHubの個人identityを重複して紐づけずに、管理者のOAuthトークンで許可を確認します。個人のSpotcodeアカウントに連携済みのGitHubでも利用できます。プロフィールのGitHubリンクは選択したOrganizationになり、ReposにはそのOrganizationのリポジトリだけを取得します。組織アカウントに同期する所属は選択先だけで、GitHubでのアクティブな管理者権限と1時間の有効期限を確認します。一般メンバーのトークンでは組織アカウントへの連携を許可しません。
 
 検証: `node scripts/test-github-organizations.mjs`、`PGLITE_MODULE=<pgliteのパス> node scripts/test-organization-account-grant.mjs`。
+
+#### `github_org_memberships does not exist` と表示された場合
+
+Stage 38が未適用です。`docs/repairs/github-organization-setup.sql` の中身全体をSupabase SQL Editorへ貼り付けて実行してください。Stage 38・39・41を依存順に一つのトランザクションで適用します。既存のプロフィールと投稿は保持し、適用済みでも再実行できます。ファイル名やMarkdown見出しではなく、SQLの中身を実行します。その後、上記のEdge Functionのデプロイも必要です。

@@ -1,0 +1,28 @@
+const { PGlite } = await import(process.env.PGLITE_MODULE || '@electric-sql/pglite');
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const db = new PGlite();
+await db.exec(`
+create role anon; create role authenticated; create role service_role bypassrls;
+create schema auth;
+create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+create table profiles(id uuid primary key,is_org boolean default false,is_admin boolean default false);
+create table auth.identities(user_id uuid,provider text,identity_data jsonb);
+create table posts(id int primary key,author_id uuid references profiles(id),body text,visibility text,repo_full_name text,github_link text,created_at timestamptz default now());
+alter table posts enable row level security;
+insert into profiles values('00000000-0000-0000-0000-000000000001',true,false);
+insert into posts(id,author_id,body,visibility) values(1,'00000000-0000-0000-0000-000000000001','Keep this post','public');
+`);
+const repair = fs.readFileSync('docs/repairs/github-organization-setup.sql','utf8');
+await db.exec(repair);
+await db.exec(`insert into github_org_accounts values('00000000-0000-0000-0000-000000000001',20,'Drowse-Lab');
+insert into github_org_memberships values('00000000-0000-0000-0000-000000000001',7,20,'Drowse-Lab','admin',now()+interval '1 hour');`);
+await db.exec(repair);
+assert.equal((await db.query('select body from posts where id=1')).rows[0].body,'Keep this post');
+assert.equal((await db.query('select login from github_org_accounts')).rows[0].login,'Drowse-Lab');
+await db.exec("select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false)");
+assert.equal((await db.query('select is_verified_github_org_member(20) as ok')).rows[0].ok,true);
+assert.equal((await db.query('select is_verified_github_org_member(30) as ok')).rows[0].ok,false);
+assert.equal((await db.query("select count(*)::int as n from pg_constraint where conname='posts_organization_author_id_fkey'")).rows[0].n,1);
+await db.close();
+console.log('PASS missing Organization tables repaired, rerun preserves posts/links, latest org grant and attribution FK installed');
