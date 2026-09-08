@@ -339,3 +339,39 @@
 "確認ファイルをコミットしてください。" = "Commit the verification file.";
 
 "Organizationを承認しました。" = "Organization verified.";
+
+"iOS設定でアプリの言語を変更" = "Change app language in iOS Settings";
+
+"権限確認もアプリと同じ言語で表示されます。" = "Permission prompts use the same language as the app.";
+
+"利用規約への同意" = "Agree to the Terms of Use";
+
+"不適切な投稿、嫌がらせ、差別、脅迫、性的搾取、違法行為は禁止です。違反投稿の削除や利用停止を行います。通報・ブロック情報は運営に送信されます。" = "Objectionable content, harassment, discrimination, threats, sexual exploitation, and illegal activity are prohibited. Violating content may be removed and accounts suspended. Reports and blocks are sent to moderation.";
+
+"利用規約を読む" = "Read the Terms of Use";
+
+"利用規約に同意します" = "I agree to the Terms of Use";
+
+"同意して続ける" = "Agree and continue";
+
+"ユーザーをブロック" = "Block user";
+
+"通報・ブロック" = "Report or block";
+
+"このユーザーをブロックしますか？投稿が非表示になり、運営へ通知されます。" = "Block this user? Their posts will be hidden and moderation will be notified.";
+
+"ブロック" = "Block";
+
+"安全・サポート" = "Safety and support";
+
+"サポート・お問い合わせ" = "Support and contact";
+
+"ブロックしたユーザー" = "Blocked users";
+
+"ブロック解除" = "Unblock";
+
+"運営への通報・ブロック通知" = "Reports and block notifications";
+
+"対象の投稿を開く" = "Open reported post";
+
+"端末ではブロックしました。運営への通知は接続回復後の次回起動時に再送します。" = "Blocked on this device. The moderation notification will be retried on your next launch when connectivity returns.";

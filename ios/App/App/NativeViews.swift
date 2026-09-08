@@ -1132,6 +1132,16 @@ struct PostRow: View {
         }
     }
 
+    private var moderationMenu: some View {
+Menu {
+                                Button { reporting = true } label: { Label("投稿を報告", systemImage: "flag") }
+                                Button(role: .destructive) { confirmingBlock = true } label: {
+                                    Label("ユーザーをブロック", systemImage: "person.crop.circle.badge.xmark")
+                                }
+                            } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
+                            .accessibilityLabel("通報・ブロック")
+    }
+
     private var postContent: some View {
         HStack(alignment: .top, spacing: 12) {
             NavigationLink(destination: ProfileLookupView(handle: post.displayAuthor?.handle ?? "")) {
@@ -1218,13 +1228,7 @@ struct PostRow: View {
                         }.buttonStyle(.plain)
                         if post.authorID != model.me?.id {
                             Spacer()
-                            Menu {
-                                Button { reporting = true } label: { Label("投稿を報告", systemImage: "flag") }
-                                Button(role: .destructive) { confirmingBlock = true } label: {
-                                    Label("ユーザーをブロック", systemImage: "person.crop.circle.badge.xmark")
-                                }
-                            } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
-                            .accessibilityLabel("通報・ブロック")
+                            moderationMenu
                         }
                         if canManagePost {
                             Spacer()

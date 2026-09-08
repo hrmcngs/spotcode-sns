@@ -1,0 +1,39 @@
+# 再提出の手順
+
+## コードとDBの反映
+
+- `docs/migrations/043-user-safety.sql` の中身をSupabase SQL Editorで実行する。既存のprofiles/posts/comments/reportsとStage 39のorganization_author_idが前提。再実行可能。
+- Webを公開する。support.html / terms.html / privacy.htmlを未ログインで開き、問い合わせ先 `spotcode@littleapps.jp` を確認する。
+- Xcodeで更新版をArchive・アップロードし、App Store Connectで更新ビルドを選ぶ。同じバージョンに再提出する場合は、提出済み1.0(9)より新しいビルド番号にする。
+- 管理者または運営アカウントで「設定 → 画面表示 → 安全・サポート」の通知一覧を確認する運用を行う。メールやPushでの自動通知ではなく、DBに保存する運営用通知一覧。
+
+## iPhone/iPad実機での録画
+
+実機の画面収録で以下を撮影する。シミュレータの動画はAppleが指定した実機録画の代わりにならない。
+
+1. ログアウト状態でログイン画面を開く。規約本文へのリンク、禁止事項、同意スイッチを映す。同意前はログインできないことを示す。
+2. 規約を開いて禁止事項を示し、戻って同意してログインする。パスワードや認証コードは録画に映さない。
+3. テスト用の別アカウントの投稿で「… → 投稿を報告」を開き、理由を入力して送信する。
+4. 同じアカウントの別の投稿で「… → ユーザーをブロック」を選び、確認後すぐにその人の投稿がフィードから消える様子を撮る。
+5. 更新・再起動後も非表示であることと、設定のブロック一覧を確認する。
+6. 運営側の通知一覧に通報・ブロックが届いたことを別途確認する。一般ユーザーには運営通知が見えないことも確認する。
+7. iOSのアプリ言語設定を日本語／英語にしてそれぞれ起動し、位置情報・写真・カメラの初回権限確認の説明が同じ言語であることを確認する。権限リセットが必要な場合は検証用端末を使う。
+
+## App Store Connect
+
+「App Reviewに返信」はAppleへの回答・添付用の画面。まず `2026-09-08-response-ja.md` の「今すぐ送れる回答」を貼り付けられる。
+
+サポートURLは、アプリのiOSバージョンのメタデータにある「サポートURL」を `https://hrmcngs.github.io/spotcode-sns/support.html` に変更する。日本語・英語のメタデータがある場合は両方確認する。これは審査への返信欄とは別。
+
+実機録画を返信に添付し、App Review情報の「メモ」にもファイル名または審査担当がアクセスできる動画URLと操作手順を書く。未公開リンク、ログイン必須リンク、未撮影の動画を添付済みと記載しない。
+
+参照: [AppleのサポートURL仕様](https://developer.apple.com/jp/help/app-store-connect/reference/app-information/platform-version-information)、[App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/)。
+
+## この作業で確認したこと
+
+- iPhone/iPad実機向けの署名なしDebugビルド成功。
+- iPadシミュレータ向けビルド成功。
+- ビルド成果物に日本語・英語のInfoPlist.stringsが含まれることを確認。
+- `scripts/test-user-safety.mjs` でブロックによる非表示、解除、通知の一括保存・重複防止、運営以外への通知非公開、通知偽造の拒否、通報通知を検証。
+- 本番DB・Web・App Store Connectの変更、署名付きArchiveのアップロード、実機録画はまだ実施していない。
+- iPad Air 11インチ（M3）/ iOS 26.1シミュレータで、英語の規約同意・ログイン画面と英語の通知許可ダイアログが表示されることを確認。確認画像: `/tmp/spotcode-review-ipad-en.png`。位置情報・写真・カメラの実機での許可操作は、上記手順で別途確認する。

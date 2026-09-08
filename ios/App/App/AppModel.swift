@@ -190,6 +190,8 @@ final class AppModel: ObservableObject {
         if let data = KeychainStore.load(account: sessionAccount),
            let saved = try? JSONDecoder().decode(AuthSession.self, from: data) {
             session = saved
+            blockedOwner = saved.user.id
+            blockedAccountIDs = Set((UserDefaults.standard.stringArray(forKey: "spotcode.blocks." + saved.user.id.uuidString) ?? []).compactMap(UUID.init(uuidString:)))
         }
         if let data = UserDefaults.standard.data(forKey: cachedProfileKey) { me = try? JSONDecoder().decode(Profile.self, from: data) }
         if let data = UserDefaults.standard.data(forKey: cachedPostsKey) {
