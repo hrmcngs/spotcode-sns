@@ -83,7 +83,8 @@ struct RootView: View {
     @State private var showAccounts = false
     @State private var repositoryComposeURL: String?
     @State private var navigationReset = UUID()
-    @AppStorage("spotcode.native.language") private var appLanguage = "en"
+    @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
+    private var appLanguage: String { Bundle.main.preferredLocalizations.first ?? "en" }
 
     private var screenshotMode: Bool {
         ProcessInfo.processInfo.arguments.contains("-SpotcodeScreenshotMode")
@@ -140,6 +141,9 @@ struct RootView: View {
                 showLogin = true
             }
             await model.bootstrap()
+        }
+        .fullScreenCover(isPresented: Binding(get: { model.session != nil && acceptedTerms != "2026-09-08" && !showLogin }, set: { _ in })) {
+            TermsAgreementGate().environmentObject(model)
         }
         .sheet(isPresented: $showLogin) { LoginView(isPresented: $showLogin) }
         .sheet(isPresented: $composing) { ComposeView(isPresented: $composing) }
@@ -1122,7 +1126,7 @@ struct PostRow: View {
     }
 
     var body: some View {
-        if model.canReadPostAudience(post) {
+        if model.canReadPostAudience(post) && !model.isBlocked(post) {
             postContent
         }
     }
@@ -1213,6 +1217,9 @@ struct PostRow: View {
                         }.buttonStyle(.plain)
                         if post.authorID != model.me?.id {
                             Spacer()
+                            Button(role: .destructive) { Task { await model.block(post) } } label: {
+                                Label("このユーザーをブロックして運営に通知", systemImage: "person.crop.circle.badge.xmark")
+                            }
                             Button { reporting = true } label: {
                                 Image(systemName: "flag")
                             }.buttonStyle(.plain).accessibilityLabel("投稿を報告")
@@ -3441,14 +3448,11 @@ private struct DisplaySettings: View {
     @AppStorage("spotcode.notifications.comments") private var notifyComments = true
     @AppStorage("spotcode.notifications.mentions") private var notifyMentions = true
     @AppStorage("spotcode.notifications.follows") private var notifyFollows = true
-    @AppStorage("spotcode.native.language") private var appLanguage = "en"
+    private var appLanguage: String { Bundle.main.preferredLocalizations.first ?? "en" }
     var body: some View { VStack(spacing: 18) {
         SettingsCard("Language") {
-            Picker("Language", selection: $appLanguage) {
-                Text("日本語").tag("ja")
-                Text("English").tag("en")
-            }.pickerStyle(.segmented)
-            Text("アプリ内の表示言語を切り替えます。投稿本文は翻訳されません。")
+            Button("iOS設定でアプリの言語を変更") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
+            Text("権限確認もアプリと同じ言語で表示されます。")
                 .foregroundColor(SpotcodeTheme.muted)
         }
         SettingsCard("装飾バッジの表示") {
@@ -3490,6 +3494,7 @@ private struct DisplaySettings: View {
             Text("スポット機能で使用するApple Mapsと位置情報を確認します。").foregroundColor(SpotcodeTheme.muted)
             Button("地図をテスト") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
         }
+        SafetySettingsCard()
         SettingsCard("Spotcodeについて") {
             Text("Spotcodeは、コード・スポット・アイデアを共有するSNSです。").foregroundColor(SpotcodeTheme.muted)
             Link("利用規約", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
@@ -3791,6 +3796,75 @@ private struct PageHeader: View {
     var body: some View { Text(LocalizedStringKey(title)).font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(16).background(SpotcodeTheme.surface).overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) } }
 }
 
+private struct SafetySettingsCard: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var events: [SupabaseService.ModerationEvent] = []
+    @State private var names: [UUID: String] = [:]
+    @State private var message = ""
+    var body: some View {
+        SettingsCard("安全・サポート") {
+            Link("サポート・お問い合わせ", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/support.html")!)
+            Text("ブロックしたユーザー").font(.headline)
+            ForEach(Array(model.blockedAccountIDs).sorted { $0.uuidString < $1.uuidString }, id: \.self) { id in
+                HStack {
+                    Text(names[id] ?? id.uuidString).lineLimit(2)
+                    Spacer()
+                    Button("ブロック解除") { Task { do { try await model.unblock(id) } catch { message = error.localizedDescription } } }
+                }
+            }
+            if model.me?.isAdmin == true || model.me?.isOperator == true {
+                Text("運営への通報・ブロック通知").font(.headline)
+                ForEach(events) { event in
+                    VStack(alignment: .leading) {
+                        Text(event.kind + " · " + event.created_at).font(.caption)
+                        Text(event.detail)
+                        if let post = event.post_id {
+                            Link("対象の投稿を開く", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/#/post/" + post.uuidString)!)
+                        }
+                    }
+                }
+            }
+            if !message.isEmpty { Text(message).font(.caption) }
+        }.task {
+            do {
+                let session = try await model.validSession()
+                let rows = try await SupabaseService.shared.blockedAccounts(token: session.accessToken)
+                guard model.session?.user.id == session.user.id else { return }
+                names = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.target?.handle ?? $0.id.uuidString) })
+                if model.me?.isAdmin == true || model.me?.isOperator == true {
+                    events = try await SupabaseService.shared.moderationEvents(token: session.accessToken)
+                }
+            } catch { message = error.localizedDescription }
+        }
+    }
+}
+
+private struct TermsAgreementContent: View {
+    @Binding var agreed: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("利用規約への同意").font(.headline)
+            Text("不適切な投稿、嫌がらせ、差別、脅迫、性的搾取、違法行為は禁止です。違反投稿の削除や利用停止を行います。通報・ブロック情報は運営に送信されます。")
+            Link("利用規約を読む", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
+            Link("プライバシーポリシー", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
+            Toggle("利用規約に同意します", isOn: $agreed)
+        }
+    }
+}
+private struct TermsAgreementGate: View {
+    @EnvironmentObject private var model: AppModel
+    @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
+    @State private var agreed = false
+    var body: some View {
+        ScrollView { VStack(spacing: 20) {
+            TermsAgreementContent(agreed: $agreed)
+            Button("同意して続ける") { acceptedTerms = "2026-09-08" }.disabled(!agreed)
+            Button("ログアウト") { model.signOut() }
+        }.padding(24).frame(maxWidth: 600) }
+        .interactiveDismissDisabled()
+    }
+}
+
 struct LoginView: View {
     @EnvironmentObject private var model: AppModel
     @Binding var isPresented: Bool
@@ -3799,9 +3873,12 @@ struct LoginView: View {
     @State private var signing = false
     @State private var showsPassword = false
     @State private var otpCode = ""
+    @State private var agreedToTerms = false
+    @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
     var body: some View {
         NavigationView {
-            VStack(spacing: 14) {
+            ScrollView { VStack(spacing: 14) {
+                TermsAgreementContent(agreed: $agreedToTerms)
                 Image(systemName: "chevron.left.forwardslash.chevron.right").font(.largeTitle)
                 if model.requiresReauthentication && !model.requiresMFA {
                     Label("iPhoneのログインセッションが無効になりました。アカウントを継続するため、もう一度ログインしてください。", systemImage: "lock.rotation")
@@ -3822,6 +3899,8 @@ struct LoginView: View {
                         }
                         .spotcodeField()
                     Button {
+                        guard agreedToTerms else { return }
+                        acceptedTerms = "2026-09-08"
                         signing = true
                         Task {
                             let succeeded = await model.verifyMFA(code: otpCode)
@@ -3840,7 +3919,7 @@ struct LoginView: View {
                     }
                     .buttonStyle(.plain)
                     .contentShape(Capsule())
-                    .disabled(signing)
+                    .disabled(signing || !agreedToTerms)
                 } else {
                 TextField("メールまたはログイン名", text: $email)
                     .textInputAutocapitalization(.never)
@@ -3866,6 +3945,8 @@ struct LoginView: View {
                     .accessibilityLabel(showsPassword ? "パスワードを隠す" : "パスワードを表示")
                 }.spotcodeField()
                 Button {
+                    guard agreedToTerms else { return }
+                    acceptedTerms = "2026-09-08"
                     signing = true
                     Task {
                         let succeeded = await model.signIn(emailOrAlias: email, password: password)
@@ -3884,7 +3965,7 @@ struct LoginView: View {
                 }
                 .buttonStyle(.plain)
                 .contentShape(Capsule())
-                .disabled(email.isEmpty || password.isEmpty || signing)
+                .disabled(email.isEmpty || password.isEmpty || signing || !agreedToTerms)
                 }
                 if let message = model.authenticationError, !message.isEmpty {
                     Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -3896,7 +3977,7 @@ struct LoginView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 Spacer()
-            }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("spotcodeへログイン")
+            }.padding() }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("spotcodeへログイン")
         }
         .preferredColorScheme(.dark)
         .onDisappear { model.authenticationError = nil }

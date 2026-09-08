@@ -359,6 +359,34 @@ actor SupabaseService {
         guard !rows.isEmpty else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を削除できません"]) }
     }
 
+    struct BlockedAccount: Decodable, Identifiable {
+        let blocked_id: UUID
+        let target: Profile?
+        var id: UUID { blocked_id }
+    }
+    struct ModerationEvent: Decodable, Identifiable {
+        let id: UUID
+        let target_id: UUID?
+        let post_id: UUID?
+        let kind: String
+        let detail: String
+        let created_at: String
+    }
+    func blockedAccounts(token: String) async throws -> [BlockedAccount] {
+        try await request("rest/v1/user_blocks?select=blocked_id,target:profiles!user_blocks_blocked_id_fkey(*)&order=created_at.desc", token: token)
+    }
+    func blockAccount(id: UUID, postID: UUID?, token: String) async throws {
+        var body: [String: Any] = ["p_target": id.uuidString]
+        if let postID { body["p_post"] = postID.uuidString }
+        let _: EmptyResponse = try await request("rest/v1/rpc/block_user", method: "POST", token: token, body: JSONSerialization.data(withJSONObject: body))
+    }
+    func unblockAccount(id: UUID, token: String) async throws {
+        let _: EmptyResponse = try await request("rest/v1/user_blocks?blocked_id=eq.\(id.uuidString)", method: "DELETE", token: token)
+    }
+    func moderationEvents(token: String) async throws -> [ModerationEvent] {
+        try await request("rest/v1/moderation_events?select=*&order=created_at.desc&limit=100", token: token)
+    }
+
     func reportPost(postID: UUID, reporterID: UUID, reason: String, comment: String?, token: String) async throws {
         let existing: [ReportIdentifier] = try await request(
             "rest/v1/reports?post_id=eq.\(postID.uuidString)&reporter_id=eq.\(reporterID.uuidString)&select=id&limit=1",

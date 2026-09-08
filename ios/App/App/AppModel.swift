@@ -35,6 +35,66 @@ final class AppModel: ObservableObject {
     private var githubOrganizationOwner: UUID?
     private var githubOrganizationExpiry = Date.distantPast
 
+    @Published private(set) var blockedAccountIDs: Set<UUID> = []
+    private var blockedOwner: UUID?
+    func isBlocked(_ post: Post) -> Bool {
+        guard blockedOwner == session?.user.id else { return false }
+        return blockedAccountIDs.contains(post.authorID) || post.displayAuthor?.id.map { blockedAccountIDs.contains($0) } == true
+    }
+    private func persistBlocks(owner: UUID) {
+        UserDefaults.standard.set(blockedAccountIDs.map(\.uuidString), forKey: "spotcode.blocks." + owner.uuidString)
+    }
+    func loadBlocks() async {
+        guard let owner = session?.user.id else { return }
+        blockedOwner = owner
+        blockedAccountIDs = Set((UserDefaults.standard.stringArray(forKey: "spotcode.blocks." + owner.uuidString) ?? []).compactMap(UUID.init(uuidString:)))
+        do {
+            let pendingKey = "spotcode.pendingBlocks." + owner.uuidString
+            var pending = UserDefaults.standard.dictionary(forKey: pendingKey) as? [String: String] ?? [:]
+            for (target, post) in pending {
+                guard session?.user.id == owner else { return }
+                if let targetID = UUID(uuidString: target) {
+                    try await withRefreshedSession { token in try await SupabaseService.shared.blockAccount(id: targetID, postID: UUID(uuidString: post), token: token) }
+                    pending.removeValue(forKey: target)
+                    UserDefaults.standard.set(pending, forKey: pendingKey)
+                }
+            }
+            let rows = try await withRefreshedSession { token in try await SupabaseService.shared.blockedAccounts(token: token) }
+            guard session?.user.id == owner else { return }
+            blockedAccountIDs.formUnion(rows.map(\.blocked_id))
+            persistBlocks(owner: owner)
+        } catch { }
+    }
+    func block(_ post: Post) async {
+        guard let owner = session?.user.id else { return }
+        let target = post.displayAuthor?.id ?? post.authorID
+        guard target != owner else { return }
+        blockedOwner = owner
+        blockedAccountIDs.insert(target)
+        persistBlocks(owner: owner)
+        posts.removeAll { isBlocked($0) }
+        let pendingKey = "spotcode.pendingBlocks." + owner.uuidString
+        var pending = UserDefaults.standard.dictionary(forKey: pendingKey) as? [String: String] ?? [:]
+        pending[target.uuidString] = post.id.uuidString
+        UserDefaults.standard.set(pending, forKey: pendingKey)
+        do {
+            try await withRefreshedSession { token in try await SupabaseService.shared.blockAccount(id: target, postID: post.id, token: token) }
+            var latest = UserDefaults.standard.dictionary(forKey: pendingKey) as? [String: String] ?? [:]
+            latest.removeValue(forKey: target.uuidString)
+            UserDefaults.standard.set(latest, forKey: pendingKey)
+        } catch {
+            if session?.user.id == owner { errorMessage = "端末ではブロックしました。運営への通知は接続回復後の次回起動時に再送します。" }
+        }
+    }
+    func unblock(_ id: UUID) async throws {
+        guard let owner = session?.user.id else { return }
+        try await withRefreshedSession { token in try await SupabaseService.shared.unblockAccount(id: id, token: token) }
+        guard session?.user.id == owner else { return }
+        blockedAccountIDs.remove(id)
+        persistBlocks(owner: owner)
+        await loadTimeline()
+    }
+
     func canReadPostAudience(_ post: Post) -> Bool {
         guard post.visibility == "github_org" || post.visibility == "only_me" else { return true }
         if post.authorID == session?.user.id { return true }
@@ -146,6 +206,7 @@ final class AppModel: ObservableObject {
             cacheProfile(profile)
             rememberAccount(session: current, profile: profile)
         }
+        await loadBlocks()
         await loadTimeline()
     }
 
@@ -572,6 +633,7 @@ final class AppModel: ObservableObject {
     }
 
     private func clearGithubOrganizations() {
+        blockedAccountIDs = []; blockedOwner = nil
         timelineGeneration = UUID(); timelineCursor = nil; isLoading = false
         hasMoreTimelinePosts = false; isLoadingMoreTimeline = false; timelinePageError = nil
         githubOrganizations = []

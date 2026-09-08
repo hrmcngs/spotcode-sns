@@ -1,0 +1,5 @@
+"NSCameraUsageDescription" = "投稿用にその場で撮った写真を添付するためカメラを使用します。";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "マップ表示と「半径 100m 以内のスポットだけ読める」機能のため、現在地を使用します。";
+"NSLocationWhenInUseUsageDescription" = "マップ表示と「半径 100m 以内のスポットだけ読める」機能のため、現在地を使用します。";
+"NSPhotoLibraryAddUsageDescription" = "投稿に添付した写真を保存するために写真ライブラリへ書き込みます。";
+"NSPhotoLibraryUsageDescription" = "投稿に写真を添付するために写真ライブラリへアクセスします。";

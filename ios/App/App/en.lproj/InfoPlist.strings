@@ -1,0 +1,5 @@
+"NSCameraUsageDescription" = "Use the camera to take photos to attach to your posts.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Use your location to show the map and read posts at spots within 100 meters.";
+"NSLocationWhenInUseUsageDescription" = "Use your location to show the map and read posts at spots within 100 meters.";
+"NSPhotoLibraryAddUsageDescription" = "Save photos from posts to your photo library.";
+"NSPhotoLibraryUsageDescription" = "Select photos from your photo library to attach to posts.";

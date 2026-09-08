@@ -22,6 +22,9 @@ function template() {
           '<button class="auth-tab" data-tab="register">Sign up</button>' +
         '</div>' +
 
+        '<section class="auth-terms"><p>不適切な投稿・嫌がらせは禁止です。違反投稿の削除や利用停止を行います。<br>Objectionable content and abusive behavior are prohibited; violations may result in removal or suspension.</p>' +
+        '<a href="terms.html" target="_blank" rel="noopener">利用規約 / Terms of Use</a> · <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>' +
+        '<label><input type="checkbox" id="auth-terms-agreed">利用規約に同意します / I agree to the Terms of Use</label></section>' +
         '<div class="auth-social">' +
           '<button type="button" class="btn btn--social btn--gh" data-social="github">' + icon('github', { size: 18, fill: true }) + 'Continue with GitHub</button>' +
         '</div>' +
@@ -210,6 +213,8 @@ function bindEvents() {
   // Login submit
   rootEl.querySelector('[data-pane="login"]').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!rootEl.querySelector('#auth-terms-agreed')?.checked) { alert('利用規約への同意が必要です / Please agree to the Terms of Use'); return; }
+
     const form = e.currentTarget;
     if (form.dataset.busy === '1') return;
     setError(form, '');
@@ -258,6 +263,8 @@ function bindEvents() {
 
   rootEl.querySelector('[data-pane="mfa"]').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!rootEl.querySelector('#auth-terms-agreed')?.checked) { alert('利用規約への同意が必要です / Please agree to the Terms of Use'); return; }
+
     const form = e.currentTarget;
     const submit = form.querySelector('button[type="submit"]');
     setError(form, '');
@@ -274,6 +281,8 @@ function bindEvents() {
   // Register submit
   reg.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!rootEl.querySelector('#auth-terms-agreed')?.checked) { alert('利用規約への同意が必要です / Please agree to the Terms of Use'); return; }
+
     setError(reg, '');
     const fd = new FormData(reg);
     const rawEmail = fd.get('email');
