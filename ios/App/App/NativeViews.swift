@@ -1094,6 +1094,7 @@ struct PostRow: View {
     @State private var showSpotMap = false
     @State private var sharing = false
     @State private var reporting = false
+    @State private var confirmingBlock = false
     @State private var liked = false
     @State private var reposted = false
     @State private var bookmarked = false
@@ -1217,12 +1218,13 @@ struct PostRow: View {
                         }.buttonStyle(.plain)
                         if post.authorID != model.me?.id {
                             Spacer()
-                            Button(role: .destructive) { Task { await model.block(post) } } label: {
-                                Label("このユーザーをブロックして運営に通知", systemImage: "person.crop.circle.badge.xmark")
-                            }
-                            Button { reporting = true } label: {
-                                Image(systemName: "flag")
-                            }.buttonStyle(.plain).accessibilityLabel("投稿を報告")
+                            Menu {
+                                Button { reporting = true } label: { Label("投稿を報告", systemImage: "flag") }
+                                Button(role: .destructive) { confirmingBlock = true } label: {
+                                    Label("ユーザーをブロック", systemImage: "person.crop.circle.badge.xmark")
+                                }
+                            } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
+                            .accessibilityLabel("通報・ブロック")
                         }
                         if canManagePost {
                             Spacer()
@@ -1273,6 +1275,10 @@ struct PostRow: View {
         }
         .onAppear { if post.spot != nil { locationGate.request() } }
         .task(id: post.id) { await loadInteractions() }
+        .confirmationDialog("このユーザーをブロックしますか？投稿が非表示になり、運営へ通知されます。", isPresented: $confirmingBlock, titleVisibility: .visible) {
+            Button("ブロック", role: .destructive) { Task { await model.block(post) } }
+            Button("キャンセル", role: .cancel) {}
+        }
         .confirmationDialog("この投稿を削除しますか？", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("削除", role: .destructive) { Task { _ = await model.deletePost(post) } }
             Button("キャンセル", role: .cancel) {}

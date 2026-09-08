@@ -1957,7 +1957,10 @@ create or replace function public.block_user(p_target uuid,p_post uuid default n
 returns void language plpgsql security definer set search_path=public as $$
 begin
  if auth.uid() is null or auth.uid()=p_target then raise exception 'Invalid block target'; end if;
- if p_post is not null and not exists(select 1 from posts where id=p_post and (author_id=p_target or organization_author_id=p_target)) then raise exception 'Invalid post'; end if;
+ if p_post is not null then
+  if not exists(select 1 from posts where id=p_post) then p_post := null;
+  elsif not exists(select 1 from posts where id=p_post and (author_id=p_target or organization_author_id=p_target)) then raise exception 'Invalid post'; end if;
+ end if;
  insert into user_blocks(blocker_id,blocked_id) values(auth.uid(),p_target) on conflict do nothing;
  if found then
   insert into moderation_events(reporter_id,target_id,post_id,kind,detail)

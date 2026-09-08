@@ -91,6 +91,10 @@ final class AppModel: ObservableObject {
         try await withRefreshedSession { token in try await SupabaseService.shared.unblockAccount(id: id, token: token) }
         guard session?.user.id == owner else { return }
         blockedAccountIDs.remove(id)
+        let pendingKey = "spotcode.pendingBlocks." + owner.uuidString
+        var pending = UserDefaults.standard.dictionary(forKey: pendingKey) as? [String: String] ?? [:]
+        pending.removeValue(forKey: id.uuidString)
+        UserDefaults.standard.set(pending, forKey: pendingKey)
         persistBlocks(owner: owner)
         await loadTimeline()
     }
@@ -495,6 +499,7 @@ final class AppModel: ObservableObject {
     }
 
     func loadTimeline() async {
+        if blockedOwner != session?.user.id { await loadBlocks() }
         let generation = UUID()
         timelineGeneration = generation
         hasMoreTimelinePosts = false; isLoadingMoreTimeline = false; timelinePageError = nil
