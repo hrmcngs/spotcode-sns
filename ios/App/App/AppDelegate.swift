@@ -2,7 +2,22 @@ import UIKit
 import SwiftUI
 import UserNotifications
 
-@UIApplicationMain
+@main
+enum SpotcodeApplication {
+    static func main() {
+        // Set the initial app language before UIKit or SwiftUI resolves strings.
+        // Read only this app's domain: the global AppleLanguages value describes
+        // the device, while an app-domain value is an explicit per-app choice.
+        if let identifier = Bundle.main.bundleIdentifier {
+            let defaults = UserDefaults.standard
+            if defaults.persistentDomain(forName: identifier)?["AppleLanguages"] == nil {
+                defaults.set(["en"], forKey: "AppleLanguages")
+            }
+        }
+        UIApplicationMain(CommandLine.argc, CommandLine.unsafeArgv, nil, NSStringFromClass(AppDelegate.self))
+    }
+}
+
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var window: UIWindow?
 
