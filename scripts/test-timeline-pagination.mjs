@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 let rows=Array.from({length:105},(_,i)=>({id:String(105-i).padStart(5,'0'),author_id:'me',created_at:'2026-09-07T00:00:00.123456+00:00',body:'post',visibility:'public'}));
 let queries=[];
-const ctx=vm.createContext({console,localStorage:{getItem:()=>null},read:(_,fallback)=>fallback,KEYS:{},
+const ctx=vm.createContext({isHiddenUser: () => false,console,localStorage:{getItem:()=>null},read:(_,fallback)=>fallback,KEYS:{},
  refreshGithubMembershipsIfNeeded:async()=>{},currentUser:()=>({id:'me'}),
  getClient:async()=>({from:()=>{
   let filter=null,ordering=[];

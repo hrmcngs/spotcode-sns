@@ -30,6 +30,7 @@ const SHELL = [
   './css/style.css',
   './js/main.js',
   './js/router.js',
+  './js/social-controls.js',
   './js/auth.js',
   './js/supa.js',
   './js/supa-config.js',

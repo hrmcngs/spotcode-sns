@@ -1,4 +1,5 @@
 import { githubAuthorizationReturnPath } from './github-oauth.js';
+import { hydrateSocialControls } from './social-controls.js';
 import { renderKindBadge, renderVisibilityBadge } from './post.js';
 import { initThemeToggle } from './theme.js';
 import { renderGrass }     from './grass.js';
@@ -21,7 +22,7 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, getUser, allPosts, cachedPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
+import { allUsers, getUser, postsWithSpots, trendingCities, onPostsCacheChange, cachedPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
          markPendingDelete, unmarkPendingDelete } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_HANDLE } from './official-account.js';
@@ -57,29 +58,6 @@ function escape(s) {
   }[c]));
 }
 
-// Aggregate the actual posts by city (市区町村) for the right-rail
-// "Trending spots" card. A post contributes when its spot includes
-// `addressDetails.city`. Posts without a location are skipped.
-// Reads the localStorage home-timeline cache synchronously — it used
-// to fire its own 200-row Supabase query on every navigation, which
-// was a major source of per-page lag. The cache is refilled by the
-// home view's own fetch and by refreshRailData() below.
-function computeTrendingCities() {
-  const byCity = new Map(); // city -> { city, prefecture, count }
-  const posts = cachedPosts('home') || [];
-  for (const p of posts) {
-    const det = p?.spot?.addressDetails;
-    const city = det?.city;
-    if (!city) continue;
-    const prev = byCity.get(city);
-    if (prev) prev.count++;
-    else byCity.set(city, { city, prefecture: det.prefecture || '', count: 1 });
-  }
-  return [...byCity.values()]
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
-}
-
 // Empty-day grid for the activity heatmap when we don't have real data
 // yet (logged-out, or fetching the GitHub contributions API). Renders as
 // a grey placeholder until cached data shows up on a re-render.
@@ -111,6 +89,7 @@ const RAIL_REFRESH_MS = 5 * 60 * 1000;
 let railFetchedAt = 0;
 let railFetching  = false;
 let lastRailHtml  = null;
+onPostsCacheChange(() => repaintRail());
 
 // The overlay identity to exclude from Who-to-follow (so
 // @spotcode_official doesn't show up as a "follow me" suggestion to
@@ -129,8 +108,7 @@ function repaintRail() {
 }
 
 // Background refresh of the rail's network-backed data (my follows,
-// recommended profiles, and — first boot only — the home timeline
-// that Trending reads from). Throttled; never blocks a paint.
+// recommended profiles, and the map's spot feed). Throttled; never blocks a paint.
 function refreshRailData() {
   if (railFetching || Date.now() - railFetchedAt < RAIL_REFRESH_MS) return;
   railFetching = true;
@@ -145,9 +123,9 @@ function refreshRailData() {
       try { excludeHandles.push(...myFollowingHandles()); } catch {}
     }
     try { await recommendedProfiles({ limit: 5, excludeHandles }); } catch {}
-    // Trending reads cachedPosts('home'); if nothing has filled it yet
-    // (first visit, landing on a non-home route) do one fetch here.
-    if (!cachedPosts('home')) { try { await allPosts({ limit: 40 }); } catch {} }
+    // Use the same spot feed and limit as the map, independent of the
+    // home timeline's smaller cache. Cache writes repaint the ranking.
+    if (!cachedPosts('spots', RAIL_REFRESH_MS)) { try { await postsWithSpots(); } catch {} }
     railFetchedAt = Date.now();
     railFetching  = false;
     repaintRail();
@@ -163,7 +141,7 @@ function buildRailHtml() {
     if (overlayHandle && u.handle === overlayHandle) return false;
     return !isFollowing(me.handle, u.handle);
   });
-  const trending = computeTrendingCities();
+  const trending = trendingCities();
 
   // Pull the viewer's real GitHub contributions for the activity heatmap.
   // If they're not logged in, or haven't linked a github_handle, fall back
@@ -1271,6 +1249,7 @@ onPrivacyModeChange(() => { refresh(); });
 
 onAuthChange(() => {
   // The signed-in identity changed (login / logout / profile update) —
+  void hydrateSocialControls().then(changed => { if (changed) refresh(); }).catch(() => {});
   // drop the like/follow cache so the next renders re-fetch with the
   // right `auth.uid()` context, then warm the new user's follows.
   clearInteractionsCache();
@@ -1413,6 +1392,12 @@ document.addEventListener('click', (e) => {
   }
 
   // Profile "More" button — opens the copy-link / report-user popover.
+  const followingMenu = e.target.closest('[data-profile-follow]');
+  if (followingMenu && currentUser() && !isPostingAsOfficial() && isFollowing(currentUser().handle, followingMenu.dataset.profileFollow)) {
+    e.preventDefault();
+    openProfileMore(followingMenu.dataset.profileFollow, followingMenu, 'following');
+    return;
+  }
   const moreBtn = e.target.closest('[data-profile-more]');
   if (moreBtn) {
     e.preventDefault();

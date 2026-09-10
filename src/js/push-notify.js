@@ -1,3 +1,4 @@
+import { isHiddenUser } from './social-controls.js';
 // Browser Notifications API wrapper — the OS-level "push" surface
 // for spotcode-sns. Only fires when the user has BOTH granted the
 // browser permission AND flipped the /settings opt-in. Triggers:
@@ -44,7 +45,7 @@ export function setNotificationTypeEnabled(type, enabled) {
 
 export function filterNotificationTypes(items) {
   const prefs = notificationTypePreferences();
-  return (items || []).filter((item) => prefs[item?.type] !== false);
+  return (items || []).filter((item) => !isHiddenUser(item?.actor?.handle, item?.actor?.id) && (item?.type !== 'followed_post' || (followedPostScope() !== 'off' && item.scope === followedPostScope())) && prefs[item?.type] !== false);
 }
 
 // User-facing opt-in stored in localStorage so the choice survives
@@ -127,4 +128,16 @@ export function showPush(title, options = {}) {
   } catch {
     return null;
   }
+}
+
+export function followedPostScope() {
+  try {
+    const value = localStorage.getItem('spotcode.notifications.followedPosts');
+    return ['following', 'mutuals'].includes(value) ? value : 'off';
+  } catch { return 'off'; }
+}
+export function setFollowedPostScope(scope) {
+  if (!['off', 'following', 'mutuals'].includes(scope)) return;
+  localStorage.setItem('spotcode.notifications.followedPosts', scope);
+  listeners.forEach(fn => { try { fn(isPushEnabled()); } catch {} });
 }

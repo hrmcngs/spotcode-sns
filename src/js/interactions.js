@@ -1,3 +1,4 @@
+import { followedPostScope } from './push-notify.js';
 // Likes / follows / reports backed by Supabase (Stage 5).
 //
 // Reads are served from small in-memory caches populated by `hydrate*()`
@@ -473,6 +474,16 @@ export async function notificationsForMe({ limit = 30, targetUserId, targetHandl
   // Build one promise per source. Each handles its own errors so a
   // missing optional table / column doesn't kill the whole page.
   const tasks = [followsPromise];
+  const postScope = followedPostScope();
+  if (effectiveId === user.id && postScope !== 'off') tasks.push((async () => {
+    const { data, error } = await supa.rpc('followed_post_notifications', { p_scope: postScope, p_limit: limit });
+    if (error) throw error;
+    return (data || []).filter(r => r.post?.author).map(r => ({
+      type: 'followed_post', scope: postScope, actor: shapeProfile(r.post.organization_author || r.post.author),
+      createdAt: new Date(r.post.created_at).getTime(),
+      post: { id: r.post.id, body: r.post.body }, district: r.district,
+    }));
+  })());
 
   // --- LIKES on my posts ---
   if (myPostIds.length) tasks.push((async () => {

@@ -1,13 +1,14 @@
 import { getUser, postsByHandle, likedPostsByHandle } from '../data.js';
 import { renderPost }              from '../post.js';
-import { url, currentPath, onRoute } from '../router.js';
+import { url, currentPath, onRoute, refresh } from '../router.js';
+import { isUserMuted, isUserBlocked, setUserControl, setAudienceMember } from '../social-controls.js';
 import { currentUser }             from '../auth.js';
 import { isPostingAsOfficial } from '../posting-identity.js';
 import { OFFICIAL_HANDLE }         from '../official-account.js';
 import { icon }                    from '../icons.js';
 import { isFollowing, isRequested, followerCount, followingCount,
          hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls,
-         hydrateProfileFollow, isOfficialFollowing, isOfficialRequested } from '../interactions.js';
+         hydrateProfileFollow, toggleFollow, isOfficialFollowing, isOfficialRequested } from '../interactions.js';
 import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
@@ -522,7 +523,7 @@ export function renderProfile(handle) {
             : viewingSelfRow
               ? ''
               : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
-                '<button class="btn ' + followBtnCls + ' btn--follow" data-target="' + u.handle + '">' +
+                '<button class="btn ' + followBtnCls + ' btn--follow" data-profile-follow="' + u.handle + '" data-target="' + u.handle + '">' +
                   followBtnLabel +
                 '</button>') +
         '</div>' +
@@ -941,9 +942,12 @@ function closeMoreMenu() {
 // this, but navigation triggered by e.g. router.refresh() from
 // onAuthChange fires no click event).
 onRoute(() => closeMoreMenu());
-export function openProfileMore(handle, anchor) {
+export function openProfileMore(handle, anchor, mode = 'more') {
   const menu = ensureMoreMenu();
   menu.innerHTML =
+    (currentUser() && currentUser().handle !== handle && !isPostingAsOfficial()
+      ? '<button type="button" class="profile-more-menu__item" data-more-action="mute">' + (isUserMuted(handle) ? 'ミュート解除' : 'ミュート') + '</button>' +
+        '<button type="button" class="profile-more-menu__item profile-more-menu__item--bad" data-more-action="block">' + (isUserBlocked(handle) ? 'ブロック解除' : 'ブロック') + '</button>' : '') +
     '<button type="button" class="profile-more-menu__item" data-more-action="copy">' +
       icon('share', { size: 14, className: 'icon--inline' }) +
       t('profile.more.copy_link') +
@@ -952,6 +956,13 @@ export function openProfileMore(handle, anchor) {
       icon('flag', { size: 14, className: 'icon--inline' }) +
       t('profile.more.report') +
     '</button>';
+  if (mode === 'following') {
+    const me = currentUser();
+    menu.innerHTML = [['friends', 'closeFriends', '親しい友達'], ['org', 'orgMembers', '同じ組織']].map(([kind, field, label]) =>
+      '<button type="button" class="profile-more-menu__item" data-more-action="' + kind + '">' + label +
+      ((me?.[field] || []).includes(handle) ? 'から解除 ✓' : 'に登録') + '</button>').join('') +
+      '<button type="button" class="profile-more-menu__item profile-more-menu__item--bad" data-more-action="unfollow">フォロー解除</button>';
+  }
   const r = anchor.getBoundingClientRect();
   menu.style.position = 'fixed';
   menu.style.top  = (r.bottom + 6) + 'px';
@@ -964,7 +975,22 @@ export function openProfileMore(handle, anchor) {
     if (!btn) return;
     const action = btn.getAttribute('data-more-action');
     closeMoreMenu();
-    if (action === 'copy') {
+    if (action === 'friends' || action === 'org' || action === 'unfollow') {
+      try {
+        const me = currentUser();
+        if (!me || isPostingAsOfficial()) return;
+        if (action === 'unfollow') await toggleFollow(me.handle, handle);
+        else await setAudienceMember(handle, action, !(me[action === 'friends' ? 'closeFriends' : 'orgMembers'] || []).includes(handle));
+        refresh();
+      } catch (error) { toast(error.message); }
+    } else if (action === 'mute' || action === 'block') {
+      const enabled = !(action === 'mute' ? isUserMuted(handle) : isUserBlocked(handle));
+      try {
+        await setUserControl(handle, action === 'mute' ? 'mutes' : 'blocks', enabled);
+        refresh();
+        toast(action === 'mute' ? (enabled ? 'ミュートしました' : 'ミュートを解除しました') : (enabled ? 'ブロックしました' : 'ブロックを解除しました'));
+      } catch (error) { toast(error.message); }
+    } else if (action === 'copy') {
       const link = location.origin + url('/' + handle);
       try {
         await navigator.clipboard.writeText(link);

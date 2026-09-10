@@ -1,3 +1,4 @@
+import { setAudienceMember } from '../social-controls.js';
 import { isPostingAsOfficial } from '../posting-identity.js';
 import { isOfficialFollowing, isOfficialRequested, hydrateOfficialFollows } from '../interactions.js';
 import { OFFICIAL_HANDLE, getOfficialAccount } from '../official-account.js';
@@ -122,7 +123,7 @@ function paintFollowUsers(list, users, kind) {
   const actorHandle = official ? OFFICIAL_HANDLE : me?.handle;
   list.innerHTML = '<div class="followlist followlist--page">' +
     users.map(u => {
-      const followed = me && actorHandle !== u.handle && (official ? isOfficialFollowing(u.handle) : isFollowing(me.handle, u.handle));
+      const followed = me && actorHandle !== u.handle && (official ? isOfficialFollowing(u.handle) : (isFollowing(me.handle, u.handle) || (kind === 'following' && currentPath() === '/' + me.handle + '/following')));
       const requested = official && isOfficialRequested(u.handle);
       const showBtn  = me && actorHandle !== u.handle;
       const displayName   = maskName(u.handle, u.name);
@@ -135,6 +136,10 @@ function paintFollowUsers(list, users, kind) {
             '<a class="followlist__handle" href="' + url('/' + u.handle) + '">@' + escape(displayHandle) + '</a>' +
             (u.bio ? '<div class="followlist__bio">' + escape(maskMentionsInText(u.bio)) + '</div>' : '') +
           '</div>' +
+          (showBtn && !official && followed && kind === 'following'
+            ? '<div class="followlist__audience">' + [['friends', 'closeFriends', '親しい友達'], ['org', 'orgMembers', '同じ組織']].map(([kind, field, label]) =>
+              '<label><input type="checkbox" data-audience-member="' + escape(u.handle) + '" data-audience-kind="' + kind + '"' +
+              ((me[field] || []).includes(u.handle) ? ' checked' : '') + '> ' + label + '</label>').join('') + '</div>' : '') +
           (showBtn
             ? '<button class="followlist__follow' + (followed || requested ? ' is-following' : '') + '" data-target="' + escape(u.handle) + '">' +
                 (requested ? t('profile.btn.requested') : followed ? t('profile.btn.following') : t('profile.btn.follow')) +
@@ -145,3 +150,13 @@ function paintFollowUsers(list, users, kind) {
     }).join('') +
     '</div>';
 }
+
+document.addEventListener('change', async event => {
+  const input = event.target.closest('[data-audience-member]');
+  if (!input) return;
+  input.disabled = true;
+  const enabled = input.checked;
+  try { await setAudienceMember(input.dataset.audienceMember, input.dataset.audienceKind, enabled); }
+  catch (error) { input.checked = !enabled; alert(error.message); }
+  finally { input.disabled = false; }
+});

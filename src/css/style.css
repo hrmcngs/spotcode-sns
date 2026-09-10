@@ -3499,3 +3499,6 @@ html.account-menu-locked { overflow: hidden; }
 
 [data-timeline-more][hidden],
 [data-timeline-end][hidden] { display: none; }
+
+.followlist__audience { display: flex; flex-direction: column; gap: 8px; font-size: 13px; flex-shrink: 0; }
+@media (max-width: 600px) { .followlist__row { flex-wrap: wrap; } .followlist__audience { flex-direction: row; flex-wrap: wrap; } }

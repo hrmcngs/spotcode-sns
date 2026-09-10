@@ -1,3 +1,4 @@
+import { followedPostScope, setFollowedPostScope } from '../push-notify.js';
 import { githubRepositories } from '../github-repositories.js';
 import { publicTaskRepositories } from '../task-repositories.js';
 import { syncGithubOrganizations } from '../github-organizations.js';
@@ -414,6 +415,10 @@ function pushNotifyCard() {
           )
       ) +
       '<div class="settings-notification-types">' +
+        '<label>投稿と地区の通知<select id="followed-post-scope">' +
+        [['off', 'OFF'], ['mutuals', '相互フォロー'], ['following', 'フォロー中']].map(([value, label]) =>
+          '<option value="' + value + '"' + (followedPostScope() === value ? ' selected' : '') + '>' + label + '</option>').join('') +
+        '</select></label><p>投稿のスポットの市区町村を通知します。スポットがない場合は地区未設定と表示します。</p>' +
         '<h3>' + t('settings.push.types') + '</h3>' +
         [['like', 'like'], ['comment', 'comment'], ['mention', 'mention'], ['follow', 'follow'], ['nearby', 'nearby']].map(([type, key]) =>
           '<label class="settings-check"><input type="checkbox" data-notification-type="' + type + '"' +
@@ -681,6 +686,7 @@ export function renderSettings() {
 }
 
 export function bindSettings() {
+  document.getElementById('followed-post-scope')?.addEventListener('change', event => setFollowedPostScope(event.target.value));
   if (currentPath() === '/settings/organization') {
     requestAnimationFrame(() => {
       if (currentPath() !== '/settings/organization') return;

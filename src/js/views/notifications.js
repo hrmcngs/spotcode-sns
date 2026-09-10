@@ -62,6 +62,7 @@ function escape(s) {
 // Labels resolved through i18n so the same notification row reads
 // "いいねしました" or "liked your post" depending on the viewer's language.
 const META = {
+  followed_post: { ico: 'pin', mod: 'mention' },
   like:           { ico: 'heart',  mod: 'like',     labelKey: 'notif.label.like' },
   comment:        { ico: 'reply',  mod: 'comment',  labelKey: 'notif.label.comment' },
   mention:        { ico: 'at',     mod: 'mention',  labelKey: 'notif.label.mention' },
@@ -100,7 +101,7 @@ function renderRow(n) {
     '<div class="notif__title">' +
       '<span class="notif__name">' + escape(displayName) + '</span>' +
       ' <span class="notif__handle">@' + escape(displayHandle) + '</span>' +
-      ' <span class="notif__action">' + escape(t(meta.labelKey)) + '</span>' +
+      ' <span class="notif__action">' + escape(n.type === 'followed_post' ? (n.district || '地区未設定') + 'で投稿しました' : t(meta.labelKey)) + '</span>' +
       ' <span class="notif__time">· ' + escape(relTime(n.createdAt)) + '</span>' +
     '</div>';
 

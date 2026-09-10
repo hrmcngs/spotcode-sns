@@ -383,6 +383,29 @@ actor SupabaseService {
     func unblockAccount(id: UUID, token: String) async throws {
         let _: EmptyResponse = try await request("rest/v1/user_blocks?blocked_id=eq.\(id.uuidString)", method: "DELETE", token: token)
     }
+    struct MutedAccount: Decodable { let muted_id: UUID }
+    struct FollowedPostNotice: Decodable { let post: Post; let district: String }
+    func mutedAccounts(token: String) async throws -> [MutedAccount] {
+        try await request("rest/v1/user_mutes?select=muted_id", token: token)
+    }
+    func muteAccount(id: UUID, owner: UUID, enabled: Bool, token: String) async throws {
+        if enabled {
+            let body = try JSONSerialization.data(withJSONObject: ["user_id": owner.uuidString, "muted_id": id.uuidString])
+            let _: EmptyResponse = try await request("rest/v1/user_mutes", method: "POST", token: token, body: body, prefer: "resolution=ignore-duplicates,return=minimal")
+        } else {
+            let _: EmptyResponse = try await request("rest/v1/user_mutes?muted_id=eq.\(id.uuidString)", method: "DELETE", token: token)
+        }
+    }
+    func setAudienceMember(id: UUID, kind: String, enabled: Bool, token: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["p_target": id.uuidString, "p_kind": kind, "p_enabled": enabled])
+        let _: EmptyResponse = try await request("rest/v1/rpc/set_audience_member", method: "POST", token: token, body: body)
+    }
+    func followedPostNotifications(scope: String, token: String) async throws -> [FollowedPostNotice] {
+        guard ["following", "mutuals"].contains(scope) else { return [] }
+        return try await request("rest/v1/rpc/followed_post_notifications", method: "POST", token: token,
+            body: JSONSerialization.data(withJSONObject: ["p_scope": scope, "p_limit": 30]))
+    }
+
     func moderationEvents(token: String) async throws -> [ModerationEvent] {
         try await request("rest/v1/moderation_events?select=*&order=created_at.desc&limit=100", token: token)
     }
@@ -666,6 +689,8 @@ actor SupabaseService {
     }
 
     func notifications(userID: UUID, handle: String, token: String) async throws -> [AppNotification] {
+        let scope = UserDefaults.standard.string(forKey: "spotcode.notifications.followedPosts") ?? "off"
+        async let followedPostsResult = followedPostNotifications(scope: scope, token: token)
         async let ownPostsResult = posts(limit: 60, authorID: userID, token: token)
         async let followsResult: [FollowEvent] = request(
             "rest/v1/follows?target_id=eq.\(userID.uuidString)&select=status,created_at,follower:profiles!follows_follower_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=30",
@@ -703,6 +728,11 @@ actor SupabaseService {
         result += try await commentMentionsResult.map { row in
             AppNotification(id: "mention-comment:\(row.id.uuidString)", kind: .mention, actor: row.author,
                             createdAt: row.createdAt, post: postMap[row.postID], context: row.body, followStatus: nil)
+        }
+        result += try await followedPostsResult.compactMap { row in
+            guard let actor = row.post.displayAuthor else { return nil }
+            return AppNotification(id: "followed-post:\(row.post.id.uuidString)", kind: .followedPost, actor: actor,
+                createdAt: row.post.createdAt, post: row.post, context: row.district + "で投稿しました", followStatus: nil)
         }
         return Array(result.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.prefix(30))
     }

@@ -67,6 +67,17 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if response.notification.request.content.userInfo["spotcode_post"] != nil {
+            NotificationCenter.default.post(name: Notification.Name("spotcode.openNotifications"), object: nil)
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
     ) {

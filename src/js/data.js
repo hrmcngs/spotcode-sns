@@ -1,3 +1,4 @@
+import { isHiddenUser } from './social-controls.js';
 import { canReadGithubOrganization, refreshGithubMembershipsIfNeeded } from './github-organizations.js';
 import { isDevMode } from './dev-mode.js';
 // Posts data layer — now backed by public.posts in Supabase so timelines
@@ -371,6 +372,7 @@ async function withResilientCols(build) {
 // change doesn't try to render an incompatible snapshot.
 
 const POSTS_CACHE_KEY = 'spotcode:posts-cache:v1';
+export const SPOT_POST_LIMIT = 120;
 const POSTS_CACHE_MAX = 30;          // don't bloat localStorage
 const POSTS_CACHE_TTL_MS = 6 * 3600 * 1000; // 6 hours
 
@@ -383,6 +385,14 @@ const POSTS_CACHE_TTL_MS = 6 * 3600 * 1000; // 6 hours
 // boot still paints text content instantly — photos pop in when the
 // live fetch lands). In-session repaints keep full photos because
 // they read the memory copy.
+const postsCacheListeners = new Set();
+export function onPostsCacheChange(listener) {
+  postsCacheListeners.add(listener);
+  return () => postsCacheListeners.delete(listener);
+}
+function notifyPostsCacheChange() {
+  for (const listener of postsCacheListeners) { try { listener(); } catch {} }
+}
 let postsCacheMem = null;
 function postsCacheAll() {
   if (postsCacheMem) return postsCacheMem;
@@ -399,6 +409,7 @@ function persistPostsCache(all) {
       if (!e || !Array.isArray(e.posts)) continue;
       slim[scope] = {
         at: e.at,
+        owner: e.owner,
         // photosStripped marks the row as an incomplete snapshot so
         // freshness-based fetch-skipping (hydrateHome) never treats a
         // photo-less cold-boot cache as the real thing.
@@ -411,13 +422,15 @@ function persistPostsCache(all) {
     }
     localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(slim));
   } catch {}
+  notifyPostsCacheChange();
 }
 
 function savePostsCache(scope, posts) {
   const all = postsCacheAll();
   all[scope] = {
     at: Date.now(),
-    posts: posts.slice(0, POSTS_CACHE_MAX),
+    owner: scope === 'spots' ? currentUser()?.id || null : undefined,
+    posts: posts.slice(0, scope === 'spots' ? SPOT_POST_LIMIT : POSTS_CACHE_MAX),
   };
   persistPostsCache(all);
 }
@@ -449,6 +462,7 @@ const pendingDeletes = new Set();   // post ids
 // The database enforces access. This also hides local snapshots after an
 // account switch, before the next authenticated request replaces the cache.
 export function canDisplayCachedPost(post) {
+  if (isHiddenUser(post.authorHandle, post.authorId) || isHiddenUser(null, post.organizationAuthorId)) return false;
   if (post.visibility === 'github_org') return !!currentUser()?.id && (post.authorId === currentUser().id || isDevMode() || canReadGithubOrganization(post.githubOrgId));
   if (post.visibility !== 'only_me') return true;
   const me = currentUser();
@@ -516,6 +530,7 @@ export function prependToTimelineCaches(post) {
   if (!post || !post.id) return;
   optimisticPosts.set(post.id, { at: Date.now(), post });
   const scopes = ['home'];
+  if (Number.isFinite(post.spot?.lat) && Number.isFinite(post.spot?.lng)) scopes.push('spots');
   if (post.authorHandle && post.authorHandle !== '?') {
     scopes.push('handle:' + post.authorHandle);
   }
@@ -524,12 +539,12 @@ export function prependToTimelineCaches(post) {
   const all = postsCacheAll();
   for (const scope of scopes) {
     const e = all[scope];
-    const prev = (e && Array.isArray(e.posts)) ? e.posts : [];
+    const prev = (e && Array.isArray(e.posts) && (scope !== 'spots' || e.owner === (currentUser()?.id || null))) ? e.posts : [];
     // Dedupe by id — addPost re-running (e.g. on a retry) would
     // otherwise queue the same row twice.
     const next = [post, ...prev.filter((p) => p.id !== post.id)]
-      .slice(0, POSTS_CACHE_MAX);
-    all[scope] = { at: Date.now(), posts: next };
+      .slice(0, scope === 'spots' ? SPOT_POST_LIMIT : POSTS_CACHE_MAX);
+    all[scope] = { at: Date.now(), owner: scope === 'spots' ? currentUser()?.id || null : undefined, posts: next };
   }
   persistPostsCache(all);
 }
@@ -546,6 +561,7 @@ export function cachedPosts(scope, maxAgeMs = POSTS_CACHE_TTL_MS) {
   if (isDevMode()) return null; // Fetch the expanded audience after enabling developer mode.
   try {
     const e = postsCacheAll()[scope];
+    if (scope === 'spots' && e?.owner !== (currentUser()?.id || null)) return null;
     if (!e || !e.posts) return null;
     if (Date.now() - (e.at || 0) > maxAgeMs) return null;
     return e.posts.filter((p) => !pendingDeletes.has(p.id) && canDisplayCachedPost(p));
@@ -651,18 +667,42 @@ export async function allPosts({ limit = 100 } = {}) {
 // server-side via `spot is not null` so we don't transfer the ~90%
 // of posts that have no location — the biggest single win for
 // "/spots feels heavy". Same shape as allPosts otherwise.
-export async function postsWithSpots({ limit = 200 } = {}) {
-  const supa = await getClient();
-  const { data, error } = await withResilientCols((cols) =>
-    supa.from('posts').select(cols)
-      .not('spot', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(limit)
-  );
-  if (error) throw new Error(error.message);
-  const shaped = mergeOptimistic((data || []).map(shapePost), 'spots');
-  savePostsCache('spots', shaped);
-  return shaped;
+let spotsRequest = null;
+export function postsWithSpots({ limit = SPOT_POST_LIMIT } = {}) {
+  const owner = currentUser()?.id || null;
+  if (spotsRequest?.owner === owner && spotsRequest.limit === limit) return spotsRequest.promise;
+  const promise = (async () => {
+    const supa = await getClient();
+    const { data, error } = await withResilientCols((cols) =>
+      supa.from('posts').select(cols)
+        .not('spot', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+    );
+    if (error) throw new Error(error.message);
+    if ((currentUser()?.id || null) !== owner) throw new Error('アカウントが変更されました');
+    const shaped = mergeOptimistic((data || []).map(shapePost), 'spots');
+    savePostsCache('spots', shaped);
+    return shaped;
+  })().finally(() => { if (spotsRequest?.promise === promise) spotsRequest = null; });
+  spotsRequest = { owner, limit, promise };
+  return promise;
+}
+
+export function trendingCities() {
+  const byCity = new Map();
+  const seen = new Set();
+  for (const post of cachedPosts('spots') || []) {
+    if (seen.has(post.id) || !Number.isFinite(post.spot?.lat) || !Number.isFinite(post.spot?.lng)) continue;
+    seen.add(post.id);
+    const details = post.spot.addressDetails;
+    const city = details?.city?.trim();
+    if (!city) continue;
+    const entry = byCity.get(city) || { city, prefecture: details.prefecture || '', count: 0 };
+    entry.count++;
+    byCity.set(city, entry);
+  }
+  return [...byCity.values()].sort((a, b) => b.count - a.count || a.city.localeCompare(b.city, 'ja')).slice(0, 5);
 }
 
 // Posts authored by anyone the current user accepted-follows, newest
@@ -1036,10 +1076,11 @@ export async function removePost(postId) {
 // (success, persistent prune) or `unmarkPendingDelete` (failure,
 // restore) clears it.
 export function markPendingDelete(id) {
-  if (id) pendingDeletes.add(String(id));
+  if (id) { pendingDeletes.add(String(id)); notifyPostsCacheChange(); }
 }
 export function unmarkPendingDelete(id) {
   pendingDeletes.delete(String(id));
+  notifyPostsCacheChange();
 }
 
 // Persistent prune: drop the row from every timeline scope in

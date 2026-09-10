@@ -77,6 +77,8 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var section: AppSection = .home
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("spotcode.notifications.followedPosts") private var followedPostScope = "off"
     @State private var drawerOpen = false
     @State private var showLogin = false
     @State private var composing = false
@@ -142,6 +144,14 @@ struct RootView: View {
             }
             await model.bootstrap()
         }
+        .task(id: "\(model.session?.user.id.uuidString ?? "guest"):\(scenePhase):\(followedPostScope)") {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await model.pollFollowedPostNotifications()
+                do { try await Task.sleep(nanoseconds: 60_000_000_000) } catch { return }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("spotcode.openNotifications"))) { _ in section = .notifications }
         .fullScreenCover(isPresented: Binding(get: { model.session != nil && acceptedTerms != "2026-09-08" && !showLogin }, set: { _ in })) {
             TermsAgreementGate().environmentObject(model)
         }
@@ -884,6 +894,7 @@ private struct LocationPickerSheet: View {
     @State private var currentCoordinate: CLLocationCoordinate2D?
     @State private var label = ""
     @State private var address = "現在地を取得すると表示されます"
+    @State private var district = ""
     @State private var locating = false
     @State private var mapRegion = MKCoordinateRegion(center: .init(latitude: 35.681236, longitude: 139.767125), span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
     @State private var adjustmentDenied = false
@@ -968,11 +979,15 @@ private struct LocationPickerSheet: View {
         spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude,
                     label: resolvedLabel.isEmpty ? "選択した場所" : resolvedLabel,
                     address: address == "現在地を取得すると表示されます" ? nil : address)
+        if !district.isEmpty { spot?.addressDetails = ["city": district] }
         isPresented = false
     }
     private func reverseGeocode(_ coordinate: CLLocationCoordinate2D) {
+        district = ""
         CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)) { places, _ in
-            guard let place = places?.first else { return }
+            guard let place = places?.first, self.coordinate?.latitude == coordinate.latitude,
+                  self.coordinate?.longitude == coordinate.longitude else { return }
+            district = place.locality ?? place.subAdministrativeArea ?? ""
             address = [place.postalCode, place.administrativeArea, place.locality, place.subLocality, place.thoroughfare, place.subThoroughfare]
                 .compactMap { $0 }.joined(separator: " ")
         }
@@ -1127,7 +1142,7 @@ struct PostRow: View {
     }
 
     var body: some View {
-        if model.canReadPostAudience(post) && !model.isBlocked(post) {
+        if model.canReadPostAudience(post) && !model.isBlocked(post) && !model.isMuted(post) {
             postContent
         }
     }
@@ -1957,6 +1972,7 @@ struct NotificationsView: View {
     @AppStorage("spotcode.notifications.comments") private var commentsEnabled = true
     @AppStorage("spotcode.notifications.mentions") private var mentionsEnabled = true
     @AppStorage("spotcode.notifications.follows") private var followsEnabled = true
+    @AppStorage("spotcode.notifications.followedPosts") private var followedPostScope = "off"
     @State private var notifications: [AppNotification] = []
     @State private var loading = false
     var body: some View {
@@ -1964,29 +1980,31 @@ struct NotificationsView: View {
             PageHeader(title: "Notifications")
             if loading && notifications.isEmpty { Spacer(); ProgressView("通知を読み込み中…"); Spacer() }
             else if notifications.isEmpty { Spacer(); ContentUnavailableViewCompat(title: "通知はありません", icon: "bell"); Spacer() }
-            else { ScrollView { LazyVStack(spacing: 0) { ForEach(notifications) { notification in
+            else { ScrollView { LazyVStack(spacing: 0) { ForEach(filterNotifications(notifications)) { notification in
                 NotificationRow(notification: notification) {
                     await respond(to: notification, accept: $0)
                 }
             }}}.refreshable { await load() } }
-        }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task { await load() }
+        }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task(id: "\(model.session?.user.id.uuidString ?? "guest"):\(followedPostScope)") { notifications = []; await load() }
     }
     private func load() async {
         guard let id = model.me?.id else { return }
+        let scope = followedPostScope
         loading = true; defer { loading = false }
         do {
             var session = try await model.validSession()
+            let result: [AppNotification]
             do {
-                notifications = filterNotifications(try await SupabaseService.shared.notifications(
-                    userID: id, handle: model.me?.handle ?? "", token: session.accessToken
-                ))
+                result = try await SupabaseService.shared.notifications(userID: id, handle: model.me?.handle ?? "", token: session.accessToken)
             } catch where AppModel.isExpiredSessionError(error) {
                 session = try await model.validSession(forceRefresh: true)
-                notifications = filterNotifications(try await SupabaseService.shared.notifications(
-                    userID: id, handle: model.me?.handle ?? "", token: session.accessToken
-                ))
+                guard model.session?.user.id == id else { return }
+                result = try await SupabaseService.shared.notifications(userID: id, handle: model.me?.handle ?? "", token: session.accessToken)
             }
+            guard !Task.isCancelled, model.session?.user.id == id, scope == followedPostScope else { return }
+            notifications = filterNotifications(result)
         } catch {
+            guard !Task.isCancelled, model.session?.user.id == id else { return }
             model.errorMessage = AppModel.isExpiredSessionError(error)
                 ? "ログインの有効期限が切れました。もう一度ログインしてください。"
                 : error.localizedDescription
@@ -1995,7 +2013,9 @@ struct NotificationsView: View {
 
     private func filterNotifications(_ values: [AppNotification]) -> [AppNotification] {
         values.filter { value in
+            if let id = value.actor.id, model.blockedAccountIDs.contains(id) || model.mutedAccountIDs.contains(id) { return false }
             switch value.kind {
+            case .followedPost: return followedPostScope != "off"
             case .like: return likesEnabled
             case .comment: return commentsEnabled
             case .mention: return mentionsEnabled
@@ -2039,7 +2059,7 @@ private struct NotificationRow: View {
                     if let date = notification.createdAt { Text(relativeTime(date)).font(.caption).foregroundColor(SpotcodeTheme.muted) }
                 }
                 Text(LocalizedStringKey(label)).font(.subheadline).foregroundColor(SpotcodeTheme.muted)
-                if let context = notification.context ?? notification.post?.body, !context.isEmpty {
+                if let context = (notification.kind == .followedPost ? notification.post?.body : notification.context ?? notification.post?.body), !context.isEmpty {
                     Text(context).font(.subheadline).lineLimit(3).padding(9)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 8))
@@ -2061,6 +2081,7 @@ private struct NotificationRow: View {
 
     private var label: String {
         switch notification.kind {
+        case .followedPost: return notification.context ?? "投稿しました"
         case .like: return "あなたの投稿にいいねしました"
         case .comment: return "あなたの投稿にコメントしました"
         case .mention: return "あなたをメンションしました"
@@ -2070,6 +2091,7 @@ private struct NotificationRow: View {
     }
     private var icon: String {
         switch notification.kind {
+        case .followedPost: return "mappin.circle.fill"
         case .like: return "heart.fill"
         case .comment: return "bubble.left.fill"
         case .mention: return "at"
@@ -2078,6 +2100,7 @@ private struct NotificationRow: View {
     }
     private var badgeColor: Color {
         switch notification.kind {
+        case .followedPost: return SpotcodeTheme.accent
         case .like: return .pink
         case .comment: return .green
         case .mention: return .purple
@@ -2313,9 +2336,15 @@ private struct ProfileHero: View {
                                 if let handle = profile.githubHandle {
                                     Link("GitHubで開く", destination: URL(string: "https://github.com/\(handle)")!)
                                 }
+                                if let id = profile.id { ProfileSocialActions(profile: profile, targetID: id) }
                             } label: { Text("More").profileActionCapsule(filled: false) }
-                            Button(followLoading ? "…" : (followState == "pending" ? "Requested" : (isFollowing ? "Following" : "Follow"))) { toggleFollow() }
-                                .profileActionCapsule(filled: !isFollowing).disabled(followLoading)
+                            if isFollowing && !model.isPostingAsOfficial {
+                                FollowAudienceMenu(profile: profile, title: "Following", unfollow: { toggleFollow() })
+                                    .profileActionCapsule(filled: false).disabled(followLoading)
+                            } else {
+                                Button(followLoading ? "…" : (followState == "pending" ? "Requested" : "Follow")) { toggleFollow() }
+                                    .profileActionCapsule(filled: !isFollowing).disabled(followLoading)
+                            }
                         }.padding(.top, 14)
                     }
                 }.frame(height: 63)
@@ -2452,6 +2481,57 @@ private struct LanguageMedal: View {
     }
 }
 
+private struct ProfileSocialActions: View {
+    @EnvironmentObject private var model: AppModel
+    let profile: Profile
+    let targetID: UUID
+    @State private var busy = false
+    var body: some View {
+        Group {
+            Button(model.mutedAccountIDs.contains(targetID) ? "ミュート解除" : "ミュート") {
+                perform { try await model.setMuted(targetID, enabled: !model.mutedAccountIDs.contains(targetID)) }
+            }
+            Button(model.blockedAccountIDs.contains(targetID) ? "ブロック解除" : "ブロック", role: .destructive) {
+                perform {
+                    if model.blockedAccountIDs.contains(targetID) { try await model.unblock(targetID) }
+                    else { try await model.blockProfile(targetID) }
+                }
+            }
+        }.disabled(busy || model.session == nil || model.isPostingAsOfficial)
+    }
+    private func perform(_ action: @escaping () async throws -> Void) {
+        guard !busy else { return }; busy = true
+        Task { defer { busy = false }; do { try await action() } catch { model.errorMessage = error.localizedDescription } }
+    }
+}
+
+private struct FollowAudienceMenu: View {
+    @EnvironmentObject private var model: AppModel
+    let profile: Profile
+    var title: String? = nil
+    var unfollow: (() -> Void)? = nil
+    @State private var busy = false
+    var body: some View {
+        Menu {
+            Button { change("friends", enabled: !friends) } label: {
+                Label(friends ? "親しい友達から解除" : "親しい友達に登録", systemImage: friends ? "checkmark.circle.fill" : "heart")
+            }
+            Button { change("org", enabled: !organization) } label: {
+                Label(organization ? "同じ組織から解除" : "同じ組織に登録", systemImage: organization ? "checkmark.circle.fill" : "building.2")
+            }
+            if let unfollow { Button("フォロー解除", role: .destructive, action: unfollow) }
+        } label: { Label(title ?? (friends || organization ? "登録済み" : "リストに登録"), systemImage: "person.crop.circle.badge.checkmark").font(.caption) }
+        .disabled(busy)
+    }
+    private var friends: Bool { model.me?.closeFriends?.contains(profile.handle) == true }
+    private var organization: Bool { model.me?.orgMembers?.contains(profile.handle) == true }
+    private func change(_ kind: String, enabled: Bool) {
+        guard !busy, let id = profile.id else { return }; busy = true
+        Task { defer { busy = false }; do { try await model.setAudienceMember(id, kind: kind, enabled: enabled) }
+            catch { model.errorMessage = error.localizedDescription } }
+    }
+}
+
 private enum FollowListKind { case following, followers }
 
 private struct FollowListView: View {
@@ -2461,8 +2541,13 @@ private struct FollowListView: View {
     @State private var profiles: [Profile] = []
     var body: some View {
         List(profiles) { profile in
-            NavigationLink(destination: ProfileView(profile: profile)) {
-                HStack(spacing: 12) { AvatarView(profile: profile, size: 42); VStack(alignment: .leading) { Text(profile.name).fontWeight(.bold); Text("@\(profile.handle)").foregroundColor(SpotcodeTheme.muted) } }
+            HStack {
+                NavigationLink(destination: ProfileView(profile: profile)) {
+                    HStack(spacing: 12) { AvatarView(profile: profile, size: 42); VStack(alignment: .leading) { Text(profile.name).fontWeight(.bold); Text("@\(profile.handle)").foregroundColor(SpotcodeTheme.muted) } }
+                }
+                if kind == .following && userID == model.session?.user.id && !model.isPostingAsOfficial {
+                    FollowAudienceMenu(profile: profile)
+                }
             }.listRowBackground(SpotcodeTheme.surface)
         }.listStyle(.plain).background(SpotcodeTheme.surface)
             .navigationTitle(kind == .following ? "Following" : "Followers")
@@ -3461,6 +3546,7 @@ private struct DisplaySettings: View {
     @AppStorage("spotcode.notifications.comments") private var notifyComments = true
     @AppStorage("spotcode.notifications.mentions") private var notifyMentions = true
     @AppStorage("spotcode.notifications.follows") private var notifyFollows = true
+    @AppStorage("spotcode.notifications.followedPosts") private var followedPostScope = "off"
     private var appLanguage: String { Bundle.main.preferredLocalizations.first ?? "en" }
     var body: some View { VStack(spacing: 18) {
         SettingsCard("Language") {
@@ -3500,6 +3586,13 @@ private struct DisplaySettings: View {
             Toggle("コメント", isOn: $notifyComments)
             Toggle("メンション", isOn: $notifyMentions)
             Toggle("フォロー・フォローリクエスト", isOn: $notifyFollows)
+            Picker("投稿と地区の通知", selection: $followedPostScope) {
+                Text("OFF").tag("off")
+                Text("相互フォロー").tag("mutuals")
+                Text("フォロー中").tag("following")
+            }
+            Text("投稿のスポットの市区町村を表示します。スポットがない投稿は地区未設定になります。アプリ利用中に新着を確認し、通知一覧とiPhoneのバナーに表示します。")
+                .font(.caption).foregroundColor(SpotcodeTheme.muted)
             Text("種類別の設定はSpotcode内の通知一覧に適用されます。通知音やバナー表示は上の「iPhoneの通知設定」で変更できます。")
                 .font(.caption).foregroundColor(SpotcodeTheme.muted)
         }

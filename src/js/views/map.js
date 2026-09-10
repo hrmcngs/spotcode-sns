@@ -6,7 +6,7 @@
 // "come within Xm to read this idea".
 
 import { loadMaps } from '../gmap.js';
-import { postsWithSpots, cachedPosts } from '../data.js';
+import { postsWithSpots, cachedPosts, canDisplayCachedPost } from '../data.js';
 import { t }        from '../i18n.js';
 import { icon }     from '../icons.js';
 import { getMyLocation, isNearSpotSync, getRadius, permissionDenied,
@@ -91,7 +91,7 @@ export async function hydrateMap(city, focus = null) {
   // Leaflet CDN round-trip; parallelising them cuts total wall-clock
   // to the slowest single leg.
   const cachedForPaint = cachedPosts('spots') || [];
-  const postsPromise = withTimeout(postsWithSpots({ limit: 120 }), 10000, '地図投稿取得').catch((err) => {
+  const postsPromise = withTimeout(postsWithSpots(), 10000, '地図投稿取得').catch((err) => {
     console.warn('hydrateMap: postsWithSpots failed, using cache', err);
     return cachedForPaint;
   });
@@ -121,7 +121,7 @@ export async function hydrateMap(city, focus = null) {
 
   // `postsWithSpots` already filters server-side (`spot is not null`)
   // so this defensive re-filter only catches lat/lng shape drift.
-  const allSpotted = (posts || []).filter(p => p?.spot?.lat != null && p?.spot?.lng != null);
+  const allSpotted = (posts || []).filter(p => canDisplayCachedPost(p) && Number.isFinite(p?.spot?.lat) && Number.isFinite(p?.spot?.lng));
   // City-scoped view (e.g. /spots/世田谷区 from the Trending card): drop
   // pins outside the city so the canvas only shows that 市区町村's ideas
   // and we can fitBounds onto them. Falls back to the unfiltered list

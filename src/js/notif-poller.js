@@ -1,3 +1,4 @@
+import { url as routeUrl } from './router.js';
 // Periodic poll of the (synthetic) notifications inbox. Diffs against
 // the last-seen timestamp persisted in localStorage so a returning
 // user only gets banners for activity AFTER their last poll, not the
@@ -54,6 +55,9 @@ function formatNotif(n) {
   const postExcerpt = (n.post?.body || n.body || '').slice(0, 80);
   const base = (window.__BASE__ || '/');
   switch (n.type) {
+    case 'followed_post':
+      return { title: actorName + 'さんが' + (n.district || '地区未設定') + 'で投稿しました',
+        body: postExcerpt, tag: 'followed_post:' + n.post.id, url: routeUrl('/post/' + n.post.id) };
     case 'like':
       return {
         title: actorName + 'さんがいいねしました',
@@ -160,14 +164,14 @@ async function tick() {
       url:  formatted.url,
       // The /notifications view already shows the row in-page; if the
       // user is looking at the tab we don't need the OS banner too.
-      skipIfVisible: true,
+      skipIfVisible: n.type !== 'followed_post',
     });
   }
   if (fresh.length > MAX_BURST) {
     showPush('+' + (fresh.length - MAX_BURST) + ' 件の新着通知', {
       tag: 'notif-summary',
       url: (window.__BASE__ || '/') + 'notifications',
-      skipIfVisible: true,
+      skipIfVisible: n.type !== 'followed_post',
     });
   }
   setLastSeen(Math.max(...rawFresh.map((n) => n.createdAt || 0), previous));

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UserNotifications
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -37,6 +38,54 @@ final class AppModel: ObservableObject {
 
     @Published private(set) var blockedAccountIDs: Set<UUID> = []
     private var blockedOwner: UUID?
+    @Published private(set) var mutedAccountIDs: Set<UUID> = []
+    private var mutedOwner: UUID?
+    func isMuted(_ post: Post) -> Bool {
+        mutedOwner == session?.user.id && (mutedAccountIDs.contains(post.authorID) || post.displayAuthor?.id.map { mutedAccountIDs.contains($0) } == true)
+    }
+    func loadMutes() async {
+        guard let owner = session?.user.id else { return }
+        mutedOwner = owner
+        mutedAccountIDs = Set((UserDefaults.standard.stringArray(forKey: "spotcode.mutes." + owner.uuidString) ?? []).compactMap(UUID.init(uuidString:)))
+        do {
+            let values = try await withRefreshedSession { token in try await SupabaseService.shared.mutedAccounts(token: token) }
+            guard session?.user.id == owner else { return }
+            mutedAccountIDs = Set(values.map(\.muted_id))
+            UserDefaults.standard.set(mutedAccountIDs.map(\.uuidString), forKey: "spotcode.mutes." + owner.uuidString)
+        } catch { }
+    }
+    func setMuted(_ id: UUID, enabled: Bool) async throws {
+        guard let owner = session?.user.id, id != owner else { throw URLError(.userAuthenticationRequired) }
+        try await withRefreshedSession { token in
+            guard self.session?.user.id == owner else { throw CancellationError() }
+            try await SupabaseService.shared.muteAccount(id: id, owner: owner, enabled: enabled, token: token)
+        }
+        guard session?.user.id == owner else { throw CancellationError() }
+        mutedOwner = owner
+        if enabled { mutedAccountIDs.insert(id) } else { mutedAccountIDs.remove(id) }
+        UserDefaults.standard.set(mutedAccountIDs.map(\.uuidString), forKey: "spotcode.mutes." + owner.uuidString)
+    }
+    func setAudienceMember(_ id: UUID, kind: String, enabled: Bool) async throws {
+        guard let owner = session?.user.id else { throw URLError(.userAuthenticationRequired) }
+        try await withRefreshedSession { token in
+            guard self.session?.user.id == owner else { throw CancellationError() }
+            try await SupabaseService.shared.setAudienceMember(id: id, kind: kind, enabled: enabled, token: token)
+        }
+        let profile = try await withRefreshedSession { token in try await SupabaseService.shared.profile(id: owner, token: token) }
+        guard session?.user.id == owner else { throw CancellationError() }
+        if let profile { me = profile; cacheProfile(profile); if let session { rememberAccount(session: session, profile: profile) } }
+    }
+    func blockProfile(_ id: UUID) async throws {
+        guard let owner = session?.user.id, id != owner else { throw URLError(.userAuthenticationRequired) }
+        try await withRefreshedSession { token in
+            guard self.session?.user.id == owner else { throw CancellationError() }
+            try await SupabaseService.shared.blockAccount(id: id, postID: nil, token: token)
+        }
+        guard session?.user.id == owner else { throw CancellationError() }
+        blockedOwner = owner; blockedAccountIDs.insert(id); persistBlocks(owner: owner)
+        posts.removeAll { isBlocked($0) }
+    }
+
     func isBlocked(_ post: Post) -> Bool {
         guard blockedOwner == session?.user.id else { return false }
         return blockedAccountIDs.contains(post.authorID) || post.displayAuthor?.id.map { blockedAccountIDs.contains($0) } == true
@@ -97,6 +146,45 @@ final class AppModel: ObservableObject {
         UserDefaults.standard.set(pending, forKey: pendingKey)
         persistBlocks(owner: owner)
         await loadTimeline()
+    }
+
+    private var postNotificationWatermarks: [String: Date] = [:]
+    func pollFollowedPostNotifications() async {
+        let scope = UserDefaults.standard.string(forKey: "spotcode.notifications.followedPosts") ?? "off"
+        guard let owner = session?.user.id, ["following", "mutuals"].contains(scope) else { return }
+        let key = owner.uuidString + ":" + scope
+        guard let previous = postNotificationWatermarks[key] else {
+            postNotificationWatermarks[key] = Date(); return
+        }
+        let started = Date()
+        do {
+            let notices = try await withRefreshedSession { token in
+                guard self.session?.user.id == owner else { throw CancellationError() }
+                return try await SupabaseService.shared.followedPostNotifications(scope: scope, token: token)
+            }
+            guard !Task.isCancelled, session?.user.id == owner else { return }
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            guard !Task.isCancelled, session?.user.id == owner else { return }
+            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+                postNotificationWatermarks[key] = started; return
+            }
+            let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let fallback = ISO8601DateFormatter()
+            let fresh = notices.filter { row in
+                guard let raw = row.post.createdAt, let date = formatter.date(from: raw) ?? fallback.date(from: raw) else { return false }
+                return date > previous && !isBlocked(row.post) && !isMuted(row.post)
+            }
+            for notice in fresh.prefix(5) {
+                guard !Task.isCancelled, session?.user.id == owner else { return }
+                let content = UNMutableNotificationContent()
+                content.title = (notice.post.displayAuthor?.name ?? "ユーザー") + "さんが" + notice.district + "で投稿しました"
+                content.body = String(notice.post.body.prefix(80)); content.sound = .default
+                content.userInfo = ["spotcode_post": notice.post.id.uuidString]
+                try await center.add(UNNotificationRequest(identifier: "followed-post:" + owner.uuidString + ":" + notice.post.id.uuidString, content: content, trigger: nil))
+            }
+            postNotificationWatermarks[key] = started
+        } catch { /* Keep the watermark so a temporary failure can be retried. */ }
     }
 
     func canReadPostAudience(_ post: Post) -> Bool {
@@ -246,6 +334,7 @@ final class AppModel: ObservableObject {
             rememberAccount(session: current, profile: profile)
         }
         await loadBlocks()
+        await loadMutes()
         await loadTimeline()
     }
 
@@ -535,6 +624,7 @@ final class AppModel: ObservableObject {
 
     func loadTimeline() async {
         if blockedOwner != session?.user.id { await loadBlocks() }
+        if mutedOwner != session?.user.id { await loadMutes() }
         let generation = UUID()
         timelineGeneration = generation
         hasMoreTimelinePosts = false; isLoadingMoreTimeline = false; timelinePageError = nil
@@ -674,6 +764,7 @@ final class AppModel: ObservableObject {
 
     private func clearGithubOrganizations() {
         blockedAccountIDs = []; blockedOwner = nil
+        mutedAccountIDs = []; mutedOwner = nil
         timelineGeneration = UUID(); timelineCursor = nil; isLoading = false
         hasMoreTimelinePosts = false; isLoadingMoreTimeline = false; timelinePageError = nil
         githubOrganizations = []

@@ -47,6 +47,7 @@ struct Spot: Codable, Hashable {
     let lng: Double
     let label: String?
     let address: String?
+    var addressDetails: [String: String]? = nil
 
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lng) }
 }
@@ -307,7 +308,7 @@ struct FollowEvent: Codable, Identifiable {
 }
 
 enum NotificationKind: String, Hashable {
-    case like, comment, mention, follow, followRequest
+    case like, comment, mention, follow, followRequest, followedPost
 }
 
 struct AppNotification: Identifiable, Hashable {
