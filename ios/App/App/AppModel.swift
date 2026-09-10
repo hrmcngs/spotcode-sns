@@ -132,7 +132,7 @@ final class AppModel: ObservableObject {
             latest.removeValue(forKey: target.uuidString)
             UserDefaults.standard.set(latest, forKey: pendingKey)
         } catch {
-            if session?.user.id == owner { errorMessage = "端末ではブロックしました。運営への通知は接続回復後の次回起動時に再送します。" }
+            if session?.user.id == owner { errorMessage = NSLocalizedString("端末ではブロックしました。運営への通知は接続回復後の次回起動時に再送します。", comment: "") }
         }
     }
     func unblock(_ id: UUID) async throws {
@@ -178,7 +178,7 @@ final class AppModel: ObservableObject {
             for notice in fresh.prefix(5) {
                 guard !Task.isCancelled, session?.user.id == owner else { return }
                 let content = UNMutableNotificationContent()
-                content.title = (notice.post.displayAuthor?.name ?? "ユーザー") + "さんが" + notice.district + "で投稿しました"
+                content.title = String(format: NSLocalizedString("%@さんが%@で投稿しました", comment: ""), notice.post.displayAuthor?.name ?? NSLocalizedString("ユーザー", comment: ""), notice.district == "地区未設定" ? NSLocalizedString("地区未設定", comment: "") : notice.district)
                 content.body = String(notice.post.body.prefix(80)); content.sound = .default
                 content.userInfo = ["spotcode_post": notice.post.id.uuidString]
                 try await center.add(UNNotificationRequest(identifier: "followed-post:" + owner.uuidString + ":" + notice.post.id.uuidString, content: content, trigger: nil))
@@ -211,7 +211,7 @@ final class AppModel: ObservableObject {
 
     func syncGithubOrganizations(organizationID: Int64? = nil, includeRepositories: Bool = false) async throws -> GitHubOrganizationResult {
         guard let owner = session?.user.id else {
-            throw NSError(domain: "GitHub", code: 401, userInfo: [NSLocalizedDescriptionKey: "GitHub Organizationを連携してください"])
+            throw NSError(domain: "GitHub", code: 401, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("GitHub Organizationを連携してください", comment: "")])
         }
         let githubToken = me?.isOrg == true ? "" : await hydrateSharedPrivateIssueToken() ?? ""
         let result = try await withRefreshedSession { token in
@@ -356,7 +356,7 @@ final class AppModel: ObservableObject {
                 throw NSError(
                     domain: "SpotcodeAuth",
                     code: 401,
-                    userInfo: [NSLocalizedDescriptionKey: "ログインの有効期限が切れました。もう一度ログインしてください。"]
+                    userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("ログインの有効期限が切れました。もう一度ログインしてください。", comment: "")]
                 )
             }
         }
@@ -413,12 +413,12 @@ final class AppModel: ObservableObject {
 
     func verifyMFA(code: String) async -> Bool {
         guard let pending = pendingMFASession, let factorID = pendingMFAFactorID else {
-            authenticationError = "確認中の2段階認証がありません。"
+            authenticationError = NSLocalizedString("確認中の2段階認証がありません。", comment: "")
             return false
         }
         let value = code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard value.range(of: "^[0-9]{6}$", options: .regularExpression) != nil else {
-            authenticationError = "6桁の確認コードを入力してください。"
+            authenticationError = NSLocalizedString("6桁の確認コードを入力してください。", comment: "")
             return false
         }
         do {
@@ -430,7 +430,7 @@ final class AppModel: ObservableObject {
             authenticationError = nil
             return true
         } catch {
-            authenticationError = "確認コードが違うか、有効期限が切れています。"
+            authenticationError = NSLocalizedString("確認コードが違うか、有効期限が切れています。", comment: "")
             return false
         }
     }
@@ -443,41 +443,41 @@ final class AppModel: ObservableObject {
             for key in ["message", "error_description", "error"] {
                 if let message = json[key] as? String, !message.isEmpty {
                     if nsError.code == 400 || nsError.code == 401 {
-                        return "メールアドレス／ログイン名、またはパスワードが正しくありません。"
+                        return NSLocalizedString("メールアドレス／ログイン名、またはパスワードが正しくありません。", comment: "")
                     }
                     return message
                 }
             }
         }
         if nsError.code == 400 || nsError.code == 401 {
-            return "メールアドレス／ログイン名、またはパスワードが正しくありません。"
+            return NSLocalizedString("メールアドレス／ログイン名、またはパスワードが正しくありません。", comment: "")
         }
         if let urlError = error as? URLError {
             switch urlError.code {
             case .notConnectedToInternet, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
-                return "サーバーに接続できません。通信状態を確認して、もう一度お試しください。"
+                return NSLocalizedString("サーバーに接続できません。通信状態を確認して、もう一度お試しください。", comment: "")
             case .timedOut:
-                return "ログイン処理がタイムアウトしました。もう一度お試しください。"
+                return NSLocalizedString("ログイン処理がタイムアウトしました。もう一度お試しください。", comment: "")
             default: break
             }
         }
         if error is DecodingError {
-            return "ログイン情報の読み込みに失敗しました。アプリを最新版に更新して、もう一度お試しください。"
+            return NSLocalizedString("ログイン情報の読み込みに失敗しました。アプリを最新版に更新して、もう一度お試しください。", comment: "")
         }
-        return raw.isEmpty ? "ログインできませんでした。もう一度お試しください。" : raw
+        return raw.isEmpty ? NSLocalizedString("ログインできませんでした。もう一度お試しください。", comment: "") : raw
     }
 
     private func finishSignIn(_ value: AuthSession) async throws {
             let profile: Profile
             do {
                 guard let loaded = try await SupabaseService.shared.profile(id: value.user.id, token: value.accessToken) else {
-                    authenticationError = "このアカウントのプロフィールが見つかりません。"
+                    authenticationError = NSLocalizedString("このアカウントのプロフィールが見つかりません。", comment: "")
                     throw URLError(.userAuthenticationRequired)
                 }
                 profile = loaded
             } catch {
                 if authenticationError == nil {
-                    authenticationError = "ログインは確認できましたが、プロフィールを読み込めませんでした。"
+                    authenticationError = NSLocalizedString("ログインは確認できましたが、プロフィールを読み込めませんでした。", comment: "")
                 }
                 throw error
             }
@@ -544,7 +544,7 @@ final class AppModel: ObservableObject {
             } catch where Self.isExpiredSessionError(error) {
                 throw NSError(
                     domain: "SpotcodeAuth", code: 401,
-                    userInfo: [NSLocalizedDescriptionKey: "ログインセッションが無効になりました。もう一度ログインしてください。"]
+                    userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("ログインセッションが無効になりました。もう一度ログインしてください。", comment: "")]
                 )
             }
         }
@@ -571,7 +571,7 @@ final class AppModel: ObservableObject {
         guard let data = KeychainStore.load(account: savedSessionPrefix + id.uuidString),
               var next = try? JSONDecoder().decode(AuthSession.self, from: data) else {
             forgetAccount(id)
-            errorMessage = "保存済みのログイン情報が見つかりません。もう一度ログインしてください。"
+            errorMessage = NSLocalizedString("保存済みのログイン情報が見つかりません。もう一度ログインしてください。", comment: "")
             return false
         }
         do {
@@ -594,14 +594,14 @@ final class AppModel: ObservableObject {
             await loadTimeline()
             return true
         } catch {
-            errorMessage = "アカウントを切り替えられませんでした。もう一度ログインしてください。\n\(error.localizedDescription)"
+            errorMessage = String(format: NSLocalizedString("アカウントを切り替えられませんでした。もう一度ログインしてください。\n%@", comment: ""), error.localizedDescription)
             return false
         }
     }
 
     func switchToOfficial() async -> Bool {
         guard me?.isAdmin == true || me?.isOperator == true, let token = session?.accessToken else {
-            errorMessage = "公式アカウントは管理者または運営者のみ利用できます。"
+            errorMessage = NSLocalizedString("公式アカウントは管理者または運営者のみ利用できます。", comment: "")
             return false
         }
         do {
@@ -612,7 +612,7 @@ final class AppModel: ObservableObject {
             isPostingAsOfficial = true
             return true
         } catch {
-            errorMessage = "公式アカウントへ切り替えられませんでした。\n\(error.localizedDescription)"
+            errorMessage = String(format: NSLocalizedString("公式アカウントへ切り替えられませんでした。\n%@", comment: ""), error.localizedDescription)
             return false
         }
     }
@@ -661,7 +661,7 @@ final class AppModel: ObservableObject {
             timelineCursor = page.last
             hasMoreTimelinePosts = page.count == 24 && page.last?.createdAt != nil
         } catch {
-            if generation == timelineGeneration { timelinePageError = "続きを取得できませんでした。再試行してください。" }
+            if generation == timelineGeneration { timelinePageError = NSLocalizedString("続きを取得できませんでした。再試行してください。", comment: "") }
         }
     }
 
@@ -722,7 +722,7 @@ final class AppModel: ObservableObject {
         guard let session else { return false }
         let editingOfficial = isPostingAsOfficial
         if editingOfficial && me?.isAdmin != true && me?.isOperator != true {
-            errorMessage = "公式プロフィールは管理者または運営者のみ編集できます。"
+            errorMessage = NSLocalizedString("公式プロフィールは管理者または運営者のみ編集できます。", comment: "")
             return false
         }
         guard let id = (editingOfficial ? officialProfile?.id : me?.id) else { return false }
@@ -738,7 +738,7 @@ final class AppModel: ObservableObject {
             return true
         } catch {
             if editingOfficial {
-                errorMessage = "公式プロフィールを保存できませんでした。Supabase SQL Editorで docs/supabase-schema.sql の Stage 32 を実行してください。\n\(error.localizedDescription)"
+                errorMessage = String(format: NSLocalizedString("公式プロフィールを保存できませんでした。Supabase SQL Editorで docs/supabase-schema.sql の Stage 32 を実行してください。\n%@", comment: ""), error.localizedDescription)
             } else {
                 errorMessage = error.localizedDescription
             }

@@ -87,7 +87,7 @@ actor SupabaseService {
         let isAuthRequest = path.hasPrefix("auth/v1/")
         let (data, response) = try await data(for: request, retryable: method == "GET" || method == "HEAD" || isAuthRequest)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let message = String(data: data, encoding: .utf8) ?? "通信エラー"
+            let message = String(data: data, encoding: .utf8) ?? NSLocalizedString("通信エラー", comment: "")
             if (response as? HTTPURLResponse)?.statusCode == 400,
                let fallback = Self.legacyOrganizationPath(path, error: message) {
                 return try await self.request(fallback, method: method, token: token, body: body,
@@ -118,7 +118,7 @@ actor SupabaseService {
         probe.setValue(key, forHTTPHeaderField: "apikey")
         let (data, response) = try await data(for: probe, retryable: true)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let message = String(data: data, encoding: .utf8) ?? "接続できませんでした。"
+            let message = String(data: data, encoding: .utf8) ?? NSLocalizedString("接続できませんでした。", comment: "")
             throw NSError(domain: "Supabase", code: (response as? HTTPURLResponse)?.statusCode ?? -1,
                           userInfo: [NSLocalizedDescriptionKey: message])
         }
@@ -304,7 +304,7 @@ actor SupabaseService {
                     "rest/v1/posts?select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
                     method: "POST", token: token, body: body, preferRepresentation: true
                 )
-                guard let post = rows.first else { throw NSError(domain: "Supabase", code: -2, userInfo: [NSLocalizedDescriptionKey: "投稿結果が空です"]) }
+                guard let post = rows.first else { throw NSError(domain: "Supabase", code: -2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("投稿結果が空です", comment: "")]) }
                 return post
             } catch {
                 guard removeMissingPostMetadata(from: error) else { throw error }
@@ -333,7 +333,7 @@ actor SupabaseService {
                     "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
                     method: "PATCH", token: token, body: body, preferRepresentation: true
                 )
-                guard let post = rows.first else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を編集できません"]) }
+                guard let post = rows.first else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("この投稿を編集できません", comment: "")]) }
                 return post
             } catch {
                 guard removeMissingPostMetadata(from: error) else { throw error }
@@ -356,7 +356,7 @@ actor SupabaseService {
             "rest/v1/posts?id=eq.\(id.uuidString)&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)",
             method: "DELETE", token: token, preferRepresentation: true
         )
-        guard !rows.isEmpty else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: "この投稿を削除できません"]) }
+        guard !rows.isEmpty else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("この投稿を削除できません", comment: "")]) }
     }
 
     struct BlockedAccount: Decodable, Identifiable {
@@ -461,7 +461,7 @@ actor SupabaseService {
         let (payload, response) = try await data(for: request, retryable: true)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else {
-            let message = status == 401 ? "GitHub認証が無効です。GitHubを再認証してください。" : "GitHubのリポジトリを取得できません。OrganizationのOAuth許可・SSO、またはAPIの利用制限を確認してください。"
+            let message = status == 401 ? NSLocalizedString("GitHub認証が無効です。GitHubを再認証してください。", comment: "") : NSLocalizedString("GitHubのリポジトリを取得できません。OrganizationのOAuth許可・SSO、またはAPIの利用制限を確認してください。", comment: "")
             throw NSError(domain: "GitHubRepositories", code: status, userInfo: [NSLocalizedDescriptionKey: message])
         }
         return try decoder.decode(T.self, from: payload)
@@ -470,7 +470,7 @@ actor SupabaseService {
     func authorizedGithubRepositories(handle: String, githubToken: String) async throws -> [Repository] {
         let user: GitHubRepositoryOwner = try await githubRepositoryRequest("/user", githubToken: githubToken)
         guard user.login.lowercased() == handle.lowercased() else {
-            throw NSError(domain: "GitHubRepositories", code: 401, userInfo: [NSLocalizedDescriptionKey: "プロフィールに連携したGitHubアカウントで再認証してください。"])
+            throw NSError(domain: "GitHubRepositories", code: 401, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("プロフィールに連携したGitHubアカウントで再認証してください。", comment: "")])
         }
         var repositories: [Int: Repository] = [:]
         for page in 1...100 {
@@ -597,7 +597,7 @@ actor SupabaseService {
               let identity = user.identities?.first(where: { $0.provider == "github" }),
               let handle = identity.identity_data?.user_name ?? identity.identity_data?.preferred_username,
               !handle.isEmpty else {
-            throw NSError(domain: "GitHubOAuth", code: 401, userInfo: [NSLocalizedDescriptionKey: "GitHubの連携を確認できませんでした。もう一度連携してください。"])
+            throw NSError(domain: "GitHubOAuth", code: 401, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("GitHubの連携を確認できませんでした。もう一度連携してください。", comment: "")])
         }
         let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(userID.uuidString)", method: "PATCH", token: token,
             body: JSONSerialization.data(withJSONObject: ["github_handle": handle, "github_verified": true, "github_verify_token": NSNull()]), preferRepresentation: true)
@@ -732,7 +732,7 @@ actor SupabaseService {
         result += try await followedPostsResult.compactMap { row in
             guard let actor = row.post.displayAuthor else { return nil }
             return AppNotification(id: "followed-post:\(row.post.id.uuidString)", kind: .followedPost, actor: actor,
-                createdAt: row.post.createdAt, post: row.post, context: row.district + "で投稿しました", followStatus: nil)
+                createdAt: row.post.createdAt, post: row.post, context: String(format: NSLocalizedString("%@で投稿しました", comment: ""), row.district == "地区未設定" ? NSLocalizedString("地区未設定", comment: "") : row.district), followStatus: nil)
         }
         return Array(result.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.prefix(30))
     }

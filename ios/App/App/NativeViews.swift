@@ -496,7 +496,7 @@ private struct InlineComposer: View {
                         }}
                     }
                 }
-                if let poll { Label("投票: \(poll.question)", systemImage: "chart.bar").font(.caption).foregroundColor(SpotcodeTheme.accent) }
+                if let poll { Label(String(format: NSLocalizedString("投票: %@", comment: ""), poll.question), systemImage: "chart.bar").font(.caption).foregroundColor(SpotcodeTheme.accent) }
                 if horizontalSizeClass == .regular {
                     HStack { composerTools; Spacer(); composerActions }
                 } else {
@@ -507,7 +507,7 @@ private struct InlineComposer: View {
                     HStack {
                         Text("下書きを復元しました")
                         Spacer()
-                        Button("破棄") { draft = ""; showDraftNotice = false }.foregroundColor(SpotcodeTheme.muted)
+                        Button(NSLocalizedString("破棄", comment: "")) { draft = ""; showDraftNotice = false }.foregroundColor(SpotcodeTheme.muted)
                     }.padding(.horizontal, 12).padding(.vertical, 11)
                      .background(Color(red: 18/255, green: 42/255, blue: 58/255))
                      .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.accent.opacity(0.45)))
@@ -540,7 +540,7 @@ private struct InlineComposer: View {
 
     private var locationChip: some View {
         Button { showLocationPicker = true } label: {
-            ComposerChip(icon: "mappin", title: selectedSpot?.label ?? "場所を追加", active: selectedSpot != nil)
+            ComposerChip(icon: "mappin", title: selectedSpot?.label ?? NSLocalizedString("場所を追加", comment: ""), active: selectedSpot != nil)
         }
     }
     private var linkChip: some View { Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加", active: showLink) } }
@@ -562,7 +562,7 @@ private struct InlineComposer: View {
             Button("下書き保存") { showDraftNotice = true }
                 .font(.body.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, 10)
                 .overlay(Capsule().stroke(SpotcodeTheme.border))
-            Button(sending ? "送信中…" : "Push") { publish() }
+            Button(sending ? NSLocalizedString("送信中…", comment: "") : "Push") { publish() }
                 .font(.body.weight(.bold)).padding(.horizontal, 28).padding(.vertical, 11)
                 .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending || model.session == nil)
@@ -582,7 +582,7 @@ private struct InlineComposer: View {
     }
     private func insertCodeBlock() {
         if !draft.isEmpty && !draft.hasSuffix("\n") { draft += "\n" }
-        draft += "```\nコードを入力\n```\n"
+        draft += NSLocalizedString("```\nコードを入力\n```\n", comment: "")
         editorFocused = true
     }
 
@@ -649,7 +649,7 @@ private struct PostKindPicker: View {
             }
         } label: {
             ComposerChip(icon: kind == "bug" ? "ladybug" : "sparkles",
-                         title: kind == "bug" ? "バグ" : kind == "idea" ? "アイデア" : "投稿タグ",
+                         title: kind == "bug" ? NSLocalizedString("バグ", comment: "") : kind == "idea" ? NSLocalizedString("アイデア", comment: "") : NSLocalizedString("投稿タグ", comment: ""),
                          active: kind != nil)
         }
     }
@@ -686,7 +686,7 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
     func clear() { spot = nil }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let coordinate = locations.last?.coordinate else { return }
-        spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude, label: "現在地", address: nil)
+        spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude, label: NSLocalizedString("現在地", comment: ""), address: nil)
     }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -893,7 +893,7 @@ private struct LocationPickerSheet: View {
     @State private var coordinate: CLLocationCoordinate2D?
     @State private var currentCoordinate: CLLocationCoordinate2D?
     @State private var label = ""
-    @State private var address = "現在地を取得すると表示されます"
+    @State private var address = NSLocalizedString("現在地を取得すると表示されます", comment: "")
     @State private var district = ""
     @State private var locating = false
     @State private var mapRegion = MKCoordinateRegion(center: .init(latitude: 35.681236, longitude: 139.767125), span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
@@ -948,7 +948,7 @@ private struct LocationPickerSheet: View {
                     mapRegion = .init(center: coordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
                 }
                 label = spot?.label ?? ""
-                address = spot?.address ?? "現在地を取得すると表示されます"
+                address = spot?.address ?? NSLocalizedString("現在地を取得すると表示されます", comment: "")
                 locating = true
                 location.request()
             }
@@ -967,18 +967,18 @@ private struct LocationPickerSheet: View {
     }
 
     private var statusText: String {
-        if developerMode && model.me?.isAdmin == true { return "開発者モード: 地図上の任意の場所を選択できます。" }
-        if locating { return "現在地を取得中… 取れるまで投稿はできません。" }
-        if adjustmentDenied { return "現在地から300mを超えています。半径300m以内を選んでください。" }
-        if coordinate != nil { return "現在地を基準に、地図タップで半径300m以内のポイントを調整できます。" }
-        return "「現在地を使う」を押して場所を取得してください。"
+        if developerMode && model.me?.isAdmin == true { return NSLocalizedString("開発者モード: 地図上の任意の場所を選択できます。", comment: "") }
+        if locating { return NSLocalizedString("現在地を取得中… 取れるまで投稿はできません。", comment: "") }
+        if adjustmentDenied { return NSLocalizedString("現在地から300mを超えています。半径300m以内を選んでください。", comment: "") }
+        if coordinate != nil { return NSLocalizedString("現在地を基準に、地図タップで半径300m以内のポイントを調整できます。", comment: "") }
+        return NSLocalizedString("「現在地を使う」を押して場所を取得してください。", comment: "")
     }
     private func confirm() {
         guard let coordinate else { return }
         let resolvedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
         spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude,
-                    label: resolvedLabel.isEmpty ? "選択した場所" : resolvedLabel,
-                    address: address == "現在地を取得すると表示されます" ? nil : address)
+                    label: resolvedLabel.isEmpty ? NSLocalizedString("選択した場所", comment: "") : resolvedLabel,
+                    address: address == NSLocalizedString("現在地を取得すると表示されます", comment: "") ? nil : address)
         if !district.isEmpty { spot?.addressDetails = ["city": district] }
         isPresented = false
     }
@@ -1177,7 +1177,7 @@ Menu {
                     HStack(spacing: 6) {
                         if let spot = post.spot {
                             Button { showSpotMap = true } label: {
-                                PostMetadataBadge(icon: "mappin", text: spot.label ?? spot.address ?? "選択した場所", color: SpotcodeTheme.accent)
+                                PostMetadataBadge(icon: "mappin", text: spot.label ?? spot.address ?? NSLocalizedString("選択した場所", comment: ""), color: SpotcodeTheme.accent)
                             }.buttonStyle(.plain)
                         }
                         if post.kind == "idea" { PostMetadataBadge(icon: "sparkles", text: "アイデア", color: SpotcodeTheme.warning) }
@@ -1306,14 +1306,14 @@ Menu {
 
     private func visibilityBadge(_ value: String) -> (icon: String, text: String) {
         switch value {
-        case "public": return ("globe", "全員に公開")
-        case "only_me": return ("lock", "自分だけ")
-        case "github_org": return ("building.2", "GitHub Organizationのみ")
-        case "mutuals": return ("arrow.2.squarepath", "相互フォロー")
-        case "following": return ("person.badge.plus", "フォロー中")
-        case "friends": return ("heart", "親しい友達")
-        case "org": return ("building.2", "同じ組織")
-        default: return ("lock", "限定公開")
+        case "public": return ("globe", NSLocalizedString("全員に公開", comment: ""))
+        case "only_me": return ("lock", NSLocalizedString("自分だけ", comment: ""))
+        case "github_org": return ("building.2", NSLocalizedString("GitHub Organizationのみ", comment: ""))
+        case "mutuals": return ("arrow.2.squarepath", NSLocalizedString("相互フォロー", comment: ""))
+        case "following": return ("person.badge.plus", NSLocalizedString("フォロー中", comment: ""))
+        case "friends": return ("heart", NSLocalizedString("親しい友達", comment: ""))
+        case "org": return ("building.2", NSLocalizedString("同じ組織", comment: ""))
+        default: return ("lock", NSLocalizedString("限定公開", comment: ""))
         }
     }
 
@@ -1329,7 +1329,7 @@ Menu {
 
     private func toggleInteraction(_ table: String) {
         guard let token = model.session?.accessToken, let userID = model.me?.id else {
-            model.errorMessage = "ログインしてください"
+            model.errorMessage = NSLocalizedString("ログインしてください", comment: "")
             return
         }
         guard !interactionInProgress.contains(table) else { return }
@@ -1396,7 +1396,7 @@ private struct ReportPostView: View {
 
     private func submit() {
         guard let token = model.session?.accessToken, let reporterID = model.me?.id else {
-            model.errorMessage = "ログインしてください"
+            model.errorMessage = NSLocalizedString("ログインしてください", comment: "")
             return
         }
         submitting = true
@@ -1607,7 +1607,7 @@ struct ComposeView: View {
                     VStack(alignment: .leading, spacing: 9) {
                         HStack(spacing: 8) {
                             Button { showLocationPicker = true } label: {
-                                ComposerChip(icon: "mappin", title: selectedSpot?.label ?? "場所を追加", active: selectedSpot != nil)
+                                ComposerChip(icon: "mappin", title: selectedSpot?.label ?? NSLocalizedString("場所を追加", comment: ""), active: selectedSpot != nil)
                             }
                             Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加", active: showLink) }
                         }
@@ -1647,7 +1647,7 @@ struct ComposeView: View {
                             }
                         }
                     }
-                    if let poll { Label("投票: \(poll.question)", systemImage: "chart.bar").foregroundColor(SpotcodeTheme.accent) }
+                    if let poll { Label(String(format: NSLocalizedString("投票: %@", comment: ""), poll.question), systemImage: "chart.bar").foregroundColor(SpotcodeTheme.accent) }
 
                     HStack(spacing: 28) {
                         Button { showPhotoPicker = true } label: { Image(systemName: "photo") }
@@ -1678,7 +1678,7 @@ struct ComposeView: View {
 
     private func insertCodeBlock() {
         if !bodyText.isEmpty && !bodyText.hasSuffix("\n") { bodyText += "\n" }
-        bodyText += "```\nコードを入力\n```\n"
+        bodyText += NSLocalizedString("```\nコードを入力\n```\n", comment: "")
         editorFocused = true
     }
 
@@ -1828,7 +1828,7 @@ private final class PostMapAnnotation: NSObject, MKAnnotation {
     var title: String? { post.spot?.label ?? post.displayAuthor?.name ?? "Spot" }
     // Never expose the protected post body in an annotation callout.
     // PostDetailView applies the 100m gate after the user opens it.
-    var subtitle: String? { "この場所の投稿" }
+    var subtitle: String? { NSLocalizedString("この場所の投稿", comment: "") }
     init(post: Post, coordinate: CLLocationCoordinate2D) { self.post = post; self.coordinate = coordinate }
 }
 
@@ -1898,7 +1898,7 @@ struct RepositoriesView: View {
             if posts.isEmpty {
                 Text("関連投稿はありません").font(.caption).foregroundColor(SpotcodeTheme.muted)
             } else {
-                Text("関連投稿 \(posts.count)件").font(.caption).fontWeight(.semibold).foregroundColor(SpotcodeTheme.muted)
+                Text(String(format: NSLocalizedString("関連投稿 %lld件", comment: ""), Int64(posts.count))).font(.caption).fontWeight(.semibold).foregroundColor(SpotcodeTheme.muted)
                 ForEach(posts.prefix(4)) { post in
                     NavigationLink(destination: PostDetailView(post: post)) {
                         HStack(spacing: 8) {
@@ -2006,7 +2006,7 @@ struct NotificationsView: View {
         } catch {
             guard !Task.isCancelled, model.session?.user.id == id else { return }
             model.errorMessage = AppModel.isExpiredSessionError(error)
-                ? "ログインの有効期限が切れました。もう一度ログインしてください。"
+                ? NSLocalizedString("ログインの有効期限が切れました。もう一度ログインしてください。", comment: "")
                 : error.localizedDescription
         }
     }
@@ -2081,12 +2081,12 @@ private struct NotificationRow: View {
 
     private var label: String {
         switch notification.kind {
-        case .followedPost: return notification.context ?? "投稿しました"
-        case .like: return "あなたの投稿にいいねしました"
-        case .comment: return "あなたの投稿にコメントしました"
-        case .mention: return "あなたをメンションしました"
-        case .follow: return "あなたをフォローしました"
-        case .followRequest: return "フォローをリクエストしました"
+        case .followedPost: return notification.context ?? NSLocalizedString("投稿しました", comment: "")
+        case .like: return NSLocalizedString("あなたの投稿にいいねしました", comment: "")
+        case .comment: return NSLocalizedString("あなたの投稿にコメントしました", comment: "")
+        case .mention: return NSLocalizedString("あなたをメンションしました", comment: "")
+        case .follow: return NSLocalizedString("あなたをフォローしました", comment: "")
+        case .followRequest: return NSLocalizedString("フォローをリクエストしました", comment: "")
         }
     }
     private var icon: String {
@@ -2488,10 +2488,10 @@ private struct ProfileSocialActions: View {
     @State private var busy = false
     var body: some View {
         Group {
-            Button(model.mutedAccountIDs.contains(targetID) ? "ミュート解除" : "ミュート") {
+            Button(model.mutedAccountIDs.contains(targetID) ? NSLocalizedString("ミュート解除", comment: "") : NSLocalizedString("ミュート", comment: "")) {
                 perform { try await model.setMuted(targetID, enabled: !model.mutedAccountIDs.contains(targetID)) }
             }
-            Button(model.blockedAccountIDs.contains(targetID) ? "ブロック解除" : "ブロック", role: .destructive) {
+            Button(model.blockedAccountIDs.contains(targetID) ? NSLocalizedString("ブロック解除", comment: "") : NSLocalizedString("ブロック", comment: ""), role: .destructive) {
                 perform {
                     if model.blockedAccountIDs.contains(targetID) { try await model.unblock(targetID) }
                     else { try await model.blockProfile(targetID) }
@@ -2514,13 +2514,13 @@ private struct FollowAudienceMenu: View {
     var body: some View {
         Menu {
             Button { change("friends", enabled: !friends) } label: {
-                Label(friends ? "親しい友達から解除" : "親しい友達に登録", systemImage: friends ? "checkmark.circle.fill" : "heart")
+                Label(friends ? NSLocalizedString("親しい友達から解除", comment: "") : NSLocalizedString("親しい友達に登録", comment: ""), systemImage: friends ? "checkmark.circle.fill" : "heart")
             }
             Button { change("org", enabled: !organization) } label: {
-                Label(organization ? "同じ組織から解除" : "同じ組織に登録", systemImage: organization ? "checkmark.circle.fill" : "building.2")
+                Label(organization ? NSLocalizedString("同じ組織から解除", comment: "") : NSLocalizedString("同じ組織に登録", comment: ""), systemImage: organization ? "checkmark.circle.fill" : "building.2")
             }
             if let unfollow { Button("フォロー解除", role: .destructive, action: unfollow) }
-        } label: { Label(title ?? (friends || organization ? "登録済み" : "リストに登録"), systemImage: "person.crop.circle.badge.checkmark").font(.caption) }
+        } label: { Label(title ?? (friends || organization ? NSLocalizedString("登録済み", comment: "") : NSLocalizedString("リストに登録", comment: "")), systemImage: "person.crop.circle.badge.checkmark").font(.caption) }
         .disabled(busy)
     }
     private var friends: Bool { model.me?.closeFriends?.contains(profile.handle) == true }
@@ -2609,7 +2609,7 @@ private struct EditProfileView: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(saving ? "保存中…" : "保存") { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location, website: normalizedWebsiteValue, twitter: sanitizeSocialHandle(twitter), instagram: sanitizeSocialHandle(instagram), avatarURL: avatarURL, avatarShape: avatarShape) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving || !websiteIsValid)
+                        Button(saving ? NSLocalizedString("保存中…", comment: "") : NSLocalizedString("保存", comment: "")) { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location, website: normalizedWebsiteValue, twitter: sanitizeSocialHandle(twitter), instagram: sanitizeSocialHandle(instagram), avatarURL: avatarURL, avatarShape: avatarShape) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving || !websiteIsValid)
                     }
                 }
                 .onAppear { name = profile.name; bio = profile.bio ?? ""; location = profile.location ?? ""; website = profile.website ?? ""; twitter = profile.twitter ?? ""; instagram = profile.instagram ?? ""; avatarURL = profile.avatarURL; avatarShape = profile.avatarShape ?? "round" }
@@ -2699,7 +2699,7 @@ private struct OpenIssuesCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) { RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues").foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text("公開リポの未クローズ issue (task)").font(.caption2).foregroundColor(SpotcodeTheme.muted)
                 if !allowedIssues.isEmpty {
-                    Button(listExpanded ? "折りたたむ" : "リストを表示") { withAnimation { listExpanded.toggle() } }
+                    Button(listExpanded ? NSLocalizedString("折りたたむ", comment: "") : NSLocalizedString("リストを表示", comment: "")) { withAnimation { listExpanded.toggle() } }
                         .font(.caption2).foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 8).padding(.vertical, 3)
                         .overlay(Capsule().stroke(SpotcodeTheme.border))
                 }
@@ -2784,7 +2784,7 @@ private struct OpenIssuesCard: View {
     private func dueLabel(_ date: Date) -> String {
         let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"
         let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: Calendar.current.startOfDay(for: date)).day ?? 0
-        return "\(formatter.string(from: date)) · " + (days < 0 ? "\(-days)日超過" : "あと\(days)日")
+        return "\(formatter.string(from: date)) · " + (days < 0 ? String(format: NSLocalizedString("%lld日超過", comment: ""), Int64(-days)) : String(format: NSLocalizedString("あと%lld日", comment: ""), Int64(days)))
     }
 
     private func dueStatus(_ date: Date) -> IssueDueStatus {
@@ -3092,12 +3092,12 @@ private struct GitHubOrganizationSettings: View {
                     let result = try await model.issueOrganizationFile(login: login.trimmingCharacters(in: .whitespacesAndNewlines))
                     guard model.session?.user.id == owner else { return }
                     challenge = result
-                    message = "確認ファイルをコミットしてください。"
+                    message = NSLocalizedString("確認ファイルをコミットしてください。", comment: "")
                 } else {
                     try await model.confirmOrganizationFile()
                     guard model.session?.user.id == owner else { return }
                     challenge = nil
-                    message = "Organizationを承認しました。"
+                    message = NSLocalizedString("Organizationを承認しました。", comment: "")
                 }
             } catch {
                 guard model.session?.user.id == owner else { return }
@@ -3109,7 +3109,7 @@ private struct GitHubOrganizationSettings: View {
         busy = true
         Task {
             defer { busy = false }
-            do { try await model.syncGithubOrganizations(); message = "更新しました" }
+            do { try await model.syncGithubOrganizations(); message = NSLocalizedString("更新しました", comment: "") }
             catch { message = error.localizedDescription }
         }
     }
@@ -3126,7 +3126,7 @@ private struct GitHubConnectionPermissions: View {
             Text("Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。")
                 .font(.caption).foregroundColor(SpotcodeTheme.muted)
             if let handle = model.me?.githubHandle { Text("@" + handle).fontWeight(.semibold) }
-            Button(model.me?.githubHandle == nil ? "GitHubと連携" : "GitHubの連携権限を更新") { authorize() }.disabled(busy)
+            Button(model.me?.githubHandle == nil ? NSLocalizedString("GitHubと連携", comment: "") : NSLocalizedString("GitHubの連携権限を更新", comment: "")) { authorize() }.disabled(busy)
             if busy { ProgressView("GitHubで認証中…") }
             if !message.isEmpty { Text(message).font(.caption) }
         }
@@ -3149,7 +3149,7 @@ private struct GitHubConnectionPermissions: View {
                     model.savePrivateIssueToken(token)
                     try await model.uploadPrivateIssueToken(token)
                     try await model.syncGithubOrganizations()
-                    message = "連携するOrganizationを選んでください。"
+                    message = NSLocalizedString("連携するOrganizationを選んでください。", comment: "")
                     return
                 }
                 if model.me?.githubHandle == nil {
@@ -3157,7 +3157,7 @@ private struct GitHubConnectionPermissions: View {
                     guard model.session?.user.id == owner else { throw CancellationError() }
                     let token = try await flow.authorize(url: url)
                     try await model.completeGithubLink(owner: owner, githubToken: token)
-                    message = "GitHubと連携しました。"
+                    message = NSLocalizedString("GitHubと連携しました。", comment: "")
                     return
                 }
                 let existing = await model.hydrateSharedPrivateIssueToken()
@@ -3168,7 +3168,7 @@ private struct GitHubConnectionPermissions: View {
                 model.savePrivateIssueToken(token)
                 try await model.uploadPrivateIssueToken(token)
                 _ = try? await model.syncGithubOrganizations()
-                message = "更新しました"
+                message = NSLocalizedString("更新しました", comment: "")
             } catch { message = error.localizedDescription }
         }
     }
@@ -3218,9 +3218,9 @@ private struct AccountSettings: View {
                 Text(LocalizedStringKey(roleDescription)).foregroundColor(SpotcodeTheme.muted)
             }
             SettingsCard("アカウントの種類") {
-                SettingsStatusTag(text: isOrg ? "組織アカウント" : "個人アカウント", enabled: isOrg)
-                Text(isOrg ? "プロフィールに組織バッジを表示します。" : "個人のプログラマープロフィールとして表示します。").foregroundColor(SpotcodeTheme.muted)
-                Button(isOrg ? "個人アカウントに変更" : "組織アカウントに変更") {
+                SettingsStatusTag(text: isOrg ? NSLocalizedString("組織アカウント", comment: "") : NSLocalizedString("個人アカウント", comment: ""), enabled: isOrg)
+                Text(isOrg ? NSLocalizedString("プロフィールに組織バッジを表示します。", comment: "") : NSLocalizedString("個人のプログラマープロフィールとして表示します。", comment: "")).foregroundColor(SpotcodeTheme.muted)
+                Button(isOrg ? NSLocalizedString("個人アカウントに変更", comment: "") : NSLocalizedString("組織アカウントに変更", comment: "")) {
                     isOrg.toggle(); saveIdentity()
                 }.buttonStyle(OutlineButtonStyle(filled: !isOrg)).disabled(savingIdentity)
             }
@@ -3233,11 +3233,11 @@ private struct AccountSettings: View {
         }.sheet(isPresented: $showAddAccount) { LoginView(isPresented: $showAddAccount).environmentObject(model) }
          .onAppear { isOrg = model.me?.isOrg ?? false; organization = model.me?.organization ?? "" }
     }
-    private var roleTitle: String { model.me?.isAdmin == true ? "管理者" : (model.me?.isOperator == true ? "運営者" : "一般ユーザー") }
+    private var roleTitle: String { model.me?.isAdmin == true ? NSLocalizedString("管理者", comment: "") : (model.me?.isOperator == true ? NSLocalizedString("運営者", comment: "") : NSLocalizedString("一般ユーザー", comment: "")) }
     private var roleDescription: String {
-        if model.me?.isAdmin == true { return "すべての管理権限を持ちます。" }
-        if model.me?.isOperator == true { return "通報対応・投稿管理・ピン管理を行えます。" }
-        return "通常の投稿・フォロー・スポット機能を利用できます。"
+        if model.me?.isAdmin == true { return NSLocalizedString("すべての管理権限を持ちます。", comment: "") }
+        if model.me?.isOperator == true { return NSLocalizedString("通報対応・投稿管理・ピン管理を行えます。", comment: "") }
+        return NSLocalizedString("通常の投稿・フォロー・スポット機能を利用できます。", comment: "")
     }
     private func saveIdentity() {
         savingIdentity = true
@@ -3288,7 +3288,7 @@ private struct DeveloperSettings: View {
                     .textSelection(.enabled)
                 HStack {
                     Button("接続テスト") { testConnection() }.buttonStyle(OutlineButtonStyle())
-                    Button(showOverride ? "編集を閉じる" : "自分のSupabaseに上書き") { showOverride.toggle() }
+                    Button(showOverride ? NSLocalizedString("編集を閉じる", comment: "") : NSLocalizedString("自分のSupabaseに上書き", comment: "")) { showOverride.toggle() }
                         .buttonStyle(OutlineButtonStyle())
                 }
                 if showOverride {
@@ -3311,16 +3311,16 @@ private struct DeveloperSettings: View {
     }
 
     private var currentMode: String {
-        projectURL == SupabaseService.defaultProjectURL ? "共有プロジェクト (DEFAULT)" : "CUSTOM"
+        projectURL == SupabaseService.defaultProjectURL ? NSLocalizedString("共有プロジェクト (DEFAULT)", comment: "") : "CUSTOM"
     }
 
     private func setDevPassword() {
-        busy = true; message = "設定中…"; messageIsError = false
+        busy = true; message = NSLocalizedString("設定中…", comment: ""); messageIsError = false
         Task {
             do {
                 let session = try await model.validSession()
                 try await SupabaseService.shared.ensureDevAccount(password: password, token: session.accessToken)
-                password = ""; message = "パスワードを設定しました。"
+                password = ""; message = NSLocalizedString("パスワードを設定しました。", comment: "")
             } catch { message = error.localizedDescription; messageIsError = true }
             busy = false
         }
@@ -3328,12 +3328,12 @@ private struct DeveloperSettings: View {
 
     private func testConnection() {
         guard let normalized = validatedConnection() else { return }
-        busy = true; message = "接続を確認中…"; messageIsError = false
+        busy = true; message = NSLocalizedString("接続を確認中…", comment: ""); messageIsError = false
         Task {
             do {
                 try await SupabaseService.shared.testConnection(projectURL: normalized.0, publishableKey: normalized.1)
-                message = "接続できました。"
-            } catch { message = "接続できませんでした: \(error.localizedDescription)"; messageIsError = true }
+                message = NSLocalizedString("接続できました。", comment: "")
+            } catch { message = String(format: NSLocalizedString("接続できませんでした: %@", comment: ""), error.localizedDescription); messageIsError = true }
             busy = false
         }
     }
@@ -3347,8 +3347,8 @@ private struct DeveloperSettings: View {
                 await SupabaseService.shared.saveConnection(projectURL: normalized.0, publishableKey: normalized.1)
                 projectURL = normalized.0; publishableKey = normalized.1
                 model.signOut()
-                message = "保存しました。新しい接続先へログインしてください。"; messageIsError = false
-            } catch { message = "保存できませんでした: \(error.localizedDescription)"; messageIsError = true }
+                message = NSLocalizedString("保存しました。新しい接続先へログインしてください。", comment: ""); messageIsError = false
+            } catch { message = String(format: NSLocalizedString("保存できませんでした: %@", comment: ""), error.localizedDescription); messageIsError = true }
             busy = false
         }
     }
@@ -3359,7 +3359,7 @@ private struct DeveloperSettings: View {
             projectURL = SupabaseService.defaultProjectURL
             publishableKey = SupabaseService.defaultPublishableKey
             model.signOut()
-            message = "標準接続に戻しました。もう一度ログインしてください。"; messageIsError = false
+            message = NSLocalizedString("標準接続に戻しました。もう一度ログインしてください。", comment: ""); messageIsError = false
         }
     }
 
@@ -3367,10 +3367,10 @@ private struct DeveloperSettings: View {
         let url = projectURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let key = publishableKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let parsed = URL(string: url), parsed.scheme == "https", parsed.host?.contains(".supabase.") == true else {
-            message = "https://…supabase.co 形式のProject URLを入力してください。"; messageIsError = true; return nil
+            message = NSLocalizedString("https://…supabase.co 形式のProject URLを入力してください。", comment: ""); messageIsError = true; return nil
         }
         guard isPublicKey(key) else {
-            message = "publishable key または anon public JWT を入力してください。"; messageIsError = true; return nil
+            message = NSLocalizedString("publishable key または anon public JWT を入力してください。", comment: ""); messageIsError = true; return nil
         }
         return (url, key)
     }
@@ -3403,7 +3403,7 @@ private struct MFASettingsCard: View {
             }
             Text("ログイン時に認証アプリが生成する6桁のワンタイムパスワードを要求します。")
                 .foregroundColor(SpotcodeTheme.muted)
-            Button(factor == nil ? "2段階認証を設定する" : "2段階認証を無効にする") {
+            Button(factor == nil ? NSLocalizedString("2段階認証を設定する", comment: "") : NSLocalizedString("2段階認証を無効にする", comment: "")) {
                 if factor != nil { showDisableConfirmation = true }
                 else {
                     loading = true
@@ -3428,7 +3428,7 @@ private struct MFASettingsCard: View {
                 guard let factor else { return }
                 loading = true
                 Task {
-                    do { try await model.disableMFA(factor); self.factor = nil; message = "無効にしました" }
+                    do { try await model.disableMFA(factor); self.factor = nil; message = NSLocalizedString("無効にしました", comment: "") }
                     catch { message = error.localizedDescription }
                     loading = false
                 }
@@ -3470,11 +3470,11 @@ private struct MFAEnrollmentView: View {
                             code = String(value.filter(\.isNumber).prefix(6))
                         }
                         .spotcodeField()
-                    Button(busy ? "確認中…" : "確認して有効にする") {
+                    Button(busy ? NSLocalizedString("確認中…", comment: "") : NSLocalizedString("確認して有効にする", comment: "")) {
                         busy = true
                         Task {
                             do { try await model.confirmMFAEnrollment(enrollment, code: code); completed(); dismiss() }
-                            catch { errorMessage = "確認コードが違うか、有効期限が切れています。"; busy = false }
+                            catch { errorMessage = NSLocalizedString("確認コードが違うか、有効期限が切れています。", comment: ""); busy = false }
                         }
                     }.buttonStyle(OutlineButtonStyle(filled: true)).disabled(busy)
                     if !errorMessage.isEmpty { Text(errorMessage).foregroundColor(SpotcodeTheme.warning) }
@@ -3500,9 +3500,9 @@ private struct PrivacySettings: View {
     @State private var saving = false
     var body: some View { VStack(spacing: 18) {
         SettingsCard("アカウントの公開範囲") {
-            SettingsStatusTag(text: privateAccount ? "非公開" : "公開", enabled: privateAccount)
-            Text(privateAccount ? "承認したフォロワーだけが投稿を表示できます。" : "すべてのユーザーが投稿を表示できます。").foregroundColor(SpotcodeTheme.muted)
-            Button(privateAccount ? "公開アカウントにする" : "非公開アカウントにする") { privateAccount.toggle(); save() }
+            SettingsStatusTag(text: privateAccount ? NSLocalizedString("非公開", comment: "") : NSLocalizedString("公開", comment: ""), enabled: privateAccount)
+            Text(privateAccount ? NSLocalizedString("承認したフォロワーだけが投稿を表示できます。", comment: "") : NSLocalizedString("すべてのユーザーが投稿を表示できます。", comment: "")).foregroundColor(SpotcodeTheme.muted)
+            Button(privateAccount ? NSLocalizedString("公開アカウントにする", comment: "") : NSLocalizedString("非公開アカウントにする", comment: "")) { privateAccount.toggle(); save() }
                 .buttonStyle(OutlineButtonStyle(filled: !privateAccount)).disabled(saving)
         }
         SettingsCard("公開対象リスト") {
@@ -3555,9 +3555,9 @@ private struct DisplaySettings: View {
                 .foregroundColor(SpotcodeTheme.muted)
         }
         SettingsCard("装飾バッジの表示") {
-            SettingsStatusTag(text: hideBadges ? "非表示" : "表示", enabled: !hideBadges)
+            SettingsStatusTag(text: hideBadges ? NSLocalizedString("非表示", comment: "") : NSLocalizedString("表示", comment: ""), enabled: !hideBadges)
             Text("プロフィールや投稿の { }・言語・アイデア・WIPなどのバッジをまとめて切り替えます。").foregroundColor(SpotcodeTheme.muted)
-            Button(hideBadges ? "バッジを表示する" : "バッジを非表示にする") { hideBadges.toggle() }
+            Button(hideBadges ? NSLocalizedString("バッジを表示する", comment: "") : NSLocalizedString("バッジを非表示にする", comment: "")) { hideBadges.toggle() }
                 .buttonStyle(OutlineButtonStyle(filled: hideBadges))
         }
         issueDisplayCard
@@ -3575,7 +3575,7 @@ private struct DisplaySettings: View {
                 Text("通知が拒否されています。iPhoneの設定アプリでSpotcodeの通知を許可してください。")
                     .font(.caption).foregroundColor(SpotcodeTheme.warning)
             } else if notificationStatus != .authorized && notificationStatus != .provisional {
-                Button(requestingNotifications ? "確認中…" : "通知をONにする") { requestNotificationPermission() }
+                Button(requestingNotifications ? NSLocalizedString("確認中…", comment: "") : NSLocalizedString("通知をONにする", comment: "")) { requestNotificationPermission() }
                     .buttonStyle(OutlineButtonStyle(filled: true)).disabled(requestingNotifications)
             } else {
                 Button("iPhoneの通知設定を開く") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
@@ -3633,7 +3633,7 @@ private struct DisplaySettings: View {
                                 try await model.uploadPrivateIssueToken(token)
                                 privateIssuesEnabled = true
                                 await savePreferences()
-                                privateIssueMessage = "GitHubの非公開Issue表示を有効にしました。"
+                                privateIssueMessage = NSLocalizedString("GitHubの非公開Issue表示を有効にしました。", comment: "")
                                 await loadIssueRepositories()
                             } catch {
                                 privateIssuesEnabled = false
@@ -3659,7 +3659,7 @@ private struct DisplaySettings: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("プロフィールに Open issue (task) を表示").font(.headline)
-                Text(hideTasks ? "非表示" : "表示")
+                Text(hideTasks ? NSLocalizedString("非表示", comment: "") : NSLocalizedString("表示", comment: ""))
                     .font(.caption.bold()).foregroundColor(SpotcodeTheme.muted)
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .overlay(Capsule().stroke(SpotcodeTheme.border))
@@ -3667,7 +3667,7 @@ private struct DisplaySettings: View {
             }
             Text("プロフィールページの下に「Open issues」カード (GitHub の未クローズ issue = task 一覧) を出します。OFF にするとカード自体が消え、GitHub Search API の呼び出しもスキップします。")
                 .foregroundColor(SpotcodeTheme.muted)
-            Button(hideTasks ? "タスクを表示する" : "タスクを非表示にする") { hideTasks.toggle() }
+            Button(hideTasks ? NSLocalizedString("タスクを表示する", comment: "") : NSLocalizedString("タスクを非表示にする", comment: "")) { hideTasks.toggle() }
                 .buttonStyle(OutlineButtonStyle())
             Text("表示するリポジトリ").font(.headline)
             TextField("リポジトリ名で検索（owner/repo）", text: $issueRepositoryQuery)
@@ -3687,7 +3687,7 @@ private struct DisplaySettings: View {
                     }
                 }.frame(maxHeight: 280)
             }
-            Button(privateIssuesEnabled ? "非公開Issue表示をOFF" : "非公開Issue表示をON") {
+            Button(privateIssuesEnabled ? NSLocalizedString("非公開Issue表示をOFF", comment: "") : NSLocalizedString("非公開Issue表示をON", comment: "")) {
                 privateIssueDisplayBinding.wrappedValue.toggle()
             }
             .buttonStyle(OutlineButtonStyle())
@@ -3723,17 +3723,17 @@ private struct DisplaySettings: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(repo))
-        .accessibilityValue(Text(selected ? "選択済み" : "未選択"))
+        .accessibilityValue(Text(selected ? NSLocalizedString("選択済み", comment: "") : NSLocalizedString("未選択", comment: "")))
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     private var notificationStatusText: String {
         switch notificationStatus {
-        case .authorized, .provisional: return "通知 ON"
-        case .denied: return "通知 OFF"
-        case .notDetermined: return "未設定"
-        case .ephemeral: return "一時的に許可"
-        @unknown default: return "未設定"
+        case .authorized, .provisional: return NSLocalizedString("通知 ON", comment: "")
+        case .denied: return NSLocalizedString("通知 OFF", comment: "")
+        case .notDetermined: return NSLocalizedString("未設定", comment: "")
+        case .ephemeral: return NSLocalizedString("一時的に許可", comment: "")
+        @unknown default: return NSLocalizedString("未設定", comment: "")
         }
     }
 
@@ -3748,7 +3748,7 @@ private struct DisplaySettings: View {
             do {
                 let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
                 if granted { await MainActor.run { UIApplication.shared.registerForRemoteNotifications() } }
-            } catch { model.errorMessage = "通知を有効にできませんでした: \(error.localizedDescription)" }
+            } catch { model.errorMessage = String(format: NSLocalizedString("通知を有効にできませんでした: %@", comment: ""), error.localizedDescription) }
             await refreshNotificationStatus()
             requestingNotifications = false
         }
@@ -3853,7 +3853,7 @@ private final class GitHubPrivateIssueAuthorizer: NSObject, ASWebAuthenticationP
                       let token = Self.callbackValues(callbackURL)["provider_token"], !token.isEmpty else {
                     continuation.resume(throwing: NSError(
                         domain: "GitHubOAuth", code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: "GitHubの権限トークンを取得できませんでした。"]
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("GitHubの権限トークンを取得できませんでした。", comment: "")]
                     ))
                     return
                 }
@@ -3866,7 +3866,7 @@ private final class GitHubPrivateIssueAuthorizer: NSObject, ASWebAuthenticationP
                 webSession = nil
                 continuation.resume(throwing: NSError(
                     domain: "GitHubOAuth", code: -2,
-                    userInfo: [NSLocalizedDescriptionKey: "GitHub認証画面を開けませんでした。"]
+                    userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("GitHub認証画面を開けませんでした。", comment: "")]
                 ))
             }
         }
@@ -3915,7 +3915,7 @@ private struct SafetySettingsCard: View {
                 HStack {
                     Text(names[id] ?? id.uuidString).lineLimit(2)
                     Spacer()
-                    Button("ブロック解除") { Task { do { try await model.unblock(id) } catch { message = error.localizedDescription } } }
+                    Button(NSLocalizedString("ブロック解除", comment: "")) { Task { do { try await model.unblock(id) } catch { message = error.localizedDescription } } }
                 }
             }
             if model.me?.isAdmin == true || model.me?.isOperator == true {
@@ -4014,7 +4014,7 @@ struct LoginView: View {
                             if succeeded { isPresented = false }
                         }
                     } label: {
-                        Text(LocalizedStringKey(signing ? "確認中…" : "確認してログイン"))
+                        Text(LocalizedStringKey(signing ? NSLocalizedString("確認中…", comment: "") : NSLocalizedString("確認してログイン", comment: "")))
                             .font(.body.weight(.bold))
                             .frame(maxWidth: .infinity)
                             .padding(13)
@@ -4048,7 +4048,7 @@ struct LoginView: View {
                             .foregroundColor(SpotcodeTheme.accent)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(showsPassword ? "パスワードを隠す" : "パスワードを表示")
+                    .accessibilityLabel(showsPassword ? NSLocalizedString("パスワードを隠す", comment: "") : NSLocalizedString("パスワードを表示", comment: ""))
                 }.spotcodeField()
                 Button {
                     guard agreedToTerms else { return }
@@ -4060,7 +4060,7 @@ struct LoginView: View {
                         if succeeded { isPresented = false }
                     }
                 } label: {
-                    Text(LocalizedStringKey(signing ? "ログイン中…" : "ログイン"))
+                    Text(LocalizedStringKey(signing ? NSLocalizedString("ログイン中…", comment: "") : NSLocalizedString("ログイン", comment: "")))
                         .font(.body.weight(.bold))
                         .frame(maxWidth: .infinity)
                         .padding(13)
