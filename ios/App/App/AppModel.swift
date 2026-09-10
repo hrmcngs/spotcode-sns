@@ -137,11 +137,44 @@ final class AppModel: ObservableObject {
             guard session?.user.id == owner else { throw CancellationError() }
             if let profile { me = profile; cacheProfile(profile) }
         }
+        applyGithubOrganizations(result, owner: owner)
+        return result
+    }
+
+    func issueOrganizationFile(login: String) async throws -> SupabaseService.OrganizationFileChallenge {
+        guard let owner = session?.user.id else { throw URLError(.userAuthenticationRequired) }
+        let result = try await withRefreshedSession { token in
+            guard self.session?.user.id == owner else { throw CancellationError() }
+            return try await SupabaseService.shared.issueOrganizationFile(login: login, token: token)
+        }
+        guard session?.user.id == owner else { throw CancellationError() }
+        return result
+    }
+
+    func confirmOrganizationFile() async throws {
+        guard let owner = session?.user.id else { throw URLError(.userAuthenticationRequired) }
+        let result = try await withRefreshedSession { token in
+            guard self.session?.user.id == owner else { throw CancellationError() }
+            return try await SupabaseService.shared.confirmOrganizationFile(token: token)
+        }
+        guard session?.user.id == owner else { throw CancellationError() }
+        applyGithubOrganizations(result, owner: owner)
+        // Confirmation already saved the profile on the server. Reflect that
+        // response without making approval depend on a second network request.
+        if let linked = result.linked, var profile = me, profile.id == owner {
+            profile.githubHandle = linked.login
+            profile.githubVerified = true
+            me = profile
+            cacheProfile(profile)
+            if let session { rememberAccount(session: session, profile: profile) }
+        }
+    }
+
+    private func applyGithubOrganizations(_ result: GitHubOrganizationResult, owner: UUID) {
         githubOrganizations = result.organizations
         linkedGithubOrganization = result.linked
         githubOrganizationOwner = owner
         githubOrganizationExpiry = Date().addingTimeInterval(55 * 60)
-        return result
     }
 
     var displayProfile: Profile? { isPostingAsOfficial ? officialProfile : me }

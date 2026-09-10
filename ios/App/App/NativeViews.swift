@@ -2995,26 +2995,29 @@ private struct GitHubOrganizationSettings: View {
         }
     }
     private func perform(issue: Bool) {
+        guard !busy else { return }
+        let owner = model.session?.user.id
         busy = true
+        message = ""
         if issue { challenge = nil }
         Task {
             defer { busy = false }
             do {
-                let session = try await model.validSession()
                 if issue {
-                    let result = try await SupabaseService.shared.issueOrganizationFile(login: login.trimmingCharacters(in: .whitespacesAndNewlines), token: session.accessToken)
-                    guard model.session?.user.id == session.user.id else { return }
+                    let result = try await model.issueOrganizationFile(login: login.trimmingCharacters(in: .whitespacesAndNewlines))
+                    guard model.session?.user.id == owner else { return }
                     challenge = result
                     message = "確認ファイルをコミットしてください。"
                 } else {
-                    _ = try await SupabaseService.shared.confirmOrganizationFile(token: session.accessToken)
-                    guard model.session?.user.id == session.user.id else { return }
-                    try await model.syncGithubOrganizations()
-                    await model.bootstrap()
+                    try await model.confirmOrganizationFile()
+                    guard model.session?.user.id == owner else { return }
                     challenge = nil
                     message = "Organizationを承認しました。"
                 }
-            } catch { message = error.localizedDescription }
+            } catch {
+                guard model.session?.user.id == owner else { return }
+                message = error.localizedDescription
+            }
         }
     }
     private func synchronize() {

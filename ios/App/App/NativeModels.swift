@@ -10,8 +10,8 @@ struct Profile: Codable, Identifiable, Hashable {
     let avatarURL: String?
     let bio: String?
     let location: String?
-    let githubHandle: String?
-    let githubVerified: Bool?
+    var githubHandle: String?
+    var githubVerified: Bool?
     let website: String?
     let twitter: String?
     let instagram: String?

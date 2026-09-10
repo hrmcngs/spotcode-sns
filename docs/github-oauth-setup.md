@@ -163,6 +163,14 @@ Stage 38が未適用です。`docs/repairs/github-organization-setup.sql` の中
 
 現在の組織アカウントの連携はファイル方式です。`docs/repairs/github-organization-file-setup.sql` の中身全体をSQL Editorで実行してください（Stage 38・39・41・42を含みます）。その後 `github-organizations` FunctionとWeb/iOSを更新します。既にStage 41まで適用済みなら `docs/migrations/042-organization-file-verification.sql` のみでも構いません。
 
+確認ファイルの画面で「先にプロフィールからGitHubを連携してください」と表示される場合は、Functionが旧OAuth方式のままになっていないか確認してください。2026-09-10には、DBのStage 42は適用済みでも、稼働中のFunction（version 1）には `confirm_file` の処理が含まれていませんでした。SQLやWebの更新だけではFunctionは更新されません。リポジトリのルートで次を実行してください。
+
+```sh
+npx supabase functions deploy github-organizations --project-ref vkwdthjiyxrhskdlgexq --no-verify-jwt --use-api
+```
+
+`--no-verify-jwt` は既存設定を維持する指定です。Function内の `auth.getUser()` によるログイン確認は引き続き必須です。
+
 Organization名を入力し「確認コードを発行」を押します。例えばDrowse-Labでは、公開の `Drowse-Lab/.github` リポジトリのデフォルトブランチのルートに `spotcode-verification.txt` を追加し、表示されたコードを保存・コミットします。リポジトリが無い場合は公開で作成してください。Forkは使えません。24時間以内に「確認して承認」を押してください。
 
 コードはSpotcodeアカウント・Organizationに紐づき、再発行で旧コードが無効になります。承認後も確認ファイルを残してください。所属更新時に再確認し、失敗すると組織アカウントの確認済み所属を取り消します（既存の確認は最大1時間有効）。ファイル方式はこの専用リポジトリへコミットできることを所有確認とし、GitHubの管理者roleを証明する方式ではありません。個人メンバーの所属確認は従来のGitHub OAuthを維持します。非公開リポジトリへのアクセスには別途GitHubの権限が必要です。
