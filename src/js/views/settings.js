@@ -134,7 +134,7 @@ function privacyCard() {
 // the Organization badge on the profile page; doesn't change any RLS
 // rule (visibility is still about close_friends / org_members lists).
 function githubOrganizationCard() {
-  if (currentUser()?.isOrg) return '<section class="settings-card"><h2>GitHub Organization</h2>' +
+  if (currentUser()?.isOrg) return '<section class="settings-card" id="github-organization"><h2>GitHub Organization</h2>' +
     '<p>公開の.githubリポジトリに確認ファイルを追加して、Organizationを連携します。</p>' +
     '<label>Organization名<input id="github-org-login" placeholder="Drowse-Lab" autocapitalize="none" spellcheck="false"></label>' +
     '<button type="button" class="btn btn--ghost" id="github-org-issue">確認コードを発行</button>' +
@@ -681,6 +681,13 @@ export function renderSettings() {
 }
 
 export function bindSettings() {
+  if (currentPath() === '/settings/organization') {
+    requestAnimationFrame(() => {
+      if (currentPath() !== '/settings/organization') return;
+      document.getElementById('github-organization')?.scrollIntoView({ block: 'start' });
+      document.getElementById('github-org-login')?.focus({ preventScroll: true });
+    });
+  }
   let orgBusy = false;
   const syncOrg = async (options = {}) => {
     if (orgBusy) return;

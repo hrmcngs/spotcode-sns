@@ -27,6 +27,15 @@ function attr(s) {
 // into the profile row. This modal just needs to expose "link" and
 // (when already linked) "unlink" affordances.
 function githubVerifyBlock(u) {
+  if (u.isOrg) {
+    const linked = u.github?.verified && u.github?.handle;
+    return '<div class="verify-row' + (linked ? ' verify-row--ok' : '') + '" id="verify-row">' +
+      '<div class="verify-row__title">' + icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
+      (linked ? '@' + attr(u.github.handle) + ' と連携済み ✓' : 'GitHub Organization と連携') + '</div>' +
+      '<p class="verify-row__hint">組織アカウントは、Organizationが所有する公開の .github リポジトリに確認ファイルを追加して連携します。設定画面で確認コードを発行し、ファイルを保存してから承認してください。</p>' +
+      '<div class="edit-actions"><button type="button" class="btn btn--primary btn--sm" id="verify-organization">' +
+      (linked ? 'Organizationの連携を確認・変更' : 'Organizationと連携する') + '</button></div></div>';
+  }
   if (u.github?.verified && u.github?.handle) {
     return (
       '<div class="verify-row verify-row--ok" id="verify-row">' +
@@ -36,7 +45,6 @@ function githubVerifyBlock(u) {
         '</div>' +
         '<div class="edit-actions">' +
           '<button type="button" class="btn btn--ghost btn--sm" id="verify-permissions">GitHubの連携権限を更新</button>' +
-          (u.isOrg ? '<button type="button" class="btn btn--ghost btn--sm" id="verify-organization">Organizationと連携</button>' : '') +
           '<button type="button" class="btn btn--ghost btn--sm" id="verify-unlink">連携を解除</button>' +
           '<span class="verify-row__status" id="verify-status"></span>' +
         '</div>' +
@@ -232,7 +240,7 @@ export function openEditProfile(profile) {
         // Redirects the browser away — after return, syncGithubIdentity()
         // in main.js writes the profile row and refreshProfile() picks
         // it up so the next modal open shows the linked state.
-        if (currentUser()?.isOrg) { close(); navigate('/settings/account'); }
+        if (currentUser()?.isOrg) { close(); navigate('/settings/organization'); }
         else await linkGithub(window.location.href);
       } catch (ex) {
         showVerify(ex.message, 'bad');
@@ -244,14 +252,14 @@ export function openEditProfile(profile) {
       button.disabled = true;
       showVerify('GitHub に移動します…');
       try {
-        if (currentUser()?.isOrg) { close(); navigate('/settings/account'); }
+        if (currentUser()?.isOrg) { close(); navigate('/settings/organization'); }
         else await linkGithubForOrganizations(window.location.href);
       }
       catch (ex) { showVerify(ex.message, 'bad'); button.disabled = false; }
     });
     document.getElementById('verify-organization')?.addEventListener('click', () => {
       close();
-      navigate('/settings/account');
+      navigate('/settings/organization');
     });
     vUnlink?.addEventListener('click', async () => {
       if (!confirm('GitHub との連携を解除しますか？ アイコンと本人確認済みバッジが消えます。')) return;
