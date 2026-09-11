@@ -26,6 +26,23 @@ npm run start:electron
 npm run cap:open:ios   
 ```
 
+## macOS アプリ
+
+Web版と共通の画面をElectronアプリとして利用できます。macOS上で次を実行します。
+
+```bash
+npm ci
+npm run start:electron                                  # 開発用に起動
+npm run build:electron:mac -- --publish never            # Apple Silicon / Intel用を生成
+```
+
+生成先は `dist/` です。Apple Silicon（Mシリーズ）は `spotcode-sns-<version>-arm64.dmg`、
+Intel Macは `spotcode-sns-<version>.dmg` を開き、アプリをApplicationsフォルダへドラッグします。
+各アーキテクチャのZIPも生成されます。
+
+現在の設定は署名・公証なしのローカル検証用です。一般配布にはApple Developerの署名・公証設定が必要です。
+GitHubへの公開は上記コマンドでは行われません。
+
 ## 構成
 
 ```
