@@ -419,3 +419,25 @@
 "接続できませんでした: %@" = "Could not connect: %@";
 "保存できませんでした: %@" = "Could not save: %@";
 "通知を有効にできませんでした: %@" = "Could not enable notifications: %@";
+
+// Native account registration
+"signup.create" = "Create account";
+"signup.name" = "Display name";
+"signup.handle" = "Username";
+"signup.handle_hint" = "2–20 letters, numbers, underscores, or hyphens; cannot start with a hyphen.";
+"signup.email" = "Email address";
+"signup.password" = "Password (at least 8 characters)";
+"signup.creating" = "Creating account…";
+"signup.back_to_login" = "Back to sign in";
+"signup.confirm_email" = "Check your email. Follow the confirmation link, then return here to sign in. If you already have an account, use the sign-in screen.";
+"signup.invalid_email" = "Enter a valid email address.";
+"signup.short_password" = "Use a password with at least 8 characters.";
+"signup.invalid_handle" = "Use 2–20 letters, numbers, underscores, or hyphens for your username; do not start with a hyphen.";
+"signup.invalid_name" = "Enter a display name of 1–40 characters.";
+"signup.failed" = "Could not complete registration. Check your details and connection.";
+"signup.created_sign_in" = "Your account was created, but the profile could not be loaded. Return to the sign-in screen and sign in.";
+"signup.handle_taken" = "This username is taken. Choose another one.";
+"signup.rate_limit" = "Too many registration attempts. Please try again later.";
+"signup.email_taken" = "This email is already registered. Use the sign-in screen.";
+"signup.disabled" = "New account registration is currently unavailable.";
+"signup.weak_password" = "Choose a stronger password.";

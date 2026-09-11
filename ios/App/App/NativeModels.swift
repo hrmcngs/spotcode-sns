@@ -42,12 +42,26 @@ struct Profile: Codable, Identifiable, Hashable {
     }
 }
 
+// Web posts store address text alongside a boolean geocoding flag.
+// Keep their JSON types intact when reading and re-saving a post.
+struct SpotAddressDetails: Codable, Hashable {
+    var city: String? = nil
+    var full: String? = nil
+    var road: String? = nil
+    var ward: String? = nil
+    var chome: String? = nil
+    var postcode: String? = nil
+    var prefecture: String? = nil
+    var houseNumber: String? = nil
+    var missingHouseNumber: Bool? = nil
+}
+
 struct Spot: Codable, Hashable {
     let lat: Double
     let lng: Double
     let label: String?
     let address: String?
-    var addressDetails: [String: String]? = nil
+    var addressDetails: SpotAddressDetails? = nil
 
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lng) }
 }
@@ -381,4 +395,47 @@ struct GitHubOrganizationResult: Codable {
     let organizations: [GitHubOrganization]
     let linked: GitHubOrganizationLink?
     let repositories: [Repository]?
+}
+
+// The signup endpoint returns a session immediately, or a user awaiting email confirmation.
+struct SignupResponse: Decodable {
+    let access_token: String?
+    let refresh_token: String?
+    let expires_at: Int?
+    let user: AuthUser?
+    let id: UUID?
+
+    var session: AuthSession? {
+        guard let access_token, !access_token.isEmpty,
+              let refresh_token, !refresh_token.isEmpty, let user else { return nil }
+        return AuthSession(accessToken: access_token, refreshToken: refresh_token, expiresAt: expires_at, user: user)
+    }
+}
+
+struct SignupInput: Encodable {
+    struct Metadata: Encodable { let handle: String; let name: String }
+    let email: String
+    let password: String
+    let data: Metadata
+
+    init(email: String, password: String, handle: String, name: String) throws {
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let handle = handle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard email.range(of: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$", options: .regularExpression) != nil,
+              !email.hasSuffix("@spotcode-sns.local") else {
+            throw Self.failure("signup.invalid_email")
+        }
+        guard password.count >= 8 else { throw Self.failure("signup.short_password") }
+        guard handle.range(of: "^[a-z0-9_][a-z0-9_-]{1,19}$", options: .regularExpression) != nil else {
+            throw Self.failure("signup.invalid_handle")
+        }
+        guard !name.isEmpty, name.count <= 40 else { throw Self.failure("signup.invalid_name") }
+        self.email = email; self.password = password
+        self.data = Metadata(handle: handle, name: name)
+    }
+
+    private static func failure(_ key: String) -> NSError {
+        NSError(domain: "Signup", code: 0, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(key, comment: "")])
+    }
 }

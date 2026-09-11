@@ -433,3 +433,25 @@
 "接続できませんでした: %@" = "接続できませんでした: %@";
 "保存できませんでした: %@" = "保存できませんでした: %@";
 "通知を有効にできませんでした: %@" = "通知を有効にできませんでした: %@";
+
+// Native account registration
+"signup.create" = "アカウントを作成";
+"signup.name" = "表示名";
+"signup.handle" = "ユーザー名";
+"signup.handle_hint" = "半角英数字・_・-の2〜20文字（先頭の-は不可）";
+"signup.email" = "メールアドレス";
+"signup.password" = "パスワード（8文字以上）";
+"signup.creating" = "作成中…";
+"signup.back_to_login" = "ログインに戻る";
+"signup.confirm_email" = "確認メールをご確認ください。メール内のリンクで確認を完了した後、ログインしてください。すでに登録済みの場合もログイン画面をご利用ください。";
+"signup.invalid_email" = "有効なメールアドレスを入力してください。";
+"signup.short_password" = "パスワードは8文字以上にしてください。";
+"signup.invalid_handle" = "ユーザー名は半角英数字・_・-の2〜20文字で入力してください（先頭の-は不可）。";
+"signup.invalid_name" = "表示名を1〜40文字で入力してください。";
+"signup.failed" = "登録を完了できませんでした。入力内容や通信状態を確認してください。";
+"signup.created_sign_in" = "アカウントは作成されましたが、プロフィールを読み込めませんでした。ログイン画面から再度ログインしてください。";
+"signup.handle_taken" = "このユーザー名は使用されています。別の名前を選んでください。";
+"signup.rate_limit" = "登録の試行回数が多すぎます。時間をおいて再度お試しください。";
+"signup.email_taken" = "このメールアドレスは登録済みです。ログイン画面をご利用ください。";
+"signup.disabled" = "現在、新規登録を受け付けていません。";
+"signup.weak_password" = "より強力なパスワードを設定してください。";

@@ -979,7 +979,7 @@ private struct LocationPickerSheet: View {
         spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude,
                     label: resolvedLabel.isEmpty ? NSLocalizedString("選択した場所", comment: "") : resolvedLabel,
                     address: address == NSLocalizedString("現在地を取得すると表示されます", comment: "") ? nil : address)
-        if !district.isEmpty { spot?.addressDetails = ["city": district] }
+        if !district.isEmpty { spot?.addressDetails = SpotAddressDetails(city: district) }
         isPresented = false
     }
     private func reverseGeocode(_ coordinate: CLLocationCoordinate2D) {
@@ -1165,10 +1165,14 @@ Menu {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 5) {
                     Text(post.displayAuthor?.name ?? "User").fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
-                    Text("@\(post.displayAuthor?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
-                    Text("· \(relativeTime(post.createdAt))").foregroundColor(SpotcodeTheme.muted).lineLimit(1)
+                        .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+                    Text("@\(post.displayAuthor?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted)
+                        .lineLimit(1).truncationMode(.tail)
+                    Text("· \(relativeTime(post.createdAt))").foregroundColor(SpotcodeTheme.muted)
+                        .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                     Spacer(minLength: 2)
                     Text((post.status ?? "wip").uppercased()).font(.caption.weight(.bold))
+                        .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                         .foregroundColor((post.status ?? "wip") == "active" ? .black : SpotcodeTheme.text)
                         .padding(.horizontal, 9).padding(.vertical, 4)
                         .background((post.status ?? "wip") == "active" ? Color.cyan : SpotcodeTheme.warning).clipShape(Capsule())
@@ -3974,6 +3978,7 @@ private struct TermsAgreementGate: View {
 struct LoginView: View {
     @EnvironmentObject private var model: AppModel
     @Binding var isPresented: Bool
+    @State private var showingSignup = false
     @State private var email = ""
     @State private var password = ""
     @State private var signing = false
@@ -4073,6 +4078,11 @@ struct LoginView: View {
                 .contentShape(Capsule())
                 .disabled(email.isEmpty || password.isEmpty || signing || !agreedToTerms)
                 }
+                if !model.requiresMFA && !model.requiresReauthentication {
+                    Button("signup.create") { showingSignup = true }
+                        .disabled(signing)
+                        .padding(.vertical, 8)
+                }
                 if let message = model.authenticationError, !message.isEmpty {
                     Label(message, systemImage: "exclamationmark.triangle.fill")
                         .font(.footnote)
@@ -4086,7 +4096,88 @@ struct LoginView: View {
             }.padding() }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("spotcodeへログイン")
         }
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showingSignup) {
+            SignupView { signedIn in
+                showingSignup = false
+                if signedIn { isPresented = false }
+            }.environmentObject(model)
+        }
         .onDisappear { model.authenticationError = nil }
+    }
+}
+
+private struct SignupView: View {
+    @EnvironmentObject private var model: AppModel
+    let completed: (Bool) -> Void
+    @State private var name = ""
+    @State private var handle = ""
+    @State private var email = ""
+    @State private var password = ""
+    @State private var agreed = false
+    @State private var busy = false
+    @State private var confirmationPending = false
+    @State private var message = ""
+    @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 16) {
+                    if confirmationPending {
+                        Image(systemName: "envelope.badge").font(.largeTitle)
+                        Text("signup.confirm_email")
+                        Text(email).textSelection(.enabled)
+                        Button("signup.back_to_login") { completed(false) }
+                            .buttonStyle(OutlineButtonStyle(filled: true))
+                    } else {
+                        TextField("signup.name", text: $name).textContentType(.name).spotcodeField()
+                        TextField("signup.handle", text: $handle)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().spotcodeField()
+                        Text("signup.handle_hint").font(.caption).foregroundColor(SpotcodeTheme.muted)
+                        TextField("signup.email", text: $email)
+                            .textContentType(.emailAddress).keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().spotcodeField()
+                        SecureField("signup.password", text: $password)
+                            .textContentType(.newPassword).textInputAutocapitalization(.never)
+                            .autocorrectionDisabled().spotcodeField()
+                        TermsAgreementContent(agreed: $agreed)
+                        Button(busy ? NSLocalizedString("signup.creating", comment: "") : NSLocalizedString("signup.create", comment: "")) {
+                            submit()
+                        }.buttonStyle(OutlineButtonStyle(filled: true))
+                            .disabled(busy || !agreed || name.isEmpty || handle.isEmpty || email.isEmpty || password.isEmpty)
+                        if !message.isEmpty {
+                            Text(message).font(.footnote).foregroundColor(SpotcodeTheme.warning)
+                        }
+                    }
+                }.padding().disabled(busy)
+            }
+            .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+            .navigationTitle("signup.create").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) {
+                Button("signup.back_to_login") { completed(false) }.disabled(busy)
+            } }
+        }.preferredColorScheme(.dark).interactiveDismissDisabled(busy)
+    }
+
+    private func submit() {
+        guard agreed, !busy else { return }
+        message = ""
+        do {
+            let input = try SignupInput(email: email, password: password, handle: handle, name: name)
+            busy = true
+            Task {
+                defer { busy = false }
+                do {
+                    let signedIn = try await model.createAccount(input)
+                    acceptedTerms = "2026-09-08"
+                    password = ""
+                    if signedIn { completed(true) }
+                    else { confirmationPending = true }
+                } catch {
+                    message = NSLocalizedString("signup.failed", comment: "") + "\n" + error.localizedDescription
+                }
+            }
+        } catch { message = error.localizedDescription }
     }
 }
 

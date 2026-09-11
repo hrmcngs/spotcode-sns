@@ -370,6 +370,23 @@ final class AppModel: ObservableObject {
             || message.contains("session_not_found") || message.contains("session from session_id")
     }
 
+    // False means email confirmation is required; no existing session is replaced.
+    func createAccount(_ input: SignupInput) async throws -> Bool {
+        authenticationError = nil
+        let response = try await SupabaseService.shared.signup(input)
+        if let value = response.session {
+            if let session, let me { rememberAccount(session: session, profile: me) }
+            do { try await finishSignIn(value) }
+            catch {
+                throw NSError(domain: "Signup", code: 0, userInfo: [NSLocalizedDescriptionKey:
+                    NSLocalizedString("signup.created_sign_in", comment: "")])
+            }
+            return true
+        }
+        guard response.id != nil || response.user != nil else { throw URLError(.badServerResponse) }
+        return false
+    }
+
     func signIn(emailOrAlias: String, password: String) async -> Bool {
         authenticationError = nil
         // Adding another account must never evict the currently active one.

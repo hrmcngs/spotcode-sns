@@ -84,7 +84,7 @@ actor SupabaseService {
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         if let prefer { request.setValue(prefer, forHTTPHeaderField: "Prefer") }
         else if preferRepresentation { request.setValue("return=representation", forHTTPHeaderField: "Prefer") }
-        let isAuthRequest = path.hasPrefix("auth/v1/")
+        let isAuthRequest = path.hasPrefix("auth/v1/") && path != "auth/v1/signup"
         let (data, response) = try await data(for: request, retryable: method == "GET" || method == "HEAD" || isAuthRequest)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let message = String(data: data, encoding: .utf8) ?? NSLocalizedString("通信エラー", comment: "")
@@ -137,6 +137,29 @@ actor SupabaseService {
     func login(email: String, password: String) async throws -> AuthSession {
         let payload = try JSONSerialization.data(withJSONObject: ["email": email, "password": password])
         return try await request("auth/v1/token?grant_type=password", method: "POST", body: payload)
+    }
+
+    func signup(_ input: SignupInput) async throws -> SignupResponse {
+        if try await profile(handle: input.data.handle, token: nil) != nil {
+            throw NSError(domain: "Signup", code: 0, userInfo: [NSLocalizedDescriptionKey:
+                NSLocalizedString("signup.handle_taken", comment: "")])
+        }
+        // The database trigger creates the profile using this metadata.
+        do {
+            return try await request("auth/v1/signup", method: "POST", body: JSONEncoder().encode(input))
+        } catch {
+            let failure = error as NSError
+            let detail = failure.localizedDescription.lowercased()
+            let key: String
+            if failure.code == 429 { key = "signup.rate_limit" }
+            else if detail.contains("user_already_exists") || detail.contains("already registered") || detail.contains("email_exists") {
+                key = "signup.email_taken"
+            } else if detail.contains("signup_disabled") { key = "signup.disabled" }
+            else if detail.contains("weak_password") { key = "signup.weak_password" }
+            else { throw error }
+            throw NSError(domain: "Signup", code: failure.code,
+                          userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(key, comment: "")])
+        }
     }
 
     func usernameLogin(handle: String, password: String) async throws -> AuthSession {
