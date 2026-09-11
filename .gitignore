@@ -6,6 +6,12 @@ out/
 .env
 .env.*
 
+# macOS / Mac Catalyst generated artifacts
+macos/build/
+macos/build-preview/
+macos/*.xcarchive/
+macos/export/
+
 # ----- iOS / Capacitor -----
 # Pods is reproduced by `pod install` from Podfile.lock — committing it
 # would bloat the repo with hundreds of dependencies.

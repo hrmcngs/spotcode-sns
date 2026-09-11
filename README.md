@@ -28,6 +28,12 @@ npm run cap:open:ios
 
 ## macOS アプリ
 
+Mac App Store用のネイティブ版は [提出手順](docs/macos-app-store.md) を参照してください。
+`bash scripts/build-macos.sh` でMac CatalystのArchiveを作成できます。
+提出用PKG・Archive・スクリーンショットは、プロジェクト直下の [`macos/`](macos/) にまとめています。
+
+### Electron版（ローカル利用）
+
 Web版と共通の画面をElectronアプリとして利用できます。macOS上で次を実行します。
 
 ```bash

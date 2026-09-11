@@ -441,3 +441,26 @@
 "signup.email_taken" = "This email is already registered. Use the sign-in screen.";
 "signup.disabled" = "New account registration is currently unavailable.";
 "signup.weak_password" = "Choose a stronger password.";
+
+// Mac Catalyst and device-neutral settings.
+"文字サイズ" = "Text size";
+"小さい" = "Small";
+"標準" = "Default";
+"大きい" = "Large";
+"特大" = "Extra large";
+"最大" = "Largest";
+"投稿やメニュー、入力欄の文字サイズを変更します。" = "Change the text size of posts, menus, and text fields.";
+"文字サイズのプレビュー" = "Text size preview";
+"いいね・コメント・メンション・フォローなどを端末の通知として受け取ります。" = "Receive device notifications for likes, comments, mentions and follows.";
+"端末の通知設定を開く" = "Open device notification settings";
+"通知が拒否されています。端末の設定でSpotcodeの通知を許可してください。" = "Notifications are denied. Allow Spotcode notifications in device settings.";
+"投稿のスポットの市区町村を表示します。スポットがない投稿は地区未設定になります。アプリ利用中に新着を確認し、通知一覧と端末のバナーに表示します。" = "Show the city or district of each post’s spot. Posts without a spot show no district. New posts are checked while the app is active and appear in the notification list and device banners.";
+"種類別の設定はSpotcode内の通知一覧に適用されます。通知音やバナー表示は端末の通知設定で変更できます。" = "Type preferences apply to the notification list in Spotcode. Change sounds and banners in device notification settings.";
+"ログインセッションが無効になりました。アカウントを継続するため、もう一度ログインしてください。" = "Your sign-in session has expired. Sign in again to continue using your account.";
+"Macのシステム設定の「一般」→「言語と地域」で、アプリの言語を変更できます。" = "Change the app language in System Settings → General → Language & Region on your Mac.";
+"Who to follow" = "Who to follow";
+"GitHub をプロフィールに連携してください" = "Connect GitHub in your profile";
+"おすすめユーザーはありません" = "No suggestions right now";
+"Your activity" = "Your activity";
+"Trending spots" = "Trending spots";
+"by city / ward" = "by city / ward";
