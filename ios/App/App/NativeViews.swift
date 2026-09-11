@@ -209,8 +209,16 @@ struct RootView: View {
                                     get: { recommendedProfileHandle != nil },
                                     set: { if !$0 { recommendedProfileHandle = nil } }
                                 )) {
-                                    ProfileLookupView(handle: recommendedProfileHandle ?? "")
-                                        .id(recommendedProfileHandle)
+                                    VStack(spacing: 0) {
+                                        HStack {
+                                            Button { recommendedProfileHandle = nil } label: {
+                                                Image(systemName: "arrow.left").frame(width: 44, height: 44)
+                                            }.accessibilityLabel("戻る")
+                                            Spacer()
+                                        }.padding(.horizontal, 12)
+                                        ProfileLookupView(handle: recommendedProfileHandle ?? "")
+                                            .id(recommendedProfileHandle)
+                                    }.background(SpotcodeTheme.surface).navigationBarHidden(true)
                                 } label: { EmptyView() }
                                     .hidden().accessibilityHidden(true)
                             }
@@ -314,8 +322,20 @@ struct RootView: View {
         // Profile follows the identity selected in the account switcher.
         // Settings and authorization still use model.me (the real signed-in
         // administrator), while official mode opens @spotcode_official here.
-        case .profile: ProfileView(profile: model.displayProfile)
-            .id(model.displayProfile?.id)
+        case .profile:
+            if let profile = model.displayProfile {
+                ProfileView(profile: profile).id(profile.id)
+            } else {
+                VStack(spacing: 16) {
+                    ContentUnavailableViewCompat(title: "ログインしてください", icon: "person.crop.circle")
+                    Button("ログイン") {
+                        if model.savedAccounts.isEmpty { showLogin = true }
+                        else { showAccounts = true }
+                    }.buttonStyle(OutlineButtonStyle(filled: true))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(SpotcodeTheme.surface).navigationBarHidden(true)
+            }
         case .settings: SettingsView()
         }
     }
@@ -2586,6 +2606,7 @@ private struct ProfileLookupView: View {
             else if loading { ProgressView("プロフィールを読み込み中…") }
             else { ContentUnavailableViewCompat(title: "プロフィールを取得できませんでした", icon: "person.crop.circle.badge.exclamationmark") }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
         .background(SwipeBackEnabler())
         .task {
@@ -2645,7 +2666,8 @@ struct ProfileView: View {
                     }
                 } else { ContentUnavailableViewCompat(title: "ログインしてください", icon: "person.crop.circle") }
             }
-        }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+         .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
          .background(SwipeBackEnabler())
          .task(id: profile?.id) { await loadProfile() }
          .onReceive(model.$posts) { timelinePosts in
@@ -4490,6 +4512,37 @@ private struct TermsAgreementGate: View {
     }
 }
 
+#if targetEnvironment(macCatalyst)
+private struct LoginSheetSize: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+    func updateUIViewController(_ controller: Controller, context: Context) { controller.resizeSheet() }
+
+    final class Controller: UIViewController {
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            resizeSheet()
+        }
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            resizeSheet()
+        }
+        func resizeSheet() {
+            guard view.window != nil else { return }
+            // Catalyst can host the sheet in its own window. Measuring that
+            // window here would repeatedly shrink the preferred size.
+            let size = CGSize(width: 1000, height: 740)
+            var ancestor = parent
+            while let controller = ancestor {
+                if controller.presentingViewController != nil && controller.preferredContentSize != size {
+                    controller.preferredContentSize = size
+                }
+                ancestor = controller.parent
+            }
+        }
+    }
+}
+#endif
+
 struct LoginView: View {
     @EnvironmentObject private var model: AppModel
     @Binding var isPresented: Bool
@@ -4593,11 +4646,13 @@ struct LoginView: View {
                 .contentShape(Capsule())
                 .disabled(email.isEmpty || password.isEmpty || signing || !agreedToTerms)
                 }
+                #if !targetEnvironment(macCatalyst)
                 if !model.requiresMFA && !model.requiresReauthentication {
                     Button("signup.create") { showingSignup = true }
                         .disabled(signing)
                         .padding(.vertical, 8)
                 }
+                #endif
                 if let message = model.authenticationError, !message.isEmpty {
                     Label(message, systemImage: "exclamationmark.triangle.fill")
                         .spotcodeFont(13, weight: .regular, fallback: .footnote)
@@ -4607,8 +4662,40 @@ struct LoginView: View {
                         .background(SpotcodeTheme.warning.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                Spacer()
-            }.padding() }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("spotcodeへログイン")
+            }.padding().padding(.bottom, SpotcodeLayout.value(16, 0)) }
+            .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+            #if targetEnvironment(macCatalyst)
+            .navigationBarHidden(true)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                HStack(spacing: 16) {
+                    Button { isPresented = false } label: {
+                        Text("閉じる").fixedSize(horizontal: true, vertical: false)
+                            .padding(.horizontal, 16).frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain).keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("login.close")
+                    Text("spotcodeへログイン")
+                        .spotcodeFont(18, weight: .bold, fallback: .headline)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }.padding(12).background(SpotcodeTheme.surface)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !model.requiresMFA && !model.requiresReauthentication {
+                    Button { showingSignup = true } label: {
+                        Text("signup.create")
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }.buttonStyle(.plain).disabled(signing)
+                        .accessibilityIdentifier("login.createAccount")
+                        .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 16)
+                        .background(SpotcodeTheme.surface)
+                }
+            }
+            #else
+            .navigationTitle("spotcodeへログイン")
             .desktopInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -4617,6 +4704,7 @@ struct LoginView: View {
                         .accessibilityIdentifier("login.close")
                 }
             }
+            #endif
         }
         .preferredColorScheme(.dark)
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
@@ -4629,6 +4717,10 @@ struct LoginView: View {
                 if signedIn { isPresented = false }
             }.environmentObject(model)
         }
+        #if targetEnvironment(macCatalyst)
+        .frame(idealWidth: 1000, idealHeight: 740)
+        .background(LoginSheetSize().frame(width: 0, height: 0))
+        #endif
         .onDisappear { model.authenticationError = nil }
     }
 }

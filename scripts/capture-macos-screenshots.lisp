@@ -30,7 +30,8 @@
     (uiop:run-program
      (append (list "/usr/bin/open" "-n" (namestring *app*) "--args"
                    "-SpotcodeScreenshotMode" "-SkipNotificationPermissionPrompt"
-                   "-SpotcodeCaptureScreenshot" "-AppleLanguages" "(ja)"
+                   "-SpotcodeCaptureScreenshot" "-AppleLanguages"
+                   (format nil "(~A)" (or (uiop:getenv "SPOTCODE_SCREENSHOT_LANGUAGE") "ja"))
                    "-ApplePersistenceIgnoreState" "YES" "-SpotcodeCaptureID" capture-id)
              (when *text-size* (list "-spotcode.mac.textSize" *text-size*))
              (when *full-page* '("-SpotcodeCaptureFullPage"))

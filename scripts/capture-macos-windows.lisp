@@ -57,7 +57,8 @@ print(\"(\\(app.processIdentifier) \\(id))\")
           (uiop:run-program
            (append (list "/usr/bin/open" "-n" (namestring *app*) "--args"
                          "-SpotcodeScreenshotMode" "-SkipNotificationPermissionPrompt"
-                         "-AppleLanguages" "(ja)" "-ApplePersistenceIgnoreState" "YES"
+                         "-AppleLanguages" (format nil "(~A)" (or (uiop:getenv "SPOTCODE_SCREENSHOT_LANGUAGE") "ja"))
+                         "-ApplePersistenceIgnoreState" "YES"
                          "-spotcode.mac.textSize" "1")
                    (cond ((string-equal name "Login") '("-SpotcodeScreenshotShowLogin"))
                          ((string-equal name "Accounts") '("-SpotcodeScreenshotShowAccounts"))

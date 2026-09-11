@@ -26,10 +26,23 @@ if [ "$rebuild" = true ] || [ ! -d "$app_path" ]; then
   bash macos/build.sh preview
 fi
 
-# A rebuilt app needs a new process to run the updated executable.
+# 通常終了を待ってから起動し、古い版のウィンドウを残さない。
 if [ "$rebuild" = true ]; then
-  open -n "$app_path"
-else
-  open "$app_path"
+  /usr/bin/swift - "$app_path" <<'SWIFT'
+import AppKit
+let path = CommandLine.arguments[1]
+let apps = NSRunningApplication.runningApplications(withBundleIdentifier: "computer.ngs.hrmc.Spotcode")
+    .filter { $0.bundleURL?.path == path }
+for app in apps { _ = app.terminate() }
+let deadline = Date().addingTimeInterval(10)
+while apps.contains(where: { !$0.isTerminated }) && Date() < deadline {
+    RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+}
+guard apps.allSatisfy({ $0.isTerminated }) else {
+    fputs("起動中のアプリを終了できませんでした。編集内容を保存して終了後、再実行してください。\n", stderr)
+    exit(1)
+}
+SWIFT
 fi
+open "$app_path"
 printf '起動しました: %s\n' "$app_path"
