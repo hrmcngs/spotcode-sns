@@ -296,6 +296,9 @@ struct RootView: View {
         .fullScreenCover(isPresented: Binding(get: { model.session != nil && acceptedTerms != "2026-09-08" && !showLogin }, set: { _ in })) {
             TermsAgreementGate().environmentObject(model)
         }
+        #if targetEnvironment(macCatalyst)
+        .blur(radius: showLogin ? 4 : 0)
+        #endif
         .sheet(isPresented: $showLogin) { LoginView(isPresented: $showLogin).environmentObject(model) }
         .sheet(isPresented: $composing) { ComposeView(isPresented: $composing).environmentObject(model) }
         .alert("エラー", isPresented: Binding(
@@ -4365,7 +4368,7 @@ private final class GitHubPrivateIssueAuthorizer: NSObject, ASWebAuthenticationP
         return try await authorize(url: authorizationURL)
     }
 
-    func authorize(url authorizationURL: URL) async throws -> String {
+    func authorize(url authorizationURL: URL, responseKey: String = "provider_token") async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(url: authorizationURL, callbackURLScheme: "spotcode") { [weak self] callbackURL, error in
                 defer { self?.webSession = nil }
@@ -4376,7 +4379,7 @@ private final class GitHubPrivateIssueAuthorizer: NSObject, ASWebAuthenticationP
                 }
                 guard let callbackURL,
                       callbackURL.scheme == "spotcode", callbackURL.host == "github-oauth",
-                      let token = Self.callbackValues(callbackURL)["provider_token"], !token.isEmpty else {
+                      let token = Self.callbackValues(callbackURL)[responseKey], !token.isEmpty else {
                     continuation.resume(throwing: NSError(
                         domain: "GitHubOAuth", code: -1,
                         userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("GitHubの権限トークンを取得できませんでした。", comment: "")]
@@ -4514,10 +4517,15 @@ private struct TermsAgreementGate: View {
 
 #if targetEnvironment(macCatalyst)
 private struct LoginSheetSize: UIViewControllerRepresentable {
+    var height: CGFloat = 800
     func makeUIViewController(context: Context) -> Controller { Controller() }
-    func updateUIViewController(_ controller: Controller, context: Context) { controller.resizeSheet() }
+    func updateUIViewController(_ controller: Controller, context: Context) {
+        controller.desiredHeight = height
+        controller.resizeSheet()
+    }
 
     final class Controller: UIViewController {
+        var desiredHeight: CGFloat = 800
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             resizeSheet()
@@ -4530,7 +4538,7 @@ private struct LoginSheetSize: UIViewControllerRepresentable {
             guard view.window != nil else { return }
             // Catalyst can host the sheet in its own window. Measuring that
             // window here would repeatedly shrink the preferred size.
-            let size = CGSize(width: 1000, height: 740)
+            let size = CGSize(width: 580, height: desiredHeight)
             var ancestor = parent
             while let controller = ancestor {
                 if controller.presentingViewController != nil && controller.preferredContentSize != size {
@@ -4555,6 +4563,9 @@ struct LoginView: View {
     @State private var agreedToTerms = false
     @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
     var body: some View {
+        #if targetEnvironment(macCatalyst)
+        DesktopLoginView(isPresented: $isPresented)
+        #else
         NavigationView {
             ScrollView { VStack(spacing: 14) {
                 TermsAgreementContent(agreed: $agreedToTerms)
@@ -4722,8 +4733,174 @@ struct LoginView: View {
         .background(LoginSheetSize().frame(width: 0, height: 0))
         #endif
         .onDisappear { model.authenticationError = nil }
+        #endif
     }
 }
+
+#if targetEnvironment(macCatalyst)
+private struct DesktopLoginView: View {
+    @EnvironmentObject private var model: AppModel
+    @Binding var isPresented: Bool
+    @State private var signup = false
+    @State private var email = ""
+    @State private var password = ""
+    @State private var name = ""
+    @State private var handle = ""
+    @State private var code = ""
+    @State private var agreed = false
+    @State private var busy = false
+    @State private var visiblePassword = false
+    @State private var confirmation = false
+    @State private var message = ""
+    @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                tab("Log in", selected: !signup) { signup = false }
+                tab("Sign up", selected: signup) { signup = true }
+                Button { isPresented = false } label: {
+                    Image(systemName: "xmark").frame(width: 36, height: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain).keyboardShortcut(.cancelAction)
+                    .accessibilityLabel("閉じる").accessibilityIdentifier("login.close")
+            }.padding(.horizontal, 24).padding(.top, 12)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if confirmation {
+                        Text("signup.confirm_email")
+                        Text(email).textSelection(.enabled)
+                    } else {
+                        Text("不適切な投稿、嫌がらせ、差別、脅迫、性的搾取、違法行為は禁止です。違反投稿の削除や利用停止を行います。通報・ブロック情報は運営に送信されます。")
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            Link("利用規約を読む", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
+                            Text("·")
+                            Link("プライバシーポリシー", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
+                        }.spotcodeFont(12, fallback: .caption)
+                        Button { agreed.toggle() } label: {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: agreed ? "checkmark.square.fill" : "square")
+                                    .foregroundColor(agreed ? SpotcodeTheme.accent : SpotcodeTheme.muted)
+                                Text("利用規約に同意します").fixedSize(horizontal: false, vertical: true)
+                            }.frame(maxWidth: .infinity, minHeight: 32, alignment: .leading).contentShape(Rectangle())
+                        }.buttonStyle(.plain).accessibilityValue(agreed ? "ON" : "OFF")
+                        if !model.requiresMFA {
+                            Button { githubLogin() } label: {
+                                Text("Continue with GitHub").fontWeight(.semibold)
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .background(SpotcodeTheme.background).clipShape(Capsule())
+                                    .overlay(Capsule().stroke(SpotcodeTheme.border)).contentShape(Capsule())
+                            }.buttonStyle(.plain).disabled(busy || !agreed)
+                            HStack(spacing: 12) {
+                                Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
+                                Text("or").spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                                Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
+                            }
+                                .padding(.vertical, 8)
+                        }
+                        Text(LocalizedStringKey(model.requiresMFA ? "2段階認証" : (signup ? "Sign up" : "Log in")))
+                            .spotcodeFont(18, weight: .bold, fallback: .headline).padding(.top, 6)
+                        if model.requiresMFA {
+                            TextField("123456", text: $code).textContentType(.oneTimeCode).spotcodeField()
+                                .onChange(of: code) { code = String($0.filter(\.isNumber).prefix(6)) }
+                        } else {
+                            if signup {
+                                field("signup.name") { TextField("", text: $name).textContentType(.name) }
+                                field("signup.handle") { TextField("", text: $handle).textInputAutocapitalization(.never).autocorrectionDisabled() }
+                            }
+                            field(signup ? "signup.email" : "メールまたはログイン名") {
+                                TextField("", text: $email).textContentType(.username)
+                                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            }
+                            field("パスワード") {
+                                HStack {
+                                    Group {
+                                        if visiblePassword { TextField("", text: $password) }
+                                        else { SecureField("", text: $password) }
+                                    }.textContentType(signup ? .newPassword : .password)
+                                    Button { visiblePassword.toggle() } label: {
+                                        Image(systemName: visiblePassword ? "eye.slash" : "eye")
+                                            .frame(width: 32, height: 28)
+                                    }.buttonStyle(.plain).foregroundColor(SpotcodeTheme.accent)
+                                        .accessibilityLabel("パスワードを表示")
+                                }
+                            }
+                        }
+                        Button { submit() } label: {
+                            Text(LocalizedStringKey(busy ? "確認中…" : (model.requiresMFA ? "確認してログイン" : (signup ? "Sign up" : "Log in"))))
+                                .spotcodeFont(14, weight: .bold, fallback: .headline)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(SpotcodeTheme.text).foregroundColor(SpotcodeTheme.background)
+                                .clipShape(Capsule()).contentShape(Capsule())
+                        }.buttonStyle(.plain).disabled(busy || !agreed)
+                    }
+                    if !message.isEmpty { Text(message).foregroundColor(SpotcodeTheme.warning) }
+                    if let error = model.authenticationError { Text(error).foregroundColor(SpotcodeTheme.warning) }
+                }.padding(24)
+            }
+        }
+        .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+        .preferredColorScheme(.dark).macTextSizePreference().spotcodeFont(14, fallback: .body)
+        .background(LoginSheetSize(height: signup ? 920 : 800).frame(width: 0, height: 0))
+        .onDisappear { model.authenticationError = nil }
+    }
+
+    private func tab(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button { action(); message = ""; confirmation = false } label: {
+            VStack(spacing: 12) {
+                Text(LocalizedStringKey(title)).fontWeight(.bold)
+                Capsule().fill(selected ? SpotcodeTheme.accent : .clear).frame(width: 48, height: 3)
+            }.padding(.top, 20).frame(maxWidth: .infinity).contentShape(Rectangle())
+        }.buttonStyle(.plain).foregroundColor(selected ? SpotcodeTheme.text : SpotcodeTheme.muted)
+            .disabled(busy || model.requiresMFA)
+    }
+
+    private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(LocalizedStringKey(title)).spotcodeFont(12, weight: .semibold, fallback: .caption)
+                .foregroundColor(SpotcodeTheme.muted)
+            content().spotcodeField().accessibilityLabel(Text(LocalizedStringKey(title)))
+        }
+    }
+
+    private func submit() {
+        guard agreed, !busy else { return }
+        busy = true; message = ""
+        Task {
+            defer { busy = false }
+            if model.requiresMFA {
+                if await model.verifyMFA(code: code) { acceptedTerms = "2026-09-08"; isPresented = false }
+            } else if signup {
+                do {
+                    let input = try SignupInput(email: email, password: password, handle: handle, name: name)
+                    let signedIn = try await model.createAccount(input)
+                    acceptedTerms = "2026-09-08"; password = ""
+                    if signedIn { isPresented = false } else { confirmation = true }
+                } catch { message = error.localizedDescription }
+            } else if await model.signIn(emailOrAlias: email, password: password) {
+                acceptedTerms = "2026-09-08"; isPresented = false
+            }
+        }
+    }
+
+    private func githubLogin() {
+        guard agreed, !busy else { return }
+        busy = true; message = ""
+        Task {
+            defer { busy = false }
+            do {
+                guard let url = await SupabaseService.shared.privateIssueAuthorizationURL(includePrivate: false) else { throw URLError(.badURL) }
+                let refreshToken = try await GitHubPrivateIssueAuthorizer.shared.authorize(url: url, responseKey: "refresh_token")
+                if await model.signInWithOAuth(refreshToken: refreshToken) {
+                    acceptedTerms = "2026-09-08"; isPresented = false
+                }
+            } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+                // Closing the browser leaves the login form available.
+            } catch { message = error.localizedDescription }
+        }
+    }
+}
+#endif
 
 private struct SignupView: View {
     @EnvironmentObject private var model: AppModel

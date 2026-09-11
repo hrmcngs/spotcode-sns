@@ -428,6 +428,26 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func signInWithOAuth(refreshToken: String) async -> Bool {
+        authenticationError = nil
+        if let current = session, let profile = me { rememberAccount(session: current, profile: profile) }
+        do {
+            let value = try await SupabaseService.shared.refresh(refreshToken)
+            if Self.assuranceLevel(of: value.accessToken) != "aal2",
+               let factor = try await SupabaseService.shared.mfaFactors(token: value.accessToken).first {
+                pendingMFASession = value
+                pendingMFAFactorID = factor.id
+                requiresMFA = true
+                return false
+            }
+            try await finishSignIn(value)
+            return true
+        } catch {
+            authenticationError = Self.authenticationMessage(for: error)
+            return false
+        }
+    }
+
     func verifyMFA(code: String) async -> Bool {
         guard let pending = pendingMFASession, let factorID = pendingMFAFactorID else {
             authenticationError = NSLocalizedString("確認中の2段階認証がありません。", comment: "")
