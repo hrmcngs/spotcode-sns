@@ -31,6 +31,9 @@
          (write-source stream "struct CLLocationCoordinate2D { let latitude: Double; let longitude: Double }")
          (write-source stream (section models "struct Profile:" "struct PostInteractionRow:"))
          (write-source stream (section models "struct PostPoll:" "struct FollowEvent:")))
+        ((string= name "task-participation")
+         (write-source stream (section models "struct GitHubIssue:" "struct AuthUser:"))
+         (write-source stream (section (app-source "SupabaseService.swift") "enum GitHubTaskLoader {")))
         ((string= name "localization")
          ;; Expose the original private static method as a standalone function.
          (write-source stream
@@ -55,11 +58,11 @@
 
 (handler-case
     (let* ((args (uiop:command-line-arguments)) (suite (or (first args) "all")))
-      (unless (and (member suite '("all" "signup" "post-decoding" "localization") :test #'string=)
+      (unless (and (member suite '("all" "signup" "post-decoding" "localization" "task-participation") :test #'string=)
                    (<= (length args) (if (string= suite "post-decoding") 2 1)))
-        (error "Usage: sbcl --script scripts/test-ios.lisp [all|signup|localization|post-decoding [response.json]]"))
+        (error "Usage: sbcl --script scripts/test-ios.lisp [all|signup|localization|task-participation|post-decoding [response.json]]"))
       (if (string= suite "all")
-          (dolist (name '("signup" "post-decoding" "localization")) (run-suite name))
+          (dolist (name '("signup" "post-decoding" "localization" "task-participation")) (run-suite name))
           (run-suite suite (second args))))
   (error (condition)
     (format *error-output* "~&iOS tests failed: ~A~%" condition)

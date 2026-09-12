@@ -398,7 +398,8 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = fals
   const overflow = totalCount > shown.length && !activeRepo
     ? '<a class="profile-tasks__more" ' +
         'href="https://github.com/issues?q=' +
-          encodeURIComponent('is:issue is:open is:public author:' + ghHandle) +
+          encodeURIComponent('is:issue is:open ' + (includePrivate ? '' : 'is:public ') +
+            [...repoCounts.keys()].map(repo => 'repo:' + repo).join(' ')) +
         '" target="_blank" rel="noopener">' +
         t('profile.tasks.more').replace('{n}', String(totalCount)) +
       '</a>'
@@ -1198,7 +1199,13 @@ export async function hydrateProfileTasks(handle) {
     const me = currentUser();
     const includePrivate = privateTasksEnabled() && me?.github?.handle?.toLowerCase() === gh.toLowerCase();
     const tasks = await fetchTasks(gh, includePrivate);
-    if (!tasks) return;
+    if (!tasks) {
+      if (currentUser()?.id === me?.id && slot.isConnected) {
+        const hint = slot.querySelector('.profile-tasks__hint');
+        if (hint) hint.textContent = t('profile.tasks.unavailable');
+      }
+      return;
+    }
     // Re-resolve the slot after the await — a re-render (e.g. from
     // hydrateProfile's post-fetch re-paint) can replace the element
     // while we were waiting on the network.

@@ -2624,6 +2624,9 @@ private struct ProfileLookupView: View {
 struct ProfileView: View {
     @EnvironmentObject private var model: AppModel
     let profile: Profile?
+    @AppStorage("spotcode.selectedIssueReposByUser") private var taskRepositoriesJSON = "{}"
+    @AppStorage("spotcode.privateIssuesEnabled") private var taskPrivateEnabled = false
+    @AppStorage("spotcode.hideTasks") private var taskCardHidden = false
     @State private var profilePosts: [Post] = []
     @State private var counts = (following: 0, followers: 0, posts: 0)
     @State private var selectedTab = 0
@@ -2672,7 +2675,7 @@ struct ProfileView: View {
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
          .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
          .background(SwipeBackEnabler())
-         .task(id: profile?.id) { await loadProfile() }
+         .task(id: "\(profile?.id?.uuidString ?? "none"):\(model.session?.user.id.uuidString ?? "guest"):\(taskRepositoriesJSON):\(taskPrivateEnabled):\(taskCardHidden)") { await loadProfile() }
          .onReceive(model.$posts) { timelinePosts in
              guard let profileID = profile?.id else { return }
              profilePosts = mergedProfilePosts(
@@ -2691,23 +2694,30 @@ struct ProfileView: View {
     }
 
     private func loadProfile() async {
+        let viewer = model.session?.user.id
+        issueSearch = nil
         guard let id = profile?.id else { return }
         async let posts = try? SupabaseService.shared.posts(limit: 80, authorID: id, token: model.session?.accessToken)
         async let stats = SupabaseService.shared.profileCounts(userID: id, token: model.session?.accessToken)
         let fetchedPosts = await posts ?? []
+        guard !Task.isCancelled, model.session?.user.id == viewer else { return }
         let timelinePosts = model.posts.filter { ($0.authorID == id || $0.organizationAuthorID == id) }
         profilePosts = mergedProfilePosts(fetchedPosts, timelinePosts)
         counts = await stats
         if let handle = profile?.githubHandle {
             let mayReadPrivate = profile?.id == model.me?.id && UserDefaults.standard.bool(forKey: "spotcode.privateIssuesEnabled")
-            let githubToken = mayReadPrivate ? await model.hydrateSharedPrivateIssueToken() : nil
+            let githubToken = await model.hydrateSharedPrivateIssueToken()
+            guard !Task.isCancelled, model.session?.user.id == viewer else { return }
+            let selected = taskCardHidden ? Set<String>() : selectedRepoSet(taskRepositoriesJSON, owner: viewer)
             async let loadedRepos = SupabaseService.shared.repositories(handle: handle)
             async let loadedContributions = SupabaseService.shared.githubContributions(handle: handle)
-            async let loadedIssues = SupabaseService.shared.githubOpenIssues(handle: handle, githubToken: githubToken, includePrivate: mayReadPrivate && githubToken != nil)
+            async let loadedIssues = SupabaseService.shared.githubOpenIssues(handle: handle, repositories: Array(selected), githubToken: githubToken, includePrivate: mayReadPrivate && githubToken != nil)
             async let loadedLanguages = SupabaseService.shared.githubLanguageStats(handle: handle)
             repositories = (try? await loadedRepos) ?? []
             contributions = (try? await loadedContributions) ?? []
-            issueSearch = try? await loadedIssues
+            let issues = try? await loadedIssues
+            guard !Task.isCancelled, model.session?.user.id == viewer else { return }
+            issueSearch = issues
             languageStats = (try? await loadedLanguages) ?? []
         }
     }
@@ -4336,9 +4346,10 @@ private struct DisplaySettings: View {
         } else {
             repositories = (try? await SupabaseService.shared.repositories(handle: handle)) ?? []
         }
-        let token = privateIssuesEnabled ? await model.hydrateSharedPrivateIssueToken() : nil
+        let token = repositoryToken
         let result = try? await SupabaseService.shared.githubOpenIssues(
-            handle: handle, githubToken: token, includePrivate: privateIssuesEnabled && token != nil
+            handle: handle, repositories: Array(selectedRepoSet(selectedIssueReposJSON, owner: owner)),
+            githubToken: token, includePrivate: privateIssuesEnabled && token != nil
         )
         guard model.session?.user.id == owner else { return }
         issueRepositories = Array(Set(repositories.map(\.fullName) + (result?.items.map(\.repositoryName) ?? []))).sorted()

@@ -562,22 +562,20 @@ actor SupabaseService {
         }.sorted { $0.bytes > $1.bytes }
     }
 
-    func githubOpenIssues(handle: String, githubToken: String? = nil, includePrivate: Bool = false) async throws -> GitHubIssueSearchResponse {
-        var components = URLComponents(string: "https://api.github.com/search/issues")!
-        components.queryItems = [
-            .init(name: "q", value: "author:\(handle) type:issue state:open\(includePrivate ? "" : " is:public")"),
-            .init(name: "sort", value: "created"), .init(name: "order", value: "desc"),
-            .init(name: "per_page", value: "30")
-        ]
-        var request = URLRequest(url: components.url!)
-        request.timeoutInterval = 35
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        if let githubToken, !githubToken.isEmpty {
-            request.setValue("Bearer \(githubToken)", forHTTPHeaderField: "Authorization")
+    func githubOpenIssues(handle: String, repositories: [String], githubToken: String? = nil, includePrivate: Bool = false) async throws -> GitHubIssueSearchResponse {
+        guard !includePrivate || githubToken?.isEmpty == false else { throw URLError(.userAuthenticationRequired) }
+        return try await GitHubTaskLoader.load(handle: handle, repositories: repositories, includePrivate: includePrivate) { url in
+            try Task.checkCancellation()
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 35
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            if let githubToken, !githubToken.isEmpty { request.setValue("Bearer \(githubToken)", forHTTPHeaderField: "Authorization") }
+            let (data, response) = try await self.data(for: request, retryable: true)
+            guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+            if http.statusCode == 404 { throw GitHubTaskLoader.LoadError.notFound }
+            guard http.statusCode == 200 else { throw URLError(.badServerResponse) }
+            return data
         }
-        let (data, response) = try await data(for: request, retryable: true)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
-        return try decoder.decode(GitHubIssueSearchResponse.self, from: data)
     }
 
     func githubTokenCanReadPrivateRepos(_ token: String) async throws -> Bool {
@@ -845,5 +843,103 @@ actor SupabaseService {
         }
         let range = http.value(forHTTPHeaderField: "Content-Range") ?? "*/0"
         return Int(range.split(separator: "/").last ?? "0") ?? 0
+    }
+}
+
+// Shared by iOS and Mac Catalyst. Membership or Issue authorship alone
+// does not qualify; commit history or an Issue-specific PR is required.
+enum GitHubTaskLoader {
+    enum LoadError: Error { case notFound, paginationLimit }
+    typealias Fetch = (URL) async throws -> Data
+    private struct RepositoryInfo: Decodable {
+        let `private`: Bool
+        let default_branch: String?
+    }
+    private struct Branch: Decodable { let name: String }
+    private struct Commit: Decodable { let sha: String }
+    private struct IssueRow: Decodable {
+        let issue: GitHubIssue
+        let isPullRequest: Bool
+        enum CodingKeys: String, CodingKey { case pull_request }
+        init(from decoder: Decoder) throws {
+            issue = try GitHubIssue(from: decoder)
+            isPullRequest = try decoder.container(keyedBy: CodingKeys.self).contains(.pull_request)
+        }
+    }
+    private struct Event: Decodable {
+        struct Source: Decodable {
+            struct Issue: Decodable {
+                struct User: Decodable { let login: String }
+                struct PullRequest: Decodable {}
+                let user: User?
+                let pull_request: PullRequest?
+            }
+            let issue: Issue?
+        }
+        let event: String
+        let source: Source?
+    }
+
+    static func load(handle: String, repositories: [String], includePrivate: Bool,
+                     fetch: Fetch) async throws -> GitHubIssueSearchResponse {
+        var found: [Int: GitHubIssue] = [:]
+        let repos = Set(repositories.map { $0.lowercased() }.filter {
+            $0.range(of: "^[a-z0-9_.-]+/[a-z0-9_.-]+$", options: .regularExpression) != nil
+        })
+        for repo in repos.sorted() {
+            try Task.checkCancellation()
+            let base = "https://api.github.com/repos/\(repo)"
+            let metadata: RepositoryInfo
+            do { metadata = try JSONDecoder().decode(RepositoryInfo.self, from: await fetch(URL(string: base)!)) }
+            catch LoadError.notFound { continue }
+            if metadata.private && !includePrivate { continue }
+            let rows: [IssueRow] = try await pages(base + "/issues?state=open&sort=created&direction=desc", fetch: fetch)
+            let issues = rows.filter { !$0.isPullRequest && !$0.issue.isHiddenFromSpotcode }.map(\.issue)
+            if issues.isEmpty { continue }
+            let contributor = try await hasCommit(base: base, handle: handle, branch: metadata.default_branch, fetch: fetch)
+            for issue in issues {
+                if contributor {
+                    found[issue.id] = issue
+                } else {
+                    let events: [Event] = try await pages(base + "/issues/\(issue.number)/timeline", fetch: fetch)
+                    if events.contains(where: {
+                        $0.event == "cross-referenced" && $0.source?.issue?.pull_request != nil &&
+                        $0.source?.issue?.user?.login.caseInsensitiveCompare(handle) == .orderedSame
+                    }) { found[issue.id] = issue }
+                }
+            }
+        }
+        let items = found.values.sorted {
+            let a = $0.dueDate ?? .distantFuture, b = $1.dueDate ?? .distantFuture
+            return a == b ? ($0.createdAt ?? "") > ($1.createdAt ?? "") : a < b
+        }
+        return GitHubIssueSearchResponse(totalCount: items.count, items: items)
+    }
+
+    private static func pages<T: Decodable>(_ path: String, fetch: Fetch) async throws -> [T] {
+        var result: [T] = []
+        for page in 1...100 {
+            try Task.checkCancellation()
+            let url = URL(string: path + (path.contains("?") ? "&" : "?") + "per_page=100&page=\(page)")!
+            let rows = try JSONDecoder().decode([T].self, from: await fetch(url))
+            result += rows
+            if rows.count < 100 { return result }
+        }
+        throw LoadError.paginationLimit
+    }
+
+    private static func hasCommit(base: String, handle: String, branch: String?, fetch: Fetch) async throws -> Bool {
+        func check(_ branch: String?) async throws -> Bool {
+            var url = URLComponents(string: base + "/commits")!
+            url.queryItems = [.init(name: "author", value: handle), .init(name: "per_page", value: "1")]
+            if let branch { url.queryItems?.append(.init(name: "sha", value: branch)) }
+            return try !JSONDecoder().decode([Commit].self, from: await fetch(url.url!)).isEmpty
+        }
+        if try await check(branch) { return true }
+        let branches: [Branch] = try await pages(base + "/branches", fetch: fetch)
+        for other in branches where other.name != branch {
+            if try await check(other.name) { return true }
+        }
+        return false
     }
 }

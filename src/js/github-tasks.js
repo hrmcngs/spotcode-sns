@@ -1,20 +1,12 @@
-// GitHub "tasks" for the profile page.
-//
-// A "task" here is a public open GitHub issue authored by the user
-// (PRs excluded via type:issue). The Search API returns count +
-// items in one call — much cheaper than iterating over the user's
-// repos and asking each for issues. All the data we surface is
-// already public on github.com; no auth required.
-//
-// Rate limit: unauth Search API is 10 requests / minute per IP.
-// Cache aggressively (1h TTL) and share the app-wide cooldown flag
-// with language-stats.js so a 403 in one place backs off the other.
-
+// Profile tasks: open Issues in explicitly selected repositories, qualified
+// by commit history or a Pull Request referencing the specific Issue.
 import { fetchJson, isRateLimited, hasGithubApiToken } from './language-stats.js';
+import { currentUser } from './auth.js';
+import { selectedTaskRepos } from './display-prefs.js';
 
-const CACHE_KEY = 'spotcode:gh-tasks:v2';
+const CACHE_KEY = 'spotcode:gh-tasks:v3';
 const TTL_MS    = 60 * 60 * 1000;   // 1 h
-const MAX_ITEMS = 30;                // hard cap so a mega-issuer doesn't blow storage
+const pending = new Map();
 
 // GitHub Search Issues doesn't return repo_full_name directly; we
 // derive it from repository_url which is
@@ -92,84 +84,104 @@ function hiddenByIssueTemplate(item) {
   return hiddenLabel || /(?:\*\*)?\s*spotcode\s*表示\s*[:：]?\s*(?:\*\*)?\s*[:：]?\s*(?:しない|非表示|off|false|no)(?:\s|$)/im.test(body);
 }
 
-function readCache() {
-  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
+function scope(handle, includePrivate) {
+  const owner = currentUser()?.id || '';
+  const repos = [...new Set(selectedTaskRepos().map(repo => String(repo).toLowerCase())
+    .filter(repo => /^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(repo)))].sort();
+  return { owner, repos, key: JSON.stringify([owner, handle.toLowerCase(), includePrivate, repos]) };
+}
+function canReadPrivate(handle) {
+  return hasGithubApiToken() && currentUser()?.github?.handle?.toLowerCase() === handle.toLowerCase();
+}
+function readCache(includePrivate) {
+  try { return JSON.parse((includePrivate ? sessionStorage : localStorage).getItem(CACHE_KEY) || '{}'); }
   catch { return {}; }
 }
-function writeCache(o) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(o)); }
-  catch {}
+export function cachedTasks(handle, includePrivate = false) {
+  if (!handle || (includePrivate && !canReadPrivate(handle))) return null;
+  return readCache(includePrivate)[scope(handle, includePrivate).key] || null;
 }
 
-// Sync accessor for the render path — reads the cached snapshot
-// so the profile card can paint SOMETHING before the network call
-// resolves. Returns null on cache miss / stale.
-export function cachedTasks(ghHandle, includePrivate = false) {
-  if (!ghHandle) return null;
-  const all = readCache();
-  const entry = all[ghHandle.toLowerCase() + (includePrivate ? ':private' : ':public')]
-             || (!includePrivate ? all[ghHandle.toLowerCase()] : null);
-  if (!entry) return null;
-  // Stale-while-revalidate: an older issue snapshot is much more useful
-  // than a loading card while GitHub Search is slow. fetchTasks() still
-  // refreshes it in the background on every profile hydration.
-  return entry;
-}
-
-// Fetch open issues authored by `ghHandle` across all public repos
-// via the Search API. Returns { totalCount, items[] }. On rate limit
-// or fetch error, returns whatever's cached (possibly stale) so the
-// card degrades gracefully rather than showing an error every render.
-export async function fetchTasks(ghHandle, includePrivate = false) {
-  if (!ghHandle) return null;
-  // Never populate the private cache through an anonymous request.
-  // GitHub would return 200 with public-only results, making Settings
-  // look successfully enabled while private repos stayed invisible.
-  if (includePrivate && !hasGithubApiToken()) return null;
-  if (isRateLimited()) return cachedTasks(ghHandle, includePrivate);
-
-  // Search qualifiers:
-  //   author:<handle>  — issues opened by this user
-  //   type:issue       — exclude PRs (github treats PRs as issues by default)
-  //   state:open       — hide closed
-  //   is:public        — hide private repos (would 404 anyway for anon fetches
-  //                       but the qualifier keeps the search index small)
-  // sort=created + order=desc → newest first, so the top of the list
-  // is what the viewer is most likely to care about.
-  const q = 'author:' + encodeURIComponent(ghHandle)
-          + '+type:issue+state:open' + (includePrivate ? '' : '+is:public');
-  const url = 'https://api.github.com/search/issues?q=' + q +
-              '&sort=created&order=desc&per_page=' + MAX_ITEMS;
-  let raw;
-  try { raw = await fetchJson(url, 6000); }
-  catch { return cachedTasks(ghHandle, includePrivate); }
-  if (!raw) return cachedTasks(ghHandle, includePrivate);
-
-  // Keep every repo in cache so turning a repo back on in Settings is
-  // reflected immediately without waiting for another GitHub request.
-  // Per-repo visibility is applied by the profile renderer instead.
-  const items = (raw.items || []).filter((item) => !hiddenByIssueTemplate(item)).map(shape);
-  // Sort so the most-urgent issues surface first:
-  //   1. Items WITH a parsed due date, ordered earliest → latest
-  //      (overdue is naturally at the top since its ts is in the past)
-  //   2. Items WITHOUT a due date, ordered by createdAt desc
-  //      (mirrors the Search API's default sort)
-  items.sort((a, b) => {
-    if (a.dueTs != null && b.dueTs != null) return a.dueTs - b.dueTs;
-    if (a.dueTs != null) return -1;
-    if (b.dueTs != null) return 1;
-    return (b.createdAt || 0) - (a.createdAt || 0);
-  });
-  // The Search API caps total_count at 1000 for anonymous callers,
-  // but for our audience (individual dev accounts) any real number
-  // is far under that ceiling. Use it verbatim.
-  const entry = {
-    at: Date.now(),
-    totalCount: raw.total_count || 0,
-    items,
+// Membership, Issue authorship and assignment alone do not qualify. A commit
+// qualifies for every open Issue in that repo; a linked PR qualifies only for
+// that Issue. Public/profile views never fetch private repository content.
+export async function fetchTasks(handle, includePrivate = false) {
+  if (!handle || (includePrivate && !canReadPrivate(handle))) return null;
+  const snapshot = scope(handle, includePrivate);
+  const cached = cachedTasks(handle, includePrivate);
+  if (cached && Date.now() - cached.at < TTL_MS) return cached;
+  if (isRateLimited()) return cached;
+  if (pending.has(snapshot.key)) return pending.get(snapshot.key);
+  const valid = () => scope(handle, includePrivate).key === snapshot.key &&
+    (!includePrivate || canReadPrivate(handle));
+  const request = async url => {
+    if (!valid()) throw new Error('ACCOUNT_OR_SELECTION_CHANGED');
+    const value = await fetchJson(url, 15000);
+    if (!valid()) throw new Error('ACCOUNT_OR_SELECTION_CHANGED');
+    return value;
   };
-  const all = readCache();
-  all[ghHandle.toLowerCase() + (includePrivate ? ':private' : ':public')] = entry;
-  writeCache(all);
-  return entry;
+  const work = (async () => {
+    try {
+      const items = [];
+      for (const repo of snapshot.repos) {
+        const base = 'https://api.github.com/repos/' + repo;
+        let metadata;
+        try { metadata = await request(base); }
+        catch (error) {
+          if (error.message === 'HTTP_404') continue;
+          throw error;
+        }
+        if (!metadata || (metadata.private && !includePrivate)) continue;
+        const issues = (await pages(base + '/issues?state=open&sort=created&direction=desc', request))
+          .filter(issue => !issue.pull_request && !hiddenByIssueTemplate(issue));
+        if (!issues.length) continue;
+        const contributor = await hasCommit(base, handle, metadata.default_branch, request);
+        for (const issue of issues) {
+          if (contributor || await hasLinkedPullRequest(base, issue.number, handle, request)) {
+            items.push(shape({ ...issue, repository_url: base }));
+          }
+        }
+      }
+      if (!valid()) return null;
+      const unique = [...new Map(items.map(item => [item.id, item])).values()];
+      unique.sort((a, b) => (a.dueTs ?? Infinity) - (b.dueTs ?? Infinity) || b.createdAt - a.createdAt);
+      const entry = { at: Date.now(), totalCount: unique.length, items: unique };
+      const all = readCache(includePrivate);
+      all[snapshot.key] = entry;
+      try { (includePrivate ? sessionStorage : localStorage).setItem(CACHE_KEY, JSON.stringify(all)); } catch {}
+      return entry;
+    } catch { return valid() ? cached : null; }
+  })();
+  pending.set(snapshot.key, work);
+  try { return await work; } finally { pending.delete(snapshot.key); }
+}
+
+async function pages(url, request) {
+  const result = [];
+  for (let page = 1; page <= 100; page++) {
+    const rows = await request(url + (url.includes('?') ? '&' : '?') + 'per_page=100&page=' + page);
+    if (!Array.isArray(rows)) throw new Error('INVALID_GITHUB_RESPONSE');
+    result.push(...rows);
+    if (rows.length < 100) return result;
+  }
+  throw new Error('GITHUB_PAGINATION_LIMIT');
+}
+async function hasCommit(base, handle, defaultBranch, request) {
+  const check = async branch => {
+    const rows = await request(base + '/commits?author=' + encodeURIComponent(handle) +
+      '&per_page=1' + (branch ? '&sha=' + encodeURIComponent(branch) : ''));
+    if (!Array.isArray(rows)) throw new Error('INVALID_GITHUB_RESPONSE');
+    return rows.length > 0;
+  };
+  if (await check(defaultBranch)) return true;
+  for (const branch of await pages(base + '/branches', request)) {
+    if (branch.name !== defaultBranch && await check(branch.name)) return true;
+  }
+  return false;
+}
+async function hasLinkedPullRequest(base, number, handle, request) {
+  const events = await pages(base + '/issues/' + number + '/timeline', request);
+  return events.some(event => event.event === 'cross-referenced' &&
+    event.source?.issue?.pull_request &&
+    event.source.issue.user?.login?.toLowerCase() === handle.toLowerCase());
 }
