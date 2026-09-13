@@ -8,6 +8,9 @@ bash macos/build.sh preview  # 動作確認用アプリ
 bash macos/build.sh export   # Archiveから提出用PKGを書き出す
 bash macos/run.sh            # アプリを起動（未ビルドなら自動ビルド）
 bash macos/run.sh --build    # 最新ソースでビルドして起動
+bash macos/version.sh        # 現在のバージョンとビルド番号
+bash macos/version.sh 1.0.2 16 # iOS・macOS共通の番号を変更
+bash macos/version.sh --bump-build # ビルド番号を1増やす
 ```
 
 スクリプトはどの作業ディレクトリからでも実行できます。追加のビルド設定はモードの後ろに指定します。既存の `scripts/build-macos.sh` もArchive作成用として使用できます。
