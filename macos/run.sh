@@ -1,6 +1,6 @@
 #!/bin/bash
 # macOSアプリの起動
-#   bash macos/run.sh          # ビルド済みアプリを起動（未作成ならビルド）
+#   bash macos/run.sh          # 起動（未作成・バージョン不一致なら自動ビルド）
 #   bash macos/run.sh --build  # 最新ソースでビルドしてから起動
 #   bash macos/run.sh --help   # 使い方を表示
 set -euo pipefail
@@ -11,7 +11,7 @@ case "${1:-}" in
   "") ;;
   --build) rebuild=true; shift ;;
   -h|--help)
-    printf '使い方: bash macos/run.sh [--build]\n\n未ビルドの場合は自動ビルドして起動します。\n--build: 最新ソースでビルドしてから起動します。\n'
+    printf '使い方: bash macos/run.sh [--build]\n\n未ビルド・バージョン不一致の場合は自動ビルドして起動します。\n--build: 最新ソースでビルドしてから起動します。\n'
     exit 0
     ;;
   *) printf '不明な引数: %s\n' "$1" >&2; exit 2 ;;
@@ -22,7 +22,16 @@ if [ "$#" -gt 0 ]; then
 fi
 
 app_path="$PWD/macos/build-preview/Build/Products/Debug-maccatalyst/App.app"
-if [ "$rebuild" = true ] || [ ! -d "$app_path" ]; then
+settings=$(bash macos/version.sh --show)
+expected_version=$(printf '%s\n' "$settings" | awk '/^Version:/ {print $2}')
+expected_build=$(printf '%s\n' "$settings" | awk '/^Build:/ {print $2}')
+actual_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Contents/Info.plist" 2>/dev/null || true)
+actual_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Contents/Info.plist" 2>/dev/null || true)
+if [ "$actual_version" != "$expected_version" ] || [ "$actual_build" != "$expected_build" ]; then
+  printf '設定の %s (%s) に合わせてMacアプリを再ビルドします。\n' "$expected_version" "$expected_build"
+  rebuild=true
+fi
+if [ "$rebuild" = true ]; then
   bash macos/build.sh preview
 fi
 

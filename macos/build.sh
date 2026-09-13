@@ -7,6 +7,7 @@
 #    bash macos/build.sh archive
 #    出力先: macos/Spotcode.xcarchive
 #    中間ファイル: macos/build/
+#    成功後、作成したArchiveをXcodeで自動的に開く。
 #
 # 2. 動作確認・スクリーンショット撮影用のDebugアプリを作成
 #    bash macos/build.sh preview
@@ -42,6 +43,7 @@ case "$mode" in
 
   archive  Release Archiveを作成（省略時の動作）
            出力: macos/Spotcode.xcarchive
+           成功後、ArchiveをXcodeで開く
   preview  動作確認用のDebugアプリを作成
            出力: macos/build-preview/Build/Products/Debug-maccatalyst/App.app
   export   作成済みのArchiveからApp Store提出用PKGを書き出す
@@ -63,6 +65,7 @@ case "$mode" in
       -derivedDataPath macos/build -archivePath macos/Spotcode.xcarchive \
       -allowProvisioningUpdates archive "$@"
     printf '\nArchive: %s/macos/Spotcode.xcarchive\n' "$PWD"
+    open -a Xcode "$PWD/macos/Spotcode.xcarchive"
     ;;
   preview)
     xcodebuild -project ios/App/App.xcodeproj -scheme App \

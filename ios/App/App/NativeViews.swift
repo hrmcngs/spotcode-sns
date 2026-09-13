@@ -2849,6 +2849,12 @@ private struct ProfileHero: View {
                         }.padding(.top, 14)
                     }
                 }.frame(height: 63)
+                HStack(spacing: 14) {
+                    NavigationLink(destination: BusinessCardView(profile: profile)) {
+                        Label("名刺を共有", systemImage: "rectangle.on.rectangle")
+                    }
+                    if isOwn { NavigationLink("名刺コレクション", destination: BusinessCardCollectionView()) }
+                }.font(.subheadline).padding(.vertical, 8)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 9) {
                         Text(profile.name).spotcodeFont(28, weight: .bold, fallback: .title.weight(.bold))
@@ -3052,6 +3058,15 @@ private struct FollowListView: View {
             }.listRowBackground(SpotcodeTheme.surface)
         }.listStyle(.plain).background(SpotcodeTheme.surface)
             .navigationTitle(kind == .following ? "Following" : "Followers")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Group {
+                        if let me = model.me {
+                            NavigationLink(destination: BusinessCardView(profile: me)) { Label("名刺を共有", systemImage: "rectangle.on.rectangle") }
+                        }
+                    }
+                }
+            }
             .task {
                 if kind == .following { profiles = (try? await SupabaseService.shared.following(userID: userID, token: model.session?.accessToken)) ?? [] }
                 else { profiles = (try? await SupabaseService.shared.followers(userID: userID, token: model.session?.accessToken)) ?? [] }
@@ -5120,4 +5135,198 @@ private func storingSelectedRepos(_ repos: Set<String>, in value: String, owner:
     map[owner.uuidString] = repos.sorted()
     guard let data = try? JSONEncoder().encode(map) else { return value }
     return String(data: data, encoding: .utf8) ?? value
+}
+
+private struct BusinessCardPreview: View {
+    let card: BusinessCard
+    @State private var flipped = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var paper: Bool { card.theme == "paper" }
+    private var colors: [Color] {
+        if paper { return [Color(red: 1, green: 0.99, blue: 0.95), Color(red: 0.9, green: 0.87, blue: 0.79)] }
+        if card.theme == "aurora" { return [Color(red: 0.2, green: 0.15, blue: 0.36), .teal] }
+        return [Color(red: 0.13, green: 0.18, blue: 0.29), Color(red: 0.04, green: 0.06, blue: 0.12)]
+    }
+    var body: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.55)) { flipped.toggle() }
+        } label: {
+            ZStack {
+                face(back: false).opacity(flipped ? 0 : 1)
+                face(back: true).rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0)).opacity(flipped ? 1 : 0)
+            }
+            .rotation3DEffect(.degrees(flipped ? 180 : -4), axis: (x: 0, y: 1, z: 0), perspective: 0.4)
+            .frame(maxWidth: 520).aspectRatio(1.65, contentMode: .fit)
+        }.buttonStyle(.plain).accessibilityLabel(flipped ? "名刺の裏面。タップして表に戻す" : "名刺の表面。タップして裏返す")
+    }
+    private func face(back: Bool) -> some View {
+        VStack(alignment: card.layout == "centered" ? .center : .leading, spacing: 10) {
+            Text(back ? "LET’S CONNECT" : "SPOTCODE / BUSINESS CARD").font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(2)
+            Spacer(minLength: 4)
+            if back {
+                Text(card.bio.isEmpty ? "よろしくお願いします。" : card.bio).font(.system(size: 14)).minimumScaleFactor(0.6)
+                Text(card.contact).font(.system(size: 12)).minimumScaleFactor(0.6)
+            } else {
+                Text(card.name).font(.system(size: 26, weight: .bold)).minimumScaleFactor(0.5)
+                Text(card.title).font(.system(size: 14)).minimumScaleFactor(0.6)
+            }
+            Spacer(minLength: 4)
+            Text(back ? "タップして表面へ ↻" : "タップして裏面へ ↻").font(.system(size: 10)).opacity(0.7)
+        }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: card.layout == "centered" ? .center : .leading)
+            .foregroundColor(paper ? .black : .white)
+            .background(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.25)))
+            .shadow(color: .black.opacity(0.2), radius: 12, y: 8)
+    }
+}
+
+private struct BusinessCardView: View {
+    @EnvironmentObject private var model: AppModel
+    let profile: Profile
+    @State private var draft = BusinessCard(owner_id: UUID(), name: "")
+    @State private var published = false
+    @State private var loading = true
+    @State private var busy = false
+    @State private var message = ""
+    @State private var failed = false
+    @State private var sharing = false
+    @State private var confirmingUnpublish = false
+    private var own: Bool { profile.id != nil && profile.id == model.session?.user.id }
+    private var link: URL { URL(string: "https://hrmcngs.github.io/spotcode-sns/#/\(profile.handle)/card")! }
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if loading { ProgressView() }
+                else if failed { Button("再読み込み") { Task { await load() } } }
+                else if published || own {
+                    BusinessCardPreview(card: draft)
+                    if published {
+                        HStack {
+                            Button("名刺を共有") { sharing = true }.buttonStyle(.borderedProminent)
+                            Button("リンクをコピー") { UIPasteboard.general.url = link; message = "リンクをコピーしました。" }.buttonStyle(.bordered)
+                        }
+                        Text("共有メニューのAirDropから名刺リンクを送れます。相手にも名刺を送り返してもらうと交換できます。")
+                            .font(.caption).foregroundColor(.secondary)
+                        if !own {
+                            Button("コレクションに保存") { collect() }.buttonStyle(.borderedProminent).disabled(busy || model.session == nil)
+                            if model.session == nil { Text("保存するにはログインしてください。").font(.caption) }
+                        }
+                    }
+                    if own { editor }
+                } else { Text("このユーザーはまだ名刺を公開していません。") }
+                if !message.isEmpty { Text(message).font(.callout).accessibilityAddTraits(.updatesFrequently) }
+                if own { NavigationLink("名刺コレクション", destination: BusinessCardCollectionView()) }
+            }.padding(24).frame(maxWidth: 600)
+        }.navigationTitle("名刺")
+            .task(id: profile.id) { await load() }
+            .sheet(isPresented: $sharing) { ActivityShareSheet(items: [link]) }
+            .confirmationDialog("名刺の公開を停止すると、相手のコレクションからも削除されます。", isPresented: $confirmingUnpublish, titleVisibility: .visible) {
+                Button("公開を停止", role: .destructive) { unpublish() }
+            }
+    }
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("自分の名刺をデザイン").font(.headline)
+            Text("保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。").font(.caption).foregroundColor(.secondary)
+            TextField("名前（表・60文字まで）", text: $draft.name)
+            TextField("肩書き・組織（表・100文字まで）", text: $draft.title)
+            Text("自己紹介（裏・280文字まで）").font(.caption)
+            TextEditor(text: $draft.bio).frame(minHeight: 80).overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3))).accessibilityLabel("自己紹介（裏）")
+            TextField("連絡先・リンク（裏・160文字まで）", text: $draft.contact)
+            Picker("配色", selection: $draft.theme) {
+                Text("ミッドナイト").tag("midnight"); Text("ペーパー").tag("paper"); Text("オーロラ").tag("aurora")
+            }
+            Picker("レイアウト", selection: $draft.layout) {
+                Text("左揃え").tag("classic"); Text("中央揃え").tag("centered")
+            }
+            Button("保存して公開") { save() }.buttonStyle(.borderedProminent).disabled(busy)
+            if published { Button("公開を停止", role: .destructive) { confirmingUnpublish = true }.disabled(busy) }
+        }.textFieldStyle(.roundedBorder).disabled(busy)
+    }
+    private func load() async {
+        loading = true; failed = false; message = ""
+        defer { loading = false }
+        guard let id = profile.id else { failed = true; message = "プロフィールが見つかりません。"; return }
+        do {
+            let card = try await SupabaseService.shared.businessCard(ownerID: id, token: model.session?.accessToken)
+            draft = card ?? BusinessCard(owner_id: id, name: profile.name)
+            published = card != nil
+        } catch { failed = true; message = "名刺を読み込めませんでした。接続を確認して再試行してください。" }
+    }
+    private func save() {
+        guard let session = model.session, own, !busy else { return }
+        draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !draft.name.isEmpty, draft.name.unicodeScalars.count <= 60, draft.title.unicodeScalars.count <= 100,
+              draft.bio.unicodeScalars.count <= 280, draft.contact.unicodeScalars.count <= 160 else {
+            message = "名前を入力し、各項目の文字数上限以内にしてください。"; return
+        }
+        busy = true
+        Task {
+            defer { busy = false }
+            do { try await SupabaseService.shared.saveBusinessCard(draft, token: session.accessToken); published = true; message = "名刺を保存・公開しました。" }
+            catch { message = "保存できませんでした。接続を確認して再試行してください。" }
+        }
+    }
+    private func collect() {
+        guard let session = model.session, let id = profile.id, !own, !busy else { return }
+        busy = true
+        Task {
+            defer { busy = false }
+            do { try await SupabaseService.shared.collectBusinessCard(ownerID: id, collectorID: session.user.id, token: session.accessToken); message = "コレクションに保存しました。自分の名刺も共有しましょう。" }
+            catch { message = "保存できませんでした。再試行してください。" }
+        }
+    }
+    private func unpublish() {
+        guard let session = model.session, let id = profile.id, own, !busy else { return }
+        busy = true
+        Task {
+            defer { busy = false }
+            do { try await SupabaseService.shared.unpublishBusinessCard(ownerID: id, token: session.accessToken); published = false; message = "公開を停止しました。" }
+            catch { message = "公開を停止できませんでした。再試行してください。" }
+        }
+    }
+}
+
+private struct BusinessCardCollectionView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var cards: [CollectedBusinessCard] = []
+    @State private var loading = true
+    @State private var message = ""
+    @State private var busy = false
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                if loading { ProgressView() }
+                else if cards.isEmpty { Text("まだ名刺がありません。相手の名刺を開いて保存しましょう。") }
+                Text("保存した名刺 \(cards.count) 枚").font(.headline)
+                ForEach(cards) { row in
+                    VStack(alignment: .leading) {
+                        BusinessCardPreview(card: row.card)
+                        Text("\(String(row.collected_at.prefix(10))) に保存").font(.caption).foregroundColor(.secondary)
+                        Button("コレクションから取り除く", role: .destructive) { remove(row) }.disabled(busy)
+                    }
+                }
+                if !message.isEmpty { Text(message); Button("再読み込み") { Task { await load() } } }
+            }.padding(24).frame(maxWidth: 600)
+        }.navigationTitle("名刺コレクション").task { await load() }
+    }
+    private func load() async {
+        defer { loading = false }
+        guard let session = model.session else { cards = []; message = "ログインしてください。"; return }
+        loading = true
+        do { cards = try await SupabaseService.shared.businessCardCollection(collectorID: session.user.id, token: session.accessToken); message = "" }
+        catch { message = "コレクションを読み込めませんでした。" }
+    }
+    private func remove(_ row: CollectedBusinessCard) {
+        guard let session = model.session, !busy else { return }
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                try await SupabaseService.shared.removeBusinessCard(ownerID: row.id, collectorID: session.user.id, token: session.accessToken)
+                cards.removeAll { $0.id == row.id }
+            } catch { message = "名刺を取り除けませんでした。" }
+        }
+    }
 }

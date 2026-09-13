@@ -29,6 +29,8 @@ const SHELL = [
   './favicon.svg',
   './css/style.css',
   './js/main.js',
+  './js/business-cards.js',
+  './js/views/business-card.js',
   './js/router.js',
   './js/social-controls.js',
   './js/auth.js',

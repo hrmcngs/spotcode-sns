@@ -22,9 +22,20 @@ function template() {
           '<button class="auth-tab" data-tab="register">Sign up</button>' +
         '</div>' +
 
-        '<section class="auth-terms"><p>不適切な投稿・嫌がらせは禁止です。違反投稿の削除や利用停止を行います。<br>Objectionable content and abusive behavior are prohibited; violations may result in removal or suspension.</p>' +
-        '<a href="terms.html" target="_blank" rel="noopener">利用規約 / Terms of Use</a> · <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>' +
-        '<label><input type="checkbox" id="auth-terms-agreed">利用規約に同意します / I agree to the Terms of Use</label></section>' +
+        '<section class="auth-terms" aria-label="利用規約への同意 / Terms agreement">' +
+          '<div class="auth-terms__notice">' +
+            '<p lang="ja">不適切な投稿・嫌がらせは禁止です。違反投稿の削除や利用停止を行います。</p>' +
+            '<p lang="en">Objectionable content and abusive behavior are prohibited; violations may result in removal or suspension.</p>' +
+          '</div>' +
+          '<div class="auth-terms__links">' +
+            '<a href="' + new URL('../../terms.html', import.meta.url).href + '" target="_blank" rel="noopener">利用規約 / Terms of Use</a>' +
+            '<a href="' + new URL('../../privacy.html', import.meta.url).href + '" target="_blank" rel="noopener">Privacy Policy</a>' +
+          '</div>' +
+          '<label class="auth-terms__agreement" for="auth-terms-agreed">' +
+            '<input type="checkbox" id="auth-terms-agreed">' +
+            '<span><span lang="ja">利用規約に同意します</span><span lang="en">I agree to the Terms of Use</span></span>' +
+          '</label>' +
+        '</section>' +
         '<div class="auth-social">' +
           '<button type="button" class="btn btn--social btn--gh" data-social="github">' + icon('github', { size: 18, fill: true }) + 'Continue with GitHub</button>' +
         '</div>' +

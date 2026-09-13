@@ -58,6 +58,8 @@ export function renderFollowList(handle, kind) {
         t('profile.stat.followers') +
       '</a>' +
     '</div>' +
+    '<div class="card-actions"><a class="btn btn--ghost" href="' + url('/' + handle + '/card') + '">名刺を共有</a>' +
+      (currentUser()?.handle === handle ? '<a class="btn btn--ghost" href="' + url('/' + handle + '/cards') + '">名刺コレクション</a>' : '') + '</div>' +
     '<div id="follow-list">' +
       '<div class="stub"><p class="stub__sub">' + t('follow.loading') + '</p></div>' +
     '</div>'

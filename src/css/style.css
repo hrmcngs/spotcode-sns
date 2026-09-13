@@ -2121,6 +2121,33 @@ html[data-theme='light'] .profile-tasks__body {
   background: var(--accent); border-radius: 3px 3px 0 0;
 }
 
+/* Keep the notice, legal links and consent control on separate rows. */
+.auth-terms {
+  display: grid; gap: .75rem;
+  margin-bottom: 1rem; padding: .85rem;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg); min-width: 0;
+  font-size: .8rem; line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.auth-terms__notice { display: grid; gap: .4rem; color: var(--muted); }
+.auth-terms__links { display: flex; flex-wrap: wrap; gap: .35rem 1rem; }
+.auth-terms__links a { color: var(--accent); text-decoration: underline; text-underline-offset: .2em; }
+.auth-terms__agreement {
+  display: flex; align-items: flex-start; gap: .65rem;
+  min-height: 44px; padding: .45rem 0;
+  border-top: 1px solid var(--border); cursor: pointer;
+  color: var(--text); font-weight: 600;
+}
+.auth-terms__agreement input {
+  flex: 0 0 auto; width: 18px; height: 18px;
+  margin-top: .2rem; accent-color: var(--accent); cursor: pointer;
+}
+.auth-terms__agreement > span { display: grid; gap: .1rem; min-width: 0; }
+.auth-terms__agreement [lang="en"] { font-weight: 400; color: var(--muted); }
+.auth-terms__agreement input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+#auth-modal .auth-tabs { margin-right: 1rem; }
+
 .auth-social { display: grid; gap: .5rem; margin-bottom: .9rem; }
 .btn--social {
   display: flex; align-items: center; justify-content: center; gap: .5rem;
@@ -3502,3 +3529,32 @@ html.account-menu-locked { overflow: hidden; }
 
 .followlist__audience { display: flex; flex-direction: column; gap: 8px; font-size: 13px; flex-shrink: 0; }
 @media (max-width: 600px) { .followlist__row { flex-wrap: wrap; } .followlist__audience { flex-direction: row; flex-wrap: wrap; } }
+
+/* Two-sided business cards: fixed aspect ratio, readable on narrow phones. */
+.card-page { padding: 24px 20px 60px; }
+.card-page h1 { margin: 24px 0; font-size: 24px; }
+.card-page p { line-height: 1.7; margin: 16px 0; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 18px 0; }
+.card-actions[hidden] { display: none; }
+.business-card { display: block; width: 100%; max-width: 520px; aspect-ratio: 1.65; margin: 24px auto; padding: 0; border: 0; background: transparent; color: #f8fafc; perspective: 1400px; cursor: pointer; text-align: left; font: inherit; -webkit-tap-highlight-color: transparent; }
+.business-card__body { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .65s cubic-bezier(.2,.7,.2,1); transform: rotateY(-5deg) rotateX(3deg); }
+.business-card.is-flipped .business-card__body { transform: rotateY(180deg); }
+.business-card__face { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: clamp(18px, 5vw, 32px); border: 1px solid #ffffff40; border-radius: 18px; background: linear-gradient(125deg,#222e49,#0b1020); box-shadow: 0 16px 32px #0003, 0 3px 0 #38415a; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; overflow-wrap: anywhere; }
+.business-card__face strong { font-size: clamp(18px, 4vw, 30px); line-height: 1.2; }
+.business-card__face > span:not(.business-card__brand):not(.business-card__hint) { font-size: clamp(11px, 2.8vw, 15px); white-space: pre-wrap; }
+.business-card__brand { font-size: 9px; letter-spacing: .18em; opacity: .7; margin-bottom: auto; }
+.business-card__hint { font-size: 10px; opacity: .7; margin-top: auto; }
+.business-card__back { transform: rotateY(180deg); }
+.business-card--paper { color: #29251f; }
+.business-card--paper .business-card__face { background: linear-gradient(125deg,#fffdf4,#e7dfca); border-color: #b9ae96; box-shadow: 0 16px 32px #0002, 0 3px 0 #b9ae96; }
+.business-card--aurora .business-card__face { background: radial-gradient(ellipse at top right,#187e80,transparent 75%),linear-gradient(135deg,#34265b,#111d34); }
+.business-card--centered { text-align: center; }
+.card-editor { display: grid; gap: 16px; margin-top: 32px; }
+.card-editor label { display: grid; gap: 8px; }
+.card-editor input, .card-editor textarea, .card-editor select { width: 100%; box-sizing: border-box; border: 1px solid var(--border, #8885); border-radius: 8px; padding: 12px; background: var(--surface, transparent); color: inherit; font: inherit; }
+.card-collection { display: grid; gap: 24px; }
+.business-card:focus-visible { outline: 3px solid #728dff; outline-offset: 8px; border-radius: 18px; }
+@media (prefers-reduced-motion: reduce) { .business-card__body { transition: none; } }
+/* Long user-authored text remains reachable without changing the card shape. */
+.business-card__face { overflow-y: auto; justify-content: flex-start; }
+.business-card__face > * { flex-shrink: 0; }

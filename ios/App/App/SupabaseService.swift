@@ -943,3 +943,46 @@ enum GitHubTaskLoader {
         return false
     }
 }
+
+struct BusinessCard: Codable, Identifiable {
+    var owner_id: UUID
+    var name: String
+    var title = ""
+    var bio = ""
+    var contact = ""
+    var theme = "midnight"
+    var layout = "classic"
+    var id: UUID { owner_id }
+}
+
+struct CollectedBusinessCard: Decodable, Identifiable {
+    let card_owner_id: UUID
+    let collected_at: String
+    let card: BusinessCard
+    var id: UUID { card_owner_id }
+}
+
+extension SupabaseService {
+    func businessCard(ownerID: UUID, token: String?) async throws -> BusinessCard? {
+        let cards: [BusinessCard] = try await request("rest/v1/business_cards?owner_id=eq.\(ownerID.uuidString)&select=*", token: token)
+        return cards.first
+    }
+    func saveBusinessCard(_ card: BusinessCard, token: String) async throws {
+        let _: EmptyResponse = try await request("rest/v1/business_cards?on_conflict=owner_id", method: "POST", token: token,
+            body: JSONEncoder().encode(card), prefer: "resolution=merge-duplicates,return=minimal")
+    }
+    func collectBusinessCard(ownerID: UUID, collectorID: UUID, token: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["collector_id": collectorID.uuidString, "card_owner_id": ownerID.uuidString])
+        let _: EmptyResponse = try await request("rest/v1/business_card_collection?on_conflict=collector_id,card_owner_id", method: "POST", token: token,
+            body: body, prefer: "resolution=ignore-duplicates,return=minimal")
+    }
+    func businessCardCollection(collectorID: UUID, token: String) async throws -> [CollectedBusinessCard] {
+        try await request("rest/v1/business_card_collection?collector_id=eq.\(collectorID.uuidString)&select=card_owner_id,collected_at,card:business_cards(*)&order=collected_at.desc", token: token)
+    }
+    func removeBusinessCard(ownerID: UUID, collectorID: UUID, token: String) async throws {
+        let _: EmptyResponse = try await request("rest/v1/business_card_collection?collector_id=eq.\(collectorID.uuidString)&card_owner_id=eq.\(ownerID.uuidString)", method: "DELETE", token: token)
+    }
+    func unpublishBusinessCard(ownerID: UUID, token: String) async throws {
+        let _: EmptyResponse = try await request("rest/v1/business_cards?owner_id=eq.\(ownerID.uuidString)", method: "DELETE", token: token)
+    }
+}

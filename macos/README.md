@@ -6,7 +6,7 @@
 bash macos/build.sh          # Release Archive
 bash macos/build.sh preview  # 動作確認用アプリ
 bash macos/build.sh export   # Archiveから提出用PKGを書き出す
-bash macos/run.sh            # アプリを起動（未ビルドなら自動ビルド）
+bash macos/run.sh            # アプリを起動（未ビルド・バージョン不一致なら自動ビルド）
 bash macos/run.sh --build    # 最新ソースでビルドして起動
 bash macos/version.sh        # 現在のバージョンとビルド番号
 bash macos/version.sh 1.0.2 16 # iOS・macOS共通の番号を変更
@@ -14,6 +14,8 @@ bash macos/version.sh --bump-build # ビルド番号を1増やす
 ```
 
 スクリプトはどの作業ディレクトリからでも実行できます。追加のビルド設定はモードの後ろに指定します。既存の `scripts/build-macos.sh` もArchive作成用として使用できます。
+
+`version.sh --bump-build` はビルド番号だけを増やします。表示バージョンも変更する場合は `bash macos/version.sh 1.0.2 16` のように指定してください。`run.sh` は設定と既存アプリの両方の番号を比較して再ビルドします。提出用Archive・PKGはそれぞれ `build.sh archive`・`build.sh export` で作り直してください。
 
 現在のコンパクトUIは `build-preview/Build/Products/Debug-maccatalyst/App.app` と `Spotcode.xcarchive` に反映済みです。
 PKGの再書き出しはXcodeの `No Accounts` エラーで未完了のため、`export/spotcode.pkg` は前回のUIです。

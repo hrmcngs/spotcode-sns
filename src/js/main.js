@@ -1,3 +1,4 @@
+import { renderBusinessCard, hydrateBusinessCard } from './views/business-card.js';
 import { githubAuthorizationReturnPath } from './github-oauth.js';
 import { hydrateSocialControls } from './social-controls.js';
 import { renderKindBadge, renderVisibilityBadge } from './post.js';
@@ -587,6 +588,7 @@ function dispatch(path) {
   const analyticsMatch = path.match(/^\/post\/([0-9a-fA-F-]{36})\/analytics\/?$/);
   const postMatch      = path.match(/^\/post\/([0-9a-fA-F-]{36})\/?$/);
   const followMatch    = path.match(/^\/([A-Za-z0-9_][A-Za-z0-9_-]*)\/(following|followers)\/?$/);
+  const cardMatch = path.match(/^\/([A-Za-z0-9_][A-Za-z0-9_-]*)\/(card|cards)$/);
   const eventMatch     = path.match(/^\/event\/(\d+)\/?$/);
   const userMatch      = path.match(/^\/([A-Za-z0-9_][A-Za-z0-9_-]*)\/?$/);
 
@@ -617,6 +619,10 @@ function dispatch(path) {
     document.title = city + ' / spotcode-sns';
     app.innerHTML = renderSpot(city);
     hydrateSpot(city);
+  } else if (cardMatch) {
+    document.title = '名刺 / spotcode-sns';
+    app.innerHTML = renderBusinessCard(cardMatch[1], cardMatch[2] === 'cards');
+    hydrateBusinessCard(cardMatch[1], cardMatch[2] === 'cards');
   } else if (followMatch) {
     const handle = followMatch[1];
     const kind   = followMatch[2]; // 'following' | 'followers'
