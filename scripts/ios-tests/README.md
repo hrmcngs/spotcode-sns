@@ -35,3 +35,15 @@ These tests make no network requests, create no accounts, and send no email.
   and preservation of boolean flags when encoding again.
 - `localization.swift`: translation coverage, duplicate keys, placeholder types,
   and English/Japanese authentication, notification, and deadline messages.
+
+Session persistence regression tests:
+
+```sh
+node scripts/test-session-persistence.mjs
+```
+
+This compiles the current Keychain save and session refresh implementations with
+fake keychain and network functions. It never reads real credentials. It verifies
+failed writes preserve existing data, refresh requests are shared, transient
+network/server failures retain login, invalid refresh tokens request login, and
+late responses cannot restore a logged-out or switched account.

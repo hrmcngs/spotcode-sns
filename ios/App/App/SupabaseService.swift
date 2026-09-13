@@ -944,6 +944,46 @@ enum GitHubTaskLoader {
     }
 }
 
+struct BusinessCardDesign: Codable {
+    var frontColor: String?
+    var backColor: String?
+    var textColor: String?
+    var accentColor: String?
+    var font: String?
+    var nameSize: Int?
+    var radius: Int?
+    var pattern: String?
+    var frontAlign: String?
+    var backAlign: String?
+    var frontLabel: String?
+    var backLabel: String?
+    static func preset(_ theme: String, layout: String = "classic") -> Self {
+        let colors = theme == "paper" ? ["#fffdf4", "#e7dfca", "#29251f", "#876c37"] : theme == "aurora" ? ["#34265b", "#187e80", "#f8fafc", "#91efdf"] : ["#222e49", "#0b1020", "#f8fafc", "#9fb5ef"]
+        return Self(frontColor: colors[0], backColor: colors[1], textColor: colors[2], accentColor: colors[3], font: "sans", nameSize: 26, radius: 18, pattern: "gradient", frontAlign: layout, backAlign: layout, frontLabel: "SPOTCODE / BUSINESS CARD", backLabel: "LET’S CONNECT")
+    }
+    func resolved(theme: String, layout: String) -> Self {
+        let p = Self.preset(theme, layout: layout)
+        return Self(frontColor: frontColor ?? p.frontColor, backColor: backColor ?? p.backColor,
+                    textColor: textColor ?? p.textColor, accentColor: accentColor ?? p.accentColor,
+                    font: font ?? p.font, nameSize: min(36, max(18, nameSize ?? 26)), radius: min(28, max(0, radius ?? 18)),
+                    pattern: pattern ?? p.pattern, frontAlign: frontAlign ?? layout, backAlign: backAlign ?? layout,
+                    frontLabel: frontLabel ?? p.frontLabel, backLabel: backLabel ?? p.backLabel)
+    }
+}
+
+struct BusinessCardLink: Codable {
+    var label: String
+    var url: String
+    var destination: URL? { Self.webURL(url) }
+    static func webURL(_ value: String) -> URL? {
+        let raw = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard raw.count <= 2048, let url = URL(string: raw),
+              ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              let host = url.host, !host.isEmpty, url.user == nil, url.password == nil else { return nil }
+        return url
+    }
+}
+
 struct BusinessCard: Codable, Identifiable {
     var owner_id: UUID
     var name: String
@@ -952,6 +992,14 @@ struct BusinessCard: Codable, Identifiable {
     var contact = ""
     var theme = "midnight"
     var layout = "classic"
+    var design: BusinessCardDesign?
+    var image_url: String?
+    var image_link: String?
+    var image_side: String?
+    var image_shape: String?
+    var image_size: Int?
+    var links_side: String?
+    var links: [BusinessCardLink]?
     var id: UUID { owner_id }
 }
 

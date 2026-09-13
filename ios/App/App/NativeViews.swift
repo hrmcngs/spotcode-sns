@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import PhotosUI
+import UniformTypeIdentifiers
 import UIKit
 import CoreImage
 import AuthenticationServices
@@ -1240,6 +1241,7 @@ private func decodedDataURLImage(_ value: String?) -> UIImage? {
 
 private struct ProfileImagePicker: UIViewControllerRepresentable {
     @Binding var image: String?
+    var maxSide: CGFloat = 256
     @Environment(\.dismiss) private var dismiss
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIViewController(context: Context) -> PHPickerViewController {
@@ -1260,7 +1262,7 @@ private struct ProfileImagePicker: UIViewControllerRepresentable {
             }
             provider.loadObject(ofClass: UIImage.self) { object, _ in
                 guard let source = object as? UIImage,
-                      let data = source.resizedForPost(maxSide: 256).jpegData(compressionQuality: 0.85) else {
+                      let data = source.resizedForPost(maxSide: self.parent.maxSide).jpegData(compressionQuality: 0.85) else {
                     DispatchQueue.main.async { self.parent.dismiss() }; return
                 }
                 DispatchQueue.main.async {
@@ -3156,34 +3158,44 @@ private struct GitHubActivity: View {
     let handle: String
     let contributions: [GitHubContribution]
     var showsTitle = true
-    private var cells: [GitHubContribution] { Array(contributions.suffix(26 * 7)) }
+    // Match Web's 53 × 7 grid and align by date rather than response length.
+    private var cells: [GitHubContribution] {
+        let counts = Dictionary(contributions.map { ($0.date, $0.count) }, uniquingKeysWith: { _, latest in latest })
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        let today = Date()
+        return (0..<371).map { index in
+            let date = Calendar.current.date(byAdding: .day, value: index - 370, to: today) ?? today
+            let key = formatter.string(from: date)
+            return GitHubContribution(date: key, count: counts[key] ?? 0)
+        }
+    }
     var body: some View {
+        let days = cells
         Link(destination: URL(string: "https://github.com/\(handle)?tab=contributions")!) {
           VStack(alignment: .leading, spacing: 8) {
             if showsTitle {
                 HStack(spacing: 5) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.spotcodeFont(12, weight: .regular, fallback: .caption)
             }
-            HStack(alignment: .bottom, spacing: 3) {
-                ForEach(0..<26, id: \.self) { column in
-                    VStack(spacing: 3) {
+            ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .bottom, spacing: 2) {
+                ForEach(0..<53, id: \.self) { column in
+                    VStack(spacing: 2) {
                         ForEach(0..<7, id: \.self) { row in
                             let index = column * 7 + row
-                            let count = index < cells.count ? cells[index].count : 0
-                            RoundedRectangle(cornerRadius: 2).fill(grassColor(count)).frame(width: 9, height: 9)
+                            let count = index < days.count ? days[index].count : 0
+                            RoundedRectangle(cornerRadius: 2).fill(grassColor(count)).frame(width: 11, height: 11).help("\(days[index].date): \(count) contributions")
                         }
                     }
                 }
-            }.frame(maxWidth: .infinity, alignment: .leading).clipped()
+            }.padding(.trailing, 2).padding(.bottom, 2)
+            }.frame(height: 91)
           }.padding(.top, 8).foregroundColor(SpotcodeTheme.text)
         }.buttonStyle(SpotcodePlainButtonStyle())
     }
 
     private func grassColor(_ count: Int) -> Color {
-        if count == 0 { return SpotcodeTheme.surface2 }
-        if count < 3 { return Color.green.opacity(0.38) }
-        if count < 6 { return Color.green.opacity(0.58) }
-        if count < 10 { return Color.green.opacity(0.78) }
-        return Color.green
+        let hex = count <= 0 ? "#161b22" : count < 2 ? "#0e4429" : count < 4 ? "#006d32" : count < 8 ? "#26a641" : "#39d353"
+        return businessCardColor(hex)
     }
 }
 
@@ -5137,47 +5149,94 @@ private func storingSelectedRepos(_ repos: Set<String>, in value: String, owner:
     return String(data: data, encoding: .utf8) ?? value
 }
 
+private func businessCardColor(_ hex: String?) -> Color {
+    guard let hex, hex.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil,
+          let value = UInt32(hex.dropFirst(), radix: 16) else { return .white }
+    return Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
+}
+
 private struct BusinessCardPreview: View {
     let card: BusinessCard
     @State private var flipped = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private var paper: Bool { card.theme == "paper" }
-    private var colors: [Color] {
-        if paper { return [Color(red: 1, green: 0.99, blue: 0.95), Color(red: 0.9, green: 0.87, blue: 0.79)] }
-        if card.theme == "aurora" { return [Color(red: 0.2, green: 0.15, blue: 0.36), .teal] }
-        return [Color(red: 0.13, green: 0.18, blue: 0.29), Color(red: 0.04, green: 0.06, blue: 0.12)]
-    }
+    private var d: BusinessCardDesign { (card.design ?? BusinessCardDesign()).resolved(theme: card.theme, layout: card.layout) }
+    private var fontDesign: Font.Design { d.font == "serif" ? .serif : d.font == "mono" ? .monospaced : .default }
     var body: some View {
-        Button {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.55)) { flipped.toggle() }
-        } label: {
-            ZStack {
-                face(back: false).opacity(flipped ? 0 : 1)
-                face(back: true).rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0)).opacity(flipped ? 1 : 0)
-            }
-            .rotation3DEffect(.degrees(flipped ? 180 : -4), axis: (x: 0, y: 1, z: 0), perspective: 0.4)
-            .frame(maxWidth: 520).aspectRatio(1.65, contentMode: .fit)
-        }.buttonStyle(.plain).accessibilityLabel(flipped ? "名刺の裏面。タップして表に戻す" : "名刺の表面。タップして裏返す")
+        ZStack {
+            face(back: false).opacity(flipped ? 0 : 1).accessibilityHidden(flipped).allowsHitTesting(!flipped)
+            face(back: true).rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0)).opacity(flipped ? 1 : 0).accessibilityHidden(!flipped).allowsHitTesting(flipped)
+        }
+        .rotation3DEffect(.degrees(flipped ? 180 : -4), axis: (x: 0, y: 1, z: 0), perspective: 0.4)
+        .frame(maxWidth: 520).aspectRatio(1.65, contentMode: .fit)
+        .accessibilityElement(children: .contain)
     }
+    private func flip() { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.55)) { flipped.toggle() } }
     private func face(back: Bool) -> some View {
-        VStack(alignment: card.layout == "centered" ? .center : .leading, spacing: 10) {
-            Text(back ? "LET’S CONNECT" : "SPOTCODE / BUSINESS CARD").font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(2)
+        let align = (back ? d.backAlign : d.frontAlign) ?? "classic"
+        let horizontal: HorizontalAlignment = align == "right" ? .trailing : align == "centered" ? .center : .leading
+        let alignment: Alignment = align == "right" ? .trailing : align == "centered" ? .center : .leading
+        let label = (back ? d.backLabel : d.frontLabel) ?? ""
+        let radius = CGFloat(d.radius ?? 18)
+        return VStack(alignment: horizontal, spacing: 10) {
+            if !label.isEmpty { Text(label).font(.system(size: 9, weight: .medium, design: fontDesign)).tracking(2).foregroundColor(businessCardColor(d.accentColor)) }
             Spacer(minLength: 4)
-            if back {
-                Text(card.bio.isEmpty ? "よろしくお願いします。" : card.bio).font(.system(size: 14)).minimumScaleFactor(0.6)
-                Text(card.contact).font(.system(size: 12)).minimumScaleFactor(0.6)
-            } else {
-                Text(card.name).font(.system(size: 26, weight: .bold)).minimumScaleFactor(0.5)
-                Text(card.title).font(.system(size: 14)).minimumScaleFactor(0.6)
+            HStack(spacing: 14) {
+                if (card.image_side ?? "front") == (back ? "back" : "front"), let source = card.image_url, !source.isEmpty {
+                    if let destination = BusinessCardLink.webURL(card.image_link ?? "") {
+                        Link(destination: destination) { picture(source) }.accessibilityLabel("画像のリンクを開く")
+                    } else { picture(source) }
+                }
+                VStack(alignment: horizontal, spacing: 8) {
+                    if back {
+                        Text(card.bio.isEmpty ? "よろしくお願いします。" : card.bio).font(.system(size: 14, design: fontDesign)).minimumScaleFactor(0.6)
+                        Text(card.contact).font(.system(size: 12, design: fontDesign)).minimumScaleFactor(0.6)
+                    } else {
+                        Text(card.name).font(.system(size: CGFloat(d.nameSize ?? 26), weight: .bold, design: fontDesign)).minimumScaleFactor(0.5)
+                        Text(card.title).font(.system(size: 14, design: fontDesign)).minimumScaleFactor(0.6)
+                    }
+                }.frame(maxWidth: .infinity, alignment: alignment)
+            }
+            if (card.links_side ?? "front") == (back ? "back" : "front") {
+                ForEach(Array((card.links ?? []).prefix(3).enumerated()), id: \.offset) { _, link in
+                    if let destination = link.destination {
+                        Link(destination: destination) { Text((link.label.isEmpty ? link.url : link.label) + " ↗").underline().font(.system(size: 12)).lineLimit(1) }
+                            .foregroundColor(businessCardColor(d.textColor))
+                    }
+                }
             }
             Spacer(minLength: 4)
-            Text(back ? "タップして表面へ ↻" : "タップして裏面へ ↻").font(.system(size: 10)).opacity(0.7)
-        }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: card.layout == "centered" ? .center : .leading)
-            .foregroundColor(paper ? .black : .white)
-            .background(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.25)))
+            Button(action: flip) { Text(back ? "タップして表面へ ↻" : "タップして裏面へ ↻").font(.system(size: 10)).opacity(0.7).frame(maxWidth: .infinity, alignment: alignment) }.buttonStyle(.plain)
+        }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+            .multilineTextAlignment(align == "right" ? .trailing : align == "centered" ? .center : .leading)
+            .foregroundColor(businessCardColor(d.textColor))
+            .background(background(back: back))
+            .clipShape(RoundedRectangle(cornerRadius: radius))
+            .overlay(RoundedRectangle(cornerRadius: radius).stroke(.white.opacity(0.25)))
             .shadow(color: .black.opacity(0.2), radius: 12, y: 8)
+    }
+    private func picture(_ source: String) -> some View {
+        let size = CGFloat(min(100, max(48, card.image_size ?? 64)))
+        return DataURLImage(value: source).frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: card.image_shape == "round" ? size / 2 : 8))
+            .accessibilityLabel("\(card.name) の名刺画像")
+    }
+    private func background(back: Bool) -> some View {
+        let front = businessCardColor(d.frontColor), rear = businessCardColor(d.backColor)
+        return ZStack {
+            if d.pattern == "gradient" {
+                LinearGradient(colors: back ? [rear, front] : [front, rear], startPoint: .topLeading, endPoint: .bottomTrailing)
+            } else { back ? rear : front }
+            if d.pattern == "stripe" {
+                GeometryReader { geometry in
+                    Path { path in
+                        for x in stride(from: -geometry.size.height, to: geometry.size.width, by: 24) {
+                            path.move(to: CGPoint(x: x, y: geometry.size.height))
+                            path.addLine(to: CGPoint(x: x + geometry.size.height, y: 0))
+                        }
+                    }.stroke(Color.white.opacity(0.06), lineWidth: 2)
+                }
+            }
+        }
     }
 }
 
@@ -5192,6 +5251,9 @@ private struct BusinessCardView: View {
     @State private var failed = false
     @State private var sharing = false
     @State private var confirmingUnpublish = false
+    @State private var pickingCardImage = false
+    @State private var pickingCardImageFile = false
+    @State private var cardImageURL = ""
     private var own: Bool { profile.id != nil && profile.id == model.session?.user.id }
     private var link: URL { URL(string: "https://hrmcngs.github.io/spotcode-sns/#/\(profile.handle)/card")! }
     var body: some View {
@@ -5221,6 +5283,24 @@ private struct BusinessCardView: View {
         }.navigationTitle("名刺")
             .task(id: profile.id) { await load() }
             .sheet(isPresented: $sharing) { ActivityShareSheet(items: [link]) }
+            .sheet(isPresented: $pickingCardImage) { ProfileImagePicker(image: $draft.image_url, maxSide: 512) }
+            .fileImporter(isPresented: $pickingCardImageFile, allowedContentTypes: [.image]) { result in
+                do {
+                    let url = try result.get()
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                    guard size <= 8 * 1024 * 1024 else { message = "8MB以下の画像を選んでください。"; return }
+                    let data = try Data(contentsOf: url)
+                    guard data.count <= 8 * 1024 * 1024, let image = UIImage(data: data),
+                          let resized = image.resizedForPost(maxSide: 512).jpegData(compressionQuality: 0.85) else {
+                        message = "画像を読み込めませんでした。別の画像を選んでください。"; return
+                    }
+                    draft.image_url = "data:image/jpeg;base64," + resized.base64EncodedString()
+                } catch {
+                    if (error as NSError).code != NSUserCancelledError { message = "画像ファイルを開けませんでした。" }
+                }
+            }
             .confirmationDialog("名刺の公開を停止すると、相手のコレクションからも削除されます。", isPresented: $confirmingUnpublish, titleVisibility: .visible) {
                 Button("公開を停止", role: .destructive) { unpublish() }
             }
@@ -5229,20 +5309,80 @@ private struct BusinessCardView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("自分の名刺をデザイン").font(.headline)
             Text("保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。").font(.caption).foregroundColor(.secondary)
-            TextField("名前（表・60文字まで）", text: $draft.name)
-            TextField("肩書き・組織（表・100文字まで）", text: $draft.title)
+            BusinessCardTextField(placeholder: "名前（表・60文字まで）", text: $draft.name).frame(height: 44)
+            BusinessCardTextField(placeholder: "肩書き・組織（表・100文字まで）", text: $draft.title).frame(height: 44)
             Text("自己紹介（裏・280文字まで）").font(.caption)
-            TextEditor(text: $draft.bio).frame(minHeight: 80).overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3))).accessibilityLabel("自己紹介（裏）")
-            TextField("連絡先・リンク（裏・160文字まで）", text: $draft.contact)
-            Picker("配色", selection: $draft.theme) {
+            TextEditor(text: $draft.bio).frame(minHeight: 80).modifier(BusinessCardInputStyle()).accessibilityLabel("自己紹介（裏）")
+            BusinessCardTextField(placeholder: "連絡先・リンク（裏・160文字まで）", text: $draft.contact).frame(height: 44)
+            Picker("配色", selection: Binding(get: { draft.theme }, set: { theme in
+                draft.theme = theme
+                let palette = BusinessCardDesign.preset(theme)
+                var design = draft.design ?? BusinessCardDesign()
+                design.frontColor = palette.frontColor; design.backColor = palette.backColor
+                design.textColor = palette.textColor; design.accentColor = palette.accentColor
+                draft.design = design
+            })) {
                 Text("ミッドナイト").tag("midnight"); Text("ペーパー").tag("paper"); Text("オーロラ").tag("aurora")
             }
-            Picker("レイアウト", selection: $draft.layout) {
+            Picker("レイアウト", selection: Binding(get: { draft.layout }, set: { layout in
+                draft.layout = layout
+                var design = draft.design ?? BusinessCardDesign()
+                design.frontAlign = layout; design.backAlign = layout; draft.design = design
+            })) {
                 Text("左揃え").tag("classic"); Text("中央揃え").tag("centered")
             }
+            mediaEditor
+            BusinessCardDesignEditor(design: Binding(get: {
+                (draft.design ?? BusinessCardDesign()).resolved(theme: draft.theme, layout: draft.layout)
+            }, set: { draft.design = $0 }))
             Button("保存して公開") { save() }.buttonStyle(.borderedProminent).disabled(busy)
             if published { Button("公開を停止", role: .destructive) { confirmingUnpublish = true }.disabled(busy) }
-        }.textFieldStyle(.roundedBorder).disabled(busy)
+        }.textFieldStyle(.plain).disabled(busy)
+
+    }
+    private var mediaEditor: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("画像を差し込む").font(.headline)
+            HStack {
+                Button("写真から選択") { pickingCardImage = true }
+                Button("ファイルから選択") { pickingCardImageFile = true }
+                if !(draft.image_url ?? "").isEmpty {
+                    Button("画像を取り除く", role: .destructive) { draft.image_url = ""; cardImageURL = "" }
+                }
+            }
+            BusinessCardTextField(placeholder: "画像URL（https://…）", text: $cardImageURL).frame(height: 44)
+            Button("このURLの画像を使う") {
+                guard let url = BusinessCardLink.webURL(cardImageURL) else { message = "http(s)形式の画像URLを入力してください。"; return }
+                draft.image_url = url.absoluteString
+            }
+            Picker("表示する面", selection: Binding(get: { draft.image_side ?? "front" }, set: { draft.image_side = $0 })) {
+                Text("表").tag("front"); Text("裏").tag("back")
+            }
+            Picker("画像の形", selection: Binding(get: { draft.image_shape ?? "square" }, set: { draft.image_shape = $0 })) {
+                Text("角丸").tag("square"); Text("丸").tag("round")
+            }
+            Stepper("画像の大きさ: \(draft.image_size ?? 64)px", value: Binding(get: { draft.image_size ?? 64 }, set: { draft.image_size = $0 }), in: 48...100)
+            BusinessCardTextField(placeholder: "画像を押したときのURL", text: Binding(get: { draft.image_link ?? "" }, set: { draft.image_link = $0 })).frame(height: 44)
+            Text("名刺に載せるリンク（3件まで）").font(.headline)
+            Picker("リンクを表示する面", selection: Binding(get: { draft.links_side ?? "front" }, set: { draft.links_side = $0 })) {
+                Text("表").tag("front"); Text("裏").tag("back")
+            }
+            ForEach(0..<3) { index in
+                BusinessCardTextField(placeholder: "リンク\(index + 1)の表示名", text: linkBinding(index, label: true)).frame(height: 44)
+                BusinessCardTextField(placeholder: "リンク\(index + 1)のURL（https://…）", text: linkBinding(index, label: false)).frame(height: 44)
+            }
+        }
+    }
+    private func linkBinding(_ index: Int, label: Bool) -> Binding<String> {
+        Binding(get: {
+            guard let links = draft.links, links.indices.contains(index) else { return "" }
+            return label ? links[index].label : links[index].url
+        }, set: { value in
+            var links = Array((draft.links ?? []).prefix(3))
+            while links.count <= index { links.append(BusinessCardLink(label: "", url: "")) }
+            if label { links[index].label = String(value.prefix(40)) } else { links[index].url = String(value.prefix(2048)) }
+            draft.links = links
+        })
     }
     private func load() async {
         loading = true; failed = false; message = ""
@@ -5261,6 +5401,13 @@ private struct BusinessCardView: View {
               draft.bio.unicodeScalars.count <= 280, draft.contact.unicodeScalars.count <= 160 else {
             message = "名前を入力し、各項目の文字数上限以内にしてください。"; return
         }
+        let links = (draft.links ?? []).filter { !$0.url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard links.allSatisfy({ $0.destination != nil }),
+              (draft.image_link ?? "").isEmpty || BusinessCardLink.webURL(draft.image_link ?? "") != nil else {
+            message = "リンクは http:// または https:// から始まるURLを入力してください。"; return
+        }
+        guard (draft.image_url ?? "").utf8.count <= 1_000_000 else { message = "画像が大きすぎます。小さい画像を選んでください。"; return }
+        draft.links = links
         busy = true
         Task {
             defer { busy = false }
@@ -5328,5 +5475,126 @@ private struct BusinessCardCollectionView: View {
                 cards.removeAll { $0.id == row.id }
             } catch { message = "名刺を取り除けませんでした。" }
         }
+    }
+}
+
+private struct BusinessCardDesignEditor: View {
+    @Binding var design: BusinessCardDesign
+    var body: some View {
+        DisclosureGroup("細かくデザイン") {
+            VStack(alignment: .leading, spacing: 16) {
+                ColorPicker("表の背景", selection: color(\.frontColor), supportsOpacity: false)
+                ColorPicker("裏の背景", selection: color(\.backColor), supportsOpacity: false)
+                ColorPicker("文字色", selection: color(\.textColor), supportsOpacity: false)
+                ColorPicker("見出しの色", selection: color(\.accentColor), supportsOpacity: false)
+                Picker("書体", selection: text(\.font)) {
+                    Text("ゴシック").tag("sans"); Text("明朝").tag("serif"); Text("等幅").tag("mono")
+                }
+                Picker("背景の装飾", selection: text(\.pattern)) {
+                    Text("単色").tag("solid"); Text("グラデーション").tag("gradient"); Text("ストライプ").tag("stripe")
+                }
+                alignment("表の文字揃え", key: \.frontAlign)
+                alignment("裏の文字揃え", key: \.backAlign)
+                Stepper("名前の大きさ: \(design.nameSize ?? 26)px", value: Binding(get: { design.nameSize ?? 26 }, set: { design.nameSize = $0 }), in: 18...36)
+                Stepper("角丸: \(design.radius ?? 18)px", value: Binding(get: { design.radius ?? 18 }, set: { design.radius = $0 }), in: 0...28)
+                BusinessCardTextField(placeholder: "表の見出し（空欄で非表示）", text: text(\.frontLabel)).frame(height: 44)
+                BusinessCardTextField(placeholder: "裏の見出し（空欄で非表示）", text: text(\.backLabel)).frame(height: 44)
+            }.padding(.vertical, 12)
+        }
+    }
+    private func alignment(_ title: String, key: WritableKeyPath<BusinessCardDesign, String?>) -> some View {
+        Picker(title, selection: text(key)) { Text("左揃え").tag("classic"); Text("中央揃え").tag("centered"); Text("右揃え").tag("right") }
+    }
+    private func text(_ key: WritableKeyPath<BusinessCardDesign, String?>) -> Binding<String> {
+        Binding(get: { design[keyPath: key] ?? "" }, set: { design[keyPath: key] = String($0.prefix(40)) })
+    }
+    private func color(_ key: WritableKeyPath<BusinessCardDesign, String?>) -> Binding<Color> {
+        Binding(get: { businessCardColor(design[keyPath: key]) }, set: { value in
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            guard UIColor(value).getRed(&r, green: &g, blue: &b, alpha: &a) else { return }
+            design[keyPath: key] = String(format: "#%02x%02x%02x", Int(r * 255), Int(g * 255), Int(b * 255))
+        })
+    }
+}
+
+// Keep keyboard focus visible without Catalyst's large blue focus halo.
+private struct BusinessCardInputStyle: ViewModifier {
+    @FocusState private var focused: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 17.0, macCatalyst 17.0, *) {
+            field(content).focusEffectDisabled()
+        } else {
+            field(content)
+        }
+    }
+    private func field(_ content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .focused($focused)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(SpotcodeTheme.surface2)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8)
+                .stroke(focused ? SpotcodeTheme.muted : SpotcodeTheme.border, lineWidth: 1))
+    }
+}
+
+// Own the field's background and border together, so Catalyst cannot inset a
+// second, pill-shaped focus halo inside the rectangular input background.
+private final class BusinessCardNativeTextField: UITextField {
+    override var focusEffect: UIFocusEffect? {
+        get { nil }
+        set { /* This field draws its own focus border. */ }
+    }
+    override func textRect(forBounds bounds: CGRect) -> CGRect { bounds.insetBy(dx: 12, dy: 8) }
+    override func editingRect(forBounds bounds: CGRect) -> CGRect { textRect(forBounds: bounds) }
+    override func placeholderRect(forBounds bounds: CGRect) -> CGRect { textRect(forBounds: bounds) }
+}
+
+private struct BusinessCardTextField: UIViewRepresentable {
+    let placeholder: String
+    @Binding var text: String
+    @Environment(\.isEnabled) private var enabled
+
+    func makeUIView(context: Context) -> BusinessCardNativeTextField {
+        let field = BusinessCardNativeTextField()
+        field.borderStyle = .none
+        field.backgroundColor = .black
+        field.textColor = .white
+        field.font = .preferredFont(forTextStyle: .body)
+        field.adjustsFontForContentSizeCategory = true
+        field.layer.cornerRadius = 8
+        field.layer.borderWidth = 1
+        field.layer.borderColor = UIColor.darkGray.cgColor
+        field.clipsToBounds = true
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
+        return field
+    }
+    func updateUIView(_ field: BusinessCardNativeTextField, context: Context) {
+        context.coordinator.parent = self
+        // Do not replace a Japanese IME's in-progress marked text.
+        if field.markedTextRange == nil && field.text != text { field.text = text }
+        field.attributedPlaceholder = NSAttributedString(string: placeholder, attributes: [.foregroundColor: UIColor.gray])
+        field.accessibilityLabel = placeholder
+        field.isEnabled = enabled
+        field.alpha = enabled ? 1 : 0.5
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: BusinessCardTextField
+        init(_ parent: BusinessCardTextField) { self.parent = parent }
+        @objc func changed(_ field: UITextField) {
+            guard field.markedTextRange == nil else { return }
+            parent.text = field.text ?? ""
+        }
+        func textFieldDidBeginEditing(_ field: UITextField) { field.layer.borderColor = UIColor.gray.cgColor }
+        func textFieldDidEndEditing(_ field: UITextField) {
+            parent.text = field.text ?? ""
+            field.layer.borderColor = UIColor.darkGray.cgColor
+        }
+        func textFieldShouldReturn(_ field: UITextField) -> Bool { field.resignFirstResponder(); return true }
     }
 }

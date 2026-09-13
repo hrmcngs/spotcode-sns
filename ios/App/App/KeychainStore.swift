@@ -10,11 +10,18 @@ enum KeychainStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        SecItemDelete(query as CFDictionary)
+        // Update in place: deleting first loses the session if the subsequent
+        // write fails and also discards the existing macOS keychain ACL.
+        let updates = [kSecValueData as String: data]
+        var status = SecItemUpdate(query as CFDictionary, updates as CFDictionary)
+        if status == errSecSuccess { return }
+        guard status == errSecItemNotFound else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
         var item = query
         item[kSecValueData as String] = data
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let status = SecItemAdd(item as CFDictionary, nil)
+        status = SecItemAdd(item as CFDictionary, nil)
+        // Another writer may have created this account after our lookup.
+        if status == errSecDuplicateItem { status = SecItemUpdate(query as CFDictionary, updates as CFDictionary) }
         guard status == errSecSuccess else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
     }
 

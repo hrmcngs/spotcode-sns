@@ -21,6 +21,7 @@ final class AppModel: ObservableObject {
     @Published var authenticationError: String?
     @Published var requiresMFA = false
     @Published var requiresReauthentication = false
+    private var sessionRefresh: (id: UUID, token: String, task: Task<AuthSession, Error>)?
     private var pendingMFASession: AuthSession?
     private var pendingMFAFactorID: String?
 
@@ -324,8 +325,14 @@ final class AppModel: ObservableObject {
 
     func bootstrap() async {
         guard session != nil else { return }
-        guard let current = try? await validSession() else {
-            requiresReauthentication = true
+        let current: AuthSession
+        do { current = try await validSession() }
+        catch {
+            // validSession marks only a rejected refresh token as requiring login.
+            // Offline launches retain the saved session and cached account.
+            if !requiresReauthentication && !(error is CancellationError) {
+                errorMessage = NSLocalizedString("ログイン状態を確認できませんでした。通信が戻ったら再試行してください。", comment: "")
+            }
             return
         }
         if let profile = try? await SupabaseService.shared.profile(id: current.user.id, token: current.accessToken) {
@@ -342,25 +349,48 @@ final class AppModel: ObservableObject {
     /// to expiry. `forceRefresh` is used after an API rejects a token whose
     /// local expiry metadata was missing or stale.
     func validSession(forceRefresh: Bool = false) async throws -> AuthSession {
-        guard var current = session else { throw URLError(.userAuthenticationRequired) }
+        guard let current = session else { throw URLError(.userAuthenticationRequired) }
         let expiresSoon = current.expiresAt.map {
             $0 < Int(Date().timeIntervalSince1970) + 60
         } ?? true
-        if forceRefresh || expiresSoon {
-            do {
-                current = try await SupabaseService.shared.refresh(current.refreshToken)
-                persist(current)
-                if let profile = me { rememberAccount(session: current, profile: profile) }
-            } catch {
-                requiresReauthentication = true
-                throw NSError(
-                    domain: "SpotcodeAuth",
-                    code: 401,
-                    userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("ログインの有効期限が切れました。もう一度ログインしてください。", comment: "")]
-                )
-            }
+        guard forceRefresh || expiresSoon else { return current }
+        let pending: (id: UUID, token: String, task: Task<AuthSession, Error>)
+        if let existing = sessionRefresh, existing.token == current.refreshToken {
+            pending = existing
+        } else {
+            pending = (UUID(), current.refreshToken, Task { try await SupabaseService.shared.refresh(current.refreshToken) })
+            sessionRefresh = pending
         }
-        return current
+        defer { if sessionRefresh?.id == pending.id { sessionRefresh = nil } }
+        do {
+            let updated = try await pending.task.value
+            // A refresh completing after logout/account switching must not sign
+            // the old account back in or overwrite a newer login.
+            guard let latest = session, latest.user.id == current.user.id else { throw CancellationError() }
+            if latest.refreshToken != current.refreshToken { return latest }
+            persist(updated)
+            if let profile = me { rememberAccount(session: updated, profile: profile) }
+            return updated
+        } catch {
+            guard let latest = session, latest.user.id == current.user.id else { throw CancellationError() }
+            if latest.refreshToken != current.refreshToken { return latest }
+            if Self.isInvalidRefreshError(error) {
+                requiresReauthentication = true
+                throw NSError(domain: "SpotcodeAuth", code: 401,
+                    userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("ログインの有効期限が切れました。もう一度ログインしてください。", comment: "")])
+            }
+            // Timeouts, offline, 429 and 5xx are retryable, not a logout.
+            throw error
+        }
+    }
+
+    static func isInvalidRefreshError(_ error: Error) -> Bool {
+        let error = error as NSError
+        guard error.domain == "Supabase", [400, 401, 403].contains(error.code) else { return false }
+        guard let data = error.localizedDescription.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        let code = (json["code"] as? String) ?? (json["error_code"] as? String) ?? (json["error"] as? String) ?? ""
+        return ["refresh_token_not_found", "refresh_token_already_used", "session_not_found", "session_expired", "invalid_grant", "user_not_found", "user_banned"].contains(code)
     }
 
     static func isExpiredSessionError(_ error: Error) -> Bool {
@@ -588,6 +618,9 @@ final class AppModel: ObservableObject {
     }
 
     func signOut() {
+        sessionRefresh?.task.cancel()
+        sessionRefresh = nil
+        requiresReauthentication = false
         if let id = session?.user.id { forgetAccount(id) }
         clearGithubOrganizations()
         session = nil
@@ -813,9 +846,18 @@ final class AppModel: ObservableObject {
     private func persist(_ value: AuthSession) {
         if session?.user.id != value.user.id { clearGithubOrganizations() }
         session = value
-        if let data = try? JSONEncoder().encode(value) {
-            try? KeychainStore.save(data, account: sessionAccount)
-            try? KeychainStore.save(data, account: savedSessionPrefix + value.user.id.uuidString)
+        requiresReauthentication = false
+        do {
+            let data = try JSONEncoder().encode(value)
+            // Try both copies even if one write fails; never silently claim
+            // the login will survive restart when the keychain rejected it.
+            var failed = false
+            for account in [sessionAccount, savedSessionPrefix + value.user.id.uuidString] {
+                do { try KeychainStore.save(data, account: account) } catch { failed = true }
+            }
+            if failed { throw NSError(domain: "SessionPersistence", code: 1) }
+        } catch {
+            errorMessage = NSLocalizedString("ログイン情報をキーチェーンに保存できませんでした。アプリの署名とキーチェーンへのアクセスを確認してください。", comment: "")
         }
     }
 
