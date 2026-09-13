@@ -3176,19 +3176,25 @@ private struct GitHubActivity: View {
             if showsTitle {
                 HStack(spacing: 5) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.spotcodeFont(12, weight: .regular, fallback: .caption)
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .bottom, spacing: 2) {
-                ForEach(0..<53, id: \.self) { column in
-                    VStack(spacing: 2) {
-                        ForEach(0..<7, id: \.self) { row in
-                            let index = column * 7 + row
-                            let count = index < days.count ? days[index].count : 0
-                            RoundedRectangle(cornerRadius: 2).fill(grassColor(count)).frame(width: 11, height: 11).help("\(days[index].date): \(count) contributions")
+            GeometryReader { geometry in
+                // Scale the entire 53-week grid to the available profile/rail
+                // width, keeping square cells and proportional spacing.
+                let scale = geometry.size.width / 687
+                HStack(alignment: .top, spacing: 2 * scale) {
+                    ForEach(0..<53, id: \.self) { column in
+                        VStack(spacing: 2 * scale) {
+                            ForEach(0..<7, id: \.self) { row in
+                                let day = days[column * 7 + row]
+                                RoundedRectangle(cornerRadius: 2 * scale)
+                                    .fill(grassColor(day.count))
+                                    .frame(width: 11 * scale, height: 11 * scale)
+                                    .help("\(day.date): \(day.count) contributions")
+                            }
                         }
                     }
                 }
-            }.padding(.trailing, 2).padding(.bottom, 2)
-            }.frame(height: 91)
+            }.aspectRatio(687.0 / 89.0, contentMode: .fit)
+             .frame(maxWidth: .infinity)
           }.padding(.top, 8).foregroundColor(SpotcodeTheme.text)
         }.buttonStyle(SpotcodePlainButtonStyle())
     }

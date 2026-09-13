@@ -3592,3 +3592,9 @@ html.account-menu-locked { overflow: hidden; }
 .business-card__align-centered .business-card__links { justify-content: center; }
 .business-card__align-right .business-card__identity { flex-direction: row-reverse; }
 .business-card__align-right .business-card__links { justify-content: flex-end; }
+
+/* Fit all 53 weeks to the parent width; keep heatmap cells square. */
+.contribution-grid { display: block; width: 100%; height: auto; }
+.profile-activity, .profile-activity__graph { min-width: 0; width: 100%; }
+.profile-activity__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.profile-activity__hint { color: var(--muted); }
