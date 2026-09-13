@@ -275,7 +275,7 @@ struct RootView: View {
             if let screenshotSection { section = screenshotSection }
             if screenshotShowsLogin {
                 showLogin = true
-            } else if model.session == nil && !screenshotMode {
+            } else if model.session == nil && !model.sessionRestorePending && !screenshotMode {
                 showLogin = true
             }
             #if DEBUG
@@ -284,6 +284,15 @@ struct RootView: View {
             }
             #endif
             await model.bootstrap()
+            if model.session != nil && !model.requiresReauthentication && !screenshotMode { showLogin = false }
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active && model.sessionRestorePending {
+                Task { await model.bootstrap() }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in
+            if model.sessionRestorePending { Task { await model.bootstrap() } }
         }
         .task(id: "\(model.session?.user.id.uuidString ?? "guest"):\(scenePhase):\(followedPostScope)") {
             guard scenePhase == .active else { return }
@@ -305,7 +314,10 @@ struct RootView: View {
         .alert("エラー", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
-        )) { Button("OK") {} } message: { Text(LocalizedStringKey(model.errorMessage ?? "")) }
+        )) {
+            if model.sessionRestorePending { Button("再試行") { Task { await model.bootstrap() } } }
+            Button("OK") {}
+        } message: { Text(LocalizedStringKey(model.errorMessage ?? "")) }
         .onChange(of: model.requiresReauthentication) { required in
             if required && !screenshotMode {
                 showAccounts = false
@@ -5337,6 +5349,9 @@ private struct BusinessCardView: View {
             })) {
                 Text("左揃え").tag("classic"); Text("中央揃え").tag("centered")
             }
+            BusinessCardBaseColorPicker(design: Binding(get: {
+                (draft.design ?? BusinessCardDesign()).resolved(theme: draft.theme, layout: draft.layout)
+            }, set: { draft.design = $0 }))
             mediaEditor
             BusinessCardDesignEditor(design: Binding(get: {
                 (draft.design ?? BusinessCardDesign()).resolved(theme: draft.theme, layout: draft.layout)
@@ -5602,5 +5617,38 @@ private struct BusinessCardTextField: UIViewRepresentable {
             field.layer.borderColor = UIColor.darkGray.cgColor
         }
         func textFieldShouldReturn(_ field: UITextField) -> Bool { field.resignFirstResponder(); return true }
+    }
+}
+
+private struct BusinessCardBaseColorPicker: View {
+    @Binding var design: BusinessCardDesign
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("ベースカラー").font(.headline)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 40, maximum: 44), spacing: 12)], alignment: .leading, spacing: 12) {
+                ForEach(BusinessCardDesign.baseColors, id: \.0) { hex, name in
+                    let selected = design.frontColor?.lowercased() == hex
+                    Button { design.applyBaseColor(hex) } label: {
+                        Circle().fill(businessCardColor(hex)).frame(width: 36, height: 36)
+                            .overlay(Circle().stroke(Color.gray.opacity(0.5), lineWidth: 1))
+                            .overlay(Group {
+                                if selected { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white).padding(4).background(Color.black).clipShape(Circle()) }
+                            })
+                            .padding(4)
+                            .overlay(Circle().stroke(selected ? SpotcodeTheme.text : .clear, lineWidth: 2))
+                    }.buttonStyle(.plain).accessibilityLabel(name)
+                     .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            ColorPicker("好きな色を選ぶ", selection: Binding(get: {
+                businessCardColor(design.frontColor)
+            }, set: { color in
+                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                guard UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a) else { return }
+                design.applyBaseColor(String(format: "#%02x%02x%02x", Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded())))
+            }), supportsOpacity: false)
+            Text("選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。")
+                .font(.caption).foregroundColor(.secondary)
+        }.padding(.vertical, 8)
     }
 }

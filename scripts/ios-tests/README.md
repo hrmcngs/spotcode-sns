@@ -47,3 +47,19 @@ fake keychain and network functions. It never reads real credentials. It verifie
 failed writes preserve existing data, refresh requests are shared, transient
 network/server failures retain login, invalid refresh tokens request login, and
 late responses cannot restore a logged-out or switched account.
+
+Startup restoration coverage also verifies that locked/denied keychain reads are
+retryable, old macOS items migrate into the data-protection keychain, the last
+active account's backup can restore a missing primary item, and explicit logout
+wins even when deletion was temporarily unavailable.
+
+To verify persistence across two actual signed macOS binaries after building the
+normal signed preview app:
+
+```sh
+sbcl --script scripts/test-signed-keychain-persistence.lisp
+```
+
+This uses a random fixture account with three test bytes, the preview build's
+signing identity and entitlements, and the production KeychainStore implementation.
+It does not read login tokens. It removes its fixture after the rebuild/read check.

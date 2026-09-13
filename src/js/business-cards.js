@@ -2,6 +2,15 @@ import { getClient } from './supa.js';
 import { currentUser } from './auth.js';
 
 export const themes = { midnight: 'ミッドナイト', paper: 'ペーパー', aurora: 'オーロラ' };
+export const baseColors = [['#18181b','チャコール'],['#1d4ed8','ブルー'],['#4f46e5','インディゴ'],['#7c3aed','パープル'],['#be185d','ピンク'],['#b91c1c','レッド'],['#c2410c','オレンジ'],['#0f766e','ティール'],['#15803d','グリーン'],['#f4e8d0','アイボリー'],['#e5e7eb','グレー'],['#ffffff','ホワイト']];
+export function paletteFromBase(value) {
+  const frontColor = /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : '#18181b';
+  const rgb = frontColor.slice(1).match(/../g).map(v => parseInt(v,16));
+  const back = rgb.map(v => Math.round(v * 0.82));
+  const luminance = values => values.map(v => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }).reduce((sum,v,i) => sum + v * [0.2126,0.7152,0.0722][i],0);
+  const textColor = 1.05 / (luminance(rgb) + 0.05) >= (luminance(back) + 0.05) / 0.05 ? '#ffffff' : '#000000';
+  return { frontColor, backColor: '#' + back.map(v => v.toString(16).padStart(2,'0')).join(''), textColor, accentColor: textColor };
+}
 export function defaultDesign(theme = 'midnight', layout = 'classic') {
   const palette = theme === 'paper' ? ['#fffdf4','#e7dfca','#29251f','#876c37']
     : theme === 'aurora' ? ['#34265b','#187e80','#f8fafc','#91efdf'] : ['#222e49','#0b1020','#f8fafc','#9fb5ef'];

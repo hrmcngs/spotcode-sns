@@ -1,7 +1,7 @@
 import { fileToAvatarDataUrl } from '../avatar.js';
 import { currentUser } from '../auth.js';
 import { url } from '../router.js';
-import { themes, defaultDesign, normalizeCard, cardLink, loadCard, saveCard, collectCard, loadCollection, removeCard, unpublishCard } from '../business-cards.js';
+import { themes, baseColors, paletteFromBase, defaultDesign, normalizeCard, cardLink, loadCard, saveCard, collectCard, loadCollection, removeCard, unpublishCard } from '../business-cards.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export function cardMarkup(value, handle) {
   const c = normalizeCard(value), d = c.design;
@@ -79,6 +79,9 @@ export async function hydrateBusinessCard(handle, collection = false) {
         previewBack = preview.querySelector('.business-card')?.classList.contains('is-flipped') || false;
         preview.innerHTML = cardMarkup(value(), handle);
         if (previewBack) preview.querySelector('[data-card-flip]').click();
+        const base = form.elements.design_frontColor.value;
+        form.querySelector('[data-base-color]').value = base;
+        form.querySelectorAll('[data-base-chip]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.baseChip === base.toLowerCase())));
       }
       form.querySelector('[data-card-image-file]').onchange = async event => {
         const file = event.target.files?.[0];
@@ -102,7 +105,12 @@ export async function hydrateBusinessCard(handle, collection = false) {
         stagedImage = ''; form.querySelector('[data-card-image-url]').value = '';
         form.querySelector('[data-image-state]').textContent = '画像なし'; paintPreview();
       };
+      function applyBaseColor(color) {
+        for (const [key, value] of Object.entries(paletteFromBase(color))) form.elements['design_' + key].value = value;
+      }
+      form.querySelectorAll('[data-base-chip]').forEach(button => button.onclick = () => { applyBaseColor(button.dataset.baseChip); paintPreview(); });
       form.oninput = event => {
+        if (event.target.matches('[data-base-color]')) applyBaseColor(event.target.value);
         if (event.target.matches('[data-card-image-file]')) return;
         if (event.target.matches('[data-card-image-url]')) {
           stagedImage = event.target.value;
@@ -146,7 +154,10 @@ export async function hydrateBusinessCard(handle, collection = false) {
   }
 }
 function editor(c, published) {
-  return `<form class="card-editor"><h2>自分の名刺をデザイン</h2><p>保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。</p>${[['name','名前（表）',60],['title','肩書き・組織（表）',100],['bio','自己紹介（裏）',280],['contact','連絡先・リンク（裏）',160]].map(([key,label,max]) => `<label>${label}${key === 'bio' ? `<textarea name="${key}" maxlength="${max}" rows="3">${esc(c[key])}</textarea>` : `<input name="${key}" maxlength="${max}" value="${esc(c[key])}" ${key === 'name' ? 'required' : ''}>`}</label>`).join('')}<label>配色<select name="theme">${Object.entries(themes).map(([key,label]) => `<option value="${key}" ${c.theme === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>レイアウト<select name="layout"><option value="classic">左揃え</option><option value="centered" ${c.layout === 'centered' ? 'selected' : ''}>中央揃え</option></select></label>${mediaEditor(c)}${designEditor(c.design)}<div class="card-actions"><button class="btn btn--primary" type="submit">保存して公開</button><button class="btn btn--ghost" type="button" data-unpublish-card ${published ? '' : 'hidden'}>公開を停止</button></div></form>`;
+  return `<form class="card-editor"><h2>自分の名刺をデザイン</h2><p>保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。</p>${[['name','名前（表）',60],['title','肩書き・組織（表）',100],['bio','自己紹介（裏）',280],['contact','連絡先・リンク（裏）',160]].map(([key,label,max]) => `<label>${label}${key === 'bio' ? `<textarea name="${key}" maxlength="${max}" rows="3">${esc(c[key])}</textarea>` : `<input name="${key}" maxlength="${max}" value="${esc(c[key])}" ${key === 'name' ? 'required' : ''}>`}</label>`).join('')}${baseColorEditor(c.design)}<label>配色プリセット<select name="theme">${Object.entries(themes).map(([key,label]) => `<option value="${key}" ${c.theme === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>レイアウト<select name="layout"><option value="classic">左揃え</option><option value="centered" ${c.layout === 'centered' ? 'selected' : ''}>中央揃え</option></select></label>${mediaEditor(c)}${designEditor(c.design)}<div class="card-actions"><button class="btn btn--primary" type="submit">保存して公開</button><button class="btn btn--ghost" type="button" data-unpublish-card ${published ? '' : 'hidden'}>公開を停止</button></div></form>`;
+}
+function baseColorEditor(d) {
+  return `<fieldset class="card-design"><legend>ベースカラー</legend><div class="card-color-chips" role="group" aria-label="ベースカラーを選択">${baseColors.map(([hex,label]) => `<button type="button" class="card-color-chip" data-base-chip="${hex}" style="--chip-color:${hex}" aria-label="${label}" title="${label}" aria-pressed="${hex === d.frontColor.toLowerCase()}"><span aria-hidden="true">✓</span></button>`).join('')}</div><label class="card-base-custom">好きな色を選ぶ<input type="color" data-base-color value="${d.frontColor}"></label><p>選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。</p></fieldset>`;
 }
 function mediaEditor(c) {
   return `<fieldset class="card-design"><legend>画像を差し込む</legend><div class="card-editor">

@@ -945,6 +945,23 @@ enum GitHubTaskLoader {
 }
 
 struct BusinessCardDesign: Codable {
+    static let baseColors: [(String, String)] = [("#18181b","チャコール"),("#1d4ed8","ブルー"),("#4f46e5","インディゴ"),("#7c3aed","パープル"),("#be185d","ピンク"),("#b91c1c","レッド"),("#c2410c","オレンジ"),("#0f766e","ティール"),("#15803d","グリーン"),("#f4e8d0","アイボリー"),("#e5e7eb","グレー"),("#ffffff","ホワイト")]
+    mutating func applyBaseColor(_ hex: String) {
+        guard hex.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil,
+              let value = UInt32(hex.dropFirst(), radix: 16) else { return }
+        let rgb = [Double((value >> 16) & 255), Double((value >> 8) & 255), Double(value & 255)]
+        let back = rgb.map { ($0 * 0.82).rounded() }
+        func luminance(_ values: [Double]) -> Double {
+            zip(values, [0.2126, 0.7152, 0.0722]).reduce(0) { sum, pair in
+                let c = pair.0 / 255
+                return sum + (c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)) * pair.1
+            }
+        }
+        frontColor = hex.lowercased()
+        backColor = String(format: "#%02x%02x%02x", Int(back[0]), Int(back[1]), Int(back[2]))
+        textColor = 1.05 / (luminance(rgb) + 0.05) >= (luminance(back) + 0.05) / 0.05 ? "#ffffff" : "#000000"
+        accentColor = textColor
+    }
     var frontColor: String?
     var backColor: String?
     var textColor: String?

@@ -3598,3 +3598,11 @@ html.account-menu-locked { overflow: hidden; }
 .profile-activity, .profile-activity__graph { min-width: 0; width: 100%; }
 .profile-activity__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
 .profile-activity__hint { color: var(--muted); }
+
+.card-color-chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 16px; }
+.card-color-chip { flex: 0 0 40px; width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid #8887; border-radius: 50%; background: var(--chip-color); padding: 0; }
+.card-color-chip span { visibility: hidden; border-radius: 50%; width: 20px; height: 20px; line-height: 20px; font-size: 13px; background: #111; color: #fff; }
+.card-color-chip[aria-pressed=true] { outline: 2px solid var(--text); outline-offset: 3px; }
+.card-color-chip[aria-pressed=true] span { visibility: visible; }
+.card-color-chip:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.card-base-custom input[type=color] { max-width: 100px; height: 44px; padding: 4px; }

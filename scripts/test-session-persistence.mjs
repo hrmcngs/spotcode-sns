@@ -4,8 +4,9 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 const app = fs.readFileSync('ios/App/App/AppModel.swift', 'utf8');
 const keychain = fs.readFileSync('ios/App/App/KeychainStore.swift', 'utf8')
-  .replaceAll('SecItemUpdate(', 'fakeUpdate(').replaceAll('SecItemAdd(', 'fakeAdd(').replaceAll('SecItemDelete(', 'fakeDelete(');
+  .replaceAll('SecItemCopyMatching(', 'fakeRead(').replaceAll('#if targetEnvironment(macCatalyst)', '#if TEST_CATALYST').replaceAll('SecItemUpdate(', 'fakeUpdate(').replaceAll('SecItemAdd(', 'fakeAdd(').replaceAll('SecItemDelete(', 'fakeDelete(');
 const methods = app.slice(app.indexOf('    func validSession('), app.indexOf('    static func isExpiredSessionError'));
+const restoration = app.slice(app.indexOf('    func restoreSavedSession()'), app.indexOf('    func bootstrap()')).replaceAll('UserDefaults.standard', 'testDefaults');
 const models = fs.readFileSync('ios/App/App/NativeModels.swift', 'utf8');
 const types = models.slice(models.indexOf('struct AuthUser:'), models.indexOf('struct MFAFactorsResponse:'));
 const source = `
@@ -16,18 +17,30 @@ var addResult = errSecSuccess
 var writes = 0
 var deletes = 0
 var stored = Data([1])
+var readStatus: OSStatus? = nil
+var rows: [String: Data] = [:]
+func rowKey(_ query: CFDictionary) -> String {
+    let q = query as NSDictionary
+    return ((q[kSecUseDataProtectionKeychain] as? Bool) == true ? "modern:" : "legacy:") + (q[kSecAttrAccount] as! String)
+}
+func fakeRead(_ query: CFDictionary, _ result: UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus {
+    if let status = readStatus { return status }
+    guard let data = rows[rowKey(query)] else { return errSecItemNotFound }
+    result?.pointee = data as NSData
+    return errSecSuccess
+}
 func fakeUpdate(_ query: CFDictionary, _ attributes: CFDictionary) -> OSStatus {
     writes += 1
     let status = updateResults.isEmpty ? errSecSuccess : updateResults.removeFirst()
-    if status == errSecSuccess { stored = (attributes as NSDictionary)[kSecValueData] as! Data }
+    if status == errSecSuccess { stored = (attributes as NSDictionary)[kSecValueData] as! Data; rows[rowKey(query)] = stored }
     return status
 }
 func fakeAdd(_ item: CFDictionary, _ result: UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus {
     writes += 1
-    if addResult == errSecSuccess { stored = (item as NSDictionary)[kSecValueData] as! Data }
+    if addResult == errSecSuccess { stored = (item as NSDictionary)[kSecValueData] as! Data; rows[rowKey(item)] = stored }
     return addResult
 }
-func fakeDelete(_ query: CFDictionary) -> OSStatus { deletes += 1; stored = Data(); return errSecSuccess }
+@discardableResult func fakeDelete(_ query: CFDictionary) -> OSStatus { deletes += 1; rows.removeValue(forKey: rowKey(query)); stored = Data(); return errSecSuccess }
 ${keychain}
 ${types}
 @MainActor final class SupabaseService {
@@ -41,16 +54,26 @@ ${types}
         return try await withCheckedThrowingContinuation { continuation = $0 }
     }
 }
-struct Profile {}
+struct Profile { var id: UUID? }
+let testDefaults = UserDefaults(suiteName: "spotcode-session-test-" + UUID().uuidString)!
 @MainActor final class Harness {
     var session: AuthSession?
     var me: Profile?
     var requiresReauthentication = false
     var persists = 0
+    var sessionRestorePending = false
+    var errorMessage: String?
+    var blockedOwner: UUID?
+    var blockedAccountIDs = Set<UUID>()
+    let sessionAccount = "fixture-primary"
+    let savedSessionPrefix = "fixture-backup."
+    let activeAccountKey = "fixture-active"
+    let signedOutKey = "fixture-signed-out"
     private var sessionRefresh: (id: UUID, token: String, task: Task<AuthSession, Error>)?
     func persist(_ value: AuthSession) { session = value; persists += 1; requiresReauthentication = false }
     func rememberAccount(session: AuthSession, profile: Profile) {}
 ${methods}
+${restoration}
 }
 @main struct Regression {
     @MainActor static func main() async throws {
@@ -108,13 +131,43 @@ ${methods}
             do { _ = try await task.value; fatalError("expected cancellation") } catch is CancellationError {} catch { fatalError("wrong error") }
             assert(model.session?.user.id == replacement?.user.id && model.persists == 0)
         }
-        print("PASS keychain update without delete, failed writes preserved, duplicate race, offline/429/5xx retention, rejected refresh, single refresh, logout/account-switch protection")
+        // Reading failures are not missing sessions. Unlock/retry recovers.
+        rows = [:]; readStatus = errSecInteractionNotAllowed
+        let restoration = Harness()
+        restoration.restoreSavedSession()
+        assert(restoration.sessionRestorePending && restoration.session == nil)
+        readStatus = nil
+        rows["modern:fixture-primary"] = try JSONEncoder().encode(session("restored"))
+        restoration.restoreSavedSession()
+        assert(!restoration.sessionRestorePending && restoration.session?.refreshToken == "restored")
+        assert(restoration.errorMessage == nil)
+        // Legacy Mac storage is migrated without deleting its only copy.
+        rows = ["legacy:fixture-primary": try JSONEncoder().encode(session("legacy"))]
+        updateResults = [errSecItemNotFound]; addResult = errSecSuccess
+        let migrated = Harness(); migrated.restoreSavedSession()
+        assert(migrated.session?.refreshToken == "legacy" && rows["modern:fixture-primary"] != nil)
+        // Missing primary recovers only the selected account's backup.
+        rows = ["modern:fixture-backup." + id.uuidString: try JSONEncoder().encode(session("backup"))]
+        testDefaults.set(id.uuidString, forKey: "fixture-active")
+        let backup = Harness(); backup.restoreSavedSession()
+        assert(backup.session?.refreshToken == "backup")
+        // Explicit logout wins even if deletion was denied while locked.
+        testDefaults.set(true, forKey: "fixture-signed-out")
+        rows["modern:fixture-primary"] = try JSONEncoder().encode(session("must-not-restore"))
+        let signedOut = Harness(); signedOut.restoreSavedSession()
+        assert(signedOut.session == nil && !signedOut.sessionRestorePending)
+        testDefaults.removeObject(forKey: "fixture-signed-out")
+        testDefaults.removeObject(forKey: "fixture-active")
+        rows = [:]
+        let guest = Harness(); guest.restoreSavedSession()
+        assert(guest.session == nil && !guest.sessionRestorePending)
+        print("PASS keychain update without delete, failed writes preserved, duplicate race, offline/429/5xx retention, rejected refresh, single refresh, logout/account-switch protection, locked-store retry, legacy migration, selected-account recovery, durable logout")
     }
 }
 `;
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spotcode-session-test-'));
 try {
   fs.writeFileSync(path.join(dir, 'Regression.swift'), source);
-  execFileSync('xcrun', ['swiftc', '-parse-as-library', '-module-cache-path', path.join(dir, 'cache'), path.join(dir, 'Regression.swift'), '-o', path.join(dir, 'test')], { stdio: 'inherit' });
+  execFileSync('xcrun', ['swiftc', '-D', 'TEST_CATALYST', '-parse-as-library', '-module-cache-path', path.join(dir, 'cache'), path.join(dir, 'Regression.swift'), '-o', path.join(dir, 'test')], { stdio: 'inherit' });
   execFileSync(path.join(dir, 'test'), { stdio: 'inherit' });
 } finally { fs.rmSync(dir, { recursive: true, force: true }); }

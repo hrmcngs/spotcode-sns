@@ -21,6 +21,9 @@ final class AppModel: ObservableObject {
     @Published var authenticationError: String?
     @Published var requiresMFA = false
     @Published var requiresReauthentication = false
+    @Published private(set) var sessionRestorePending = false
+    private let activeAccountKey = "spotcode.native.active-account"
+    private let signedOutKey = "spotcode.native.signed-out"
     private var sessionRefresh: (id: UUID, token: String, task: Task<AuthSession, Error>)?
     private var pendingMFASession: AuthSession?
     private var pendingMFAFactorID: String?
@@ -309,13 +312,8 @@ final class AppModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: savedAccountsKey) {
             savedAccounts = (try? JSONDecoder().decode([SavedAccount].self, from: data)) ?? []
         }
-        if let data = KeychainStore.load(account: sessionAccount),
-           let saved = try? JSONDecoder().decode(AuthSession.self, from: data) {
-            session = saved
-            blockedOwner = saved.user.id
-            blockedAccountIDs = Set((UserDefaults.standard.stringArray(forKey: "spotcode.blocks." + saved.user.id.uuidString) ?? []).compactMap(UUID.init(uuidString:)))
-        }
         if let data = UserDefaults.standard.data(forKey: cachedProfileKey) { me = try? JSONDecoder().decode(Profile.self, from: data) }
+        restoreSavedSession()
         if let data = UserDefaults.standard.data(forKey: cachedPostsKey) {
             let cached = (try? JSONDecoder().decode([Post].self, from: data)) ?? []
             let canInspect = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && me?.isAdmin == true && me?.id == session?.user.id
@@ -323,7 +321,43 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func restoreSavedSession() {
+        guard session == nil else { sessionRestorePending = false; return }
+        if UserDefaults.standard.bool(forKey: signedOutKey) {
+            sessionRestorePending = false; me = nil; return
+        }
+        do {
+            var saved: AuthSession?
+            if let data = try KeychainStore.read(account: sessionAccount) {
+                saved = try JSONDecoder().decode(AuthSession.self, from: data)
+            }
+            // Restore only the last active account, never an arbitrary account
+            // from the account switcher. Explicit logout clears this marker.
+            let expected = saved?.user.id ?? UserDefaults.standard.string(forKey: activeAccountKey).flatMap(UUID.init(uuidString:)) ?? me?.id
+            if let id = expected, let data = try KeychainStore.read(account: savedSessionPrefix + id.uuidString) {
+                let backup = try JSONDecoder().decode(AuthSession.self, from: data)
+                if backup.user.id == id && (saved == nil || (backup.expiresAt ?? 0) > (saved?.expiresAt ?? 0)) { saved = backup }
+            }
+            session = saved
+            if sessionRestorePending { errorMessage = nil }
+            sessionRestorePending = false
+            if let saved {
+                UserDefaults.standard.set(saved.user.id.uuidString, forKey: activeAccountKey)
+                blockedOwner = saved.user.id
+                blockedAccountIDs = Set((UserDefaults.standard.stringArray(forKey: "spotcode.blocks." + saved.user.id.uuidString) ?? []).compactMap(UUID.init(uuidString:)))
+                // A stale cached profile must not identify another signed-in user.
+                if me?.id != saved.user.id { me = nil }
+            } else { me = nil }
+        } catch {
+            sessionRestorePending = true
+            // Include only the OS status, never keychain data or session tokens.
+            let status = (error as NSError).code
+            errorMessage = "保存済みのログイン情報を読み込めませんでした（コード: \(status)）。ロック解除後に再試行してください。"
+        }
+    }
+
     func bootstrap() async {
+        if session == nil { restoreSavedSession() }
         guard session != nil else { return }
         let current: AuthSession
         do { current = try await validSession() }
@@ -621,6 +655,9 @@ final class AppModel: ObservableObject {
         sessionRefresh?.task.cancel()
         sessionRefresh = nil
         requiresReauthentication = false
+        sessionRestorePending = false
+        UserDefaults.standard.set(true, forKey: signedOutKey)
+        UserDefaults.standard.removeObject(forKey: activeAccountKey)
         if let id = session?.user.id { forgetAccount(id) }
         clearGithubOrganizations()
         session = nil
@@ -640,7 +677,6 @@ final class AppModel: ObservableObject {
         }
         guard let data = KeychainStore.load(account: savedSessionPrefix + id.uuidString),
               var next = try? JSONDecoder().decode(AuthSession.self, from: data) else {
-            forgetAccount(id)
             errorMessage = NSLocalizedString("保存済みのログイン情報が見つかりません。もう一度ログインしてください。", comment: "")
             return false
         }
@@ -846,6 +882,9 @@ final class AppModel: ObservableObject {
     private func persist(_ value: AuthSession) {
         if session?.user.id != value.user.id { clearGithubOrganizations() }
         session = value
+        sessionRestorePending = false
+        UserDefaults.standard.set(false, forKey: signedOutKey)
+        UserDefaults.standard.set(value.user.id.uuidString, forKey: activeAccountKey)
         requiresReauthentication = false
         do {
             let data = try JSONEncoder().encode(value)

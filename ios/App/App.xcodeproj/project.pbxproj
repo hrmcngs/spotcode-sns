@@ -339,6 +339,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				CODE_SIGN_ENTITLEMENTS = App/iOS.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = App/MacCatalyst.entitlements;
 				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
@@ -363,6 +364,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				CODE_SIGN_ENTITLEMENTS = App/iOS.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = App/MacCatalyst.entitlements;
 				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
