@@ -21,9 +21,20 @@ export function cardMarkup(value, handle) {
 export function renderBusinessCard(handle, collection = false) {
   return `<section class="card-page ${collection ? '' : 'card-page--showcase'}" data-card-page><nav class="card-actions"><a href="${url('/' + handle)}">← プロフィール</a><a href="${url('/' + handle + '/card')}">名刺</a>${currentUser()?.handle === handle ? `<a href="${url('/' + handle + '/cards')}">コレクション</a>` : ''}</nav><h1>${collection ? '名刺コレクション' : '名刺'}</h1><div data-card-content>読み込み中…</div><p role="status" aria-live="polite" data-card-status></p></section>`;
 }
-export async function hydrateBusinessCard(handle, collection = false) {
+let refreshVisibleCard = null;
+let refreshingCard = false;
+async function refreshCardOnReturn() {
+  if (document.visibilityState === 'hidden' || refreshingCard || !refreshVisibleCard) return;
+  refreshingCard = true;
+  try { await refreshVisibleCard(); } finally { refreshingCard = false; }
+}
+document.addEventListener('visibilitychange', refreshCardOnReturn);
+if (typeof window !== 'undefined') window.addEventListener('focus', refreshCardOnReturn);
+
+export async function hydrateBusinessCard(handle, collection = false, canRefresh = null) {
   const page = document.querySelector('[data-card-page]');
   if (!page) return;
+  if (!canRefresh) refreshVisibleCard = null;
   const content = page.querySelector('[data-card-content]');
   const status = page.querySelector('[data-card-status]');
   const message = text => { if (page.isConnected) status.textContent = text; };
@@ -49,7 +60,7 @@ export async function hydrateBusinessCard(handle, collection = false) {
       return;
     }
     const { profile, card } = await loadCard(handle);
-    if (!page.isConnected) return;
+    if (!page.isConnected || (canRefresh && !canRefresh())) return;
     const own = currentUser()?.id === profile.id;
     if (!card && !own) { content.innerHTML = '<p>このユーザーはまだ名刺を公開していません。</p>'; return; }
     const initial = normalizeCard(card || { name: profile.name });
@@ -71,6 +82,10 @@ export async function hydrateBusinessCard(handle, collection = false) {
       try { await collectCard(profile.id); collect.textContent = '保存済み'; message('コレクションに保存しました。自分の名刺も共有して交換しましょう。'); }
       catch (e) { message(e.message); collect.disabled = false; }
     };
+    refreshVisibleCard = () => {
+      const ready = () => page.isConnected && !content.querySelector('form');
+      if (ready()) return hydrateBusinessCard(handle, false, ready);
+    };
     const form = content.querySelector('form');
     if (form) {
       content.querySelector('[data-edit-card]').onclick = event => {
@@ -80,7 +95,18 @@ export async function hydrateBusinessCard(handle, collection = false) {
         if (!panel.hidden) panel.scrollIntoView({behavior:'smooth',block:'start'});
       };
       let stagedImage = initial.image_url;
-      const value = () => ({ ...Object.fromEntries(new FormData(form)), image_url: stagedImage });
+      let selectedTheme = initial.theme;
+      const value = () => ({
+        ...Object.fromEntries(new FormData(form)), image_url: stagedImage,
+        theme: form.elements.theme.value === 'solid' ? selectedTheme : form.elements.theme.value
+      });
+      let savedValue = JSON.stringify(value());
+      refreshVisibleCard = () => {
+        const ready = () => page.isConnected && form.isConnected
+          && content.querySelector('[data-card-editor]').hidden
+          && !form.querySelector(':disabled') && JSON.stringify(value()) === savedValue;
+        if (ready()) return hydrateBusinessCard(handle, false, ready);
+      };
       let previewBack = false;
       const preview = content.querySelector('[data-card-preview]');
       function paintPreview() {
@@ -141,6 +167,7 @@ export async function hydrateBusinessCard(handle, collection = false) {
             form.elements.design_pattern.value = 'solid';
             form.elements.design_backColor.value = form.elements.design_frontColor.value;
           } else {
+            selectedTheme = event.target.value;
             const defaults = defaultDesign(event.target.value, form.elements.layout.value);
             for (const key of ['frontColor','backColor','textColor','accentColor']) form.elements['design_' + key].value = defaults[key];
             form.elements.design_pattern.value = 'gradient';
@@ -161,7 +188,8 @@ export async function hydrateBusinessCard(handle, collection = false) {
           if (!page.isConnected) return;
           content.querySelector('[data-card-sharing]').hidden = false;
           form.querySelector('[data-unpublish-card]').hidden = false;
-          message('名刺を保存・公開しました。');
+          savedValue = JSON.stringify(submitted);
+          message('名刺を保存しました。同じアカウントのWeb版・アプリ版に反映されます。');
         } catch (e) { message(e.message); }
         finally { form.querySelectorAll('input, textarea, select, button').forEach(el => { el.disabled = false; }); }
       };
@@ -175,6 +203,7 @@ export async function hydrateBusinessCard(handle, collection = false) {
     }
   } catch (e) {
     if (!page.isConnected) return;
+    if (canRefresh) { message('最新の名刺を取得できませんでした。接続を確認してください。'); return; }
     content.innerHTML = '<button class="btn btn--ghost" data-card-retry>再読み込み</button>';
     content.querySelector('button').onclick = () => hydrateBusinessCard(handle, collection);
     message(e.message);

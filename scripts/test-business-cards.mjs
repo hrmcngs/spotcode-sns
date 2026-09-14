@@ -150,3 +150,42 @@ cardEvents.click({target,preventDefault(){}});
 assert.equal(turns,2);
 assert(!run("cardMarkup({name:'No hint'},'me')").includes('タップして'));
 console.log('PASS horizontal wheel, momentum debounce, swipe, click suppression and no printed hint');
+
+// Returning to a visible card refreshes once, even when focus and visibility fire together.
+let finishRefresh;
+ctx.refreshCalls = 0;
+ctx.finishRefresh = resolve => { finishRefresh = resolve; };
+run('refreshVisibleCard = () => { refreshCalls++; return new Promise(finishRefresh); }');
+ctx.document.visibilityState = 'hidden';
+await cardEvents.visibilitychange();
+assert.equal(ctx.refreshCalls, 0);
+ctx.document.visibilityState = 'visible';
+const refreshPending = cardEvents.visibilitychange();
+await cardEvents.visibilitychange();
+assert.equal(ctx.refreshCalls, 1);
+finishRefresh();
+await refreshPending;
+run('refreshVisibleCard = null');
+await cardEvents.visibilitychange();
+assert.equal(ctx.refreshCalls, 1);
+console.log('PASS card foreground refresh, hidden-page suppression and duplicate-event coalescing');
+
+// An edit started while a refresh is in flight must keep its form and preview.
+let completeLoad;
+ctx.completeLoad = resolve => { completeLoad = resolve; };
+const previousLoad = run('loadCard');
+run('loadCard = () => new Promise(completeLoad)');
+const unchangedContent = { innerHTML: 'unsaved draft' };
+ctx.document.querySelector = () => ({
+  isConnected: true,
+  querySelector: selector => selector === '[data-card-content]' ? unchangedContent : {}
+});
+ctx.allowRefresh = true;
+const editingRace = run("hydrateBusinessCard('me', false, () => allowRefresh)");
+ctx.allowRefresh = false;
+completeLoad({ profile: { id: 'me' }, card: { name: 'remote change' } });
+await editingRace;
+assert.equal(unchangedContent.innerHTML, 'unsaved draft');
+ctx.previousLoad = previousLoad;
+run('loadCard = previousLoad');
+console.log('PASS refresh response does not replace an edit started during loading');

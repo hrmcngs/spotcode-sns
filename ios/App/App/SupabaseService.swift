@@ -944,7 +944,7 @@ enum GitHubTaskLoader {
     }
 }
 
-struct BusinessCardDesign: Codable {
+struct BusinessCardDesign: Codable, Equatable {
     static let baseColors: [(String, String)] = [("#18181b","チャコール"),("#1d4ed8","ブルー"),("#4f46e5","インディゴ"),("#7c3aed","パープル"),("#be185d","ピンク"),("#b91c1c","レッド"),("#c2410c","オレンジ"),("#0f766e","ティール"),("#15803d","グリーン"),("#f4e8d0","アイボリー"),("#e5e7eb","グレー"),("#ffffff","ホワイト")]
     mutating func applyBaseColor(_ hex: String, theme: String = "midnight") {
         guard hex.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil,
@@ -1007,7 +1007,7 @@ struct BusinessCardDesign: Codable {
     }
 }
 
-struct BusinessCardLink: Codable {
+struct BusinessCardLink: Codable, Equatable {
     var label: String
     var url: String
     var destination: URL? { Self.webURL(url) }
@@ -1020,7 +1020,7 @@ struct BusinessCardLink: Codable {
     }
 }
 
-struct BusinessCard: Codable, Identifiable {
+struct BusinessCard: Codable, Identifiable, Equatable {
     var owner_id: UUID
     var name: String
     var title = ""

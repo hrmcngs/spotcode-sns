@@ -5658,6 +5658,9 @@ private struct BusinessCardTemplateDocument: FileDocument {
 
 private struct BusinessCardView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var loadedCard: BusinessCard?
+    @State private var syncing = false
     let profile: Profile
     @State private var draft = BusinessCard(owner_id: UUID(), name: "")
     @State private var published = false
@@ -5716,6 +5719,9 @@ private struct BusinessCardView: View {
             }.frame(maxWidth: .infinity)
         }.navigationTitle("")
             .task(id: profile.id) { await load() }
+            .onChange(of: scenePhase) { phase in
+                if phase == .active { Task { await syncCard() } }
+            }
             .sheet(isPresented: $sharing) { ActivityShareSheet(items: [link]) }
             .sheet(isPresented: $pickingCardImage) { ProfileImagePicker(image: $draft.image_url, maxSide: 1650) }
             .fileExporter(isPresented: $exportingTemplate,
@@ -5857,11 +5863,26 @@ private struct BusinessCardView: View {
         do {
             let card = try await SupabaseService.shared.businessCard(ownerID: id, token: model.session?.accessToken)
             draft = card ?? BusinessCard(owner_id: id, name: profile.name)
+            loadedCard = draft
+            cardImageURL = draft.image_url?.hasPrefix("data:") == false ? draft.image_url! : ""
             published = card != nil
         } catch { failed = true; message = "名刺を読み込めませんでした。接続を確認して再試行してください。" }
     }
+    private func syncCard() async {
+        guard let id = profile.id, !loading, !syncing, !busy, !editingCard, draft == loadedCard else { return }
+        syncing = true
+        defer { syncing = false }
+        do {
+            let card = try await SupabaseService.shared.businessCard(ownerID: id, token: model.session?.accessToken)
+            guard !Task.isCancelled, !busy, !editingCard, draft == loadedCard else { return }
+            draft = card ?? BusinessCard(owner_id: id, name: profile.name)
+            loadedCard = draft
+            cardImageURL = draft.image_url?.hasPrefix("data:") == false ? draft.image_url! : ""
+            published = card != nil
+        } catch { message = "最新の名刺を取得できませんでした。接続を確認してください。" }
+    }
     private func save() {
-        guard let session = model.session, own, !busy else { return }
+        guard model.session != nil, own, !busy else { return }
         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !draft.name.isEmpty, draft.name.unicodeScalars.count <= 60, draft.title.unicodeScalars.count <= 100,
               draft.bio.unicodeScalars.count <= 280, draft.contact.unicodeScalars.count <= 160 else {
@@ -5874,10 +5895,19 @@ private struct BusinessCardView: View {
         }
         guard (draft.image_url ?? "").utf8.count <= 1_000_000 else { message = "画像が大きすぎます。小さい画像を選んでください。"; return }
         draft.links = links
+        let submitted = draft
         busy = true
         Task {
             defer { busy = false }
-            do { try await SupabaseService.shared.saveBusinessCard(draft, token: session.accessToken); published = true; message = "名刺を保存・公開しました。" }
+            do {
+                let session = try await model.validSession()
+                guard session.user.id == submitted.owner_id else { return }
+                try await SupabaseService.shared.saveBusinessCard(submitted, token: session.accessToken)
+                guard model.session?.user.id == submitted.owner_id else { return }
+                loadedCard = submitted
+                published = true
+                message = "名刺を保存しました。同じアカウントのWeb版・アプリ版に反映されます。"
+            }
             catch { message = "保存できませんでした。接続を確認して再試行してください。" }
         }
     }
