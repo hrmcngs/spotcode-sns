@@ -64,7 +64,7 @@ export async function hydrateBusinessCard(handle, collection = false, canRefresh
     const own = currentUser()?.id === profile.id;
     if (!card && !own) { content.innerHTML = '<p>このユーザーはまだ名刺を公開していません。</p>'; return; }
     const initial = normalizeCard(card || { name: profile.name });
-    content.innerHTML = `<div class="card-showcase" data-card-preview>${cardMarkup(initial, handle)}</div><div class="card-actions" data-card-sharing ${card ? '' : 'hidden'}><button class="btn btn--primary" data-share-card>名刺を共有</button><button class="btn btn--ghost" data-copy-card>リンクをコピー</button>${!own ? '<button class="btn btn--primary" data-collect-card>コレクションに保存</button>' : ''}</div><p>共有メニューからAirDropなどでリンクを送れます。相手が名刺を保存し、自分の名刺も送り返すと交換できます。</p>${own ? '<button class="btn btn--primary" data-edit-card aria-expanded="false">名刺を編集</button><div data-card-editor hidden>' + editor(initial, !!card) + '</div>' : ''}`;
+    content.innerHTML = `<div class="card-showcase-wrap"><button type="button" class="btn btn--ghost card-fullscreen-open" data-card-fullscreen aria-label="名刺を全画面で表示">⛶ 全画面</button><div class="card-showcase" data-card-preview>${cardMarkup(initial, handle)}</div></div><div class="card-actions" data-card-sharing ${card ? '' : 'hidden'}><button class="btn btn--primary" data-share-card>名刺を共有</button><button class="btn btn--ghost" data-copy-card>リンクをコピー</button>${!own ? '<button class="btn btn--primary" data-collect-card>コレクションに保存</button>' : ''}</div><p>共有メニューからAirDropなどでリンクを送れます。相手が名刺を保存し、自分の名刺も送り返すと交換できます。</p>${own ? '<button class="btn btn--primary" data-edit-card aria-expanded="false">名刺を編集</button><div data-card-editor hidden>' + editor(initial, !!card) + '</div>' : ''}`;
     const link = cardLink(handle);
     content.querySelector('[data-share-card]').onclick = async () => {
       try {
@@ -240,6 +240,46 @@ function designEditor(d) {
     <label>角丸（0〜28px）<input type="number" name="design_radius" min="0" max="28" value="${d.radius}"></label>
     ${[['frontLabel','表の見出し'],['backLabel','裏の見出し']].map(([key,label]) => `<label>${label}<input name="design_${key}" maxlength="40" value="${esc(d[key])}" placeholder="空欄で非表示"></label>`).join('')}</div><p>配色プリセットを変更すると4色が切り替わります。タップして裏面を確認しながら編集できます。</p></fieldset>`;
 }
+function openCardFullscreen(button) {
+  const original = button.closest('.card-showcase-wrap')?.querySelector('.business-card');
+  if (!original || document.querySelector('.card-fullscreen')) return;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'card-fullscreen';
+  dialog.setAttribute('aria-label', '名刺の全画面表示');
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'btn btn--ghost card-fullscreen-close';
+  close.textContent = '× 閉じる';
+  const stage = document.createElement('div');
+  stage.className = 'card-fullscreen-stage';
+  stage.append(original.cloneNode(true));
+  dialog.append(close, stage);
+  document.body.append(dialog);
+  const previousOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+  const closeDialog = () => dialog.close();
+  const changedFullscreen = () => { if (!document.fullscreenElement) closeDialog(); };
+  close.onclick = closeDialog;
+  dialog.addEventListener('close', () => {
+    if (document.fullscreenElement === dialog) document.exitFullscreen().catch(() => {});
+    document.removeEventListener('fullscreenchange', changedFullscreen);
+    window.removeEventListener('hashchange', closeDialog);
+    document.body.style.overflow = previousOverflow;
+    dialog.remove();
+    if (button.isConnected) button.focus({preventScroll: true});
+  }, {once: true});
+  window.addEventListener('hashchange', closeDialog);
+  dialog.showModal();
+  close.focus({preventScroll: true});
+  // Browsers without the Fullscreen API still get a viewport-sized modal.
+  if (dialog.requestFullscreen) {
+    dialog.requestFullscreen().then(() => {
+      if (!dialog.isConnected) { document.exitFullscreen().catch(() => {}); return; }
+      document.addEventListener('fullscreenchange', changedFullscreen);
+    }).catch(() => {});
+  }
+}
+
 function flipCard(card) {
   const flipped = card.classList.toggle('is-flipped');
   card.querySelectorAll('[data-card-flip]').forEach(button => button.setAttribute('aria-pressed', String(flipped)));
@@ -253,6 +293,8 @@ function flipCard(card) {
 
 const cardSwipeState = new WeakMap();
 document.addEventListener('click', event => {
+  const fullscreen = event.target.closest('[data-card-fullscreen]');
+  if (fullscreen) { openCardFullscreen(fullscreen); return; }
   const card = event.target.closest('.business-card');
   if (!card) return;
   if (Date.now() < (cardSwipeState.get(card)?.suppressClickUntil || 0)) { event.preventDefault(); return; }

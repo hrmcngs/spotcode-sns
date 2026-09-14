@@ -5656,9 +5656,35 @@ private struct BusinessCardTemplateDocument: FileDocument {
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
 
+private struct FullscreenBusinessCardView: View {
+    let card: BusinessCard
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button { dismiss() } label: {
+                    Label("閉じる", systemImage: "xmark").padding(8)
+                }
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.cancelAction)
+            }.padding(.horizontal, 16).padding(.top, 8)
+            GeometryReader { viewport in
+                let ratio: CGFloat = card.design?.orientation == "portrait" ? 1 / 1.65 : 1.65
+                let width = max(1, min(viewport.size.width - 32, (viewport.size.height - 32) * ratio))
+                BusinessCardPreview(card: card, maximumWidth: width)
+                    .frame(width: width)
+                    .frame(width: viewport.size.width, height: viewport.size.height)
+            }
+        }
+        .background(Color.black.ignoresSafeArea())
+    }
+}
+
 private struct BusinessCardView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
+    @State private var fullscreenCard = false
     @State private var loadedCard: BusinessCard?
     @State private var syncing = false
     let profile: Profile
@@ -5689,9 +5715,15 @@ private struct BusinessCardView: View {
                     BusinessCardPreview(card: draft, maximumWidth: width)
                         .frame(width: width)
                         .frame(width: viewport.size.width, height: viewport.size.height)
+                        .overlay(alignment: .topTrailing) {
+                            Button { fullscreenCard = true } label: {
+                                Label("全画面", systemImage: "arrow.up.left.and.arrow.down.right")
+                            }
+                            .buttonStyle(.bordered).padding(16)
+                        }
                         .overlay(alignment: .bottom) {
                             if own && published, let id = profile.id {
-                                NearbyBusinessCardExchangeView(ownerID: id, handle: profile.handle, enabled: !editingCard)
+                                NearbyBusinessCardExchangeView(ownerID: id, handle: profile.handle, enabled: !editingCard && !fullscreenCard)
                             }
                         }
                     VStack(alignment: .leading, spacing: 20) {
@@ -5722,6 +5754,7 @@ private struct BusinessCardView: View {
             .onChange(of: scenePhase) { phase in
                 if phase == .active { Task { await syncCard() } }
             }
+            .fullScreenCover(isPresented: $fullscreenCard) { FullscreenBusinessCardView(card: draft) }
             .sheet(isPresented: $sharing) { ActivityShareSheet(items: [link]) }
             .sheet(isPresented: $pickingCardImage) { ProfileImagePicker(image: $draft.image_url, maxSide: 1650) }
             .fileExporter(isPresented: $exportingTemplate,
