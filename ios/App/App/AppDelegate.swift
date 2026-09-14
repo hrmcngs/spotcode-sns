@@ -10,8 +10,12 @@ enum SpotcodeApplication {
         // the device, while an app-domain value is an explicit per-app choice.
         if let identifier = Bundle.main.bundleIdentifier {
             let defaults = UserDefaults.standard
-            if defaults.persistentDomain(forName: identifier)?["AppleLanguages"] == nil {
-                defaults.set(["en"], forKey: "AppleLanguages")
+            let languages = defaults.persistentDomain(forName: identifier)?["AppleLanguages"] as? [String]
+            // Keep English UI by default, but retain Japanese as the CJK font
+            // fallback. Migrate the English-only value written by older builds.
+            // Explicit language choices made in system settings stay intact.
+            if languages == nil || languages == ["en"] {
+                defaults.set(["en", "ja"], forKey: "AppleLanguages")
             }
         }
         UIApplicationMain(CommandLine.argc, CommandLine.unsafeArgv, nil, NSStringFromClass(AppDelegate.self))

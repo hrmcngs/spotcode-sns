@@ -6,7 +6,7 @@
 // "come within Xm to read this idea".
 
 import { loadMaps } from '../gmap.js';
-import { postsWithSpots, cachedPosts, canDisplayCachedPost } from '../data.js';
+import { postsWithSpots, cachedPosts, canDisplayCachedPost, canonicalCity } from '../data.js';
 import { t }        from '../i18n.js';
 import { icon }     from '../icons.js';
 import { getMyLocation, isNearSpotSync, getRadius, permissionDenied,
@@ -127,7 +127,7 @@ export async function hydrateMap(city, focus = null) {
   // and we can fitBounds onto them. Falls back to the unfiltered list
   // if the city has no spots yet (avoids an empty Tokyo-default fly-in).
   const cityFiltered = city
-    ? allSpotted.filter(p => p?.spot?.addressDetails?.city === city)
+    ? allSpotted.filter(p => canonicalCity(p?.spot?.addressDetails?.city) === canonicalCity(city))
     : null;
   const spotted = (cityFiltered && cityFiltered.length) ? cityFiltered : allSpotted;
 

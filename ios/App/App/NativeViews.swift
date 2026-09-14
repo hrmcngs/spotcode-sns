@@ -162,6 +162,21 @@ private enum AppSection: String, CaseIterable {
     }
 }
 
+struct CityMapDestination: Identifiable {
+    let id = UUID()
+    let name: String
+    let posts: [Post]
+    var region: MKCoordinateRegion {
+        let coordinates = posts.compactMap { $0.spot?.coordinate }
+        let latitudes = coordinates.map(\.latitude), longitudes = coordinates.map(\.longitude)
+        let south = latitudes.min() ?? 35.681236, north = latitudes.max() ?? south
+        let west = longitudes.min() ?? 139.767125, east = longitudes.max() ?? west
+        return .init(center: .init(latitude: (south + north) / 2, longitude: (west + east) / 2),
+                     span: .init(latitudeDelta: max(0.006, (north - south) * 1.5),
+                                 longitudeDelta: max(0.006, (east - west) * 1.5)))
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -174,6 +189,7 @@ struct RootView: View {
     @State private var showAccounts = false
     @State private var repositoryComposeURL: String?
     @State private var navigationReset = UUID()
+    @State private var cityDestination: CityMapDestination?
     @State private var recommendedProfileHandle: String?
     @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
     private var appLanguage: String { Bundle.main.preferredLocalizations.first ?? "en" }
@@ -231,6 +247,10 @@ struct RootView: View {
                         if geometry.size.width >= 1450 {
                             DesktopCommunity(openProfile: { profile in
                                 recommendedProfileHandle = profile.handle
+                            }, openCity: { destination in
+                                cityDestination = destination
+                                section = .home
+                                navigationReset = UUID()
                             }).frame(width: 400)
                         }
                     }
@@ -328,7 +348,7 @@ struct RootView: View {
 
     @ViewBuilder private var sectionView: some View {
         switch section {
-        case .home: TimelineView(repositoryComposeURL: $repositoryComposeURL, drawerOpen: $drawerOpen)
+        case .home: TimelineView(repositoryComposeURL: $repositoryComposeURL, drawerOpen: $drawerOpen, cityDestination: cityDestination)
         case .repos: RepositoriesView { url in
             repositoryComposeURL = url.absoluteString
             section = .home
@@ -492,6 +512,7 @@ private struct DesktopNavigation: View {
 private struct DesktopCommunity: View {
     @EnvironmentObject private var model: AppModel
     let openProfile: (Profile) -> Void
+    let openCity: (CityMapDestination) -> Void
     @State private var profiles: [Profile] = []
     @State private var contributions: [GitHubContribution] = []
     @State private var busy: Set<UUID> = []
@@ -500,14 +521,13 @@ private struct DesktopCommunity: View {
     @State private var message: String?
     @State private var loading = true
     @State private var spotPosts: [Post] = []
-    @State private var selectedCity: String?
 
     private var cities: [(name: String, prefecture: String, posts: [Post])] {
         let visible = spotPosts.filter {
             !model.blockedAccountIDs.contains($0.authorID) && !model.mutedAccountIDs.contains($0.authorID)
                 && $0.spot?.lat.isFinite == true && $0.spot?.lng.isFinite == true
         }
-        let groups = Dictionary(grouping: visible, by: { $0.spot?.addressDetails?.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" })
+        let groups = Dictionary(grouping: visible, by: { $0.spot?.addressDetails?.canonicalCity ?? "" })
         var result: [(name: String, prefecture: String, posts: [Post])] = []
         for (name, posts) in groups where !name.isEmpty {
             result.append((name: name, prefecture: posts.first?.spot?.addressDetails?.prefecture ?? "", posts: posts))
@@ -534,7 +554,7 @@ private struct DesktopCommunity: View {
                 if !cities.isEmpty {
                     DesktopRailCard("Trending spots", subtitle: "by city / ward") {
                         ForEach(Array(cities.enumerated()), id: \.element.name) { index, city in
-                            Button { selectedCity = city.name } label: {
+                            Button { openCity(CityMapDestination(name: city.name, posts: city.posts)) } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text("Trending · #\(index + 1)").spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
@@ -584,18 +604,6 @@ private struct DesktopCommunity: View {
             }
         }
         .task(id: model.displayProfile?.id) { await load() }
-        .sheet(isPresented: Binding(get: { selectedCity != nil }, set: { if !$0 { selectedCity = nil } })) {
-            NavigationView {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(cities.first(where: { $0.name == selectedCity })?.posts ?? []) { post in
-                            PostRow(post: post)
-                        }
-                    }
-                }.navigationTitle(selectedCity ?? "")
-                    .toolbar { Button("閉じる") { selectedCity = nil } }
-            }.environmentObject(model).macTextSizePreference()
-        }
     }
 
     private func load() async {
@@ -800,6 +808,7 @@ struct TimelineView: View {
     @EnvironmentObject private var model: AppModel
     @Binding var repositoryComposeURL: String?
     @Binding var drawerOpen: Bool
+    var cityDestination: CityMapDestination? = nil
     @State private var selectedTab = 0
     @State private var composing = false
 
@@ -807,7 +816,7 @@ struct TimelineView: View {
         VStack(spacing: 0) {
             TimelineTabs(selected: $selectedTab)
             if selectedTab == 2 {
-                NativeMapView()
+                NativeMapView(cityDestination: cityDestination).id(cityDestination?.id)
             } else if model.posts.isEmpty && model.isLoading {
                 Spacer(); ProgressView("Loading timeline…").foregroundColor(SpotcodeTheme.muted); Spacer()
             } else {
@@ -826,9 +835,16 @@ struct TimelineView: View {
                                 if let error = model.timelinePageError {
                                     Text(LocalizedStringKey(error)).spotcodeFont(12, weight: .regular, fallback: .caption)
                                     Button("再試行") { Task { await model.loadMoreTimeline() } }
-                                } else { ProgressView("読み込み中…") }
-                            }.padding().onAppear {
-                                if model.timelinePageError == nil && !ProcessInfo.processInfo.arguments.contains("-SpotcodeCaptureFullPage") { Task { await model.loadMoreTimeline() } }
+                                } else if model.isLoadingMoreTimeline {
+                                    ProgressView("読み込み中…")
+                                } else {
+                                    Button("もっと昔の投稿を読み込む") { Task { await model.loadMoreTimeline() } }
+                                        .disabled(model.isLoading)
+                                }
+                            }.padding().id(model.posts.last?.id).task(id: model.isLoading) {
+                                // Retry after refresh finishes: onAppear can run
+                                // while isLoading still prevents pagination.
+                                if !model.isLoading && model.timelinePageError == nil { await model.loadMoreTimeline() }
                             }
                         }
                     }
@@ -850,6 +866,8 @@ struct TimelineView: View {
                 }
         )
         .background(SpotcodeTheme.surface).navigationBarHidden(true)
+        .onAppear { if cityDestination != nil { selectedTab = 2 } }
+        .onChange(of: cityDestination?.id) { value in if value != nil { selectedTab = 2 } }
         .sheet(isPresented: $composing) { ComposeView(isPresented: $composing).environmentObject(model) }
     }
 }
@@ -1108,7 +1126,10 @@ private struct ComposerChip: View {
 
 private final class ComposerLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var spot: Spot?
+    @Published private(set) var errorMessage: String?
     private let manager = CLLocationManager()
+    private var requested = false
+    private var timeout: DispatchWorkItem?
 
     override init() {
         super.init()
@@ -1116,22 +1137,57 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
     }
     func request() {
-        manager.requestWhenInUseAuthorization()
-        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
-            manager.requestLocation()
-        }
+        requested = true
+        errorMessage = nil
+        updateAuthorization()
     }
     func clear() { spot = nil }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let coordinate = locations.last?.coordinate else { return }
+        guard requested, let latest = locations.last(where: {
+            $0.horizontalAccuracy >= 0 && abs($0.timestamp.timeIntervalSinceNow) < 120
+        }) else { return }
+        let coordinate = latest.coordinate
+        finish()
         spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude, label: NSLocalizedString("現在地", comment: ""), address: nil)
     }
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        guard requested else { return }
+        // On Mac, Wi-Fi positioning may initially be unavailable. Keep
+        // listening until a fix arrives or the bounded timeout expires.
+        if (error as? CLError)?.code == .locationUnknown { return }
+        finish()
+        errorMessage = NSLocalizedString("現在地を取得できませんでした。位置情報の設定を確認して再試行してください。", comment: "")
+    }
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
-            manager.requestLocation()
+        guard requested else { return }
+        updateAuthorization()
+    }
+    private func updateAuthorization() {
+        switch manager.authorizationStatus {
+        case .notDetermined: manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            timeout?.cancel()
+            manager.startUpdatingLocation()
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, self.requested else { return }
+                self.finish()
+                self.errorMessage = NSLocalizedString("現在地を取得できませんでした。位置情報の設定を確認して再試行してください。", comment: "")
+            }
+            timeout = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
+        case .denied, .restricted:
+            finish()
+            errorMessage = NSLocalizedString("現在地を表示するには、システム設定でspotcodeの位置情報を許可してください。", comment: "")
+        @unknown default: finish()
         }
     }
+    private func finish() {
+        requested = false
+        timeout?.cancel()
+        timeout = nil
+        manager.stopUpdatingLocation()
+    }
+    deinit { timeout?.cancel(); manager.stopUpdatingLocation() }
 }
 
 // Shared reader-location gate for every timeline row. One CLLocationManager
@@ -1221,14 +1277,15 @@ private struct PhotoLibraryPicker: UIViewControllerRepresentable {
 
 private struct DataURLImage: View {
     let value: String
+    var fit = false
     var body: some View {
         Group {
             if let image = decodedDataURLImage(value) {
-                Image(uiImage: image).resizable().scaledToFill()
+                Image(uiImage: image).resizable().aspectRatio(contentMode: fit ? .fit : .fill)
             } else if let url = URL(string: value), ["https", "http"].contains(url.scheme?.lowercased() ?? "") {
                 AsyncImage(url: url) { phase in
                     switch phase {
-                    case .success(let image): image.resizable().scaledToFill()
+                    case .success(let image): image.resizable().aspectRatio(contentMode: fit ? .fit : .fill)
                     case .empty: ProgressView()
                     default: placeholder
                     }
@@ -1557,10 +1614,63 @@ private struct ComposerTextView: UIViewRepresentable {
     }
 }
 
+private final class SelectablePostTextView: UITextView {
+    private var measuredWidth: CGFloat = 0
+    override var intrinsicContentSize: CGSize {
+        let height = bounds.width > 0
+            ? sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height
+            : (font?.lineHeight ?? 20)
+        return CGSize(width: UIView.noIntrinsicMetric, height: ceil(height))
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if measuredWidth != bounds.width {
+            measuredWidth = bounds.width
+            invalidateIntrinsicContentSize()
+        }
+    }
+}
+
+private struct SelectablePostBody: UIViewRepresentable {
+    let text: String
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    func makeUIView(context: Context) -> SelectablePostTextView {
+        let view = SelectablePostTextView()
+        view.isEditable = false
+        view.isSelectable = true
+        view.isScrollEnabled = false
+        view.backgroundColor = .clear
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.textColor = UIColor(red: 230/255, green: 237/255, blue: 243/255, alpha: 1)
+        view.tintColor = .systemBlue
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return view
+    }
+    func updateUIView(_ view: SelectablePostTextView, context: Context) {
+        // Do not assign unchanged text: a timeline refresh must retain selection.
+        if view.text != text { view.text = text }
+        #if targetEnvironment(macCatalyst)
+        let font = MacTextSize.editorFont(dynamicTypeSize)
+        #else
+        let font = UIFont.preferredFont(forTextStyle: .body)
+        #endif
+        if view.font != font { view.font = font }
+        view.invalidateIntrinsicContentSize()
+    }
+    @available(iOS 16.0, *)
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: SelectablePostTextView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width > 0 else { return nil }
+        return CGSize(width: width, height: ceil(uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height))
+    }
+}
+
 struct PostRow: View {
     @EnvironmentObject private var model: AppModel
     let post: Post
     var opensDetail = true
+    var onSpotTap: ((Post) -> Void)?
     @State private var editing = false
     @State private var confirmingDelete = false
     @State private var showingDetail = false
@@ -1578,9 +1688,10 @@ struct PostRow: View {
     @ObservedObject private var locationGate = PostLocationGate.shared
     @AppStorage("spotcode.native.dev-mode") private var developerMode = false
 
-    init(post: Post, opensDetail: Bool = true) {
+    init(post: Post, opensDetail: Bool = true, onSpotTap: ((Post) -> Void)? = nil) {
         self.post = post
         self.opensDetail = opensDetail
+        self.onSpotTap = onSpotTap
         _repostCount = State(initialValue: post.repostsCount ?? 0)
         _bookmarkCount = State(initialValue: post.bookmarksCount ?? 0)
     }
@@ -1635,10 +1746,15 @@ Menu {
                         .padding(.horizontal, 9).padding(.vertical, 4)
                         .background((post.status ?? "wip") == "active" ? Color.cyan : SpotcodeTheme.warning).clipShape(Capsule())
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { if opensDetail { showingDetail = true } }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         if let spot = post.spot {
-                            Button { showSpotMap = true } label: {
+                            Button {
+                                if let onSpotTap { onSpotTap(post) }
+                                else { showSpotMap = true }
+                            } label: {
                                 PostMetadataBadge(icon: "mappin", text: spot.label ?? spot.address ?? NSLocalizedString("選択した場所", comment: ""), color: SpotcodeTheme.accent)
                             }.buttonStyle(SpotcodePlainButtonStyle())
                         }
@@ -1653,7 +1769,8 @@ Menu {
                         .padding(SpotcodeLayout.value(10, 12)).frame(maxWidth: .infinity, alignment: .leading)
                         .background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 9))
                 } else {
-                    Text(post.body).foregroundColor(SpotcodeTheme.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                    SelectablePostBody(text: post.body)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if canReadContent, let photos = post.photos, !photos.isEmpty {
@@ -1727,7 +1844,6 @@ Menu {
         .padding(SpotcodeLayout.value(16, 16)).background(SpotcodeTheme.surface)
         .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
         .contentShape(Rectangle())
-        .onTapGesture { if opensDetail { showingDetail = true } }
         .background {
             if opensDetail {
                 NavigationLink(destination: PostDetailView(post: post), isActive: $showingDetail) { EmptyView() }
@@ -1740,7 +1856,7 @@ Menu {
                 NativeMapView(focusPost: post)
                     .navigationTitle(post.spot?.label ?? "Spot")
                     .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { showSpotMap = false } } }
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { MapSheetCloseButton { showSpotMap = false } } }
             }
         }
         .sheet(isPresented: $sharing) {
@@ -2015,9 +2131,27 @@ struct AvatarView: View {
 
 struct PostDetailView: View {
     let post: Post
+    var onSpotTap: ((Post) -> Void)? = nil
+    var onClose: (() -> Void)? = nil
     var body: some View {
-        ScrollView { PostRow(post: post, opensDetail: false) }
+        ScrollView { PostRow(post: post, opensDetail: false, onSpotTap: onSpotTap) }
             .background(SpotcodeTheme.surface).navigationTitle("Post").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    if let onClose { MapSheetCloseButton(action: onClose) }
+                }
+            }
+    }
+}
+
+private struct MapSheetCloseButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark").frame(width: 32, height: 32)
+        }
+        .accessibilityLabel("閉じる")
+        .keyboardShortcut(.cancelAction)
     }
 }
 
@@ -2169,34 +2303,63 @@ struct ComposeView: View {
     }
 }
 
+private struct MapPostSelection: Identifiable {
+    let id = UUID()
+    let posts: [Post]
+}
+
 struct NativeMapView: View {
     @EnvironmentObject private var model: AppModel
     var focusPost: Post? = nil
+    var cityDestination: CityMapDestination? = nil
     @State private var posts: [Post] = []
     @State private var region: MKCoordinateRegion
-    @State private var selectedPost: Post?
+    @State private var selectedPosts: MapPostSelection?
     @State private var loading = false
+    @State private var awaitingCurrentLocation: Bool
+    @State private var locationRequestID = UUID()
+    @State private var cameraRequestID = UUID()
     @StateObject private var location = ComposerLocationProvider()
 
-    init(focusPost: Post? = nil) {
+    init(focusPost: Post? = nil, cityDestination: CityMapDestination? = nil) {
         self.focusPost = focusPost
+        self.cityDestination = cityDestination
+        _posts = State(initialValue: cityDestination?.posts ?? [])
+        _awaitingCurrentLocation = State(initialValue: focusPost == nil && cityDestination == nil)
         let center = focusPost?.spot?.coordinate ?? .init(latitude: 35.681236, longitude: 139.767125)
-        _region = State(initialValue: .init(center: center, span: .init(latitudeDelta: 0.003, longitudeDelta: 0.003)))
+        _region = State(initialValue: cityDestination?.region ?? .init(center: center, span: .init(latitudeDelta: 0.003, longitudeDelta: 0.003)))
     }
 
     var body: some View {
         ZStack(alignment: .trailing) {
-            ClusteredPostMap(posts: posts, region: $region, selectedPost: $selectedPost)
+            ClusteredPostMap(posts: posts, region: $region, selectedPosts: $selectedPosts,
+                             locationRequestID: locationRequestID, initiallyLocateUser: focusPost == nil && cityDestination == nil,
+                             cameraRequestID: cameraRequestID,
+                             onLocated: { awaitingCurrentLocation = false })
             VStack(spacing: 8) {
                 mapButton("plus") { zoom(0.5) }
                 mapButton("minus") { zoom(2) }
                 mapButton("arrow.counterclockwise") { resetMap() }
+                mapButton("location.fill") { resetMap() }
+                    .accessibilityLabel("現在地")
             }
             .padding(.trailing, 12)
             if loading { ProgressView().padding(10).background(.ultraThinMaterial).clipShape(Circle()) }
-        }.task {
+        }
+        .overlay(alignment: .bottom) {
+            if awaitingCurrentLocation, let message = location.errorMessage {
+                VStack(spacing: 8) {
+                    Text(message).font(.caption)
+                    Button("再試行") { resetMap() }
+                }.padding().background(.regularMaterial).cornerRadius(12).padding()
+            } else if awaitingCurrentLocation {
+                ProgressView("現在地を取得中…")
+                    .padding().background(.regularMaterial).cornerRadius(12).padding()
+            }
+        }
+        .task {
+            if cityDestination == nil { location.request() }
             guard posts.isEmpty else { return }
-            location.request()
             loading = true; defer { loading = false }
             posts = (try? await SupabaseService.shared.spottedPosts(token: model.session?.accessToken)) ?? []
             if let focusPost, !posts.contains(where: { $0.id == focusPost.id }) { posts.append(focusPost) }
@@ -2204,23 +2367,56 @@ struct NativeMapView: View {
                 region = .init(center: coordinate, span: .init(latitudeDelta: 0.003, longitudeDelta: 0.003))
             }
         }
-        .onChange(of: location.spot) { value in
-            guard focusPost == nil else { return }
+        .onReceive(location.$spot) { value in
+            guard awaitingCurrentLocation else { return }
             guard let coordinate = value?.coordinate else { return }
             region = .init(center: coordinate, span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
+            awaitingCurrentLocation = false
         }
-        .sheet(item: $selectedPost) { post in
-            NavigationView { PostDetailView(post: post) }
+        .sheet(item: $selectedPosts) { selection in
+            NavigationView {
+                if selection.posts.count == 1, let post = selection.posts.first {
+                    PostDetailView(post: post, onSpotTap: showSpotOnMap, onClose: { selectedPosts = nil })
+                } else {
+                    List(selection.posts) { post in
+                        NavigationLink(destination: PostDetailView(post: post, onSpotTap: showSpotOnMap, onClose: { selectedPosts = nil })) {
+                            // Only public pin metadata here; the detail view
+                            // checks the location gate before showing the body.
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(post.displayAuthor?.name ?? "Spot")
+                                Text(post.spot?.label ?? NSLocalizedString("この場所の投稿", comment: ""))
+                                    .font(.caption).foregroundColor(.secondary)
+                                Text(relativeTime(post.createdAt))
+                                    .font(.caption2).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .navigationTitle("この場所の投稿")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { MapSheetCloseButton { selectedPosts = nil } }
+                    }
+                }
+            }
         }
     }
 
+    private func showSpotOnMap(_ post: Post) {
+        guard let coordinate = post.spot?.coordinate else { return }
+        cameraRequestID = UUID()
+        awaitingCurrentLocation = false
+        selectedPosts = nil
+        region = .init(center: coordinate, span: .init(latitudeDelta: 0.003, longitudeDelta: 0.003))
+    }
+
     private func zoom(_ multiplier: Double) {
+        cameraRequestID = UUID()
         region.span.latitudeDelta = min(max(region.span.latitudeDelta * multiplier, 0.002), 120)
         region.span.longitudeDelta = min(max(region.span.longitudeDelta * multiplier, 0.002), 120)
     }
     private func resetMap() {
-        if let coordinate = location.spot?.coordinate { region.center = coordinate }
-        else { location.request() }
+        awaitingCurrentLocation = true
+        locationRequestID = UUID()
+        location.request()
         region.span = .init(latitudeDelta: 0.006, longitudeDelta: 0.006)
     }
     private func mapButton(_ icon: String, action: @escaping () -> Void) -> some View {
@@ -2233,7 +2429,11 @@ struct NativeMapView: View {
 private struct ClusteredPostMap: UIViewRepresentable {
     let posts: [Post]
     @Binding var region: MKCoordinateRegion
-    @Binding var selectedPost: Post?
+    @Binding var selectedPosts: MapPostSelection?
+    let locationRequestID: UUID
+    let initiallyLocateUser: Bool
+    let cameraRequestID: UUID
+    let onLocated: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> MKMapView {
@@ -2245,11 +2445,25 @@ private struct ClusteredPostMap: UIViewRepresentable {
         map.isPitchEnabled = false
         map.showsUserLocation = true
         map.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "post")
+        map.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "post-cluster")
         map.setRegion(region, animated: false)
+        context.coordinator.lastLocationRequestID = locationRequestID
+        context.coordinator.lastCameraRequestID = cameraRequestID
+        if initiallyLocateUser { map.setUserTrackingMode(.follow, animated: false) }
         return map
     }
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.parent = self
+        if context.coordinator.lastCameraRequestID != cameraRequestID {
+            context.coordinator.lastCameraRequestID = cameraRequestID
+            map.setUserTrackingMode(.none, animated: false)
+        }
+        if context.coordinator.lastLocationRequestID != locationRequestID {
+            context.coordinator.lastLocationRequestID = locationRequestID
+            // Let MapKit move its own camera when the blue-dot location arrives,
+            // including when CLLocationManager and SwiftUI update out of order.
+            map.setUserTrackingMode(.follow, animated: true)
+        }
         let wanted = Set(posts.map { $0.id.uuidString })
         let current = Set(map.annotations.compactMap { ($0 as? PostMapAnnotation)?.post.id.uuidString })
         if wanted != current {
@@ -2262,13 +2476,26 @@ private struct ClusteredPostMap: UIViewRepresentable {
         let latitudeChanged = abs(map.region.span.latitudeDelta - region.span.latitudeDelta) > 0.0001
         let centerChanged = abs(map.region.center.latitude - region.center.latitude) > 0.0001 || abs(map.region.center.longitude - region.center.longitude) > 0.0001
         let userIsTouchingMap = map.gestureRecognizers?.contains(where: { $0.state == .began || $0.state == .changed }) == true
-        if !userIsTouchingMap && (latitudeChanged || centerChanged) { map.setRegion(region, animated: true) }
+        if map.userTrackingMode == .none && !userIsTouchingMap && (latitudeChanged || centerChanged) {
+            map.setRegion(region, animated: false)
+        }
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: ClusteredPostMap
+        var lastLocationRequestID: UUID?
+        var lastCameraRequestID: UUID?
         init(_ parent: ClusteredPostMap) { self.parent = parent }
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if let cluster = annotation as? MKClusterAnnotation {
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: "post-cluster", for: cluster) as! MKMarkerAnnotationView
+                view.markerTintColor = .systemBlue
+                view.glyphText = String(cluster.memberAnnotations.count)
+                view.glyphImage = nil
+                view.canShowCallout = false
+                view.accessibilityLabel = NSLocalizedString("この場所の投稿", comment: "") + ": \(cluster.memberAnnotations.count)"
+                return view
+            }
             guard let postAnnotation = annotation as? PostMapAnnotation else { return nil }
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "post", for: postAnnotation) as! MKMarkerAnnotationView
             view.markerTintColor = UIColor(red: 29/255, green: 155/255, blue: 240/255, alpha: 1)
@@ -2281,8 +2508,32 @@ private struct ClusteredPostMap: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.region = mapView.region
         }
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            guard mapView.userTrackingMode != .none,
+                  let fix = userLocation.location, fix.horizontalAccuracy >= 0,
+                  abs(fix.timestamp.timeIntervalSinceNow) < 120 else { return }
+            let target = MKCoordinateRegion(center: fix.coordinate,
+                                            span: .init(latitudeDelta: 0.006, longitudeDelta: 0.006))
+            // Complete the one-shot move on the actual map, then release
+            // tracking so zoom, panning and a post's address remain usable.
+            mapView.setUserTrackingMode(.none, animated: false)
+            mapView.setRegion(target, animated: false)
+            parent.region = mapView.region
+            parent.onLocated()
+        }
+        func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
+            guard let cluster = view.annotation as? MKClusterAnnotation else { return }
+            let posts = cluster.memberAnnotations.compactMap { ($0 as? PostMapAnnotation)?.post }
+                .sorted {
+                    if $0.createdAt != $1.createdAt { return ($0.createdAt ?? "") > ($1.createdAt ?? "") }
+                    return $0.id.uuidString < $1.id.uuidString
+                }
+            guard !posts.isEmpty else { return }
+            parent.selectedPosts = MapPostSelection(posts: posts)
+            mapView.deselectAnnotation(cluster, animated: false)
+        }
         func mapView(_ mapView: MKMapView, annotationView view: MKAnnotationView, calloutAccessoryControlTapped control: UIControl) {
-            if let annotation = view.annotation as? PostMapAnnotation { parent.selectedPost = annotation.post }
+            if let annotation = view.annotation as? PostMapAnnotation { parent.selectedPosts = MapPostSelection(posts: [annotation.post]) }
         }
     }
 }
@@ -2760,6 +3011,7 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
     }
 
     final class SwipeBackController: UIViewController, UIGestureRecognizerDelegate {
+        private var horizontalBackGesture: UIPanGestureRecognizer?
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             enableWhenAvailable()
@@ -2772,11 +3024,55 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
                       let gesture = navigationController.interactivePopGestureRecognizer else { return }
                 gesture.delegate = self
                 gesture.isEnabled = navigationController.viewControllers.count > 1
+                #if targetEnvironment(macCatalyst)
+                // Catalyst's edge-pop does not handle a two-finger trackpad
+                // scroll. Attach one recognizer to the existing navigation
+                // stack; popping preserves the previous scroll view and offset.
+                guard navigationController.viewControllers.count > 1,
+                      self.horizontalBackGesture == nil,
+                      !(navigationController.view.gestureRecognizers ?? []).contains(where: { $0.name == "spotcode.profile.scrollBack" }) else { return }
+                let pan = UIPanGestureRecognizer(target: self, action: #selector(self.scrollBack(_:)))
+                pan.name = "spotcode.profile.scrollBack"
+                pan.allowedScrollTypesMask = .continuous
+                pan.allowedTouchTypes = []
+                pan.cancelsTouchesInView = false
+                pan.delegate = self
+                navigationController.view.addGestureRecognizer(pan)
+                self.horizontalBackGesture = pan
+                #endif
             }
         }
 
+        override func viewDidDisappear(_ animated: Bool) {
+            super.viewDidDisappear(animated)
+            if let horizontalBackGesture {
+                horizontalBackGesture.view?.removeGestureRecognizer(horizontalBackGesture)
+                self.horizontalBackGesture = nil
+            }
+        }
+
+        @objc private func scrollBack(_ pan: UIPanGestureRecognizer) {
+            guard pan.state == .ended, let navigationController,
+                  navigationController.viewControllers.count > 1,
+                  navigationController.transitionCoordinator == nil else { return }
+            let delta = pan.translation(in: pan.view)
+            guard delta.x > 100, delta.x > abs(delta.y) * 2 else { return }
+            navigationController.popViewController(animated: true)
+        }
+
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            (navigationController?.viewControllers.count ?? 0) > 1
+            guard (navigationController?.viewControllers.count ?? 0) > 1,
+                  navigationController?.transitionCoordinator == nil else { return false }
+            if let pan = gestureRecognizer as? UIPanGestureRecognizer, pan === horizontalBackGesture {
+                let velocity = pan.velocity(in: pan.view)
+                return velocity.x > 0 && velocity.x > abs(velocity.y) * 2
+            }
+            return true
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            gestureRecognizer === horizontalBackGesture
         }
     }
 }
@@ -5173,8 +5469,21 @@ private func businessCardColor(_ hex: String?) -> Color {
     return Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
 }
 
+private struct BusinessCardOutline: Shape {
+    let radius: CGFloat
+    let style: String
+    func path(in rect: CGRect) -> Path {
+        let corners: UIRectCorner = style == "diagonal" ? [.topLeft, .bottomRight]
+            : style == "diagonalReverse" ? [.topRight, .bottomLeft] : .allCorners
+        return Path(UIBezierPath(roundedRect: rect, byRoundingCorners: corners,
+                                 cornerRadii: CGSize(width: style == "square" ? 0 : radius,
+                                                     height: style == "square" ? 0 : radius)).cgPath)
+    }
+}
+
 private struct BusinessCardPreview: View {
     let card: BusinessCard
+    var maximumWidth: CGFloat? = nil
     @State private var flipped = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var d: BusinessCardDesign { (card.design ?? BusinessCardDesign()).resolved(theme: card.theme, layout: card.layout) }
@@ -5185,7 +5494,8 @@ private struct BusinessCardPreview: View {
             face(back: true).rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0)).opacity(flipped ? 1 : 0).accessibilityHidden(!flipped).allowsHitTesting(flipped)
         }
         .rotation3DEffect(.degrees(flipped ? 180 : -4), axis: (x: 0, y: 1, z: 0), perspective: 0.4)
-        .frame(maxWidth: 520).aspectRatio(1.65, contentMode: .fit)
+        .aspectRatio(d.orientation == "portrait" ? 1 / 1.65 : 1.65, contentMode: .fit)
+        .frame(maxWidth: maximumWidth ?? (d.orientation == "portrait" ? 360 : 520))
         .accessibilityElement(children: .contain)
     }
     private func flip() { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.55)) { flipped.toggle() } }
@@ -5195,6 +5505,7 @@ private struct BusinessCardPreview: View {
         let alignment: Alignment = align == "right" ? .trailing : align == "centered" ? .center : .leading
         let label = (back ? d.backLabel : d.frontLabel) ?? ""
         let radius = CGFloat(d.radius ?? 18)
+        let artwork = d.imagePlacement == "artwork" && (card.image_side ?? "front") == (back ? "back" : "front") && !(card.image_url ?? "").isEmpty
         return VStack(alignment: horizontal, spacing: 10) {
             if !label.isEmpty { Text(label).font(.system(size: 9, weight: .medium, design: fontDesign)).tracking(2).foregroundColor(businessCardColor(d.accentColor)) }
             Spacer(minLength: 4)
@@ -5227,9 +5538,24 @@ private struct BusinessCardPreview: View {
         }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
             .multilineTextAlignment(align == "right" ? .trailing : align == "centered" ? .center : .leading)
             .foregroundColor(businessCardColor(d.textColor))
+            .opacity(artwork ? 0 : 1).accessibilityHidden(artwork)
             .background(background(back: back))
-            .clipShape(RoundedRectangle(cornerRadius: radius))
-            .overlay(RoundedRectangle(cornerRadius: radius).stroke(.white.opacity(0.25)))
+            .overlay {
+                if artwork {
+                    GeometryReader { geometry in
+                        ZStack(alignment: .bottomTrailing) {
+                            DataURLImage(value: card.image_url ?? "", fit: true)
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                                .accessibilityLabel("名刺画像")
+                            Button(action: flip) { Image(systemName: "arrow.triangle.2.circlepath").padding(10) }
+                                .background(.regularMaterial).clipShape(Circle()).padding(12)
+                                .accessibilityLabel("名刺を裏返す")
+                        }
+                    }
+                }
+            }
+            .clipShape(BusinessCardOutline(radius: radius, style: d.cornerStyle ?? "rounded"))
+            .overlay(BusinessCardOutline(radius: radius, style: d.cornerStyle ?? "rounded").stroke(.white.opacity(0.25)))
             .shadow(color: .black.opacity(0.2), radius: 12, y: 8)
     }
     private func picture(_ source: String) -> some View {
@@ -5258,6 +5584,30 @@ private struct BusinessCardPreview: View {
     }
 }
 
+private struct BusinessCardTemplateDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.svg] }
+    var data: Data
+    init(design: BusinessCardDesign) {
+        let width = design.orientation == "portrait" ? 1000 : 1650
+        let height = design.orientation == "portrait" ? 1650 : 1000
+        func color(_ value: String?, fallback: String) -> String {
+            guard let value, value.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil else { return fallback }
+            return value
+        }
+        let background = color(design.frontColor, fallback: "#ffffff")
+        let text = color(design.textColor, fallback: "#000000")
+        data = Data("""
+        <svg xmlns="http://www.w3.org/2000/svg" width="\(width)" height="\(height)" viewBox="0 0 \(width) \(height)">
+        <rect width="100%" height="100%" fill="\(background)"/>
+        <text x="80" y="200" font-family="sans-serif" font-size="72" fill="\(text)">YOUR NAME</text>
+        <text x="80" y="300" font-family="sans-serif" font-size="36" fill="\(text)">Title / Organization</text>
+        </svg>
+        """.utf8)
+    }
+    init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
+}
+
 private struct BusinessCardView: View {
     @EnvironmentObject private var model: AppModel
     let profile: Profile
@@ -5272,15 +5622,22 @@ private struct BusinessCardView: View {
     @State private var pickingCardImage = false
     @State private var pickingCardImageFile = false
     @State private var cardImageURL = ""
+    @State private var exportingTemplate = false
     private var own: Bool { profile.id != nil && profile.id == model.session?.user.id }
     private var link: URL { URL(string: "https://hrmcngs.github.io/spotcode-sns/#/\(profile.handle)/card")! }
     var body: some View {
+        GeometryReader { viewport in
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(spacing: 0) {
                 if loading { ProgressView() }
                 else if failed { Button("再読み込み") { Task { await load() } } }
                 else if published || own {
-                    BusinessCardPreview(card: draft)
+                    let ratio: CGFloat = draft.design?.orientation == "portrait" ? 1 / 1.65 : 1.65
+                    let width = max(1, min(viewport.size.width - 48, (viewport.size.height - 48) * ratio))
+                    BusinessCardPreview(card: draft, maximumWidth: width)
+                        .frame(width: width)
+                        .frame(width: viewport.size.width, height: viewport.size.height)
+                    VStack(alignment: .leading, spacing: 20) {
                     if published {
                         HStack {
                             Button("名刺を共有") { sharing = true }.buttonStyle(.borderedProminent)
@@ -5294,14 +5651,20 @@ private struct BusinessCardView: View {
                         }
                     }
                     if own { editor }
+                    }.padding(24).frame(maxWidth: 600)
                 } else { Text("このユーザーはまだ名刺を公開していません。") }
                 if !message.isEmpty { Text(message).font(.callout).accessibilityAddTraits(.updatesFrequently) }
                 if own { NavigationLink("名刺コレクション", destination: BusinessCardCollectionView()) }
-            }.padding(24).frame(maxWidth: 600)
-        }.navigationTitle("名刺")
+            }.frame(maxWidth: .infinity)
+        }.navigationTitle("")
             .task(id: profile.id) { await load() }
             .sheet(isPresented: $sharing) { ActivityShareSheet(items: [link]) }
-            .sheet(isPresented: $pickingCardImage) { ProfileImagePicker(image: $draft.image_url, maxSide: 512) }
+            .sheet(isPresented: $pickingCardImage) { ProfileImagePicker(image: $draft.image_url, maxSide: 1650) }
+            .fileExporter(isPresented: $exportingTemplate,
+                          document: BusinessCardTemplateDocument(design: (draft.design ?? BusinessCardDesign()).resolved(theme: draft.theme, layout: draft.layout)),
+                          contentType: .svg, defaultFilename: "spotcode-card-template") { result in
+                if case .failure = result { message = "テンプレートを保存できませんでした。" }
+            }
             .fileImporter(isPresented: $pickingCardImageFile, allowedContentTypes: [.image]) { result in
                 do {
                     let url = try result.get()
@@ -5311,7 +5674,7 @@ private struct BusinessCardView: View {
                     guard size <= 8 * 1024 * 1024 else { message = "8MB以下の画像を選んでください。"; return }
                     let data = try Data(contentsOf: url)
                     guard data.count <= 8 * 1024 * 1024, let image = UIImage(data: data),
-                          let resized = image.resizedForPost(maxSide: 512).jpegData(compressionQuality: 0.85) else {
+                          let resized = image.resizedForPost(maxSide: 1650).jpegData(compressionQuality: 0.85) else {
                         message = "画像を読み込めませんでした。別の画像を選んでください。"; return
                     }
                     draft.image_url = "data:image/jpeg;base64," + resized.base64EncodedString()
@@ -5322,6 +5685,7 @@ private struct BusinessCardView: View {
             .confirmationDialog("名刺の公開を停止すると、相手のコレクションからも削除されます。", isPresented: $confirmingUnpublish, titleVisibility: .visible) {
                 Button("公開を停止", role: .destructive) { unpublish() }
             }
+        }
     }
     private var editor: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -5332,15 +5696,24 @@ private struct BusinessCardView: View {
             Text("自己紹介（裏・280文字まで）").font(.caption)
             TextEditor(text: $draft.bio).frame(minHeight: 80).modifier(BusinessCardInputStyle()).accessibilityLabel("自己紹介（裏）")
             BusinessCardTextField(placeholder: "連絡先・リンク（裏・160文字まで）", text: $draft.contact).frame(height: 44)
-            Picker("配色", selection: Binding(get: { draft.theme }, set: { theme in
+            Picker("テーマ", selection: Binding(get: { draft.design?.pattern == "solid" ? "solid" : draft.theme }, set: { theme in
+                if theme == "solid" {
+                    var design = (draft.design ?? BusinessCardDesign()).resolved(theme: draft.theme, layout: draft.layout)
+                    design.pattern = "solid"
+                    design.backColor = design.frontColor
+                    draft.design = design
+                    return
+                }
                 draft.theme = theme
                 let palette = BusinessCardDesign.preset(theme)
                 var design = draft.design ?? BusinessCardDesign()
                 design.frontColor = palette.frontColor; design.backColor = palette.backColor
                 design.textColor = palette.textColor; design.accentColor = palette.accentColor
+                design.pattern = "gradient"
                 draft.design = design
             })) {
                 Text("ミッドナイト").tag("midnight"); Text("ペーパー").tag("paper"); Text("オーロラ").tag("aurora")
+                Text("単色").tag("solid")
             }
             Picker("レイアウト", selection: Binding(get: { draft.layout }, set: { layout in
                 draft.layout = layout
@@ -5363,6 +5736,16 @@ private struct BusinessCardView: View {
     }
     private var mediaEditor: some View {
         VStack(alignment: .leading, spacing: 14) {
+            Button("デザイン用テンプレートをダウンロード（SVG）") { exportingTemplate = true }
+            Text("テンプレートを編集後、PNG/JPEGで書き出して取り込めます。実物の名刺は周囲を切り抜いた写真・スキャン画像を選んでください。画像は表または裏の1面に使えます。")
+                .font(.caption).foregroundColor(.secondary)
+            Picker("画像の使い方", selection: Binding(get: { draft.design?.imagePlacement ?? "inline" }, set: { value in
+                var design = draft.design ?? BusinessCardDesign()
+                design.imagePlacement = value; draft.design = design
+            })) {
+                Text("画像を差し込む").tag("inline")
+                Text("名刺の1面として使う").tag("artwork")
+            }
             Text("画像を差し込む").font(.headline)
             HStack {
                 Button("写真から選択") { pickingCardImage = true }
@@ -5516,6 +5899,14 @@ private struct BusinessCardDesignEditor: View {
                 }
                 alignment("表の文字揃え", key: \.frontAlign)
                 alignment("裏の文字揃え", key: \.backAlign)
+                Picker("名刺の向き", selection: text(\.orientation)) {
+                    Text("横向き").tag("landscape"); Text("縦向き").tag("portrait")
+                }
+                Picker("角の形", selection: text(\.cornerStyle)) {
+                    Text("すべて丸い").tag("rounded"); Text("すべて直角").tag("square")
+                    Text("左上・右下が丸い").tag("diagonal")
+                    Text("右上・左下が丸い").tag("diagonalReverse")
+                }
                 Stepper("名前の大きさ: \(design.nameSize ?? 26)px", value: Binding(get: { design.nameSize ?? 26 }, set: { design.nameSize = $0 }), in: 18...36)
                 Stepper("角丸: \(design.radius ?? 18)px", value: Binding(get: { design.radius ?? 18 }, set: { design.radius = $0 }), in: 0...28)
                 BusinessCardTextField(placeholder: "表の見出し（空欄で非表示）", text: text(\.frontLabel)).frame(height: 44)

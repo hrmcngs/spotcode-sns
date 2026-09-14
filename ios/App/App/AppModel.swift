@@ -733,7 +733,7 @@ final class AppModel: ObservableObject {
         if mutedOwner != session?.user.id { await loadMutes() }
         let generation = UUID()
         timelineGeneration = generation
-        hasMoreTimelinePosts = false; isLoadingMoreTimeline = false; timelinePageError = nil
+        isLoadingMoreTimeline = false; timelinePageError = nil
         isLoading = true
         defer { if timelineGeneration == generation { isLoading = false } }
         if me?.githubHandle != nil && (githubOrganizationOwner != session?.user.id || githubOrganizationExpiry <= Date()) {
@@ -741,11 +741,14 @@ final class AppModel: ObservableObject {
         }
         do {
             guard timelineGeneration == generation else { return }
-            let page = try await SupabaseService.shared.posts(token: session?.accessToken)
+            // Refresh the already loaded range instead of collapsing back to
+            // the first page while someone is reading older posts.
+            let limit = max(24, posts.count)
+            let page = try await SupabaseService.shared.posts(limit: limit, token: session?.accessToken)
             guard timelineGeneration == generation else { return }
             posts = page
             timelineCursor = page.last
-            hasMoreTimelinePosts = page.count == 24
+            hasMoreTimelinePosts = page.count == limit
             if let data = try? JSONEncoder().encode(posts) { UserDefaults.standard.set(data, forKey: cachedPostsKey) }
         }
         catch is CancellationError { return }

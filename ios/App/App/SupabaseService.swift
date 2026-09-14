@@ -950,7 +950,7 @@ struct BusinessCardDesign: Codable {
         guard hex.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil,
               let value = UInt32(hex.dropFirst(), radix: 16) else { return }
         let rgb = [Double((value >> 16) & 255), Double((value >> 8) & 255), Double(value & 255)]
-        let back = rgb.map { ($0 * 0.82).rounded() }
+        let back = pattern == "solid" ? rgb : rgb.map { ($0 * 0.82).rounded() }
         func luminance(_ values: [Double]) -> Double {
             zip(values, [0.2126, 0.7152, 0.0722]).reduce(0) { sum, pair in
                 let c = pair.0 / 255
@@ -974,6 +974,9 @@ struct BusinessCardDesign: Codable {
     var backAlign: String?
     var frontLabel: String?
     var backLabel: String?
+    var orientation: String?
+    var cornerStyle: String?
+    var imagePlacement: String?
     static func preset(_ theme: String, layout: String = "classic") -> Self {
         let colors = theme == "paper" ? ["#fffdf4", "#e7dfca", "#29251f", "#876c37"] : theme == "aurora" ? ["#34265b", "#187e80", "#f8fafc", "#91efdf"] : ["#222e49", "#0b1020", "#f8fafc", "#9fb5ef"]
         return Self(frontColor: colors[0], backColor: colors[1], textColor: colors[2], accentColor: colors[3], font: "sans", nameSize: 26, radius: 18, pattern: "gradient", frontAlign: layout, backAlign: layout, frontLabel: "SPOTCODE / BUSINESS CARD", backLabel: "LET’S CONNECT")
@@ -984,7 +987,10 @@ struct BusinessCardDesign: Codable {
                     textColor: textColor ?? p.textColor, accentColor: accentColor ?? p.accentColor,
                     font: font ?? p.font, nameSize: min(36, max(18, nameSize ?? 26)), radius: min(28, max(0, radius ?? 18)),
                     pattern: pattern ?? p.pattern, frontAlign: frontAlign ?? layout, backAlign: backAlign ?? layout,
-                    frontLabel: frontLabel ?? p.frontLabel, backLabel: backLabel ?? p.backLabel)
+                    frontLabel: frontLabel ?? p.frontLabel, backLabel: backLabel ?? p.backLabel,
+                    orientation: orientation == "portrait" ? "portrait" : "landscape",
+                    cornerStyle: ["diagonal", "diagonalReverse", "square"].contains(cornerStyle ?? "") ? cornerStyle : "rounded",
+                    imagePlacement: imagePlacement == "artwork" ? "artwork" : "inline")
     }
 }
 

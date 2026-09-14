@@ -3,10 +3,10 @@ import { currentUser } from './auth.js';
 
 export const themes = { midnight: 'ミッドナイト', paper: 'ペーパー', aurora: 'オーロラ' };
 export const baseColors = [['#18181b','チャコール'],['#1d4ed8','ブルー'],['#4f46e5','インディゴ'],['#7c3aed','パープル'],['#be185d','ピンク'],['#b91c1c','レッド'],['#c2410c','オレンジ'],['#0f766e','ティール'],['#15803d','グリーン'],['#f4e8d0','アイボリー'],['#e5e7eb','グレー'],['#ffffff','ホワイト']];
-export function paletteFromBase(value) {
+export function paletteFromBase(value, pattern = 'gradient') {
   const frontColor = /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : '#18181b';
   const rgb = frontColor.slice(1).match(/../g).map(v => parseInt(v,16));
-  const back = rgb.map(v => Math.round(v * 0.82));
+  const back = pattern === 'solid' ? rgb : rgb.map(v => Math.round(v * 0.82));
   const luminance = values => values.map(v => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }).reduce((sum,v,i) => sum + v * [0.2126,0.7152,0.0722][i],0);
   const textColor = 1.05 / (luminance(rgb) + 0.05) >= (luminance(back) + 0.05) / 0.05 ? '#ffffff' : '#000000';
   return { frontColor, backColor: '#' + back.map(v => v.toString(16).padStart(2,'0')).join(''), textColor, accentColor: textColor };
@@ -16,7 +16,7 @@ export function defaultDesign(theme = 'midnight', layout = 'classic') {
     : theme === 'aurora' ? ['#34265b','#187e80','#f8fafc','#91efdf'] : ['#222e49','#0b1020','#f8fafc','#9fb5ef'];
   return { frontColor: palette[0], backColor: palette[1], textColor: palette[2], accentColor: palette[3],
     font: 'sans', nameSize: 26, radius: 18, pattern: 'gradient', frontAlign: layout, backAlign: layout,
-    frontLabel: 'SPOTCODE / BUSINESS CARD', backLabel: 'LET’S CONNECT' };
+    frontLabel: 'SPOTCODE / BUSINESS CARD', backLabel: 'LET’S CONNECT', orientation: 'landscape', cornerStyle: 'rounded', imagePlacement: 'inline' };
 }
 export function normalizeDesign(value, theme, layout) {
   const defaults = defaultDesign(theme, layout);
@@ -25,7 +25,7 @@ export function normalizeDesign(value, theme, layout) {
   for (const key of ['frontColor','backColor','textColor','accentColor']) {
     if (/^#[0-9a-f]{6}$/i.test(d[key])) result[key] = d[key];
   }
-  for (const [key, allowed] of Object.entries({font:['sans','serif','mono'],pattern:['solid','gradient','stripe'],frontAlign:['classic','centered','right'],backAlign:['classic','centered','right']})) {
+  for (const [key, allowed] of Object.entries({imagePlacement:['inline','artwork'],orientation:['landscape','portrait'],cornerStyle:['rounded','square','diagonal','diagonalReverse'],font:['sans','serif','mono'],pattern:['solid','gradient','stripe'],frontAlign:['classic','centered','right'],backAlign:['classic','centered','right']})) {
     if (allowed.includes(d[key])) result[key] = d[key];
   }
   for (const [key,min,max] of [['nameSize',18,36],['radius',0,28]]) {

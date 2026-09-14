@@ -42,6 +42,14 @@ ctx.savePostsCache('spots',[
  {id:'no-city',spot:{lat:35,lng:135}},
 ]);
 assert.equal(ctx.trendingCities()[0].count,1);
+ctx.savePostsCache('spots', ['世田谷区', 'Setagaya', 'setagaya-ku', 'Setagaya Ward', '京都市'].map((city, i) => ({
+ id: 'alias-' + i, authorId: 'author', spot: { lat: 35.64, lng: 139.65, addressDetails: { city } },
+})));
+assert.equal(ctx.trendingCities().length, 2);
+assert.equal(ctx.trendingCities()[0].city, '世田谷区');
+assert.equal(ctx.trendingCities()[0].count, 4);
+assert.equal(ctx.canonicalCity(' Setagaya City '), '世田谷区');
+assert.equal(ctx.canonicalCity('Setagaya Heights'), 'Setagaya Heights');
 owner='another';
 assert.equal(ctx.trendingCities().length,0);
 const pending=ctx.postsWithSpots();owner='third';

@@ -54,6 +54,17 @@ struct SpotAddressDetails: Codable, Hashable {
     var prefecture: String? = nil
     var houseNumber: String? = nil
     var missingHouseNumber: Bool? = nil
+
+    var canonicalCity: String {
+        let name = (city ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        // MapKit can return either the English or Japanese ward name.
+        // Keep the original address in storage; normalize only grouping.
+        switch name.lowercased().replacingOccurrences(of: "-", with: " ") {
+        case "setagaya", "setagaya ku", "setagaya city", "setagaya ward", "世田谷", "世田谷区":
+            return "世田谷区"
+        default: return name
+        }
+    }
 }
 
 struct Spot: Codable, Hashable {

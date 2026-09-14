@@ -16,7 +16,8 @@
   --boost: #00ba7c;
   --radius: 12px;
   --radius-sm: 6px;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+  --mono: SFMono-Regular, "SF Mono", Menlo, Consolas, "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", monospace;
   /* Actual rendered topbar height (padding .6rem×2 + .icon-btn 34px + 1px
      border). Sticky bars (.timeline__head, .notif-head, side rails) used
      to hard-code top: 64px which was ~10px taller than the real topbar,
@@ -60,13 +61,14 @@ html {
 }
 body {
   background: var(--bg); color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-family: var(--font);
   line-height: 1.5;
   overflow-x: hidden;
   max-width: 100vw;
 }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; cursor: pointer; }
+input, textarea, select { font-family: inherit; }
 
 /* iOS Safari / WKWebView auto-zooms any input whose computed font-size is
    below 16px when it gains focus, and then doesn't always zoom back out.
@@ -3572,8 +3574,8 @@ html.account-menu-locked { overflow: hidden; }
 .business-card .business-card__brand { color: var(--card-accent); opacity: 1; }
 .business-card .business-card__brand:empty { display: none; }
 .business-card .business-card__face strong { font-size: var(--card-name-size); }
-.business-card--font-serif { font-family: Georgia, 'Hiragino Mincho ProN', serif; }
-.business-card--font-mono { font-family: ui-monospace, 'SFMono-Regular', monospace; }
+.business-card--font-serif { font-family: Georgia, 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif; }
+.business-card--font-mono { font-family: var(--mono); }
 .business-card .business-card__align-classic { text-align: left; }
 .business-card .business-card__align-centered { text-align: center; }
 .business-card .business-card__align-right { text-align: right; }
@@ -3606,3 +3608,27 @@ html.account-menu-locked { overflow: hidden; }
 .card-color-chip[aria-pressed=true] span { visibility: visible; }
 .card-color-chip:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 .card-base-custom input[type=color] { max-width: 100px; height: 44px; padding: 4px; }
+
+.business-card--portrait { aspect-ratio: 1 / 1.65; max-width: 360px; }
+.business-card--corners-square .business-card__face { border-radius: 0; }
+.business-card--corners-diagonal .business-card__face { border-radius: var(--card-radius) 0 var(--card-radius) 0; }
+.business-card--corners-diagonalReverse .business-card__face { border-radius: 0 var(--card-radius) 0 var(--card-radius); }
+.business-card__face--artwork > :not(.business-card__artwork):not(.business-card__hint) { visibility: hidden; pointer-events: none; }
+.business-card__artwork { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.business-card__face--artwork .business-card__hint { position: relative; z-index: 1; background: #000b; color: white; border-radius: 6px; padding: 4px 8px; }
+
+.card-page--showcase { padding-top: 0; }
+.card-page--showcase > nav, .card-page--showcase > h1 { display: none; }
+.card-showcase {
+  min-height: calc(100vh - var(--topbar-h));
+  min-height: calc(100svh - var(--topbar-h));
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px 0;
+}
+.card-showcase > .business-card {
+  margin: 0;
+  max-width: min(100%, calc((100svh - var(--topbar-h) - 48px) * 1.65));
+}
+.card-showcase > .business-card--portrait {
+  max-width: min(100%, calc((100svh - var(--topbar-h) - 48px) / 1.65));
+}

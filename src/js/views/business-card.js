@@ -6,18 +6,20 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;
 export function cardMarkup(value, handle) {
   const c = normalizeCard(value), d = c.design;
   const style = `--card-front:${d.frontColor};--card-back:${d.backColor};--card-text:${d.textColor};--card-accent:${d.accentColor};--card-name-size:${d.nameSize}px;--card-radius:${d.radius}px`;
+  const artwork = side => d.imagePlacement === 'artwork' && c.image_side === side && c.image_url;
+  const artworkHtml = side => artwork(side) ? '<img class="business-card__artwork" src="' + esc(c.image_url) + '" alt="' + esc(c.name) + ' の名刺" referrerpolicy="no-referrer">' : '';
   const picture = side => {
-    if (!c.image_url || c.image_side !== side) return '';
+    if (artwork(side) || !c.image_url || c.image_side !== side) return '';
     const img = `<img class="business-card__image" src="${esc(c.image_url)}" alt="${esc(c.name)} の名刺画像" referrerpolicy="no-referrer" style="width:${c.image_size}px;height:${c.image_size}px;border-radius:${c.image_shape === 'round' ? '50%' : '8px'}">`;
     return c.image_link ? `<a class="business-card__image-link" ${side === 'back' ? 'tabindex="-1"' : ''} href="${esc(c.image_link)}" target="_blank" rel="noopener noreferrer" aria-label="画像のリンクを開く">${img}</a>` : img;
   };
   const links = side => c.links_side !== side ? '' : `<div class="business-card__links">${c.links.map(link => `<a href="${esc(link.url)}" target="_blank" rel="noopener noreferrer" ${side === 'back' ? 'tabindex="-1"' : ''}>${esc(link.label || link.url)} ↗</a>`).join('')}</div>`;
-  return `<div style="${style}" class="business-card business-card--${c.theme} business-card--${c.layout} business-card--font-${d.font} business-card--pattern-${d.pattern}" role="group" aria-label="${esc(c.name)} の名刺">
-    <div class="business-card__body"><div class="business-card__face business-card__align-${d.frontAlign}"><span class="business-card__brand">${esc(d.frontLabel)}</span><div class="business-card__identity">${picture('front')}<div><strong>${esc(c.name)}</strong><span>${esc(c.title)}</span><small>@${esc(handle)}</small></div></div>${links('front')}<button type="button" class="business-card__hint" data-card-flip aria-pressed="false">タップして裏面へ ↻</button></div>
-    <div class="business-card__face business-card__back business-card__align-${d.backAlign}" aria-hidden="true" inert><span class="business-card__brand">${esc(d.backLabel)}</span><div class="business-card__identity">${picture('back')}<div><span class="business-card__bio">${esc(c.bio || 'よろしくお願いします。')}</span><span>${esc(c.contact)}</span></div></div>${links('back')}<button type="button" class="business-card__hint" data-card-flip aria-pressed="false" tabindex="-1">タップして表面へ ↻</button></div></div></div>`;
+  return `<div style="${style}" class="business-card business-card--${c.theme} business-card--${c.layout} business-card--font-${d.font} business-card--pattern-${d.pattern} business-card--${d.orientation} business-card--corners-${d.cornerStyle}" role="group" aria-label="${esc(c.name)} の名刺">
+    <div class="business-card__body"><div class="business-card__face business-card__align-${d.frontAlign} ${artwork('front') ? 'business-card__face--artwork' : ''}">${artworkHtml('front')}<span class="business-card__brand">${esc(d.frontLabel)}</span><div class="business-card__identity">${picture('front')}<div><strong>${esc(c.name)}</strong><span>${esc(c.title)}</span><small>@${esc(handle)}</small></div></div>${links('front')}<button type="button" class="business-card__hint" data-card-flip aria-pressed="false">タップして裏面へ ↻</button></div>
+    <div class="business-card__face business-card__back business-card__align-${d.backAlign} ${artwork('back') ? 'business-card__face--artwork' : ''}" aria-hidden="true" inert>${artworkHtml('back')}<span class="business-card__brand">${esc(d.backLabel)}</span><div class="business-card__identity">${picture('back')}<div><span class="business-card__bio">${esc(c.bio || 'よろしくお願いします。')}</span><span>${esc(c.contact)}</span></div></div>${links('back')}<button type="button" class="business-card__hint" data-card-flip aria-pressed="false" tabindex="-1">タップして表面へ ↻</button></div></div></div>`;
 }
 export function renderBusinessCard(handle, collection = false) {
-  return `<section class="card-page" data-card-page><nav class="card-actions"><a href="${url('/' + handle)}">← プロフィール</a><a href="${url('/' + handle + '/card')}">名刺</a>${currentUser()?.handle === handle ? `<a href="${url('/' + handle + '/cards')}">コレクション</a>` : ''}</nav><h1>${collection ? '名刺コレクション' : '名刺'}</h1><div data-card-content>読み込み中…</div><p role="status" aria-live="polite" data-card-status></p></section>`;
+  return `<section class="card-page ${collection ? '' : 'card-page--showcase'}" data-card-page><nav class="card-actions"><a href="${url('/' + handle)}">← プロフィール</a><a href="${url('/' + handle + '/card')}">名刺</a>${currentUser()?.handle === handle ? `<a href="${url('/' + handle + '/cards')}">コレクション</a>` : ''}</nav><h1>${collection ? '名刺コレクション' : '名刺'}</h1><div data-card-content>読み込み中…</div><p role="status" aria-live="polite" data-card-status></p></section>`;
 }
 export async function hydrateBusinessCard(handle, collection = false) {
   const page = document.querySelector('[data-card-page]');
@@ -51,7 +53,7 @@ export async function hydrateBusinessCard(handle, collection = false) {
     const own = currentUser()?.id === profile.id;
     if (!card && !own) { content.innerHTML = '<p>このユーザーはまだ名刺を公開していません。</p>'; return; }
     const initial = normalizeCard(card || { name: profile.name });
-    content.innerHTML = `<div data-card-preview>${cardMarkup(initial, handle)}</div><div class="card-actions" data-card-sharing ${card ? '' : 'hidden'}><button class="btn btn--primary" data-share-card>名刺を共有</button><button class="btn btn--ghost" data-copy-card>リンクをコピー</button>${!own ? '<button class="btn btn--primary" data-collect-card>コレクションに保存</button>' : ''}</div><p>共有メニューからAirDropなどでリンクを送れます。相手が名刺を保存し、自分の名刺も送り返すと交換できます。</p>${own ? editor(initial, !!card) : ''}`;
+    content.innerHTML = `<div class="card-showcase" data-card-preview>${cardMarkup(initial, handle)}</div><div class="card-actions" data-card-sharing ${card ? '' : 'hidden'}><button class="btn btn--primary" data-share-card>名刺を共有</button><button class="btn btn--ghost" data-copy-card>リンクをコピー</button>${!own ? '<button class="btn btn--primary" data-collect-card>コレクションに保存</button>' : ''}</div><p>共有メニューからAirDropなどでリンクを送れます。相手が名刺を保存し、自分の名刺も送り返すと交換できます。</p>${own ? editor(initial, !!card) : ''}`;
     const link = cardLink(handle);
     content.querySelector('[data-share-card]').onclick = async () => {
       try {
@@ -88,7 +90,7 @@ export async function hydrateBusinessCard(handle, collection = false) {
         if (!file) return;
         form.querySelectorAll('input, textarea, select, button').forEach(el => { el.disabled = true; });
         try {
-          const image = await fileToAvatarDataUrl(file, 512);
+          const image = await fileToAvatarDataUrl(file, 1650);
           if (!page.isConnected) return;
           stagedImage = image;
           form.querySelector('[data-card-image-url]').value = '';
@@ -101,12 +103,20 @@ export async function hydrateBusinessCard(handle, collection = false) {
           if (page.isConnected) paintPreview();
         }
       };
+      form.querySelector('[data-card-template]').onclick = () => {
+        const d = normalizeCard(value()).design;
+        const w = d.orientation === 'portrait' ? 1000 : 1650, h = d.orientation === 'portrait' ? 1650 : 1000;
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '"><rect width="100%" height="100%" fill="' + d.frontColor + '"/><text x="80" y="200" font-family="sans-serif" font-size="72" fill="' + d.textColor + '">YOUR NAME</text><text x="80" y="300" font-family="sans-serif" font-size="36" fill="' + d.textColor + '">Title / Organization</text></svg>';
+        const objectURL = URL.createObjectURL(new Blob([svg], {type:'image/svg+xml'}));
+        const a = document.createElement('a'); a.href = objectURL; a.download = 'spotcode-card-template.svg'; a.click();
+        setTimeout(() => URL.revokeObjectURL(objectURL), 1000);
+      };
       form.querySelector('[data-clear-card-image]').onclick = () => {
         stagedImage = ''; form.querySelector('[data-card-image-url]').value = '';
         form.querySelector('[data-image-state]').textContent = '画像なし'; paintPreview();
       };
       function applyBaseColor(color) {
-        for (const [key, value] of Object.entries(paletteFromBase(color))) form.elements['design_' + key].value = value;
+        for (const [key, value] of Object.entries(paletteFromBase(color, form.elements.design_pattern.value))) form.elements['design_' + key].value = value;
       }
       form.querySelectorAll('[data-base-chip]').forEach(button => button.onclick = () => { applyBaseColor(button.dataset.baseChip); paintPreview(); });
       form.oninput = event => {
@@ -117,8 +127,14 @@ export async function hydrateBusinessCard(handle, collection = false) {
           form.querySelector('[data-image-state]').textContent = stagedImage ? 'URLの画像を表示します。' : '画像なし';
         }
         if (event.target.name === 'theme') {
-          const defaults = defaultDesign(event.target.value, form.elements.layout.value);
-          for (const key of ['frontColor','backColor','textColor','accentColor']) form.elements['design_' + key].value = defaults[key];
+          if (event.target.value === 'solid') {
+            form.elements.design_pattern.value = 'solid';
+            form.elements.design_backColor.value = form.elements.design_frontColor.value;
+          } else {
+            const defaults = defaultDesign(event.target.value, form.elements.layout.value);
+            for (const key of ['frontColor','backColor','textColor','accentColor']) form.elements['design_' + key].value = defaults[key];
+            form.elements.design_pattern.value = 'gradient';
+          }
         }
         if (event.target.name === 'layout') {
           for (const key of ['frontAlign','backAlign']) form.elements['design_' + key].value = event.target.value;
@@ -154,7 +170,7 @@ export async function hydrateBusinessCard(handle, collection = false) {
   }
 }
 function editor(c, published) {
-  return `<form class="card-editor"><h2>自分の名刺をデザイン</h2><p>保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。</p>${[['name','名前（表）',60],['title','肩書き・組織（表）',100],['bio','自己紹介（裏）',280],['contact','連絡先・リンク（裏）',160]].map(([key,label,max]) => `<label>${label}${key === 'bio' ? `<textarea name="${key}" maxlength="${max}" rows="3">${esc(c[key])}</textarea>` : `<input name="${key}" maxlength="${max}" value="${esc(c[key])}" ${key === 'name' ? 'required' : ''}>`}</label>`).join('')}${baseColorEditor(c.design)}<label>配色プリセット<select name="theme">${Object.entries(themes).map(([key,label]) => `<option value="${key}" ${c.theme === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>レイアウト<select name="layout"><option value="classic">左揃え</option><option value="centered" ${c.layout === 'centered' ? 'selected' : ''}>中央揃え</option></select></label>${mediaEditor(c)}${designEditor(c.design)}<div class="card-actions"><button class="btn btn--primary" type="submit">保存して公開</button><button class="btn btn--ghost" type="button" data-unpublish-card ${published ? '' : 'hidden'}>公開を停止</button></div></form>`;
+  return `<form class="card-editor"><h2>自分の名刺をデザイン</h2><p>保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。</p>${[['name','名前（表）',60],['title','肩書き・組織（表）',100],['bio','自己紹介（裏）',280],['contact','連絡先・リンク（裏）',160]].map(([key,label,max]) => `<label>${label}${key === 'bio' ? `<textarea name="${key}" maxlength="${max}" rows="3">${esc(c[key])}</textarea>` : `<input name="${key}" maxlength="${max}" value="${esc(c[key])}" ${key === 'name' ? 'required' : ''}>`}</label>`).join('')}${baseColorEditor(c.design)}<label>テーマ<select name="theme">${Object.entries({...themes, solid: "単色"}).map(([key,label]) => `<option value="${key}" ${(c.design.pattern === 'solid' ? 'solid' : c.theme) === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>レイアウト<select name="layout"><option value="classic">左揃え</option><option value="centered" ${c.layout === 'centered' ? 'selected' : ''}>中央揃え</option></select></label>${mediaEditor(c)}${designEditor(c.design)}<div class="card-actions"><button class="btn btn--primary" type="submit">保存して公開</button><button class="btn btn--ghost" type="button" data-unpublish-card ${published ? '' : 'hidden'}>公開を停止</button></div></form>`;
 }
 function baseColorEditor(d) {
   return `<fieldset class="card-design"><legend>ベースカラー</legend><div class="card-color-chips" role="group" aria-label="ベースカラーを選択">${baseColors.map(([hex,label]) => `<button type="button" class="card-color-chip" data-base-chip="${hex}" style="--chip-color:${hex}" aria-label="${label}" title="${label}" aria-pressed="${hex === d.frontColor.toLowerCase()}"><span aria-hidden="true">✓</span></button>`).join('')}</div><label class="card-base-custom">好きな色を選ぶ<input type="color" data-base-color value="${d.frontColor}"></label><p>選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。</p></fieldset>`;
@@ -162,7 +178,7 @@ function baseColorEditor(d) {
 function mediaEditor(c) {
   return `<fieldset class="card-design"><legend>画像を差し込む</legend><div class="card-editor">
     <label>画像を選択<input type="file" accept="image/*" data-card-image-file></label>
-    <p data-image-state>${c.image_url ? '画像を設定済み' : '画像なし'}</p>
+    <button type="button" class="btn btn--ghost" data-card-template>デザイン用テンプレートをダウンロード（SVG）</button><p>テンプレートを編集後、PNG/JPEGで書き出して取り込めます。実物の名刺は周囲を切り抜いた写真・スキャン画像を選んでください。画像は表または裏の1面に使えます。</p><label>画像の使い方<select name="design_imagePlacement"><option value="inline">画像を差し込む</option><option value="artwork" ${c.design.imagePlacement === 'artwork' ? 'selected' : ''}>名刺の1面として使う</option></select></label><p data-image-state>${c.image_url ? '画像を設定済み' : '画像なし'}</p>
     <label>または画像URL<input type="url" data-card-image-url value="${esc(c.image_url.startsWith('data:') ? '' : c.image_url)}" placeholder="https://example.com/photo.jpg"></label>
     <label>表示する面<select name="image_side"><option value="front">表</option><option value="back" ${c.image_side === 'back' ? 'selected' : ''}>裏</option></select></label>
     <label>画像の形<select name="image_shape"><option value="square">角丸</option><option value="round" ${c.image_shape === 'round' ? 'selected' : ''}>丸</option></select></label>
@@ -178,6 +194,8 @@ function designEditor(d) {
     ${options('font','書体',[['sans','ゴシック'],['serif','明朝'],['mono','等幅']])}
     ${options('pattern','背景の装飾',[['solid','単色'],['gradient','グラデーション'],['stripe','ストライプ']])}
     ${options('frontAlign','表の文字揃え',align)}${options('backAlign','裏の文字揃え',align)}
+    ${options('orientation','名刺の向き',[['landscape','横向き'],['portrait','縦向き']])}
+    ${options('cornerStyle','角の形',[['rounded','すべて丸い'],['square','すべて直角'],['diagonal','左上・右下が丸い'],['diagonalReverse','右上・左下が丸い']])}
     <label>名前の大きさ（18〜36px）<input type="number" name="design_nameSize" min="18" max="36" value="${d.nameSize}"></label>
     <label>角丸（0〜28px）<input type="number" name="design_radius" min="0" max="28" value="${d.radius}"></label>
     ${[['frontLabel','表の見出し'],['backLabel','裏の見出し']].map(([key,label]) => `<label>${label}<input name="design_${key}" maxlength="40" value="${esc(d[key])}" placeholder="空欄で非表示"></label>`).join('')}</div><p>配色プリセットを変更すると4色が切り替わります。タップして裏面を確認しながら編集できます。</p></fieldset>`;

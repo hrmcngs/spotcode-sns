@@ -384,6 +384,9 @@
 "GitHubのリポジトリを取得できません。OrganizationのOAuth許可・SSO、またはAPIの利用制限を確認してください。" = "Could not load GitHub repositories. Check your organization’s OAuth permissions, SSO, or API rate limits.";
 "プロフィールに連携したGitHubアカウントで再認証してください。" = "Reauthorize using the GitHub account linked to your profile.";
 "読み込み中…" = "Loading…";
+"もっと昔の投稿を読み込む" = "Load older posts";
+"現在地を取得できませんでした。位置情報の設定を確認して再試行してください。" = "Could not get your location. Check Location Services settings and try again.";
+"現在地を表示するには、システム設定でspotcodeの位置情報を許可してください。" = "Allow spotcode to access your location in System Settings to show your current location.";
 "```\nコードを入力\n```\n" = "```\nEnter code here\n```\n";
 "現在地から300mを超えています。半径300m以内を選んでください。" = "This point is more than 300 m from your current location. Choose a point within 300 m.";
 "投稿の分析" = "Post analytics";

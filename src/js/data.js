@@ -689,6 +689,11 @@ export function postsWithSpots({ limit = SPOT_POST_LIMIT } = {}) {
   return promise;
 }
 
+export function canonicalCity(value) {
+  const name = String(value || '').trim();
+  return /^(setagaya(?:[ -](?:ku|city|ward))?|世田谷区?)$/i.test(name) ? '世田谷区' : name;
+}
+
 export function trendingCities() {
   const byCity = new Map();
   const seen = new Set();
@@ -696,7 +701,7 @@ export function trendingCities() {
     if (seen.has(post.id) || !Number.isFinite(post.spot?.lat) || !Number.isFinite(post.spot?.lng)) continue;
     seen.add(post.id);
     const details = post.spot.addressDetails;
-    const city = details?.city?.trim();
+    const city = canonicalCity(details?.city);
     if (!city) continue;
     const entry = byCity.get(city) || { city, prefecture: details.prefecture || '', count: 0 };
     entry.count++;
@@ -821,14 +826,15 @@ export async function postsByEventId(eventId) {
 export async function postsByCity(city) {
   if (!city) return [];
   const supa = await getClient();
-  // PostgREST JSONB path filter: spot->addressDetails->>city == city.
-  // The post.spot column is jsonb and addressDetails is the nested
-  // object we save from the picker.
-  const { data, error } = await withResilientCols((cols) =>
-    supa.from('posts').select(cols)
-      .eq('spot->addressDetails->>city', city)
-      .order('created_at', { ascending: false })
-  );
+  const { data, error } = await withResilientCols((cols) => {
+    let query = supa.from('posts').select(cols);
+    if (canonicalCity(city) === '世田谷区') {
+      query = query.or('spot->addressDetails->>city.eq.世田谷区,spot->addressDetails->>city.eq.世田谷,spot->addressDetails->>city.ilike.setagaya,spot->addressDetails->>city.ilike.setagaya-ku,spot->addressDetails->>city.ilike.setagaya ku,spot->addressDetails->>city.ilike.setagaya city,spot->addressDetails->>city.ilike.setagaya ward');
+    } else {
+      query = query.eq('spot->addressDetails->>city', city);
+    }
+    return query.order('created_at', { ascending: false });
+  });
   if (error) throw new Error(error.message);
   const shaped = mergeOptimistic((data || []).map(shapePost), 'city:' + city);
   savePostsCache('city:' + city, shaped);
