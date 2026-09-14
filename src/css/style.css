@@ -3538,8 +3538,8 @@ html.account-menu-locked { overflow: hidden; }
 .card-page p { line-height: 1.7; margin: 16px 0; }
 .card-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 18px 0; }
 .card-actions[hidden] { display: none; }
-.business-card { display: block; width: 100%; max-width: 520px; aspect-ratio: 1.65; margin: 24px auto; padding: 0; border: 0; background: transparent; color: #f8fafc; perspective: 1400px; cursor: pointer; text-align: left; font: inherit; -webkit-tap-highlight-color: transparent; }
-.business-card__body { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .65s cubic-bezier(.2,.7,.2,1); transform: rotateY(-5deg) rotateX(3deg); }
+.business-card { display: block; width: 91mm; height: 55mm; max-width: none; flex-shrink: 0; zoom: var(--card-physical-scale, 1); margin: 24px auto; padding: 0; border: 0; background: transparent; color: #f8fafc; perspective: 1400px; cursor: pointer; text-align: left; font: inherit; -webkit-tap-highlight-color: transparent; }
+.business-card__body { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .65s cubic-bezier(.2,.7,.2,1); transform: rotateY(0deg); }
 .business-card.is-flipped .business-card__body { transform: rotateY(180deg); }
 .business-card__face { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: clamp(18px, 5vw, 32px); border: 1px solid #ffffff40; border-radius: 18px; background: linear-gradient(125deg,#222e49,#0b1020); box-shadow: 0 16px 32px #0003, 0 3px 0 #38415a; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; overflow-wrap: anywhere; }
 .business-card__face strong { font-size: clamp(18px, 4vw, 30px); line-height: 1.2; }
@@ -3609,7 +3609,7 @@ html.account-menu-locked { overflow: hidden; }
 .card-color-chip:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 .card-base-custom input[type=color] { max-width: 100px; height: 44px; padding: 4px; }
 
-.business-card--portrait { aspect-ratio: 1 / 1.65; max-width: 360px; }
+.business-card--portrait { width: 55mm; height: 91mm; }
 .business-card--corners-square .business-card__face { border-radius: 0; }
 .business-card--corners-diagonal .business-card__face { border-radius: var(--card-radius) 0 var(--card-radius) 0; }
 .business-card--corners-diagonalReverse .business-card__face { border-radius: 0 var(--card-radius) 0 var(--card-radius); }
@@ -3623,15 +3623,9 @@ html.account-menu-locked { overflow: hidden; }
   min-height: calc(100vh - var(--topbar-h));
   min-height: calc(100svh - var(--topbar-h));
   display: flex; align-items: center; justify-content: center;
-  padding: 24px 0;
+  padding: 24px 0; overflow: auto; justify-content: flex-start;
 }
-.card-showcase > .business-card {
-  margin: 0;
-  max-width: min(100%, calc((100svh - var(--topbar-h) - 48px) * 1.65));
-}
-.card-showcase > .business-card--portrait {
-  max-width: min(100%, calc((100svh - var(--topbar-h) - 48px) / 1.65));
-}
+.card-showcase > .business-card { margin: auto; }
 .business-card--aurora.business-card--pattern-gradient .business-card__face {
   background: radial-gradient(ellipse at top right, var(--card-back), transparent 75%), linear-gradient(135deg, var(--card-front), var(--card-back));
 }
@@ -3666,16 +3660,11 @@ dialog.card-fullscreen[open] { display: flex; flex-direction: column; align-item
 .card-fullscreen-close { align-self: flex-end; flex-shrink: 0; min-height: 44px; color: #fff; }
 .card-fullscreen-stage {
   flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
-  container-type: size;
+  overflow: auto; align-items: flex-start; justify-content: flex-start;
 }
-.card-fullscreen-stage > .business-card {
-  width: min(100%, calc((100dvh - 100px) * 1.65));
-  width: min(100cqw, calc(100cqh * 1.65)); max-width: none; margin: 0;
-}
-.card-fullscreen-stage > .business-card--portrait {
-  width: min(100%, calc((100dvh - 100px) / 1.65));
-  width: min(100cqw, calc(100cqh / 1.65));
-}
+.card-fullscreen-stage > .business-card { margin: auto; }
+.card-size-calibration { flex-shrink: 0; width: min(100%, 440px); align-self: center; padding-top: 12px; }
+.card-size-calibration input { width: 100%; }
 
 /* Hide the SNS shell as well as covering it; restore it without remounting on close. */
 body.card-fullscreen-active > :not(dialog.card-fullscreen) { visibility: hidden !important; }

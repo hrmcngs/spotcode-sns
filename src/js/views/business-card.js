@@ -240,6 +240,19 @@ function designEditor(d) {
     <label>角丸（0〜28px）<input type="number" name="design_radius" min="0" max="28" value="${d.radius}"></label>
     ${[['frontLabel','表の見出し'],['backLabel','裏の見出し']].map(([key,label]) => `<label>${label}<input name="design_${key}" maxlength="40" value="${esc(d[key])}" placeholder="空欄で非表示"></label>`).join('')}</div><p>配色プリセットを変更すると4色が切り替わります。タップして裏面を確認しながら編集できます。</p></fieldset>`;
 }
+function readCardPhysicalScale() {
+  try {
+    const value = Number(localStorage.getItem('spotcode.card.physicalScale') || 1);
+    return Number.isFinite(value) ? Math.min(2, Math.max(0.5, value)) : 1;
+  } catch { return 1; }
+}
+function applyCardPhysicalScale(value) {
+  const scale = Number.isFinite(Number(value)) ? Math.min(2, Math.max(0.5, Number(value))) : 1;
+  document.documentElement?.style.setProperty('--card-physical-scale', String(scale));
+  try { localStorage.setItem('spotcode.card.physicalScale', String(scale)); } catch {}
+}
+applyCardPhysicalScale(readCardPhysicalScale());
+
 function openCardFullscreen(button) {
   const original = button.closest('.card-showcase-wrap')?.querySelector('.business-card');
   if (!original || document.querySelector('.card-fullscreen')) return;
@@ -253,7 +266,14 @@ function openCardFullscreen(button) {
   const stage = document.createElement('div');
   stage.className = 'card-fullscreen-stage';
   stage.append(original.cloneNode(true));
-  dialog.append(close, stage);
+  const calibration = document.createElement('details');
+  calibration.className = 'card-size-calibration';
+  calibration.innerHTML = '<summary>実寸調整（91 × 55 mm）</summary><p>定規を当て、長辺が91mmになるよう調整してください。画面や表示倍率を変えた場合は調整し直してください。</p><input type="range" min="0.5" max="2" step="0.005" aria-label="実寸の補正倍率"><button type="button" class="btn btn--ghost">補正をリセット</button>';
+  const scaleInput = calibration.querySelector('input');
+  scaleInput.value = String(readCardPhysicalScale());
+  scaleInput.oninput = () => applyCardPhysicalScale(scaleInput.value);
+  calibration.querySelector('button').onclick = () => { scaleInput.value = '1'; applyCardPhysicalScale(1); };
+  dialog.append(close, stage, calibration);
   document.body.append(dialog);
   const previousOverflow = document.body.style.overflow;
   document.body.style.overflow = 'hidden';
