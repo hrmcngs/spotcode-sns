@@ -3,3 +3,4 @@
 "NSLocationWhenInUseUsageDescription" = "Use your location to show the map and read posts at spots within 100 meters.";
 "NSPhotoLibraryAddUsageDescription" = "Save photos from posts to your photo library.";
 "NSPhotoLibraryUsageDescription" = "Select photos from your photo library to attach to posts.";
+"NSLocalNetworkUsageDescription" = "Find nearby people with their business card open and exchange cards after confirmation.";

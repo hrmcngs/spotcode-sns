@@ -5481,12 +5481,45 @@ private struct BusinessCardOutline: Shape {
     }
 }
 
+private struct CardHorizontalScroll: UIViewRepresentable {
+    let flip: () -> Void
+    func makeUIView(context: Context) -> ScrollView { ScrollView() }
+    func updateUIView(_ view: ScrollView, context: Context) { view.flip = flip }
+    static func dismantleUIView(_ view: ScrollView, coordinator: ()) { view.pan.view?.removeGestureRecognizer(view.pan) }
+    final class ScrollView: UIView, UIGestureRecognizerDelegate {
+        var flip: (() -> Void)?
+        lazy var pan: UIPanGestureRecognizer = {
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(scrolled(_:)))
+            pan.allowedScrollTypesMask = .continuous
+            pan.allowedTouchTypes = []
+            pan.cancelsTouchesInView = false
+            pan.delegate = self
+            return pan
+        }()
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            pan.view?.removeGestureRecognizer(pan)
+            window?.addGestureRecognizer(pan)
+        }
+        override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard window != nil, bounds.contains(gestureRecognizer.location(in: self)) else { return false }
+            let velocity = pan.velocity(in: self)
+            return abs(velocity.x) > abs(velocity.y) * 2
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+        @objc private func scrolled(_ pan: UIPanGestureRecognizer) {
+            let delta = pan.translation(in: self)
+            if pan.state == .ended && abs(delta.x) > 60 && abs(delta.x) > abs(delta.y) * 2 { flip?() }
+        }
+    }
+}
+
 private struct BusinessCardPreview: View {
     let card: BusinessCard
     var maximumWidth: CGFloat? = nil
     @State private var flipped = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private var d: BusinessCardDesign { (card.design ?? BusinessCardDesign()).resolved(theme: card.theme, layout: card.layout) }
+    private var d: BusinessCardDesign { (card.design ?? BusinessCardDesign()).resolved(theme: card.effectiveTheme, layout: card.layout) }
     private var fontDesign: Font.Design { d.font == "serif" ? .serif : d.font == "mono" ? .monospaced : .default }
     var body: some View {
         ZStack {
@@ -5496,6 +5529,15 @@ private struct BusinessCardPreview: View {
         .rotation3DEffect(.degrees(flipped ? 180 : -4), axis: (x: 0, y: 1, z: 0), perspective: 0.4)
         .aspectRatio(d.orientation == "portrait" ? 1 / 1.65 : 1.65, contentMode: .fit)
         .frame(maxWidth: maximumWidth ?? (d.orientation == "portrait" ? 360 : 520))
+        .contentShape(Rectangle())
+        .onTapGesture { flip() }
+        .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded { value in
+            if abs(value.translation.width) > 60 && abs(value.translation.width) > abs(value.translation.height) * 2 { flip() }
+        })
+        #if targetEnvironment(macCatalyst)
+        .background(CardHorizontalScroll(flip: flip))
+        #endif
+        .accessibilityAction(named: "名刺を裏返す", flip)
         .accessibilityElement(children: .contain)
     }
     private func flip() { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.55)) { flipped.toggle() } }
@@ -5534,7 +5576,6 @@ private struct BusinessCardPreview: View {
                 }
             }
             Spacer(minLength: 4)
-            Button(action: flip) { Text(back ? "タップして表面へ ↻" : "タップして裏面へ ↻").font(.system(size: 10)).opacity(0.7).frame(maxWidth: .infinity, alignment: alignment) }.buttonStyle(.plain)
         }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
             .multilineTextAlignment(align == "right" ? .trailing : align == "centered" ? .center : .leading)
             .foregroundColor(businessCardColor(d.textColor))
@@ -5547,9 +5588,6 @@ private struct BusinessCardPreview: View {
                             DataURLImage(value: card.image_url ?? "", fit: true)
                                 .frame(width: geometry.size.width, height: geometry.size.height)
                                 .accessibilityLabel("名刺画像")
-                            Button(action: flip) { Image(systemName: "arrow.triangle.2.circlepath").padding(10) }
-                                .background(.regularMaterial).clipShape(Circle()).padding(12)
-                                .accessibilityLabel("名刺を裏返す")
                         }
                     }
                 }
@@ -5569,7 +5607,17 @@ private struct BusinessCardPreview: View {
         return ZStack {
             if d.pattern == "gradient" {
                 LinearGradient(colors: back ? [rear, front] : [front, rear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                if card.effectiveTheme == "aurora" {
+                    RadialGradient(colors: [rear, .clear], center: .topTrailing, startRadius: 0, endRadius: 360)
+                }
             } else { back ? rear : front }
+            if card.effectiveTheme == "ghost" && d.pattern != "solid" {
+                RadialGradient(colors: [.white.opacity(0.65), .clear], center: .topLeading, startRadius: 0, endRadius: 300)
+            }
+            if d.pattern != "solid", let symbol = ["spring":"leaf", "summer":"sun.max", "autumn":"leaf.fill", "winter":"snowflake"][card.effectiveTheme] {
+                VStack { HStack { Spacer(); Image(systemName: symbol).font(.system(size: 72)).opacity(0.12) }; Spacer() }.padding(22)
+                    .foregroundColor(businessCardColor(d.accentColor)).allowsHitTesting(false).accessibilityHidden(true)
+            }
             if d.pattern == "stripe" {
                 GeometryReader { geometry in
                     Path { path in
@@ -5623,6 +5671,7 @@ private struct BusinessCardView: View {
     @State private var pickingCardImageFile = false
     @State private var cardImageURL = ""
     @State private var exportingTemplate = false
+    @State private var editingCard = false
     private var own: Bool { profile.id != nil && profile.id == model.session?.user.id }
     private var link: URL { URL(string: "https://hrmcngs.github.io/spotcode-sns/#/\(profile.handle)/card")! }
     var body: some View {
@@ -5637,6 +5686,11 @@ private struct BusinessCardView: View {
                     BusinessCardPreview(card: draft, maximumWidth: width)
                         .frame(width: width)
                         .frame(width: viewport.size.width, height: viewport.size.height)
+                        .overlay(alignment: .bottom) {
+                            if own && published, let id = profile.id {
+                                NearbyBusinessCardExchangeView(ownerID: id, handle: profile.handle, enabled: !editingCard)
+                            }
+                        }
                     VStack(alignment: .leading, spacing: 20) {
                     if published {
                         HStack {
@@ -5650,7 +5704,11 @@ private struct BusinessCardView: View {
                             if model.session == nil { Text("保存するにはログインしてください。").font(.caption) }
                         }
                     }
-                    if own { editor }
+                    if own {
+                        Button(editingCard ? "編集を閉じる" : "名刺を編集") { editingCard.toggle() }
+                            .buttonStyle(.borderedProminent)
+                        if editingCard { editor }
+                    }
                     }.padding(24).frame(maxWidth: 600)
                 } else { Text("このユーザーはまだ名刺を公開していません。") }
                 if !message.isEmpty { Text(message).font(.callout).accessibilityAddTraits(.updatesFrequently) }
@@ -5661,7 +5719,7 @@ private struct BusinessCardView: View {
             .sheet(isPresented: $sharing) { ActivityShareSheet(items: [link]) }
             .sheet(isPresented: $pickingCardImage) { ProfileImagePicker(image: $draft.image_url, maxSide: 1650) }
             .fileExporter(isPresented: $exportingTemplate,
-                          document: BusinessCardTemplateDocument(design: (draft.design ?? BusinessCardDesign()).resolved(theme: draft.theme, layout: draft.layout)),
+                          document: BusinessCardTemplateDocument(design: (draft.design ?? BusinessCardDesign()).resolved(theme: draft.effectiveTheme, layout: draft.layout)),
                           contentType: .svg, defaultFilename: "spotcode-card-template") { result in
                 if case .failure = result { message = "テンプレートを保存できませんでした。" }
             }
@@ -5696,23 +5754,27 @@ private struct BusinessCardView: View {
             Text("自己紹介（裏・280文字まで）").font(.caption)
             TextEditor(text: $draft.bio).frame(minHeight: 80).modifier(BusinessCardInputStyle()).accessibilityLabel("自己紹介（裏）")
             BusinessCardTextField(placeholder: "連絡先・リンク（裏・160文字まで）", text: $draft.contact).frame(height: 44)
-            Picker("テーマ", selection: Binding(get: { draft.design?.pattern == "solid" ? "solid" : draft.theme }, set: { theme in
+            Picker("テーマ", selection: Binding(get: { draft.design?.pattern == "solid" ? "solid" : draft.effectiveTheme }, set: { theme in
                 if theme == "solid" {
-                    var design = (draft.design ?? BusinessCardDesign()).resolved(theme: draft.theme, layout: draft.layout)
+                    var design = (draft.design ?? BusinessCardDesign()).resolved(theme: draft.effectiveTheme, layout: draft.layout)
                     design.pattern = "solid"
                     design.backColor = design.frontColor
                     draft.design = design
                     return
                 }
-                draft.theme = theme
+                draft.theme = BusinessCardDesign.extraThemes.contains(theme) ? "midnight" : theme
                 let palette = BusinessCardDesign.preset(theme)
                 var design = draft.design ?? BusinessCardDesign()
                 design.frontColor = palette.frontColor; design.backColor = palette.backColor
                 design.textColor = palette.textColor; design.accentColor = palette.accentColor
                 design.pattern = "gradient"
+                design.themeVariant = BusinessCardDesign.extraThemes.contains(theme) ? theme : nil
+                design.font = theme == "mono" ? "mono" : "sans"
                 draft.design = design
             })) {
                 Text("ミッドナイト").tag("midnight"); Text("ペーパー").tag("paper"); Text("オーロラ").tag("aurora")
+                Text("Mono").tag("mono"); Text("Ghost").tag("ghost")
+                Text("春").tag("spring"); Text("夏").tag("summer"); Text("秋").tag("autumn"); Text("冬").tag("winter")
                 Text("単色").tag("solid")
             }
             Picker("レイアウト", selection: Binding(get: { draft.layout }, set: { layout in
@@ -5723,11 +5785,11 @@ private struct BusinessCardView: View {
                 Text("左揃え").tag("classic"); Text("中央揃え").tag("centered")
             }
             BusinessCardBaseColorPicker(design: Binding(get: {
-                (draft.design ?? BusinessCardDesign()).resolved(theme: draft.theme, layout: draft.layout)
-            }, set: { draft.design = $0 }))
+                (draft.design ?? BusinessCardDesign()).resolved(theme: draft.effectiveTheme, layout: draft.layout)
+            }, set: { draft.design = $0 }), theme: draft.effectiveTheme)
             mediaEditor
             BusinessCardDesignEditor(design: Binding(get: {
-                (draft.design ?? BusinessCardDesign()).resolved(theme: draft.theme, layout: draft.layout)
+                (draft.design ?? BusinessCardDesign()).resolved(theme: draft.effectiveTheme, layout: draft.layout)
             }, set: { draft.design = $0 }))
             Button("保存して公開") { save() }.buttonStyle(.borderedProminent).disabled(busy)
             if published { Button("公開を停止", role: .destructive) { confirmingUnpublish = true }.disabled(busy) }
@@ -6011,15 +6073,60 @@ private struct BusinessCardTextField: UIViewRepresentable {
     }
 }
 
+private struct BusinessCardColorPalette: UIViewControllerRepresentable {
+    @Binding var color: Color
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIViewController(context: Context) -> UIColorPickerViewController {
+        let picker = UIColorPickerViewController()
+        picker.supportsAlpha = false
+        picker.selectedColor = UIColor(color)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    func updateUIViewController(_ picker: UIColorPickerViewController, context: Context) {
+        context.coordinator.parent = self
+        let current = UIColor(color)
+        if picker.selectedColor != current { picker.selectedColor = current }
+    }
+    final class Coordinator: NSObject, UIColorPickerViewControllerDelegate {
+        var parent: BusinessCardColorPalette
+        init(_ parent: BusinessCardColorPalette) { self.parent = parent }
+        func colorPickerViewControllerDidSelectColor(_ viewController: UIColorPickerViewController) {
+            parent.color = Color(uiColor: viewController.selectedColor)
+        }
+    }
+}
+
 private struct BusinessCardBaseColorPicker: View {
     @Binding var design: BusinessCardDesign
+    var theme: String = "midnight"
+    @State private var showingPalette = false
+    private var baseColor: Binding<Color> { Binding(get: {
+                businessCardColor(design.frontColor)
+            }, set: { color in
+                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                guard UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a) else { return }
+                design.applyBaseColor(String(format: "#%02x%02x%02x", Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded())), theme: theme)
+            }) }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("ベースカラー").font(.headline)
+            Button { showingPalette = true } label: {
+                HStack {
+                    Circle().fill(businessCardColor(design.frontColor)).frame(width: 28, height: 28)
+                    Label("カラーパレットを開く", systemImage: "paintpalette")
+                }.padding(8)
+            }.buttonStyle(.bordered)
+            .sheet(isPresented: $showingPalette) {
+                VStack(spacing: 0) {
+                    HStack { Text("ベースカラー").font(.headline); Spacer(); Button("完了") { showingPalette = false } }.padding()
+                    BusinessCardColorPalette(color: baseColor)
+                }.frame(minWidth: 300, minHeight: 420)
+            }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 40, maximum: 44), spacing: 12)], alignment: .leading, spacing: 12) {
                 ForEach(BusinessCardDesign.baseColors, id: \.0) { hex, name in
                     let selected = design.frontColor?.lowercased() == hex
-                    Button { design.applyBaseColor(hex) } label: {
+                    Button { design.applyBaseColor(hex, theme: theme) } label: {
                         Circle().fill(businessCardColor(hex)).frame(width: 36, height: 36)
                             .overlay(Circle().stroke(Color.gray.opacity(0.5), lineWidth: 1))
                             .overlay(Group {
@@ -6031,13 +6138,6 @@ private struct BusinessCardBaseColorPicker: View {
                      .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
-            ColorPicker("好きな色を選ぶ", selection: Binding(get: {
-                businessCardColor(design.frontColor)
-            }, set: { color in
-                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                guard UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a) else { return }
-                design.applyBaseColor(String(format: "#%02x%02x%02x", Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded())))
-            }), supportsOpacity: false)
             Text("選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。")
                 .font(.caption).foregroundColor(.secondary)
         }.padding(.vertical, 8)

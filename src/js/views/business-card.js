@@ -15,8 +15,8 @@ export function cardMarkup(value, handle) {
   };
   const links = side => c.links_side !== side ? '' : `<div class="business-card__links">${c.links.map(link => `<a href="${esc(link.url)}" target="_blank" rel="noopener noreferrer" ${side === 'back' ? 'tabindex="-1"' : ''}>${esc(link.label || link.url)} ↗</a>`).join('')}</div>`;
   return `<div style="${style}" class="business-card business-card--${c.theme} business-card--${c.layout} business-card--font-${d.font} business-card--pattern-${d.pattern} business-card--${d.orientation} business-card--corners-${d.cornerStyle}" role="group" aria-label="${esc(c.name)} の名刺">
-    <div class="business-card__body"><div class="business-card__face business-card__align-${d.frontAlign} ${artwork('front') ? 'business-card__face--artwork' : ''}">${artworkHtml('front')}<span class="business-card__brand">${esc(d.frontLabel)}</span><div class="business-card__identity">${picture('front')}<div><strong>${esc(c.name)}</strong><span>${esc(c.title)}</span><small>@${esc(handle)}</small></div></div>${links('front')}<button type="button" class="business-card__hint" data-card-flip aria-pressed="false">タップして裏面へ ↻</button></div>
-    <div class="business-card__face business-card__back business-card__align-${d.backAlign} ${artwork('back') ? 'business-card__face--artwork' : ''}" aria-hidden="true" inert>${artworkHtml('back')}<span class="business-card__brand">${esc(d.backLabel)}</span><div class="business-card__identity">${picture('back')}<div><span class="business-card__bio">${esc(c.bio || 'よろしくお願いします。')}</span><span>${esc(c.contact)}</span></div></div>${links('back')}<button type="button" class="business-card__hint" data-card-flip aria-pressed="false" tabindex="-1">タップして表面へ ↻</button></div></div></div>`;
+    <div class="business-card__body"><div class="business-card__face business-card__align-${d.frontAlign} ${artwork('front') ? 'business-card__face--artwork' : ''}">${artworkHtml('front')}<span class="business-card__brand">${esc(d.frontLabel)}</span><div class="business-card__identity">${picture('front')}<div><strong>${esc(c.name)}</strong><span>${esc(c.title)}</span><small>@${esc(handle)}</small></div></div>${links('front')}<button type="button" class="business-card__flip-accessible" data-card-flip aria-pressed="false" aria-label="名刺を裏返す"></button></div>
+    <div class="business-card__face business-card__back business-card__align-${d.backAlign} ${artwork('back') ? 'business-card__face--artwork' : ''}" aria-hidden="true" inert>${artworkHtml('back')}<span class="business-card__brand">${esc(d.backLabel)}</span><div class="business-card__identity">${picture('back')}<div><span class="business-card__bio">${esc(c.bio || 'よろしくお願いします。')}</span><span>${esc(c.contact)}</span></div></div>${links('back')}<button type="button" class="business-card__flip-accessible" data-card-flip aria-pressed="false" tabindex="-1" aria-label="名刺を裏返す"></button></div></div></div>`;
 }
 export function renderBusinessCard(handle, collection = false) {
   return `<section class="card-page ${collection ? '' : 'card-page--showcase'}" data-card-page><nav class="card-actions"><a href="${url('/' + handle)}">← プロフィール</a><a href="${url('/' + handle + '/card')}">名刺</a>${currentUser()?.handle === handle ? `<a href="${url('/' + handle + '/cards')}">コレクション</a>` : ''}</nav><h1>${collection ? '名刺コレクション' : '名刺'}</h1><div data-card-content>読み込み中…</div><p role="status" aria-live="polite" data-card-status></p></section>`;
@@ -53,7 +53,7 @@ export async function hydrateBusinessCard(handle, collection = false) {
     const own = currentUser()?.id === profile.id;
     if (!card && !own) { content.innerHTML = '<p>このユーザーはまだ名刺を公開していません。</p>'; return; }
     const initial = normalizeCard(card || { name: profile.name });
-    content.innerHTML = `<div class="card-showcase" data-card-preview>${cardMarkup(initial, handle)}</div><div class="card-actions" data-card-sharing ${card ? '' : 'hidden'}><button class="btn btn--primary" data-share-card>名刺を共有</button><button class="btn btn--ghost" data-copy-card>リンクをコピー</button>${!own ? '<button class="btn btn--primary" data-collect-card>コレクションに保存</button>' : ''}</div><p>共有メニューからAirDropなどでリンクを送れます。相手が名刺を保存し、自分の名刺も送り返すと交換できます。</p>${own ? editor(initial, !!card) : ''}`;
+    content.innerHTML = `<div class="card-showcase" data-card-preview>${cardMarkup(initial, handle)}</div><div class="card-actions" data-card-sharing ${card ? '' : 'hidden'}><button class="btn btn--primary" data-share-card>名刺を共有</button><button class="btn btn--ghost" data-copy-card>リンクをコピー</button>${!own ? '<button class="btn btn--primary" data-collect-card>コレクションに保存</button>' : ''}</div><p>共有メニューからAirDropなどでリンクを送れます。相手が名刺を保存し、自分の名刺も送り返すと交換できます。</p>${own ? '<button class="btn btn--primary" data-edit-card aria-expanded="false">名刺を編集</button><div data-card-editor hidden>' + editor(initial, !!card) + '</div>' : ''}`;
     const link = cardLink(handle);
     content.querySelector('[data-share-card]').onclick = async () => {
       try {
@@ -73,6 +73,12 @@ export async function hydrateBusinessCard(handle, collection = false) {
     };
     const form = content.querySelector('form');
     if (form) {
+      content.querySelector('[data-edit-card]').onclick = event => {
+        const panel = content.querySelector('[data-card-editor]'); panel.hidden = !panel.hidden;
+        event.currentTarget.setAttribute('aria-expanded', String(!panel.hidden));
+        event.currentTarget.textContent = panel.hidden ? '名刺を編集' : '編集を閉じる';
+        if (!panel.hidden) panel.scrollIntoView({behavior:'smooth',block:'start'});
+      };
       let stagedImage = initial.image_url;
       const value = () => ({ ...Object.fromEntries(new FormData(form)), image_url: stagedImage });
       let previewBack = false;
@@ -85,6 +91,10 @@ export async function hydrateBusinessCard(handle, collection = false) {
         form.querySelector('[data-base-color]').value = base;
         form.querySelectorAll('[data-base-chip]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.baseChip === base.toLowerCase())));
       }
+      form.querySelector('[data-open-palette]').onclick = () => {
+        const picker = form.querySelector('[data-base-color]');
+        if (typeof picker.showPicker === 'function') picker.showPicker(); else picker.click();
+      };
       form.querySelector('[data-card-image-file]').onchange = async event => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -116,7 +126,7 @@ export async function hydrateBusinessCard(handle, collection = false) {
         form.querySelector('[data-image-state]').textContent = '画像なし'; paintPreview();
       };
       function applyBaseColor(color) {
-        for (const [key, value] of Object.entries(paletteFromBase(color, form.elements.design_pattern.value))) form.elements['design_' + key].value = value;
+        for (const [key, value] of Object.entries(paletteFromBase(color, form.elements.design_pattern.value, form.elements.theme.value))) form.elements['design_' + key].value = value;
       }
       form.querySelectorAll('[data-base-chip]').forEach(button => button.onclick = () => { applyBaseColor(button.dataset.baseChip); paintPreview(); });
       form.oninput = event => {
@@ -134,6 +144,7 @@ export async function hydrateBusinessCard(handle, collection = false) {
             const defaults = defaultDesign(event.target.value, form.elements.layout.value);
             for (const key of ['frontColor','backColor','textColor','accentColor']) form.elements['design_' + key].value = defaults[key];
             form.elements.design_pattern.value = 'gradient';
+            form.elements.design_font.value = defaults.font;
           }
         }
         if (event.target.name === 'layout') {
@@ -173,7 +184,7 @@ function editor(c, published) {
   return `<form class="card-editor"><h2>自分の名刺をデザイン</h2><p>保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。</p>${[['name','名前（表）',60],['title','肩書き・組織（表）',100],['bio','自己紹介（裏）',280],['contact','連絡先・リンク（裏）',160]].map(([key,label,max]) => `<label>${label}${key === 'bio' ? `<textarea name="${key}" maxlength="${max}" rows="3">${esc(c[key])}</textarea>` : `<input name="${key}" maxlength="${max}" value="${esc(c[key])}" ${key === 'name' ? 'required' : ''}>`}</label>`).join('')}${baseColorEditor(c.design)}<label>テーマ<select name="theme">${Object.entries({...themes, solid: "単色"}).map(([key,label]) => `<option value="${key}" ${(c.design.pattern === 'solid' ? 'solid' : c.theme) === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>レイアウト<select name="layout"><option value="classic">左揃え</option><option value="centered" ${c.layout === 'centered' ? 'selected' : ''}>中央揃え</option></select></label>${mediaEditor(c)}${designEditor(c.design)}<div class="card-actions"><button class="btn btn--primary" type="submit">保存して公開</button><button class="btn btn--ghost" type="button" data-unpublish-card ${published ? '' : 'hidden'}>公開を停止</button></div></form>`;
 }
 function baseColorEditor(d) {
-  return `<fieldset class="card-design"><legend>ベースカラー</legend><div class="card-color-chips" role="group" aria-label="ベースカラーを選択">${baseColors.map(([hex,label]) => `<button type="button" class="card-color-chip" data-base-chip="${hex}" style="--chip-color:${hex}" aria-label="${label}" title="${label}" aria-pressed="${hex === d.frontColor.toLowerCase()}"><span aria-hidden="true">✓</span></button>`).join('')}</div><label class="card-base-custom">好きな色を選ぶ<input type="color" data-base-color value="${d.frontColor}"></label><p>選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。</p></fieldset>`;
+  return `<fieldset class="card-design"><legend>ベースカラー</legend><button type="button" class="btn btn--primary" data-open-palette>カラーパレットを開く</button><div class="card-color-chips" role="group" aria-label="ベースカラーを選択">${baseColors.map(([hex,label]) => `<button type="button" class="card-color-chip" data-base-chip="${hex}" style="--chip-color:${hex}" aria-label="${label}" title="${label}" aria-pressed="${hex === d.frontColor.toLowerCase()}"><span aria-hidden="true">✓</span></button>`).join('')}</div><label class="card-base-custom">好きな色を選ぶ<input type="color" data-base-color value="${d.frontColor}"></label><p>選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。</p></fieldset>`;
 }
 function mediaEditor(c) {
   return `<fieldset class="card-design"><legend>画像を差し込む</legend><div class="card-editor">
@@ -200,9 +211,7 @@ function designEditor(d) {
     <label>角丸（0〜28px）<input type="number" name="design_radius" min="0" max="28" value="${d.radius}"></label>
     ${[['frontLabel','表の見出し'],['backLabel','裏の見出し']].map(([key,label]) => `<label>${label}<input name="design_${key}" maxlength="40" value="${esc(d[key])}" placeholder="空欄で非表示"></label>`).join('')}</div><p>配色プリセットを変更すると4色が切り替わります。タップして裏面を確認しながら編集できます。</p></fieldset>`;
 }
-document.addEventListener('click', event => {
-  const card = event.target.closest('.business-card');
-  if (!card || event.target.closest('a')) return;
+function flipCard(card) {
   const flipped = card.classList.toggle('is-flipped');
   card.querySelectorAll('[data-card-flip]').forEach(button => button.setAttribute('aria-pressed', String(flipped)));
   card.querySelectorAll('.business-card__face').forEach((face, i) => {
@@ -211,4 +220,34 @@ document.addEventListener('click', event => {
     face.toggleAttribute('inert', hidden);
     face.querySelectorAll('a, button').forEach(control => { control.tabIndex = hidden ? -1 : 0; });
   });
+}
+
+const cardSwipeState = new WeakMap();
+document.addEventListener('click', event => {
+  const card = event.target.closest('.business-card');
+  if (!card) return;
+  if (Date.now() < (cardSwipeState.get(card)?.suppressClickUntil || 0)) { event.preventDefault(); return; }
+  if (!event.target.closest('a')) flipCard(card);
 });
+document.addEventListener('pointerdown', event => {
+  const card = event.target.closest('.business-card');
+  if (card) cardSwipeState.set(card, {x:event.clientX,y:event.clientY});
+});
+document.addEventListener('pointerup', event => {
+  const card = event.target.closest('.business-card'), state = card && cardSwipeState.get(card);
+  if (!state) return;
+  const dx = event.clientX-state.x, dy = event.clientY-state.y;
+  if (Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*2) {
+    state.suppressClickUntil = Date.now()+500; flipCard(card);
+  }
+});
+document.addEventListener('wheel', event => {
+  const card = event.target.closest('.business-card');
+  if (!card || Math.abs(event.deltaX)<=Math.abs(event.deltaY)*2) return;
+  event.preventDefault();
+  const now=Date.now(), state=cardSwipeState.get(card)||{};
+  if (now-(state.wheelAt||0)>250) {state.total=0;state.turned=false;}
+  state.wheelAt=now; state.total=(state.total||0)+event.deltaX*(event.deltaMode===1?16:1);
+  if (!state.turned && Math.abs(state.total)>60) {flipCard(card);state.turned=true;}
+  cardSwipeState.set(card,state);
+}, {passive:false});

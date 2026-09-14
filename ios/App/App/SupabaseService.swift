@@ -946,11 +946,21 @@ enum GitHubTaskLoader {
 
 struct BusinessCardDesign: Codable {
     static let baseColors: [(String, String)] = [("#18181b","チャコール"),("#1d4ed8","ブルー"),("#4f46e5","インディゴ"),("#7c3aed","パープル"),("#be185d","ピンク"),("#b91c1c","レッド"),("#c2410c","オレンジ"),("#0f766e","ティール"),("#15803d","グリーン"),("#f4e8d0","アイボリー"),("#e5e7eb","グレー"),("#ffffff","ホワイト")]
-    mutating func applyBaseColor(_ hex: String) {
+    mutating func applyBaseColor(_ hex: String, theme: String = "midnight") {
         guard hex.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil,
               let value = UInt32(hex.dropFirst(), radix: 16) else { return }
         let rgb = [Double((value >> 16) & 255), Double((value >> 8) & 255), Double(value & 255)]
-        let back = pattern == "solid" ? rgb : rgb.map { ($0 * 0.82).rounded() }
+        var back = pattern == "solid" ? rgb : rgb.map { ($0 * 0.45).rounded() }
+        if theme == "aurora" && pattern != "solid" {
+            let r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255
+            let maximum = max(r, g, b), minimum = min(r, g, b), delta = maximum - minimum
+            var hue = delta == 0 ? 0 : maximum == r ? ((g - b) / delta + 6).truncatingRemainder(dividingBy: 6) : maximum == g ? (b - r) / delta + 2 : (r - g) / delta + 4
+            hue = (hue + 1.67).truncatingRemainder(dividingBy: 6)
+            let saturation = max(0.6, maximum == 0 ? 0 : delta / maximum), brightness = max(0.55, maximum * 0.85)
+            let c = brightness * saturation, x = c * (1 - abs(hue.truncatingRemainder(dividingBy: 2) - 1)), m = brightness - c
+            let channels = hue < 1 ? [c,x,0] : hue < 2 ? [x,c,0] : hue < 3 ? [0,c,x] : hue < 4 ? [0,x,c] : hue < 5 ? [x,0,c] : [c,0,x]
+            back = channels.map { (($0 + m) * 255).rounded() }
+        }
         func luminance(_ values: [Double]) -> Double {
             zip(values, [0.2126, 0.7152, 0.0722]).reduce(0) { sum, pair in
                 let c = pair.0 / 255
@@ -977,8 +987,11 @@ struct BusinessCardDesign: Codable {
     var orientation: String?
     var cornerStyle: String?
     var imagePlacement: String?
+    var themeVariant: String?
+    static let extraThemes = ["mono", "ghost", "spring", "summer", "autumn", "winter"]
     static func preset(_ theme: String, layout: String = "classic") -> Self {
-        let colors = theme == "paper" ? ["#fffdf4", "#e7dfca", "#29251f", "#876c37"] : theme == "aurora" ? ["#34265b", "#187e80", "#f8fafc", "#91efdf"] : ["#222e49", "#0b1020", "#f8fafc", "#9fb5ef"]
+        let extras = ["mono":["#18181b","#3f3f46","#fafafa","#d4d4d8"], "ghost":["#e8edf5","#b8c5dc","#172033","#566887"], "spring":["#ffe4ed","#d9efde","#482c3c","#9b4766"], "summer":["#cffafe","#38bdf8","#083344","#075985"], "autumn":["#ffedd5","#d97706","#431407","#7c2d12"], "winter":["#eff6ff","#a5c7e7","#172554","#36588a"]]
+        let colors = extras[theme] ?? (theme == "paper" ? ["#fffdf4", "#e7dfca", "#29251f", "#876c37"] : theme == "aurora" ? ["#34265b", "#187e80", "#f8fafc", "#91efdf"] : ["#222e49", "#0b1020", "#f8fafc", "#9fb5ef"])
         return Self(frontColor: colors[0], backColor: colors[1], textColor: colors[2], accentColor: colors[3], font: "sans", nameSize: 26, radius: 18, pattern: "gradient", frontAlign: layout, backAlign: layout, frontLabel: "SPOTCODE / BUSINESS CARD", backLabel: "LET’S CONNECT")
     }
     func resolved(theme: String, layout: String) -> Self {
@@ -990,7 +1003,7 @@ struct BusinessCardDesign: Codable {
                     frontLabel: frontLabel ?? p.frontLabel, backLabel: backLabel ?? p.backLabel,
                     orientation: orientation == "portrait" ? "portrait" : "landscape",
                     cornerStyle: ["diagonal", "diagonalReverse", "square"].contains(cornerStyle ?? "") ? cornerStyle : "rounded",
-                    imagePlacement: imagePlacement == "artwork" ? "artwork" : "inline")
+                    imagePlacement: imagePlacement == "artwork" ? "artwork" : "inline", themeVariant: themeVariant)
     }
 }
 
@@ -1014,6 +1027,7 @@ struct BusinessCard: Codable, Identifiable {
     var bio = ""
     var contact = ""
     var theme = "midnight"
+    var effectiveTheme: String { BusinessCardDesign.extraThemes.contains(design?.themeVariant ?? "") ? design!.themeVariant! : theme }
     var layout = "classic"
     var design: BusinessCardDesign?
     var image_url: String?

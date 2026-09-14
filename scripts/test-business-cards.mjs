@@ -43,7 +43,8 @@ for (const expression of ["saveCard({name:'test'})", "collectCard('other')", "re
   await assert.rejects(run(expression), /ログイン/);
 }
 const view = fs.readFileSync('src/js/views/business-card.js', 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
-ctx.document = { addEventListener() {} };
+const cardEvents = {};
+ctx.document = { addEventListener(type, handler) { cardEvents[type] = handler; } };
 vm.runInContext(view, ctx);
 const markup = run(`cardMarkup({name:'<img src=x onerror=alert(1)>',theme:'bad',contact:'" onclick="bad'}, '<script>')`);
 assert(!markup.includes('<img'));
@@ -115,3 +116,37 @@ assert.equal((artwork.match(/class=\"business-card__artwork\"/g) || []).length, 
 assert(artwork.indexOf('class="business-card__artwork"') > artwork.indexOf('business-card__back'));
 assert(run("editor(normalizeCard({name:'Template'}),false)").includes('data-card-template'));
 console.log('PASS artwork mode persistence, selected face, and template download control');
+for (const base of ['#000000', '#ffffff', '#1d4ed8', '#15803d']) {
+  const palette = run(`paletteFromBase('${base}', 'gradient', 'aurora')`);
+  assert.notEqual(palette.frontColor, palette.backColor);
+  assert.notEqual(palette.backColor, run(`paletteFromBase('${base}', 'gradient', 'midnight').backColor`));
+  assert.equal(run(`paletteFromBase('${base}', 'solid', 'aurora').backColor`), base);
+}
+console.log('PASS aurora keeps distinct gradient colors, solid remains solid');
+response = {data: null};
+for (const theme of ['mono','ghost','spring','summer','autumn','winter']) {
+  calls.length = 0;
+  await run(`saveCard({name:'Season',theme:'${theme}'})`);
+  const stored = calls.find(c => c[0] === 'upsert')[1];
+  assert.equal(stored.theme, 'midnight');
+  assert.equal(stored.design.themeVariant, theme);
+  assert.equal(run(`normalizeCard(${JSON.stringify(stored)}).theme`), theme);
+  assert(run(`cardMarkup(${JSON.stringify(stored)},'me')`).includes('business-card--' + theme));
+}
+assert.equal(run("defaultDesign('mono').font"), 'mono');
+console.log('PASS six themes, legacy-compatible storage and reload, theme classes and mono font');
+let turns = 0;
+const gestureCard = {classList:{toggle(){turns++;return turns%2===1;}},querySelectorAll(){return [];}};
+const target = {closest(selector){return selector === '.business-card' ? gestureCard : null;}};
+cardEvents.wheel({target,deltaX:0,deltaY:100,preventDefault(){throw Error('Vertical scroll blocked');}});
+assert.equal(turns,0);
+cardEvents.wheel({target,deltaX:80,deltaY:0,preventDefault(){}});
+cardEvents.wheel({target,deltaX:80,deltaY:0,preventDefault(){}});
+assert.equal(turns,1);
+cardEvents.pointerdown({target,clientX:0,clientY:0});
+cardEvents.pointerup({target,clientX:90,clientY:5});
+assert.equal(turns,2);
+cardEvents.click({target,preventDefault(){}});
+assert.equal(turns,2);
+assert(!run("cardMarkup({name:'No hint'},'me')").includes('タップして'));
+console.log('PASS horizontal wheel, momentum debounce, swipe, click suppression and no printed hint');

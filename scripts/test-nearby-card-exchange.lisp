@@ -1,0 +1,18 @@
+(require :asdf)
+(let* ((root (truename (merge-pathnames "../" (uiop:pathname-directory-pathname *load-truename*))))
+       (source (uiop:read-file-string (merge-pathnames "ios/App/App/NearbyBusinessCardExchange.swift" root)))
+       (start (search "// Only public card IDs" source))
+       (end (search "struct NearbyBusinessCardExchangeView:" source))
+       (directory (uiop:ensure-directory-pathname (string-trim '(#\Newline #\Return) (uiop:run-program '("mktemp" "-d" "/tmp/spotcode-nearby-test.XXXXXX") :output :string))))
+       (swift (merge-pathnames "main.swift" directory))
+       (binary (merge-pathnames "checks" directory)))
+  (unwind-protect
+       (progn
+         (unless (and start end) (error "Production exchange declarations not found"))
+         (with-open-file (out swift :direction :output :if-exists :supersede)
+           (write-string (uiop:read-file-string (merge-pathnames "scripts/ios-tests/nearby-card-stubs.swift" root)) out)
+           (write-string (subseq source start end) out)
+           (write-string (uiop:read-file-string (merge-pathnames "scripts/ios-tests/nearby-card-checks.swift" root)) out))
+         (uiop:run-program (list "xcrun" "swiftc" "-parse-as-library" (namestring swift) "-o" (namestring binary)) :output *standard-output* :error-output *error-output*)
+         (uiop:run-program (list (namestring binary)) :output *standard-output* :error-output *error-output*))
+    (uiop:delete-directory-tree directory :validate t :if-does-not-exist :ignore)))

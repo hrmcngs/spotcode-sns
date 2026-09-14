@@ -3613,7 +3613,7 @@ html.account-menu-locked { overflow: hidden; }
 .business-card--corners-square .business-card__face { border-radius: 0; }
 .business-card--corners-diagonal .business-card__face { border-radius: var(--card-radius) 0 var(--card-radius) 0; }
 .business-card--corners-diagonalReverse .business-card__face { border-radius: 0 var(--card-radius) 0 var(--card-radius); }
-.business-card__face--artwork > :not(.business-card__artwork):not(.business-card__hint) { visibility: hidden; pointer-events: none; }
+.business-card__face--artwork > :not(.business-card__artwork):not(.business-card__flip-accessible) { visibility: hidden; pointer-events: none; }
 .business-card__artwork { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .business-card__face--artwork .business-card__hint { position: relative; z-index: 1; background: #000b; color: white; border-radius: 6px; padding: 4px 8px; }
 
@@ -3632,3 +3632,22 @@ html.account-menu-locked { overflow: hidden; }
 .card-showcase > .business-card--portrait {
   max-width: min(100%, calc((100svh - var(--topbar-h) - 48px) / 1.65));
 }
+.business-card--aurora.business-card--pattern-gradient .business-card__face {
+  background: radial-gradient(ellipse at top right, var(--card-back), transparent 75%), linear-gradient(135deg, var(--card-front), var(--card-back));
+}
+.business-card--ghost:not(.business-card--pattern-solid) .business-card__face {
+  background: radial-gradient(ellipse at top left, #ffffffa6, transparent 70%), linear-gradient(125deg,var(--card-front),var(--card-back));
+}
+.business-card--spring { --season-symbol: '❀'; }
+.business-card--summer { --season-symbol: '☼'; }
+.business-card--autumn { --season-symbol: '❧'; }
+.business-card--winter { --season-symbol: '❄'; }
+.business-card:not(.business-card--pattern-solid) .business-card__face::after {
+  content: var(--season-symbol, none); position: absolute; right: 22px; top: 14px;
+  font-size: 72px; color: var(--card-accent); opacity: .12; pointer-events: none;
+}
+.business-card__face--artwork::after { display: none; }
+.business-card { touch-action: pan-y; }
+.business-card__flip-accessible { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; border: 0; }
+.business-card__flip-accessible:focus-visible { width: 32px; height: 32px; clip-path: none; right: 8px; bottom: 8px; background: var(--card-back); outline: 2px solid var(--card-text); }
+.business-card__flip-accessible:focus-visible::after { content: '↻'; }
