@@ -257,6 +257,7 @@ function openCardFullscreen(button) {
   document.body.append(dialog);
   const previousOverflow = document.body.style.overflow;
   document.body.style.overflow = 'hidden';
+  document.body.classList.add('card-fullscreen-active');
   const closeDialog = () => dialog.close();
   const changedFullscreen = () => { if (!document.fullscreenElement) closeDialog(); };
   close.onclick = closeDialog;
@@ -265,6 +266,7 @@ function openCardFullscreen(button) {
     document.removeEventListener('fullscreenchange', changedFullscreen);
     window.removeEventListener('hashchange', closeDialog);
     document.body.style.overflow = previousOverflow;
+    document.body.classList.remove('card-fullscreen-active');
     dialog.remove();
     if (button.isConnected) button.focus({preventScroll: true});
   }, {once: true});

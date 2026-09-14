@@ -5516,7 +5516,7 @@ private struct CardHorizontalScroll: UIViewRepresentable {
 
 private struct BusinessCardPreview: View {
     let card: BusinessCard
-    var maximumWidth: CGFloat? = nil
+    @AppStorage("spotcode.card.physicalScale") private var physicalScale = 1.0
     @State private var flipped = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var d: BusinessCardDesign { (card.design ?? BusinessCardDesign()).resolved(theme: card.effectiveTheme, layout: card.layout) }
@@ -5526,9 +5526,12 @@ private struct BusinessCardPreview: View {
             face(back: false).opacity(flipped ? 0 : 1).accessibilityHidden(flipped).allowsHitTesting(!flipped)
             face(back: true).rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0)).opacity(flipped ? 1 : 0).accessibilityHidden(!flipped).allowsHitTesting(flipped)
         }
-        .rotation3DEffect(.degrees(flipped ? 180 : -4), axis: (x: 0, y: 1, z: 0), perspective: 0.4)
-        .aspectRatio(d.orientation == "portrait" ? 1 / 1.65 : 1.65, contentMode: .fit)
-        .frame(maxWidth: maximumWidth ?? (d.orientation == "portrait" ? 360 : 520))
+        .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0), perspective: 0.4)
+        .frame(width: d.orientation == "portrait" ? 55 * 96 / 25.4 : 91 * 96 / 25.4,
+               height: d.orientation == "portrait" ? 91 * 96 / 25.4 : 55 * 96 / 25.4)
+        .scaleEffect(min(2, max(0.5, physicalScale)))
+        .frame(width: (d.orientation == "portrait" ? 55 : 91) * 96 / 25.4 * min(2, max(0.5, physicalScale)),
+               height: (d.orientation == "portrait" ? 91 : 55) * 96 / 25.4 * min(2, max(0.5, physicalScale)))
         .contentShape(Rectangle())
         .onTapGesture { flip() }
         .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded { value in
@@ -5658,7 +5661,8 @@ private struct BusinessCardTemplateDocument: FileDocument {
 
 private struct FullscreenBusinessCardView: View {
     let card: BusinessCard
-    @Environment(\.dismiss) private var dismiss
+    let dismiss: () -> Void
+    @AppStorage("spotcode.card.physicalScale") private var physicalScale = 1.0
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -5670,14 +5674,69 @@ private struct FullscreenBusinessCardView: View {
                 .keyboardShortcut(.cancelAction)
             }.padding(.horizontal, 16).padding(.top, 8)
             GeometryReader { viewport in
-                let ratio: CGFloat = card.design?.orientation == "portrait" ? 1 / 1.65 : 1.65
-                let width = max(1, min(viewport.size.width - 32, (viewport.size.height - 32) * ratio))
-                BusinessCardPreview(card: card, maximumWidth: width)
-                    .frame(width: width)
-                    .frame(width: viewport.size.width, height: viewport.size.height)
+                ScrollView([.horizontal, .vertical]) {
+                    BusinessCardPreview(card: card)
+                        .padding(16)
+                        .frame(minWidth: viewport.size.width, minHeight: viewport.size.height)
+                }
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            DisclosureGroup("実寸調整（91 × 55 mm）") {
+                Text("定規を当て、長辺が91mmになるよう調整してください。画面や表示倍率を変えた場合は調整し直してください。")
+                    .font(.caption)
+                Slider(value: $physicalScale, in: 0.5...2, step: 0.005)
+                    .accessibilityLabel("実寸の補正倍率")
+                Button("補正をリセット") { physicalScale = 1 }
+            }
+            .padding(16).frame(maxWidth: 440).background(Color.black)
+        }
         .background(Color.black.ignoresSafeArea())
+    }
+}
+
+// Present from the window hierarchy so Catalyst also covers the SNS split-view chrome.
+private struct BusinessCardFullscreenPresenter: UIViewControllerRepresentable {
+    @Binding var isPresented: Bool
+    let card: BusinessCard
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIViewController(context: Context) -> UIViewController {
+        let controller = UIViewController()
+        controller.view.backgroundColor = .clear
+        return controller
+    }
+    func updateUIViewController(_ controller: UIViewController, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.wantsPresentation = isPresented
+        DispatchQueue.main.async {
+            guard coordinator.active else { return }
+            if !coordinator.wantsPresentation {
+                coordinator.host?.dismiss(animated: false)
+                coordinator.host = nil
+                return
+            }
+            guard coordinator.host == nil, var presenter = controller.view.window?.rootViewController else { return }
+            while let presented = presenter.presentedViewController { presenter = presented }
+            guard !presenter.isBeingDismissed else { return }
+            let host = UIHostingController(rootView: FullscreenBusinessCardView(card: card) {
+                isPresented = false
+            })
+            host.modalPresentationStyle = .fullScreen
+            host.view.backgroundColor = .black
+            host.isModalInPresentation = true
+            coordinator.host = host
+            presenter.present(host, animated: false)
+        }
+    }
+    static func dismantleUIViewController(_ controller: UIViewController, coordinator: Coordinator) {
+        coordinator.active = false
+        coordinator.host?.dismiss(animated: false)
+        coordinator.host = nil
+    }
+    final class Coordinator {
+        var active = true
+        var wantsPresentation = false
+        var host: UIViewController?
     }
 }
 
@@ -5710,10 +5769,7 @@ private struct BusinessCardView: View {
                 if loading { ProgressView() }
                 else if failed { Button("再読み込み") { Task { await load() } } }
                 else if published || own {
-                    let ratio: CGFloat = draft.design?.orientation == "portrait" ? 1 / 1.65 : 1.65
-                    let width = max(1, min(viewport.size.width - 48, (viewport.size.height - 48) * ratio))
-                    BusinessCardPreview(card: draft, maximumWidth: width)
-                        .frame(width: width)
+                    BusinessCardPreview(card: draft)
                         .frame(width: viewport.size.width, height: viewport.size.height)
                         .overlay(alignment: .topTrailing) {
                             Button { fullscreenCard = true } label: {
@@ -5754,7 +5810,7 @@ private struct BusinessCardView: View {
             .onChange(of: scenePhase) { phase in
                 if phase == .active { Task { await syncCard() } }
             }
-            .fullScreenCover(isPresented: $fullscreenCard) { FullscreenBusinessCardView(card: draft) }
+            .background(BusinessCardFullscreenPresenter(isPresented: $fullscreenCard, card: draft))
             .sheet(isPresented: $sharing) { ActivityShareSheet(items: [link]) }
             .sheet(isPresented: $pickingCardImage) { ProfileImagePicker(image: $draft.image_url, maxSide: 1650) }
             .fileExporter(isPresented: $exportingTemplate,

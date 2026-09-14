@@ -3676,3 +3676,11 @@ dialog.card-fullscreen[open] { display: flex; flex-direction: column; align-item
   width: min(100%, calc((100dvh - 100px) / 1.65));
   width: min(100cqw, calc(100cqh / 1.65));
 }
+
+/* Hide the SNS shell as well as covering it; restore it without remounting on close. */
+body.card-fullscreen-active > :not(dialog.card-fullscreen) { visibility: hidden !important; }
+body.card-fullscreen-active > :not(dialog.card-fullscreen) * { visibility: hidden !important; }
+body.card-fullscreen-active { background: #000; }
+dialog.card-fullscreen, dialog.card-fullscreen:fullscreen {
+  opacity: 1; border-radius: 0; background: #000; backdrop-filter: none;
+}
