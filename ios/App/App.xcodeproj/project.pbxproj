@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AF0000010000000000000001 /* NativeColorThemes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000020000000000000001 /* NativeColorThemes.swift */; };
 		AE0000010000000000000001 /* NativeCardLayers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0000020000000000000001 /* NativeCardLayers.swift */; };
 		AC0000010000000000000001 /* NearbyBusinessCardExchange.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000020000000000000001 /* NearbyBusinessCardExchange.swift */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
@@ -22,6 +23,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AF0000020000000000000001 /* NativeColorThemes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeColorThemes.swift; sourceTree = "<group>"; };
 		AE0000020000000000000001 /* NativeCardLayers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCardLayers.swift; sourceTree = "<group>"; };
 		AC0000020000000000000001 /* NearbyBusinessCardExchange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyBusinessCardExchange.swift; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -77,6 +79,7 @@
 				AA0000140000000000000001 /* AppModel.swift */,
 				AA0000150000000000000001 /* NativeViews.swift */,
 				AE0000020000000000000001 /* NativeCardLayers.swift */,
+				AF0000020000000000000001 /* NativeColorThemes.swift */,
 				AC0000020000000000000001 /* NearbyBusinessCardExchange.swift */,
 				AA0000160000000000000001 /* Localizable.strings */,
 				AB0000020000000000000001 /* InfoPlist.strings */,
@@ -170,6 +173,7 @@
 				AA0000040000000000000001 /* AppModel.swift in Sources */,
 				AA0000050000000000000001 /* NativeViews.swift in Sources */,
 				AE0000010000000000000001 /* NativeCardLayers.swift in Sources */,
+				AF0000010000000000000001 /* NativeColorThemes.swift in Sources */,
 				AC0000010000000000000001 /* NearbyBusinessCardExchange.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

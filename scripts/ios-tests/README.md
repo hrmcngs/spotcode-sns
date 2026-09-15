@@ -1,5 +1,15 @@
 # iOS regression tests
 
+Repository loading cancellation on navigation:
+
+```sh
+node scripts/test-repository-load-cancellation.mjs
+```
+
+Exercises the production repository loader with fake services: cancellation
+does not show an alert or start a fallback request; genuine failures still
+surface; stale requests and account switches cannot publish results.
+
 Native image and offline preview cache limits:
 
 ```sh

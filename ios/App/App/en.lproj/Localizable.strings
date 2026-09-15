@@ -781,3 +781,13 @@
 "背面へ" = "Send to back";
 "中央に配置" = "Center";
 "自動配置に戻す" = "Restore automatic layout";
+
+"外観" = "Appearance";
+
+"システムに合わせる" = "System";
+
+"ライト" = "Light";
+
+"テーマカラー" = "Color theme";
+
+"どのテーマでもライト・ダークを選べます。システム設定にも自動で合わせられます。" = "Every theme supports Light, Dark, and System appearance.";

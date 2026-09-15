@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>spotcode-sns</title>
   <script>
+    // Set appearance before loading CSS to avoid a flash of the wrong theme.
+    (function () {
+      var saved;
+      try {
+        saved = localStorage.getItem('spotcode-theme');
+        document.documentElement.dataset.colorTheme = localStorage.getItem('spotcode-color-theme') || 'standard';
+      } catch (_) {}
+      document.documentElement.dataset.theme = saved === 'light' || saved === 'dark'
+        ? saved : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    })();
+  </script>
+  <script>
     // Native iOS private-Issue OAuth bridge. Supabase redirects to this
     // already-allowlisted HTTPS origin; immediately hand the returned token
     // fragment to ASWebAuthenticationSession via the app's custom scheme.
@@ -37,6 +49,7 @@
         '<link rel="manifest" href="' + b + 'manifest.json">' +
         '<link rel="apple-touch-icon" href="' + b + 'favicon.svg">' +
         '<link rel="stylesheet" href="' + b + 'css/style.css">' +
+        '<link rel="stylesheet" href="' + b + 'css/color-themes.css">' +
         '<script src="' + b + 'js/main.js" type="module" defer><\/script>'
       );
     })();

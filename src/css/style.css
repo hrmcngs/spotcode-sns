@@ -1,13 +1,17 @@
-/* ---------- design tokens (GitHub × Twitter chimera) ---------- */
+/* ---------- shared neutral light / dark palette ---------- */
 :root {
-  --bg: #0d1117;            /* gh canvas */
-  --surface: #161b22;       /* gh card */
-  --surface-2: #21262d;     /* gh hover */
-  --text: #e6edf3;
-  --muted: #7d8590;
-  --border: #30363d;
-  --accent: #1d9bf0;        /* twitter blue */
-  --accent-hover: #1a8cd8;
+  color-scheme: dark;
+  --bg: #121212;
+  --surface: #1a1a1a;
+  --surface-2: #262626;
+  --input-surface: #1f1f1f;
+  --text: #ebebeb;
+  --muted: #a6a6a6;
+  --border: #404040;
+  --accent: #e6e6e6;
+  --accent-hover: #cccccc;
+  --on-accent: #141414;
+  --selection: #363636;
   --green: #2ea043;         /* gh green */
   --green-soft: #238636;
   --danger: #f85149;
@@ -42,12 +46,19 @@
 }
 html { scroll-padding-top: var(--page-clear); }
 html[data-theme='light'] {
-  --bg: #f6f8fa;
+  color-scheme: light;
+  --bg: #fafafa;
   --surface: #ffffff;
-  --surface-2: #eaeef2;
-  --text: #1f2328;
-  --muted: #59636e;
-  --border: #d0d7de;
+  --surface-2: #f2f2f2;
+  --input-surface: #ffffff;
+  --text: #1a1a1a;
+  --muted: #6e6e6e;
+  --border: #d6d6d6;
+  --accent: #1f1f1f;
+  --accent-hover: #383838;
+  --on-accent: #ffffff;
+  --selection: #e6e6e6;
+  --warn: #8c5705;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -309,7 +320,7 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
 .compose-cta {
   margin: 1rem 0;
   width: 100%;
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--on-accent);
   border: 0; border-radius: 999px;
   padding: .85rem 1rem; font-weight: 700; font-size: 1rem;
 }
@@ -326,7 +337,7 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
 /* ---------- avatars ---------- */
 .avatar {
   width: 36px; height: 36px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--green));
+  background: #666666;
   color: #fff; font-weight: 800; font-size: .9rem;
   display: inline-flex; align-items: center; justify-content: center;
   flex: 0 0 auto;
@@ -417,11 +428,10 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
 .composer textarea {
   display: block;
   width: 100%;
-  /* High contrast against the .timeline surface so the box is obvious. */
-  background: var(--surface-2);
+  background: var(--input-surface);
   color: var(--text);
   /* 2px hard-coded border (was 1px color-mix that came out very faint). */
-  border: 2px solid #4a5568;
+  border: 2px solid var(--border);
   border-radius: 10px;
   outline: 0;
   font: inherit; font-size: 1.15rem; line-height: 1.5;
@@ -440,14 +450,9 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .composer textarea::placeholder {
-  color: #b3bbc4;
+  color: var(--muted);
   opacity: 1;
 }
-html[data-theme='light'] .composer textarea {
-  background: #f6f8fa;
-  border-color: #c2c8d0;
-}
-html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 .composer textarea.is-error {
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, var(--surface-2));
@@ -482,7 +487,7 @@ html[data-theme='light'] .composer textarea::placeholder { color: #59636e; }
 }
 .compose-tool:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .composer button[type="submit"] {
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--on-accent);
   border: 0; padding: .55em 1.3em; border-radius: 999px;
   font-weight: 700;
   white-space: nowrap;
@@ -2409,7 +2414,7 @@ a.trend-item:hover { background: var(--surface-2); }
   border-radius: 999px;
   padding: .65rem .9rem;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font: inherit;
   font-size: .82rem;
   font-weight: 700;
@@ -2525,7 +2530,7 @@ a.trend-item:hover { background: var(--surface-2); }
 .notif__badge--quote,
 .notif__badge--follow,
 .notif__badge--mention,
-.notif__badge--request  { background: var(--accent); }
+.notif__badge--request  { background: var(--accent); color: var(--on-accent); }
 
 /* Inline @mention link in post / comment bodies. Slightly muted vs.
    plain accent so it doesn't shout, but underlined on hover so users
@@ -2793,6 +2798,16 @@ a.mention:hover { text-decoration: underline; }
 .settings__hint a { color: var(--accent); }
 .settings__hint a:hover { text-decoration: underline; }
 .settings-form { display: flex; flex-direction: column; gap: .8rem; }
+#settings-theme, #settings-color-theme {
+  margin: .5rem 0 .5rem .75rem;
+  padding: .5rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+#settings-theme:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-form label { display: flex; flex-direction: column; gap: .3rem; font-size: .82rem; color: var(--muted); font-weight: 600; }
 .settings-form input {
   background: var(--bg); color: var(--text);
@@ -3697,3 +3712,8 @@ dialog.card-fullscreen, dialog.card-fullscreen:fullscreen {
 .card-layer-editor p { margin:0; }
 
 .card-showcase-wrap[hidden] { display:none; }
+
+.theme-swatches { display: flex; gap: .5rem; margin: .75rem 0; }
+.theme-swatches i { width: 24px; height: 24px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); }
+.theme-swatches i:nth-child(2) { background: var(--text); }
+.theme-swatches i:nth-child(3) { background: var(--accent); }

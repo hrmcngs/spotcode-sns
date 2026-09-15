@@ -98,15 +98,68 @@ private struct MacTextSizePreference: ViewModifier {
 #endif
 
 private enum SpotcodeTheme {
-    static let background = Color(red: 13/255, green: 17/255, blue: 23/255)
-    static let surface = Color(red: 22/255, green: 27/255, blue: 34/255)
-    static let surface2 = Color(red: 33/255, green: 38/255, blue: 45/255)
-    static let inputSurface = Color(red: 33/255, green: 38/255, blue: 45/255)
-    static let border = Color(red: 48/255, green: 54/255, blue: 61/255)
-    static let text = Color(red: 230/255, green: 237/255, blue: 243/255)
-    static let muted = Color(red: 125/255, green: 133/255, blue: 144/255)
-    static let accent = Color(red: 29/255, green: 155/255, blue: 240/255)
-    static let warning = Color(red: 254/255, green: 188/255, blue: 46/255)
+    static var palette: [String: [String: String]]? {
+        AppColorThemes.palettes[UserDefaults.standard.string(forKey: "spotcode.colorTheme") ?? "standard"]
+    }
+    private static func paletteColor(_ key: String, fallback: Color) -> Color {
+        guard let variants = palette else { return fallback }
+        return Color(UIColor { traits in
+            let mode = traits.userInterfaceStyle == .dark ? "dark" : "light"
+            guard let hex = variants[mode]?[key], let rgb = UInt32(hex.dropFirst(), radix: 16) else {
+                return UIColor(fallback).resolvedColor(with: traits)
+            }
+            return UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
+                           green: CGFloat((rgb >> 8) & 255) / 255,
+                           blue: CGFloat(rgb & 255) / 255, alpha: 1)
+        })
+    }
+    // Resolve against each window's appearance, including live system changes.
+    private static func neutral(_ light: CGFloat, _ dark: CGFloat) -> Color {
+        Color(UIColor { traits in
+            UIColor(white: traits.userInterfaceStyle == .dark ? dark : light, alpha: 1)
+        })
+    }
+    static var background: Color { paletteColor("bg", fallback: neutral(0.98, 0.07)) }
+    static var surface: Color { paletteColor("surface", fallback: neutral(1.0, 0.10)) }
+    static var surface2: Color { paletteColor("surface-2", fallback: neutral(0.95, 0.15)) }
+    static var inputSurface: Color { paletteColor("input-surface", fallback: neutral(1.0, 0.12)) }
+    static var border: Color { paletteColor("border", fallback: neutral(0.84, 0.25)) }
+    static var text: Color { paletteColor("text", fallback: neutral(0.10, 0.92)) }
+    static var muted: Color { paletteColor("muted", fallback: neutral(0.43, 0.65)) }
+    static var accent: Color { paletteColor("accent", fallback: neutral(0.12, 0.90)) }
+    static var onAccent: Color { paletteColor("on-accent", fallback: neutral(1.0, 0.08)) }
+    static var warning: Color { paletteColor("warn", fallback: Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.99, green: 0.74, blue: 0.18, alpha: 1)
+            : UIColor(red: 0.55, green: 0.34, blue: 0.02, alpha: 1)
+    })) }
+    static var selection: Color { paletteColor("selection", fallback: neutral(0.90, 0.21)) }
+}
+
+// Changing a palette invalidates colors without recreating forms or navigation.
+private struct AppColorThemeKey: EnvironmentKey {
+    static let defaultValue = "standard"
+}
+private extension EnvironmentValues {
+    var appColorTheme: String {
+        get { self[AppColorThemeKey.self] }
+        set { self[AppColorThemeKey.self] = newValue }
+    }
+}
+
+private struct AppAppearancePreference: ViewModifier {
+    @AppStorage("spotcode.colorTheme") private var colorTheme = "standard"
+    @AppStorage("spotcode.appearance") private var appearance = "system"
+    private var scheme: ColorScheme? {
+        switch appearance {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
+    func body(content: Content) -> some View {
+        content.environment(\.appColorTheme, colorTheme).preferredColorScheme(scheme)
+    }
 }
 
 // Code-native marks shared with the web SVG icon set. Keeping the same 24×24
@@ -179,6 +232,8 @@ struct CityMapDestination: Identifiable {
 }
 
 struct RootView: View {
+    @AppStorage("spotcode.colorTheme") private var selectedColorTheme = "standard"
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var section: AppSection = .home
@@ -212,6 +267,9 @@ struct RootView: View {
     }
 
     var body: some View {
+        let _ = selectedColorTheme
+        let _ = appColorTheme
+
         ZStack(alignment: .leading) {
             SpotcodeTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
@@ -243,8 +301,7 @@ struct RootView: View {
                         }
                             .id(navigationReset).navigationViewStyle(.stack)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
+                            .overlay(alignment: .leading) { Rectangle().fill(SpotcodeTheme.border).frame(width: 1) }
                         if geometry.size.width >= 1450 {
                             DesktopCommunity(openProfile: { profile in
                                 recommendedProfileHandle = profile.handle
@@ -280,12 +337,14 @@ struct RootView: View {
             }
             #endif
             if showAccounts {
-                Color.black.opacity(Double(SpotcodeLayout.value(0.3, 0.72))).ignoresSafeArea().onTapGesture { showAccounts = false }
+                // Desktop account menus dismiss on outside clicks without dimming the page.
+                Color.black.opacity(Double(SpotcodeLayout.value(0, 0.72)))
+                    .contentShape(Rectangle()).ignoresSafeArea().onTapGesture { showAccounts = false }
                 AccountSwitcher(isPresented: $showAccounts, showLogin: $showLogin)
                     .desktopAccountPlacement()
             }
         }
-        .preferredColorScheme(.dark)
+        .modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -381,6 +440,7 @@ struct RootView: View {
 }
 
 private struct TopBar: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Binding var drawerOpen: Bool
     @Binding var section: AppSection
@@ -392,6 +452,8 @@ private struct TopBar: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
+        let _ = appColorTheme
+
         HStack(spacing: 9) {
             #if !targetEnvironment(macCatalyst)
             Button { withAnimation(.easeOut(duration: 0.2)) { drawerOpen.toggle() } } label: {
@@ -446,6 +508,7 @@ private struct TopBar: View {
 
 #if targetEnvironment(macCatalyst)
 private struct DesktopNavigation: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Binding var section: AppSection
     @Binding var composing: Bool
@@ -453,11 +516,13 @@ private struct DesktopNavigation: View {
     @Binding var showLogin: Bool
     @Binding var navigationReset: UUID
     let compact: Bool
-    @State private var hoveredSection: AppSection?
 
     var body: some View {
+        let _ = appColorTheme
+
         ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
+                Rectangle().fill(SpotcodeTheme.text).frame(height: 1)
                 ForEach(AppSection.allCases, id: \.self) { item in
                     Button {
                         section = item; navigationReset = UUID()
@@ -469,28 +534,27 @@ private struct DesktopNavigation: View {
                         .padding(.horizontal, compact ? 16 : 24)
                         .padding(.vertical, 16)
                         .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                        .background(Capsule().fill(hoveredSection == item ? SpotcodeTheme.surface2 : .clear))
                         .contentShape(Rectangle())
-                        .foregroundColor(section == item ? SpotcodeTheme.accent : SpotcodeTheme.text)
+                        .foregroundColor(SpotcodeTheme.text)
                     }
-                    .buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel(Text(LocalizedStringKey(item.rawValue)))
+                    .buttonStyle(DesktopMenuRowStyle(selected: section == item))
+                    .accessibilityLabel(Text(LocalizedStringKey(item.rawValue)))
+                    .accessibilityAddTraits(section == item ? .isSelected : [])
                     .accessibilityIdentifier("desktop.nav.\(item.rawValue)")
-                    .onHover { hovering in
-                        if hovering { hoveredSection = item }
-                        else if hoveredSection == item { hoveredSection = nil }
-                    }
                 }
                 Button {
                     if model.session == nil { showLogin = true } else { composing = true }
                 } label: {
-                    HStack {
-                        Image(systemName: "plus")
+                    HStack(spacing: 18) {
+                        Image(systemName: "plus").frame(width: 30)
                         if !compact { Text(NSLocalizedString("New idea", comment: "")).fontWeight(.bold) }
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 18)
-                    .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
-                    .contentShape(Capsule())
-                }.buttonStyle(SpotcodePlainButtonStyle()).keyboardShortcut("n", modifiers: .command)
+                    .padding(.horizontal, compact ? 16 : 24)
+                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                    .foregroundColor(SpotcodeTheme.text)
+                    .contentShape(Rectangle())
+                }.buttonStyle(DesktopMenuRowStyle()).keyboardShortcut("n", modifiers: .command)
+                    .accessibilityLabel(NSLocalizedString("New idea", comment: ""))
                 Button {
                     if model.session == nil { showLogin = true } else { showAccounts = true }
                 } label: {
@@ -503,16 +567,46 @@ private struct DesktopNavigation: View {
                             }
                         }
                     }
-                    .padding(.horizontal, compact ? 0 : 16).padding(.vertical, 20)
+                    .padding(.horizontal, compact ? 14 : 24).padding(.vertical, 20)
                     .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
                     .contentShape(Rectangle()).foregroundColor(SpotcodeTheme.text)
-                }.buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel(NSLocalizedString("アカウント", comment: ""))
+                }.buttonStyle(DesktopMenuRowStyle()).accessibilityLabel(NSLocalizedString("アカウント", comment: ""))
             }
         }
     }
 }
 
+// Hover stays local to each row, avoiding redraws of the entire navigation.
+private struct DesktopMenuRowStyle: ButtonStyle {
+    var selected = false
+    func makeBody(configuration: Configuration) -> some View {
+        DesktopMenuRow(configuration: configuration, selected: selected)
+    }
+
+    private struct DesktopMenuRow: View {
+        @Environment(\.appColorTheme) private var appColorTheme
+        let configuration: ButtonStyleConfiguration
+        let selected: Bool
+        @State private var hovering = false
+        var body: some View {
+            let _ = appColorTheme
+
+            configuration.label
+                .frame(maxWidth: .infinity)
+                .background(configuration.isPressed ? SpotcodeTheme.border :
+                    (hovering ? SpotcodeTheme.selection : (selected ? SpotcodeTheme.surface2 : .clear)))
+                .overlay(alignment: .leading) {
+                    if selected { Rectangle().fill(SpotcodeTheme.text).frame(width: 3) }
+                }
+                .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
+                .contentShape(Rectangle())
+                .onHover { hovering = $0 }
+        }
+    }
+}
+
 private struct DesktopCommunity: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let openProfile: (Profile) -> Void
     let openCity: (CityMapDestination) -> Void
@@ -543,6 +637,8 @@ private struct DesktopCommunity: View {
     }
 
     var body: some View {
+        let _ = appColorTheme
+
         ScrollView {
             VStack(spacing: 20) {
                 DesktopRailCard("Your activity", subtitle: NSLocalizedString("last 12 months", comment: "")) {
@@ -681,6 +777,7 @@ private struct DesktopCommunity: View {
 }
 
 private struct DesktopRailCard<Content: View>: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let title: String
     let subtitle: String
     let content: Content
@@ -688,18 +785,21 @@ private struct DesktopRailCard<Content: View>: View {
         self.title = title; self.subtitle = subtitle; self.content = content()
     }
     var body: some View {
+        let _ = appColorTheme
+
         VStack(alignment: .leading, spacing: 20) {
             (Text(LocalizedStringKey(title)).bold() + Text(subtitle.isEmpty ? "" : " " + NSLocalizedString(subtitle, comment: "")).foregroundColor(SpotcodeTheme.muted))
                 .spotcodeFont(16, fallback: .headline)
             content
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-            .background(SpotcodeTheme.surface).clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
+            .background(SpotcodeTheme.surface)
+            .overlay(alignment: .top) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
     }
 }
 #endif
 
 private struct SideDrawer: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Binding var section: AppSection
     @Binding var open: Bool
@@ -707,6 +807,8 @@ private struct SideDrawer: View {
     @Binding var navigationReset: UUID
 
     var body: some View {
+        let _ = appColorTheme
+
         VStack(alignment: .leading, spacing: 5) {
             ForEach(AppSection.allCases, id: \.self) { item in
                 Button {
@@ -723,7 +825,7 @@ private struct SideDrawer: View {
             Button { composing = true; open = false } label: {
                 Label(NSLocalizedString("New idea", comment: ""), systemImage: "plus")
                     .spotcodeFont(14, weight: .bold, fallback: SpotcodeLayout.bodyFont.weight(.bold)).frame(maxWidth: .infinity).padding(.vertical, SpotcodeLayout.value(8, 14))
-                    .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
+                    .background(SpotcodeTheme.accent).foregroundColor(SpotcodeTheme.onAccent).clipShape(Capsule())
             }.padding(.top, 10).disabled(model.session == nil)
             Spacer()
             if let me = model.displayProfile {
@@ -744,11 +846,14 @@ private struct SideDrawer: View {
 }
 
 private struct AccountSwitcher: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Binding var isPresented: Bool
     @Binding var showLogin: Bool
     @State private var switchingID: UUID?
     var body: some View {
+        let _ = appColorTheme
+
         VStack(alignment: .leading, spacing: SpotcodeLayout.value(16, 16)) {
             HStack {
                 Text(NSLocalizedString("アカウント", comment: "")).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
@@ -780,7 +885,7 @@ private struct AccountSwitcher: View {
                         if switchingID == account.id { ProgressView() }
                     }
                     .padding(SpotcodeLayout.value(10, 12)).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(active ? Color(red: 23/255, green: 40/255, blue: 54/255) : SpotcodeTheme.surface2)
+                    .background(active ? SpotcodeTheme.selection : SpotcodeTheme.surface2)
                     .clipShape(RoundedRectangle(cornerRadius: 9))
                 }
                 .buttonStyle(SpotcodePlainButtonStyle())
@@ -799,17 +904,17 @@ private struct AccountSwitcher: View {
                     }
                 } label: {
                     HStack(spacing: 12) {
-                        ZStack { LinearGradient(colors: [SpotcodeTheme.accent, .green], startPoint: .topLeading, endPoint: .bottomTrailing); Text("S").spotcodeFont(22, weight: .bold, fallback: .title2.weight(.bold)) }.frame(width: SpotcodeLayout.value(40, 44), height: SpotcodeLayout.value(40, 44)).clipShape(Circle())
+                        ZStack { Color(red: 102/255, green: 102/255, blue: 102/255); Text("S").spotcodeFont(22, weight: .bold, fallback: .title2.weight(.bold)).foregroundColor(.white) }.frame(width: SpotcodeLayout.value(40, 44), height: SpotcodeLayout.value(40, 44)).clipShape(Circle())
                         VStack(alignment: .leading) {
                             HStack {
                                 Text("spotcode").fontWeight(.bold)
-                                Text(NSLocalizedString("公式", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(.yellow).padding(4).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5))
+                                Text(NSLocalizedString("公式", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.warning).padding(4).background(SpotcodeTheme.warning.opacity(0.12)).clipShape(RoundedRectangle(cornerRadius: 5))
                                 if model.isPostingAsOfficial { Text(NSLocalizedString("現在", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent) }
                             }
                             Text("@spotcode_official").foregroundColor(SpotcodeTheme.muted)
                         }
                         Spacer()
-                    }.padding(SpotcodeLayout.value(10, 12)).background(model.isPostingAsOfficial ? Color(red: 23/255, green: 40/255, blue: 54/255) : SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 9))
+                    }.padding(SpotcodeLayout.value(10, 12)).background(model.isPostingAsOfficial ? SpotcodeTheme.selection : SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 9))
                 }.buttonStyle(SpotcodePlainButtonStyle())
             }
             Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
@@ -834,6 +939,7 @@ private struct AccountSwitcher: View {
 }
 
 struct TimelineView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Binding var repositoryComposeURL: String?
     @Binding var drawerOpen: Bool
@@ -842,6 +948,8 @@ struct TimelineView: View {
     @State private var composing = false
 
     var body: some View {
+        let _ = appColorTheme
+
         VStack(spacing: 0) {
             TimelineTabs(selected: $selectedTab)
             if selectedTab == 2 {
@@ -904,6 +1012,7 @@ struct TimelineView: View {
 }
 
 private struct FollowingTimelineView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @State private var posts: [Post] = []
     @State private var loading = false
@@ -912,6 +1021,8 @@ private struct FollowingTimelineView: View {
     @State private var generation = UUID()
 
     var body: some View {
+        let _ = appColorTheme
+
         ScrollView {
             LazyVStack(spacing: 0) {
                 if model.session == nil {
@@ -960,9 +1071,12 @@ private struct FollowingTimelineView: View {
 }
 
 private struct TimelineTabs: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @Binding var selected: Int
     private let labels = [NSLocalizedString("For you", comment: ""), NSLocalizedString("Following", comment: ""), NSLocalizedString("Spots", comment: "")]
     var body: some View {
+        let _ = appColorTheme
+
         HStack(spacing: 0) {
             ForEach(labels.indices, id: \.self) { index in
                 Button { selected = index } label: {
@@ -978,6 +1092,7 @@ private struct TimelineTabs: View {
 }
 
 private struct InlineComposer: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -1005,6 +1120,8 @@ private struct InlineComposer: View {
     @State private var showDraftNotice = true
     @State private var editorFocused = false
     var body: some View {
+        let _ = appColorTheme
+
         HStack(alignment: .top, spacing: 12) {
             AvatarView(profile: model.displayProfile, size: SpotcodeLayout.value(40, 42))
             VStack(alignment: .leading, spacing: 12) {
@@ -1019,7 +1136,7 @@ private struct InlineComposer: View {
                     }
                 }
                 .background(SpotcodeTheme.inputSurface)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : Color(red: 74/255, green: 85/255, blue: 104/255), lineWidth: editorFocused ? 3 : 2))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(editorFocused ? SpotcodeTheme.accent : SpotcodeTheme.border, lineWidth: editorFocused ? 3 : 2))
                 composerChips
                 if showLink {
                     TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
@@ -1052,7 +1169,7 @@ private struct InlineComposer: View {
                         Spacer()
                         Button(NSLocalizedString("破棄", comment: "")) { draft = ""; showDraftNotice = false }.foregroundColor(SpotcodeTheme.muted)
                     }.padding(.horizontal, 12).padding(.vertical, SpotcodeLayout.value(9, 11))
-                     .background(Color(red: 18/255, green: 42/255, blue: 58/255))
+                     .background(SpotcodeTheme.selection)
                      .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.accent.opacity(0.45)))
                 }
             }
@@ -1107,7 +1224,7 @@ private struct InlineComposer: View {
                 .overlay(Capsule().stroke(SpotcodeTheme.border))
             Button(sending ? NSLocalizedString("送信中…", comment: "") : NSLocalizedString("Push", comment: "")) { publish() }
                 .spotcodeFont(14, weight: .bold, fallback: SpotcodeLayout.bodyFont.weight(.bold)).padding(.horizontal, SpotcodeLayout.value(18, 28)).padding(.vertical, SpotcodeLayout.value(9, 11))
-                .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
+                .background(SpotcodeTheme.accent).foregroundColor(SpotcodeTheme.onAccent).clipShape(Capsule())
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending || model.session == nil)
         }
     }
@@ -1155,10 +1272,13 @@ private struct InlineComposer: View {
 }
 
 private struct PostAudiencePicker: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Binding var visibility: String
 
     var body: some View {
+        let _ = appColorTheme
+
         Picker(NSLocalizedString("公開範囲", comment: ""), selection: $visibility) {
             Label(NSLocalizedString("全員", comment: ""), systemImage: "globe").tag("public")
             Label(NSLocalizedString("相互フォロー", comment: ""), systemImage: "arrow.2.squarepath").tag("mutuals")
@@ -1181,9 +1301,12 @@ private struct PostAudiencePicker: View {
 }
 
 private struct PostKindPicker: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @Binding var kind: String?
 
     var body: some View {
+        let _ = appColorTheme
+
         Menu {
             Picker(NSLocalizedString("投稿タグ", comment: ""), selection: $kind) {
                 Text(NSLocalizedString("タグなし", comment: "")).tag(String?.none)
@@ -1199,10 +1322,13 @@ private struct PostKindPicker: View {
 }
 
 private struct ComposerChip: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let icon: String; let title: String
     var strong = false
     var active = false
     var body: some View {
+        let _ = appColorTheme
+
         Label { Text(LocalizedStringKey(title)) } icon: { Image(systemName: icon) }
             .spotcodeFont(12, weight: .semibold, fallback: .caption.weight(.semibold)).foregroundColor(active ? SpotcodeTheme.accent : (strong ? SpotcodeTheme.text : SpotcodeTheme.muted))
             .padding(.horizontal, 10).padding(.vertical, SpotcodeLayout.value(8, 7))
@@ -1408,9 +1534,12 @@ private struct PhotoLibraryPicker: UIViewControllerRepresentable {
 }
 
 struct DataURLImage: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let value: String
     var fit = false
     var body: some View {
+        let _ = appColorTheme
+
         Group {
             if let image = decodedDataURLImage(value) {
                 Image(uiImage: image).resizable().aspectRatio(contentMode: fit ? .fit : .fill)
@@ -1506,12 +1635,15 @@ private extension UIImage {
 }
 
 private struct PollEditorSheet: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @Binding var poll: PostPoll?
     @Binding var isPresented: Bool
     @State private var question = ""
     @State private var first = ""
     @State private var second = ""
     var body: some View {
+        let _ = appColorTheme
+
         NavigationView {
             VStack(spacing: 14) {
                 TextField(NSLocalizedString("質問", comment: ""), text: $question).spotcodeField()
@@ -1529,7 +1661,7 @@ private struct PollEditorSheet: View {
                     }
                 }
                 .onAppear { question = poll?.question ?? ""; first = poll?.options.first ?? ""; second = poll?.options.dropFirst().first ?? "" }
-        }.preferredColorScheme(.dark)
+        }.modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -1538,6 +1670,7 @@ private struct PollEditorSheet: View {
 }
 
 private struct LocationPickerSheet: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @AppStorage("spotcode.native.dev-mode") private var developerMode = false
     @Binding var spot: Spot?
@@ -1553,6 +1686,8 @@ private struct LocationPickerSheet: View {
     @State private var adjustmentDenied = false
 
     var body: some View {
+        let _ = appColorTheme
+
         NavigationView {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
@@ -1616,7 +1751,7 @@ private struct LocationPickerSheet: View {
             .onChange(of: coordinate.map { "\($0.latitude),\($0.longitude)" }) { _ in
                 if let coordinate { reverseGeocode(coordinate) }
             }
-        }.preferredColorScheme(.dark)
+        }.modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -1722,6 +1857,7 @@ private struct CurrentLocationMap: UIViewRepresentable {
 // when SwiftUI's outer background is set. A native UITextView lets us apply
 // the exact web composer surface (#21262d) to the actual editable layer.
 private struct ComposerTextView: UIViewRepresentable {
+    @Environment(\.appColorTheme) private var appColorTheme
     @Binding var text: String
     @Binding var isFocused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -1731,8 +1867,8 @@ private struct ComposerTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
         view.delegate = context.coordinator
-        view.backgroundColor = UIColor(red: 33/255, green: 38/255, blue: 45/255, alpha: 1)
-        view.textColor = UIColor(red: 230/255, green: 237/255, blue: 243/255, alpha: 1)
+        view.backgroundColor = UIColor(SpotcodeTheme.inputSurface)
+        view.textColor = UIColor(SpotcodeTheme.text)
         view.tintColor = UIColor(red: 29/255, green: 155/255, blue: 240/255, alpha: 1)
         #if targetEnvironment(macCatalyst)
         view.font = MacTextSize.editorFont(dynamicTypeSize)
@@ -1750,6 +1886,9 @@ private struct ComposerTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UITextView, context: Context) {
+        let _ = appColorTheme
+        view.textColor = UIColor(SpotcodeTheme.text)
+        view.backgroundColor = UIColor(SpotcodeTheme.inputSurface)
         if view.text != text { view.text = text }
         #if targetEnvironment(macCatalyst)
         let font = MacTextSize.editorFont(dynamicTypeSize)
@@ -1785,6 +1924,7 @@ private final class SelectablePostTextView: UITextView {
 }
 
 private struct SelectablePostBody: UIViewRepresentable {
+    @Environment(\.appColorTheme) private var appColorTheme
     let text: String
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -1796,12 +1936,14 @@ private struct SelectablePostBody: UIViewRepresentable {
         view.backgroundColor = .clear
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
-        view.textColor = UIColor(red: 230/255, green: 237/255, blue: 243/255, alpha: 1)
+        view.textColor = UIColor(SpotcodeTheme.text)
         view.tintColor = .systemBlue
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return view
     }
     func updateUIView(_ view: SelectablePostTextView, context: Context) {
+        let _ = appColorTheme
+        view.textColor = UIColor(SpotcodeTheme.text)
         // Do not assign unchanged text: a timeline refresh must retain selection.
         if view.text != text { view.text = text }
         #if targetEnvironment(macCatalyst)
@@ -1820,6 +1962,7 @@ private struct SelectablePostBody: UIViewRepresentable {
 }
 
 struct PostRow: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let post: Post
     var opensDetail = true
@@ -1865,6 +2008,8 @@ struct PostRow: View {
     }
 
     var body: some View {
+        let _ = appColorTheme
+
         if model.canReadPostAudience(post) && !model.isBlocked(post) && !model.isMuted(post) {
             postContent
         }
@@ -2092,6 +2237,7 @@ Menu {
 }
 
 private struct ReportPostView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let post: Post
     @Binding var isPresented: Bool
@@ -2108,6 +2254,8 @@ private struct ReportPostView: View {
     ]
 
     var body: some View {
+        let _ = appColorTheme
+
         NavigationView {
             Form {
                 Section(NSLocalizedString("報告する理由", comment: "")) {
@@ -2163,12 +2311,16 @@ private struct ActivityShareSheet: UIViewControllerRepresentable {
 }
 
 private struct PostAction: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let icon: String
     let count: Int
-    var body: some View { HStack(spacing: 5) { Image(systemName: icon); Text("\(count)") } }
+    var body: some View {
+        let _ = appColorTheme
+         HStack(spacing: 5) { Image(systemName: icon); Text("\(count)") } }
 }
 
 private struct EditPostView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let post: Post
     @Binding var isPresented: Bool
@@ -2193,6 +2345,8 @@ private struct EditPostView: View {
     }
 
     var body: some View {
+        let _ = appColorTheme
+
         NavigationView {
             VStack(spacing: SpotcodeLayout.value(16, 16)) {
                 ComposerTextView(text: $bodyText, isFocused: $editorFocused)
@@ -2245,7 +2399,7 @@ private struct EditPostView: View {
                     }.disabled(saving || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-        }.preferredColorScheme(.dark)
+        }.modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -2254,10 +2408,13 @@ private struct EditPostView: View {
 }
 
 private struct PostMetadataBadge: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let icon: String
     let text: String
     let color: Color
     var body: some View {
+        let _ = appColorTheme
+
         Label { Text(LocalizedStringKey(text)) } icon: { Image(systemName: icon) }
             .spotcodeFont(11, weight: .semibold, fallback: .caption2.weight(.semibold)).foregroundColor(color)
             .padding(.horizontal, 8).padding(.vertical, 4)
@@ -2266,9 +2423,12 @@ private struct PostMetadataBadge: View {
 }
 
 struct AvatarView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let profile: Profile?
     var size: CGFloat = 42
     var body: some View {
+        let _ = appColorTheme
+
         Group {
             if let image = decodedDataURLImage(profile?.avatarURL, maxPixelSize: max(1, Int(ceil(size * 3)))) {
                 Image(uiImage: image).resizable().scaledToFill()
@@ -2285,7 +2445,7 @@ struct AvatarView: View {
 
     private var avatarFallback: some View {
         ZStack {
-            LinearGradient(colors: [SpotcodeTheme.accent, Color(red: 46/255, green: 160/255, blue: 67/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            Color(red: 102/255, green: 102/255, blue: 102/255)
             Text(String(profile?.name.first ?? "?"))
                 .font(.system(size: max(13, size * 0.4), weight: .bold, design: .rounded))
                 .foregroundColor(.white)
@@ -2296,10 +2456,13 @@ struct AvatarView: View {
 }
 
 struct PostDetailView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let post: Post
     var onSpotTap: ((Post) -> Void)? = nil
     var onClose: (() -> Void)? = nil
     var body: some View {
+        let _ = appColorTheme
+
         ScrollView { PostRow(post: post, opensDetail: false, onSpotTap: onSpotTap) }
             .background(SpotcodeTheme.surface).navigationTitle(NSLocalizedString("Post", comment: "")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -2311,8 +2474,11 @@ struct PostDetailView: View {
 }
 
 private struct MapSheetCloseButton: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let action: () -> Void
     var body: some View {
+        let _ = appColorTheme
+
         Button(action: action) {
             Image(systemName: "xmark").frame(width: 32, height: 32)
         }
@@ -2322,6 +2488,7 @@ private struct MapSheetCloseButton: View {
 }
 
 struct ComposeView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Binding var isPresented: Bool
     @State private var bodyText = ""
@@ -2349,6 +2516,8 @@ struct ComposeView: View {
     }
 
     var body: some View {
+        let _ = appColorTheme
+
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: SpotcodeLayout.value(16, 16)) {
@@ -2421,15 +2590,23 @@ struct ComposeView: View {
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
              .navigationTitle(NSLocalizedString("New idea", comment: "")).navigationBarTitleDisplayMode(.inline)
              .toolbar {
-                 ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("Cancel", comment: "")) { isPresented = false } }
+                 ToolbarItem(placement: .cancellationAction) {
+                     Button { isPresented = false } label: {
+                         Text(NSLocalizedString("Cancel", comment: ""))
+                             .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                             .padding(.horizontal, 8)
+                     }
+                 }
                  ToolbarItem(placement: .confirmationAction) {
-                     Button(sending ? "Posting…" : NSLocalizedString("Post", comment: "")) {
-                         publish()
+                     Button { publish() } label: {
+                         Text(sending ? "Posting…" : NSLocalizedString("Post", comment: ""))
+                             .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                             .padding(.horizontal, 8)
                      }.disabled(bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending)
                  }
              }
         }
-        .preferredColorScheme(.dark)
+        .modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -2475,6 +2652,7 @@ private struct MapPostSelection: Identifiable {
 }
 
 struct NativeMapView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     var focusPost: Post? = nil
     var cityDestination: CityMapDestination? = nil
@@ -2497,6 +2675,8 @@ struct NativeMapView: View {
     }
 
     var body: some View {
+        let _ = appColorTheme
+
         ZStack(alignment: .trailing) {
             ClusteredPostMap(posts: posts, region: $region, selectedPosts: $selectedPosts,
                              locationRequestID: locationRequestID, initiallyLocateUser: focusPost == nil && cityDestination == nil,
@@ -2715,6 +2895,7 @@ private final class PostMapAnnotation: NSObject, MKAnnotation {
 }
 
 struct RepositoriesView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let onCompose: (URL) -> Void
     @State private var repositoryNotice = ""
@@ -2722,7 +2903,10 @@ struct RepositoriesView: View {
     @State private var repositories: [Repository] = []
     @State private var relatedPosts: [Post] = []
     @State private var loading = false
+    @State private var loadGeneration = UUID()
     var body: some View {
+        let _ = appColorTheme
+
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 6) {
@@ -2798,12 +2982,18 @@ struct RepositoriesView: View {
     }
 
     private func load() async {
+        guard !Task.isCancelled else { return }
+        let generation = UUID()
+        loadGeneration = generation
+        loading = false
         repositories = []; relatedPosts = []; repositoryOwner = nil; repositoryNotice = ""
         guard let handle = model.me?.githubHandle, let session = model.session else { return }
-        loading = true; defer { loading = false }
+        loading = true
+        defer { if loadGeneration == generation { loading = false } }
         do {
             let loaded: [Repository]
             let githubToken = await model.hydrateSharedPrivateIssueToken()
+            guard !Task.isCancelled, loadGeneration == generation, session.user.id == model.session?.user.id else { return }
             if githubToken != nil || model.me?.isOrg == true {
                 do {
                     if model.me?.isOrg == true {
@@ -2811,21 +3001,29 @@ struct RepositoriesView: View {
                     } else {
                         loaded = try await SupabaseService.shared.authorizedGithubRepositories(handle: handle, githubToken: githubToken ?? "")
                     }
+                } catch is CancellationError { return
+                } catch let error as URLError where error.code == .cancelled { return
                 } catch {
+                    guard !Task.isCancelled, loadGeneration == generation, session.user.id == model.session?.user.id else { return }
                     loaded = try await SupabaseService.shared.repositories(handle: handle)
-                    guard session.user.id == model.session?.user.id else { return }
+                    guard !Task.isCancelled, loadGeneration == generation, session.user.id == model.session?.user.id else { return }
                     repositoryNotice = error.localizedDescription
                 }
             } else {
                 loaded = try await SupabaseService.shared.repositories(handle: handle)
             }
-            guard session.user.id == model.session?.user.id else { return }
+            guard !Task.isCancelled, loadGeneration == generation, session.user.id == model.session?.user.id else { return }
             repositoryOwner = session.user.id
             repositories = loaded.sorted { ($0.pushedAt ?? "") > ($1.pushedAt ?? "") }
             let posts = (try? await SupabaseService.shared.posts(limit: 200, token: session.accessToken)) ?? []
-            guard session.user.id == model.session?.user.id else { return }
+            guard !Task.isCancelled, loadGeneration == generation, session.user.id == model.session?.user.id else { return }
             relatedPosts = posts
-        } catch { model.errorMessage = error.localizedDescription }
+        } catch is CancellationError { return
+        } catch let error as URLError where error.code == .cancelled { return
+        } catch {
+            guard !Task.isCancelled, loadGeneration == generation, session.user.id == model.session?.user.id else { return }
+            model.errorMessage = error.localizedDescription
+        }
     }
 
     private func repositoryName(for post: Post) -> String? {
@@ -2849,6 +3047,7 @@ struct RepositoriesView: View {
 }
 
 struct NotificationsView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @AppStorage("spotcode.notifications.likes") private var likesEnabled = true
     @AppStorage("spotcode.notifications.comments") private var commentsEnabled = true
@@ -2858,6 +3057,8 @@ struct NotificationsView: View {
     @State private var notifications: [AppNotification] = []
     @State private var loading = false
     var body: some View {
+        let _ = appColorTheme
+
         VStack(spacing: 0) {
             #if targetEnvironment(macCatalyst)
             Text(NSLocalizedString("Notifications", comment: "")).spotcodeFont(18, weight: .bold, fallback: .headline)
@@ -2924,6 +3125,7 @@ struct NotificationsView: View {
 }
 
 private struct NotificationRow: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let notification: AppNotification
     let respond: (Bool) async -> Void
     @State private var responding = false
@@ -2932,6 +3134,8 @@ private struct NotificationRow: View {
     @State private var hovered = false
 
     var body: some View {
+        let _ = appColorTheme
+
         HStack(alignment: .top, spacing: 12) {
             ZStack(alignment: .bottomTrailing) {
                 NavigationLink(destination: ProfileLookupView(handle: notification.actor.handle)) {
@@ -3030,11 +3234,14 @@ private struct NotificationRow: View {
 }
 
 private struct ProfileLookupView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let handle: String
     @State private var profile: Profile?
     @State private var loading = true
     var body: some View {
+        let _ = appColorTheme
+
         Group {
             if let profile { ProfileView(profile: profile) }
             else if loading { ProgressView(NSLocalizedString("プロフィールを読み込み中…", comment: "")) }
@@ -3053,6 +3260,7 @@ private struct ProfileLookupView: View {
 }
 
 struct ProfileView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let profile: Profile?
     @AppStorage("spotcode.selectedIssueReposByUser") private var taskRepositoriesJSON = "{}"
@@ -3066,6 +3274,8 @@ struct ProfileView: View {
     @State private var contributions: [GitHubContribution] = []
     @State private var issueSearch: GitHubIssueSearchResponse?
     var body: some View {
+        let _ = appColorTheme
+
         VStack(spacing: 0) {
             ScrollView {
                 if let profile {
@@ -3244,12 +3454,15 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
 }
 
 private struct ProfileSearchView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State var initialQuery: String
     @State private var results: [Profile] = []
     @State private var loading = false
     var body: some View {
+        let _ = appColorTheme
+
         NavigationView {
             VStack(spacing: 0) {
                 TextField(NSLocalizedString("ユーザー・スポット・リポジトリを検索…", comment: ""), text: $initialQuery)
@@ -3265,7 +3478,7 @@ private struct ProfileSearchView: View {
                 .navigationTitle(NSLocalizedString("Search", comment: "")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("閉じる", comment: "")) { dismiss() } } }
                 .task { await search() }
-        }.preferredColorScheme(.dark)
+        }.modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -3279,6 +3492,7 @@ private struct ProfileSearchView: View {
 }
 
 private struct ProfileHero: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let profile: Profile
     let counts: (following: Int, followers: Int, posts: Int)
@@ -3294,6 +3508,8 @@ private struct ProfileHero: View {
     @AppStorage("spotcode.hideBadges") private var hideBadges = false
     @AppStorage("spotcode.hideTasks") private var hideTasks = false
     var body: some View {
+        let _ = appColorTheme
+
         VStack(alignment: .leading, spacing: 0) {
             LinearGradient(colors: [Color(red: 8/255, green: 70/255, blue: 111/255), Color(red: 30/255, green: 116/255, blue: 77/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
                 .frame(height: 176)
@@ -3418,6 +3634,7 @@ private struct ProfileHero: View {
 }
 
 private struct LanguageMedal: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let language: GitHubLanguageStat
     private var color: Color {
         [
@@ -3441,6 +3658,8 @@ private struct LanguageMedal: View {
     }
     private var usesDarkText: Bool { ["JavaScript", "Java", "Kotlin"].contains(language.name) }
     var body: some View {
+        let _ = appColorTheme
+
         ZStack(alignment: .bottomTrailing) {
             Text(abbreviation)
                 .font(.system(size: 10, weight: .heavy, design: .monospaced))
@@ -3465,11 +3684,14 @@ private struct LanguageMedal: View {
 }
 
 private struct ProfileSocialActions: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let profile: Profile
     let targetID: UUID
     @State private var busy = false
     var body: some View {
+        let _ = appColorTheme
+
         Group {
             Button(model.mutedAccountIDs.contains(targetID) ? NSLocalizedString("ミュート解除", comment: "") : NSLocalizedString("ミュート", comment: "")) {
                 perform { try await model.setMuted(targetID, enabled: !model.mutedAccountIDs.contains(targetID)) }
@@ -3489,12 +3711,15 @@ private struct ProfileSocialActions: View {
 }
 
 private struct FollowAudienceMenu: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let profile: Profile
     var title: String? = nil
     var unfollow: (() -> Void)? = nil
     @State private var busy = false
     var body: some View {
+        let _ = appColorTheme
+
         Menu {
             Button { change("friends", enabled: !friends) } label: {
                 Label(friends ? NSLocalizedString("親しい友達から解除", comment: "") : NSLocalizedString("親しい友達に登録", comment: ""), systemImage: friends ? "checkmark.circle.fill" : "heart")
@@ -3518,11 +3743,14 @@ private struct FollowAudienceMenu: View {
 private enum FollowListKind { case following, followers }
 
 private struct FollowListView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let userID: UUID
     let kind: FollowListKind
     @State private var profiles: [Profile] = []
     var body: some View {
+        let _ = appColorTheme
+
         List(profiles) { profile in
             HStack {
                 NavigationLink(destination: ProfileView(profile: profile)) {
@@ -3551,6 +3779,7 @@ private struct FollowListView: View {
 }
 
 private struct EditProfileView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let profile: Profile
     @Binding var isPresented: Bool
@@ -3565,6 +3794,8 @@ private struct EditProfileView: View {
     @State private var showingImagePicker = false
     @State private var saving = false
     var body: some View {
+        let _ = appColorTheme
+
         NavigationView {
             ScrollView {
               VStack(spacing: 14) {
@@ -3606,7 +3837,7 @@ private struct EditProfileView: View {
                 }
                 .onAppear { name = profile.name; bio = profile.bio ?? ""; location = profile.location ?? ""; website = profile.website ?? ""; twitter = profile.twitter ?? ""; instagram = profile.instagram ?? ""; avatarURL = profile.avatarURL; avatarShape = profile.avatarShape ?? "round" }
                 .sheet(isPresented: $showingImagePicker) { ProfileImagePicker(image: $avatarURL) }
-        }.preferredColorScheme(.dark)
+        }.modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -3629,6 +3860,7 @@ private struct EditProfileView: View {
 }
 
 private struct GitHubActivity: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let handle: String
     let contributions: [GitHubContribution]
     var showsTitle = true
@@ -3644,6 +3876,8 @@ private struct GitHubActivity: View {
         }
     }
     var body: some View {
+        let _ = appColorTheme
+
         let days = cells
         Link(destination: URL(string: "https://github.com/\(handle)?tab=contributions")!) {
           VStack(alignment: .leading, spacing: 8) {
@@ -3682,6 +3916,7 @@ private struct GitHubActivity: View {
 private enum IssueDueStatus { case overdue, soon, later }
 
 private struct OpenIssuesCard: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let handle: String
     let result: GitHubIssueSearchResponse?
@@ -3711,6 +3946,8 @@ private struct OpenIssuesCard: View {
         }.prefix(20))
     }
     var body: some View {
+        let _ = appColorTheme
+
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) { RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text(NSLocalizedString("Open issues", comment: "")).foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text(NSLocalizedString("公開リポの未クローズ issue (task)", comment: "")).spotcodeFont(11, weight: .regular, fallback: .caption2).foregroundColor(SpotcodeTheme.muted)
                 if !allowedIssues.isEmpty {
@@ -3826,10 +4063,13 @@ private enum IssueMarkdownBlock {
 }
 
 private struct IssueMarkdownView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let source: String
     private var blocks: [IssueMarkdownBlock] { parseIssueMarkdown(source) }
 
     var body: some View {
+        let _ = appColorTheme
+
         VStack(alignment: .leading, spacing: 9) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 blockView(block)
@@ -3992,11 +4232,15 @@ private extension Text {
 }
 
 private struct ProfileCount: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let value: Int; let label: String
-    var body: some View { HStack(spacing: 5) { Text("\(value)").fontWeight(.bold).foregroundColor(SpotcodeTheme.text); Text(label).foregroundColor(SpotcodeTheme.muted) } }
+    var body: some View {
+        let _ = appColorTheme
+         HStack(spacing: 5) { Text("\(value)").fontWeight(.bold).foregroundColor(SpotcodeTheme.text); Text(label).foregroundColor(SpotcodeTheme.muted) } }
 }
 
 struct SettingsView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @State private var tab: Int
 
@@ -4006,6 +4250,8 @@ struct SettingsView: View {
         _tab = State(initialValue: screenshotTab)
     }
     var body: some View {
+        let _ = appColorTheme
+
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text(NSLocalizedString("Settings", comment: "")).spotcodeFont(22, weight: .bold, fallback: .title2.weight(.bold))
@@ -4027,8 +4273,11 @@ struct SettingsView: View {
 }
 
 private struct SettingsTab: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let title: String; let icon: String; let selected: Bool; let action: () -> Void
     var body: some View {
+        let _ = appColorTheme
+
         Button(action: action) {
             VStack(spacing: 10) {
                 Label { Text(LocalizedStringKey(title)) } icon: { Image(systemName: icon) }
@@ -4040,10 +4289,13 @@ private struct SettingsTab: View {
 }
 
 private struct SettingsCard<Content: View>: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let title: String
     @ViewBuilder let content: Content
     init(_ title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
     var body: some View {
+        let _ = appColorTheme
+
         VStack(alignment: .leading, spacing: 14) { Text(LocalizedStringKey(title)).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont); content }
             .padding(SpotcodeLayout.value(16, 16)).frame(maxWidth: .infinity, alignment: .leading)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
@@ -4051,9 +4303,12 @@ private struct SettingsCard<Content: View>: View {
 }
 
 private struct SettingsStatusTag: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let text: String
     let enabled: Bool
     var body: some View {
+        let _ = appColorTheme
+
         Text(LocalizedStringKey(text)).spotcodeFont(12, weight: .bold, fallback: .caption.bold())
             .foregroundColor(enabled ? .green : SpotcodeTheme.muted)
             .padding(.horizontal, 9).padding(.vertical, 4)
@@ -4064,6 +4319,7 @@ private struct SettingsStatusTag: View {
 }
 
 private struct GitHubOrganizationSettings: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @State private var busy = false
     @State private var message = ""
@@ -4071,6 +4327,8 @@ private struct GitHubOrganizationSettings: View {
     @State private var challenge: SupabaseService.OrganizationFileChallenge?
 
     var body: some View {
+        let _ = appColorTheme
+
         SettingsCard("GitHub Organization") {
             if model.me?.isOrg == true {
                 Text(NSLocalizedString("公開の.githubリポジトリに確認ファイルを追加して承認します。承認後もファイルは残してください。", comment: ""))
@@ -4131,12 +4389,15 @@ private struct GitHubOrganizationSettings: View {
 }
 
 private struct GitHubConnectionPermissions: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @State private var busy = false
     @State private var message = ""
     @State private var authorizer: GitHubPrivateIssueAuthorizer?
 
     var body: some View {
+        let _ = appColorTheme
+
         SettingsCard("GitHub") {
             Text(NSLocalizedString("Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。", comment: ""))
                 .spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
@@ -4190,12 +4451,15 @@ private struct GitHubConnectionPermissions: View {
 }
 
 private struct AccountSettings: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @State private var showAddAccount = false
     @State private var isOrg = false
     @State private var organization = ""
     @State private var savingIdentity = false
     var body: some View {
+        let _ = appColorTheme
+
         VStack(spacing: SpotcodeLayout.value(12, 18)) {
             SettingsCard(NSLocalizedString("アカウント", comment: "")) {
                 Text(NSLocalizedString("この端末にログイン済みのアカウントを切り替えられます。アカウント自体は削除されません。", comment: "")).foregroundColor(SpotcodeTheme.muted)
@@ -4221,7 +4485,7 @@ private struct AccountSettings: View {
                             if !active { Text(NSLocalizedString("切り替え", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent) }
                         }
                         .padding(SpotcodeLayout.value(10, 12))
-                        .background(active ? Color(red: 23/255, green: 40/255, blue: 54/255) : SpotcodeTheme.surface2)
+                        .background(active ? SpotcodeTheme.selection : SpotcodeTheme.surface2)
                         .clipShape(RoundedRectangle(cornerRadius: 9))
                     }.buttonStyle(SpotcodePlainButtonStyle())
                 }
@@ -4264,6 +4528,7 @@ private struct AccountSettings: View {
 }
 
 private struct DeveloperSettings: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @AppStorage("spotcode.native.dev-mode") private var developerMode = false
     @State private var password = ""
@@ -4275,6 +4540,8 @@ private struct DeveloperSettings: View {
     @State private var messageIsError = false
 
     var body: some View {
+        let _ = appColorTheme
+
         VStack(spacing: SpotcodeLayout.value(12, 18)) {
             Text(NSLocalizedString("この区画は管理者だけに表示されます。接続情報や内部IDは一般ユーザーには表示されません。", comment: ""))
                 .foregroundColor(SpotcodeTheme.muted)
@@ -4402,6 +4669,7 @@ private struct DeveloperSettings: View {
 }
 
 private struct MFASettingsCard: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @State private var factor: MFAFactor?
     @State private var enrollment: MFAEnrollment?
@@ -4410,6 +4678,8 @@ private struct MFASettingsCard: View {
     @State private var showDisableConfirmation = false
 
     var body: some View {
+        let _ = appColorTheme
+
         SettingsCard(NSLocalizedString("2段階認証", comment: "")) {
             HStack {
                 Text(factor == nil ? NSLocalizedString("OFF", comment: "") : NSLocalizedString("ON", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.bold())
@@ -4460,6 +4730,7 @@ private struct MFASettingsCard: View {
 }
 
 private struct MFAEnrollmentView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let enrollment: MFAEnrollment
     let completed: () -> Void
@@ -4469,6 +4740,8 @@ private struct MFAEnrollmentView: View {
     @State private var errorMessage = ""
 
     var body: some View {
+        let _ = appColorTheme
+
         NavigationView {
             ScrollView {
                 VStack(spacing: SpotcodeLayout.value(16, 16)) {
@@ -4495,7 +4768,7 @@ private struct MFAEnrollmentView: View {
                     if !errorMessage.isEmpty { Text(errorMessage).foregroundColor(SpotcodeTheme.warning) }
                 }.padding()
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle(NSLocalizedString("2段階認証", comment: ""))
-        }.preferredColorScheme(.dark)
+        }.modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -4512,12 +4785,15 @@ private struct MFAEnrollmentView: View {
 }
 
 private struct PrivacySettings: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @State private var privateAccount = false
     @State private var closeFriends = ""
     @State private var orgMembers = ""
     @State private var saving = false
-    var body: some View { VStack(spacing: SpotcodeLayout.value(12, 18)) {
+    var body: some View {
+        let _ = appColorTheme
+         VStack(spacing: SpotcodeLayout.value(12, 18)) {
         SettingsCard(NSLocalizedString("アカウントの公開範囲", comment: "")) {
             SettingsStatusTag(text: privateAccount ? NSLocalizedString("非公開", comment: "") : NSLocalizedString("公開", comment: ""), enabled: privateAccount)
             Text(privateAccount ? NSLocalizedString("承認したフォロワーだけが投稿を表示できます。", comment: "") : NSLocalizedString("すべてのユーザーが投稿を表示できます。", comment: "")).foregroundColor(SpotcodeTheme.muted)
@@ -4548,6 +4824,9 @@ private struct PrivacySettings: View {
 }
 
 private struct DisplaySettings: View {
+    @Environment(\.appColorTheme) private var appColorTheme
+    @AppStorage("spotcode.colorTheme") private var colorTheme = "standard"
+    @AppStorage("spotcode.appearance") private var appearance = "system"
     @EnvironmentObject private var model: AppModel
     #if targetEnvironment(macCatalyst)
     @AppStorage(MacTextSize.key) private var macTextSize = 1
@@ -4570,7 +4849,32 @@ private struct DisplaySettings: View {
     @AppStorage("spotcode.notifications.follows") private var notifyFollows = true
     @AppStorage("spotcode.notifications.followedPosts") private var followedPostScope = "off"
     @AppStorage("spotcode.language") private var appLanguage = AppLocalization.language
-    var body: some View { VStack(spacing: SpotcodeLayout.value(12, 18)) {
+    var body: some View {
+        let _ = appColorTheme
+         VStack(spacing: SpotcodeLayout.value(12, 18)) {
+        SettingsCard(NSLocalizedString("外観", comment: "")) {
+            Picker(NSLocalizedString("外観", comment: ""), selection: $appearance) {
+                Text(NSLocalizedString("システムに合わせる", comment: "")).tag("system")
+                Text(NSLocalizedString("ライト", comment: "")).tag("light")
+                Text(NSLocalizedString("ダーク", comment: "")).tag("dark")
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("settings.appearance")
+            Picker(NSLocalizedString("テーマカラー", comment: ""), selection: $colorTheme) {
+                Text(NSLocalizedString("標準", comment: "")).tag("standard")
+                ForEach(AppColorThemes.names, id: \.self) { name in Text(verbatim: name).tag(name) }
+            }.pickerStyle(.menu).accessibilityIdentifier("settings.colorTheme")
+            HStack(spacing: 8) {
+                Circle().fill(SpotcodeTheme.surface).overlay(Circle().stroke(SpotcodeTheme.border)).frame(width: 24, height: 24)
+                Circle().fill(SpotcodeTheme.text).frame(width: 24, height: 24)
+                Circle().fill(SpotcodeTheme.accent).frame(width: 24, height: 24)
+            }.accessibilityHidden(true)
+            Text(NSLocalizedString("どのテーマでもライト・ダークを選べます。システム設定にも自動で合わせられます。", comment: ""))
+                .foregroundColor(SpotcodeTheme.muted)
+            Link("GitHub Readme Stats", destination: URL(string: "https://github.com/anuraghazra/github-readme-stats/blob/master/themes/README.md")!)
+            DisclosureGroup("License (MIT)") { Text(verbatim: AppColorThemes.license).font(.caption) }
+        }
+
         #if targetEnvironment(macCatalyst)
         SettingsCard(NSLocalizedString("文字サイズ", comment: "")) {
             Picker(NSLocalizedString("文字サイズ", comment: ""), selection: $macTextSize) {
@@ -4951,9 +5255,11 @@ private struct SpotcodePlainButtonStyle: ButtonStyle {
 }
 
 private struct OutlineButtonStyle: ButtonStyle {
+    @Environment(\.appColorTheme) private var appColorTheme
     var filled = false
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.bodyFont.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, SpotcodeLayout.value(8, 9))
+        let _ = appColorTheme
+        return configuration.label.spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.bodyFont.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, SpotcodeLayout.value(8, 9))
             .foregroundColor(filled ? SpotcodeTheme.background : SpotcodeTheme.text)
             .background(filled ? SpotcodeTheme.text : Color.clear).clipShape(Capsule())
             .overlay(Capsule().stroke(SpotcodeTheme.border)).opacity(configuration.isPressed ? 0.7 : 1)
@@ -4962,16 +5268,22 @@ private struct OutlineButtonStyle: ButtonStyle {
 }
 
 private struct PageHeader: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let title: String
-    var body: some View { Text(LocalizedStringKey(title)).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont).frame(maxWidth: .infinity, alignment: .leading).padding(SpotcodeLayout.value(16, 16)).background(SpotcodeTheme.surface).overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) } }
+    var body: some View {
+        let _ = appColorTheme
+         Text(LocalizedStringKey(title)).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont).frame(maxWidth: .infinity, alignment: .leading).padding(SpotcodeLayout.value(16, 16)).background(SpotcodeTheme.surface).overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) } }
 }
 
 private struct SafetySettingsCard: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @State private var events: [SupabaseService.ModerationEvent] = []
     @State private var names: [UUID: String] = [:]
     @State private var message = ""
     var body: some View {
+        let _ = appColorTheme
+
         SettingsCard(NSLocalizedString("安全・サポート", comment: "")) {
             Link(NSLocalizedString("サポート・お問い合わせ", comment: ""), destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/support.html")!)
             Text(NSLocalizedString("ブロックしたユーザー", comment: "")).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
@@ -5010,8 +5322,11 @@ private struct SafetySettingsCard: View {
 }
 
 private struct TermsAgreementContent: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @Binding var agreed: Bool
     var body: some View {
+        let _ = appColorTheme
+
         VStack(alignment: .leading, spacing: 12) {
             Text(NSLocalizedString("利用規約への同意", comment: "")).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
             Text(NSLocalizedString("不適切な投稿、嫌がらせ、差別、脅迫、性的搾取、違法行為は禁止です。違反投稿の削除や利用停止を行います。通報・ブロック情報は運営に送信されます。", comment: ""))
@@ -5022,10 +5337,13 @@ private struct TermsAgreementContent: View {
     }
 }
 private struct TermsAgreementGate: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
     @State private var agreed = false
     var body: some View {
+        let _ = appColorTheme
+
         ScrollView { VStack(spacing: 20) {
             TermsAgreementContent(agreed: $agreed)
             Button(NSLocalizedString("同意して続ける", comment: "")) { acceptedTerms = "2026-09-08" }.disabled(!agreed)
@@ -5072,6 +5390,7 @@ private struct LoginSheetSize: UIViewControllerRepresentable {
 #endif
 
 struct LoginView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Binding var isPresented: Bool
     @State private var showingSignup = false
@@ -5083,6 +5402,8 @@ struct LoginView: View {
     @State private var agreedToTerms = false
     @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
     var body: some View {
+        let _ = appColorTheme
+
         #if targetEnvironment(macCatalyst)
         DesktopLoginView(isPresented: $isPresented)
         #else
@@ -5123,7 +5444,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity)
                             .padding(SpotcodeLayout.value(10, 13))
                             .background(SpotcodeTheme.accent)
-                            .foregroundColor(.white)
+                            .foregroundColor(SpotcodeTheme.onAccent)
                             .clipShape(Capsule())
                             .contentShape(Capsule())
                     }
@@ -5169,7 +5490,7 @@ struct LoginView: View {
                         .frame(maxWidth: .infinity)
                         .padding(SpotcodeLayout.value(10, 13))
                         .background(SpotcodeTheme.accent)
-                        .foregroundColor(.white)
+                        .foregroundColor(SpotcodeTheme.onAccent)
                         .clipShape(Capsule())
                         .contentShape(Capsule())
                 }
@@ -5237,7 +5558,7 @@ struct LoginView: View {
             }
             #endif
         }
-        .preferredColorScheme(.dark)
+        .modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -5259,6 +5580,7 @@ struct LoginView: View {
 
 #if targetEnvironment(macCatalyst)
 private struct DesktopLoginView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Binding var isPresented: Bool
     @State private var signup = false
@@ -5275,6 +5597,8 @@ private struct DesktopLoginView: View {
     @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
 
     var body: some View {
+        let _ = appColorTheme
+
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 tab(NSLocalizedString("Log in", comment: ""), selected: !signup) { signup = false }
@@ -5360,7 +5684,7 @@ private struct DesktopLoginView: View {
             }
         }
         .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
-        .preferredColorScheme(.dark).macTextSizePreference().spotcodeFont(14, fallback: .body)
+        .modifier(AppAppearancePreference()).macTextSizePreference().spotcodeFont(14, fallback: .body)
         .background(LoginSheetSize(height: signup ? 920 : 800).frame(width: 0, height: 0))
         .onDisappear { model.authenticationError = nil }
     }
@@ -5423,6 +5747,7 @@ private struct DesktopLoginView: View {
 #endif
 
 private struct SignupView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     let completed: (Bool) -> Void
     @State private var name = ""
@@ -5436,6 +5761,8 @@ private struct SignupView: View {
     @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
 
     var body: some View {
+        let _ = appColorTheme
+
         NavigationView {
             ScrollView {
                 VStack(spacing: SpotcodeLayout.value(16, 16)) {
@@ -5472,7 +5799,7 @@ private struct SignupView: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) {
                 Button("signup.back_to_login") { completed(false) }.disabled(busy)
             } }
-        }.preferredColorScheme(.dark)
+        }.modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
         .buttonStyle(SpotcodePlainButtonStyle())
@@ -5502,8 +5829,11 @@ private struct SignupView: View {
 }
 
 struct ContentUnavailableViewCompat: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let title: String; let icon: String
-    var body: some View { VStack(spacing: 12) { Image(systemName: icon).spotcodeFont(34, weight: .regular, fallback: .largeTitle); Text(LocalizedStringKey(title)).multilineTextAlignment(.center) }.foregroundColor(SpotcodeTheme.muted).padding() }
+    var body: some View {
+        let _ = appColorTheme
+         VStack(spacing: 12) { Image(systemName: icon).spotcodeFont(34, weight: .regular, fallback: .largeTitle); Text(LocalizedStringKey(title)).multilineTextAlignment(.center) }.foregroundColor(SpotcodeTheme.muted).padding() }
 }
 
 private extension View {
@@ -5683,6 +6013,7 @@ private struct CardHorizontalScroll: UIViewRepresentable {
 }
 
 private struct BusinessCardPreview: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let card: BusinessCard
     var actualSize = false
     @AppStorage("spotcode.card.physicalScale") private var physicalScale = 1.0
@@ -5692,6 +6023,8 @@ private struct BusinessCardPreview: View {
     private var fontDesign: Font.Design { d.font == "serif" ? .serif : d.font == "mono" ? .monospaced : .default }
     private var displayScale: Double { actualSize ? min(2, max(0.5, physicalScale)) : 0.85 }
     var body: some View {
+        let _ = appColorTheme
+
         ZStack {
             face(back: false).opacity(flipped ? 0 : 1).accessibilityHidden(flipped).allowsHitTesting(!flipped)
             face(back: true).rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0)).opacity(flipped ? 1 : 0).accessibilityHidden(!flipped).allowsHitTesting(flipped)
@@ -5814,10 +6147,13 @@ private struct BusinessCardTemplateDocument: FileDocument {
 }
 
 private struct FullscreenBusinessCardView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     let card: BusinessCard
     let dismiss: () -> Void
     @AppStorage("spotcode.card.physicalScale") private var physicalScale = 1.0
     var body: some View {
+        let _ = appColorTheme
+
         VStack(spacing: 0) {
             HStack {
                 Spacer()
@@ -5907,6 +6243,7 @@ private struct BusinessCardFullscreenPresenter: UIViewControllerRepresentable {
 }
 
 private struct BusinessCardView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var fullscreenCard = false
@@ -5930,6 +6267,8 @@ private struct BusinessCardView: View {
     private var own: Bool { profile.id != nil && profile.id == model.session?.user.id }
     private var link: URL { URL(string: "https://hrmcngs.github.io/spotcode-sns/#/\(profile.handle)/card")! }
     var body: some View {
+        let _ = appColorTheme
+
         GeometryReader { viewport in
         ScrollView {
             VStack(spacing: 0) {
@@ -6231,12 +6570,15 @@ private struct BusinessCardView: View {
 }
 
 private struct BusinessCardCollectionView: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
     @State private var cards: [CollectedBusinessCard] = []
     @State private var loading = true
     @State private var message = ""
     @State private var busy = false
     var body: some View {
+        let _ = appColorTheme
+
         ScrollView {
             VStack(spacing: 24) {
                 if loading { ProgressView() }
@@ -6274,8 +6616,11 @@ private struct BusinessCardCollectionView: View {
 }
 
 private struct BusinessCardDesignEditor: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @Binding var design: BusinessCardDesign
     var body: some View {
+        let _ = appColorTheme
+
         DisclosureGroup(NSLocalizedString("細かくデザイン", comment: "")) {
             VStack(alignment: .leading, spacing: 16) {
                 ColorPicker(NSLocalizedString("表の背景", comment: ""), selection: color(\.frontColor), supportsOpacity: false)
@@ -6427,6 +6772,7 @@ private struct BusinessCardColorPalette: UIViewControllerRepresentable {
 }
 
 private struct BusinessCardBaseColorPicker: View {
+    @Environment(\.appColorTheme) private var appColorTheme
     @Binding var design: BusinessCardDesign
     var theme: String = "midnight"
     @State private var showingPalette = false
@@ -6438,6 +6784,8 @@ private struct BusinessCardBaseColorPicker: View {
                 design.applyBaseColor(String(format: "#%02x%02x%02x", Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded())), theme: theme)
             }) }
     var body: some View {
+        let _ = appColorTheme
+
         VStack(alignment: .leading, spacing: 14) {
             Text(NSLocalizedString("ベースカラー", comment: "")).font(.headline)
             Button { showingPalette = true } label: {

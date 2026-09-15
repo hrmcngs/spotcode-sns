@@ -86,6 +86,19 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
         let model = AppModel()
         let root = RootView().environmentObject(model)
         let window = UIWindow(frame: UIScreen.main.bounds)
+        #if DEBUG && targetEnvironment(macCatalyst)
+        // Verify both appearances without changing the user's macOS settings.
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-SpotcodeScreenshotMode"),
+           let index = arguments.firstIndex(of: "-SpotcodeScreenshotAppearance"),
+           arguments.indices.contains(index + 1) {
+            switch arguments[index + 1] {
+            case "light": window.overrideUserInterfaceStyle = .light
+            case "dark": window.overrideUserInterfaceStyle = .dark
+            default: break
+            }
+        }
+        #endif
         window.rootViewController = UIHostingController(rootView: root)
         window.makeKeyAndVisible()
         self.window = window
