@@ -303,7 +303,7 @@ export async function hydrateRepos() {
     notice.className = 'settings__hint';
     notice.setAttribute('role', 'status');
     notice.dataset.reposConnection = '1';
-    notice.textContent = (error.message || 'GitHubに接続できません。') + ' 自分の公開リポジトリを表示しています。';
+    notice.textContent = (error.message || t("GitHubに接続できません。")) + t(" 自分の公開リポジトリを表示しています。");
     list.before(notice);
   }
   if (!list.isConnected || currentUser()?.id !== me.id) return;

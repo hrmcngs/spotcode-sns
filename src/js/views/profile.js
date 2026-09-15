@@ -259,13 +259,13 @@ function renderDueBadge(dueTs, hasTime) {
   if (diffMs < 0) {
     state = 'overdue';
     const daysAgo = Math.floor(-diffMs / dayMs);
-    label = daysAgo === 0 ? '本日締切 (超過)' : (daysAgo + '日超過');
+    label = daysAgo === 0 ? t("本日締切 (超過)") : (t("{n}日超過", { n: daysAgo }));
   } else {
     const daysLeft = Math.floor(diffMs / dayMs);
     if (daysLeft <= 3) state = 'soon';
-    if (daysLeft === 0)      label = '今日中';
-    else if (daysLeft === 1) label = 'あと 1 日';
-    else                     label = 'あと ' + daysLeft + ' 日';
+    if (daysLeft === 0)      label = t("今日中");
+    else if (daysLeft === 1) label = t("あと 1 日");
+    else                     label = t("あと {n} 日", { n: daysLeft });
   }
   const d = new Date(dueTs);
   const iso = d.getFullYear() + '-' +
@@ -381,7 +381,7 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = fals
                   : '') +
                 (due ? due : '') +
                 '<a class="profile-tasks__external" href="' + escAttr(it.url) + '" target="_blank" rel="noopener" ' +
-                  'title="GitHub で開く" aria-label="GitHub で開く">' +
+                  ("title=\"" + t("GitHub で開く") + "\" aria-label=\"" + t("GitHub で開く") + "\">") +
                   icon('repo', { size: 12, className: 'icon--inline' }) +
                 '</a>' +
               '</div>' +
@@ -499,10 +499,10 @@ export function renderProfile(handle) {
   const followed   = me && !isMe && (overlayOn ? isOfficialFollowing(u.handle) : isFollowing(me.handle, u.handle));
   const requested  = me && !isMe && (overlayOn ? isOfficialRequested(u.handle) : isRequested(me.handle, u.handle));
   // Follow-button text/style depends on (target privacy) × (current state).
-  const followBtnLabel = followed   ? 'Following'
-                       : requested  ? 'Requested'
+  const followBtnLabel = followed   ? t("Following")
+                       : requested  ? t("Requested")
                        : u.isPrivate ? 'Request'
-                       :              'Follow';
+                       :              t("Follow");
   const followBtnCls   = (followed || requested) ? 'btn--ghost is-following' : 'btn--primary';
 
   // GitHub-org-style header: square avatar, "Organization" subtitle in
@@ -516,7 +516,7 @@ export function renderProfile(handle) {
       '<div class="profile-top">' +
         renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
-          '<a class="btn btn--ghost" href="' + url('/' + u.handle + '/card') + '">名刺を共有</a>' +
+          '<a class="btn btn--ghost" href="' + url('/' + u.handle + '/card') + ("\">" + t("名刺を共有") + "</a>") +
           // Edit only fires when the row actually belongs to the
           // auth user AND the overlay is off (canEdit).
           // Follow as the selected identity; only hide its own Follow button.
@@ -537,7 +537,7 @@ export function renderProfile(handle) {
           // accounts whose DB fields weren't populated as expected.
           // Org accounts are different (they get the Organization
           // subtitle below the name instead).
-          (!u.isOrg ? ' <span class="role-badge role-badge--prog" title="Programmer">{ }</span>' : '') +
+          (!u.isOrg ? (" <span class=\"role-badge role-badge--prog\" title=\"" + t("Programmer") + "\">{ }</span>") : '') +
           // Round language medals next to the {} badge, cache-painted
           // here and re-populated by hydrateProfileLanguages. Empty
           // until first fetch resolves so we don't show a placeholder
@@ -558,7 +558,7 @@ export function renderProfile(handle) {
             '</div>'
           : '') +
         '<div class="profile-handle">@' + maskHandle(u.handle) +
-          (u.isPrivate ? ' <span class="profile-lock" title="非公開アカウント">' + icon('lock', { size: 12, className: 'icon--inline' }) + '</span>' : '') +
+          (u.isPrivate ? (" <span class=\"profile-lock\" title=\"" + t("非公開アカウント") + "\">") + icon('lock', { size: 12, className: 'icon--inline' }) + '</span>' : '') +
         '</div>' +
       '</div>' +
       (u.bio ? '<p class="profile-bio">' + u.bio + '</p>' : '') +
@@ -566,9 +566,9 @@ export function renderProfile(handle) {
         (u.location ? '<span>' + icon('pin',      { size: 14, className: 'icon--inline' }) + u.location + '</span>' : '') +
         (u.joined   ? '<span>' + icon('calendar', { size: 14, className: 'icon--inline' }) + t('profile.joined') + u.joined + '</span>' : '') +
         (ghLink ? '<a class="profile-gh" href="' + ghLink + '" target="_blank" rel="noopener" title="' +
-                    (u.github?.verified ? '本人確認済み' : '未確認') + '">' +
+                    (u.github?.verified ? t("本人確認済み") : t("未確認")) + '">' +
                     icon('github', { size: 14, fill: true, className: 'icon--inline' }) + (u.github.handle || '') +
-                    (u.github?.verified ? ' <span class="gh-verified" title="本人確認済み">✓</span>' : '') +
+                    (u.github?.verified ? (" <span class=\"gh-verified\" title=\"" + t("本人確認済み") + "\">✓</span>") : '') +
                   '</a>' : '') +
       '</div>' +
       renderProfileLinks(u) +
@@ -591,7 +591,7 @@ export function renderProfile(handle) {
             '<div class="profile-activity__head">' +
               icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
               ' GitHub activity ' +
-              '<span class="profile-activity__hint">last 12 months</span>' +
+              ("<span class=\"profile-activity__hint\">" + t("last 12 months") + "</span>") +
             '</div>' +
             '<div class="profile-activity__graph">' +
               renderGrass(cachedContributions(u.github.handle) || emptyGrid()) +
@@ -682,9 +682,9 @@ async function doHydrateProfile(handle) {
       const app = document.getElementById('app');
       if (app) app.innerHTML =
         '<div class="stub">' +
-          '<h2 class="stub__title">読み込みに失敗しました</h2>' +
+          ("<h2 class=\"stub__title\">" + t("読み込みに失敗しました") + "</h2>") +
           '<p class="stub__sub">' + (err.message || '') + '</p>' +
-          '<button class="btn btn--ghost btn--sm" data-profile-retry="1">再試行</button>' +
+          ("<button class=\"btn btn--ghost btn--sm\" data-profile-retry=\"1\">" + t("再試行") + "</button>") +
         '</div>';
       return;
     }
@@ -783,11 +783,11 @@ async function hydrateProfileBody(handle) {
     if (!list) return;
     list.innerHTML =
       '<div class="stub">' +
-        '<h2 class="stub__title">' + icon('lock', { size: 18, className: 'icon--inline' }) + 'このアカウントは非公開です</h2>' +
+        '<h2 class="stub__title">' + icon('lock', { size: 18, className: 'icon--inline' }) + (t("このアカウントは非公開です") + "</h2>") +
         '<p class="stub__sub">' +
           (requested
-            ? '<strong>承認待ち</strong>です。@' + handle + ' が承認すると投稿が見られるようになります。'
-            : 'フォローして承認されると投稿が見られるようになります。') +
+            ? ("<strong>" + t("承認待ち") + "</strong>" + t("です。@")) + handle + t(" が承認すると投稿が見られるようになります。")
+            : t("フォローして承認されると投稿が見られるようになります。")) +
         '</p>' +
       '</div>';
     const countEl = document.getElementById('profile-postcount');
@@ -832,8 +832,8 @@ async function hydrateProfileBody(handle) {
     if (list) {
       list.innerHTML =
         '<div class="stub">' +
-          '<p class="stub__sub">取得に失敗しました: ' + (err.message || '') + '</p>' +
-          '<button class="btn btn--ghost btn--sm" data-profile-retry="1">再試行</button>' +
+          ("<p class=\"stub__sub\">" + t("取得に失敗しました: ")) + (err.message || '') + '</p>' +
+          ("<button class=\"btn btn--ghost btn--sm\" data-profile-retry=\"1\">" + t("再試行") + "</button>") +
         '</div>';
     }
     // Never leave the header count stuck on the "…" placeholder —
@@ -948,8 +948,8 @@ export function openProfileMore(handle, anchor, mode = 'more') {
   const menu = ensureMoreMenu();
   menu.innerHTML =
     (currentUser() && currentUser().handle !== handle && !isPostingAsOfficial()
-      ? '<button type="button" class="profile-more-menu__item" data-more-action="mute">' + (isUserMuted(handle) ? 'ミュート解除' : 'ミュート') + '</button>' +
-        '<button type="button" class="profile-more-menu__item profile-more-menu__item--bad" data-more-action="block">' + (isUserBlocked(handle) ? 'ブロック解除' : 'ブロック') + '</button>' : '') +
+      ? '<button type="button" class="profile-more-menu__item" data-more-action="mute">' + (isUserMuted(handle) ? t("ミュート解除") : t("ミュート")) + '</button>' +
+        '<button type="button" class="profile-more-menu__item profile-more-menu__item--bad" data-more-action="block">' + (isUserBlocked(handle) ? t("ブロック解除") : t("ブロック")) + '</button>' : '') +
     '<button type="button" class="profile-more-menu__item" data-more-action="copy">' +
       icon('share', { size: 14, className: 'icon--inline' }) +
       t('profile.more.copy_link') +
@@ -960,10 +960,10 @@ export function openProfileMore(handle, anchor, mode = 'more') {
     '</button>';
   if (mode === 'following') {
     const me = currentUser();
-    menu.innerHTML = [['friends', 'closeFriends', '親しい友達'], ['org', 'orgMembers', '同じ組織']].map(([kind, field, label]) =>
+    menu.innerHTML = [['friends', 'closeFriends', t("親しい友達")], ['org', 'orgMembers', t("同じ組織")]].map(([kind, field, label]) =>
       '<button type="button" class="profile-more-menu__item" data-more-action="' + kind + '">' + label +
-      ((me?.[field] || []).includes(handle) ? 'から解除 ✓' : 'に登録') + '</button>').join('') +
-      '<button type="button" class="profile-more-menu__item profile-more-menu__item--bad" data-more-action="unfollow">フォロー解除</button>';
+      ((me?.[field] || []).includes(handle) ? t("から解除 ✓") : t("に登録")) + '</button>').join('') +
+      ("<button type=\"button\" class=\"profile-more-menu__item profile-more-menu__item--bad\" data-more-action=\"unfollow\">" + t("フォロー解除") + "</button>");
   }
   const r = anchor.getBoundingClientRect();
   menu.style.position = 'fixed';
@@ -990,7 +990,7 @@ export function openProfileMore(handle, anchor, mode = 'more') {
       try {
         await setUserControl(handle, action === 'mute' ? 'mutes' : 'blocks', enabled);
         refresh();
-        toast(action === 'mute' ? (enabled ? 'ミュートしました' : 'ミュートを解除しました') : (enabled ? 'ブロックしました' : 'ブロックを解除しました'));
+        toast(action === 'mute' ? (enabled ? t("ミュートしました") : t("ミュートを解除しました")) : (enabled ? t("ブロックしました") : t("ブロックを解除しました")));
       } catch (error) { toast(error.message); }
     } else if (action === 'copy') {
       const link = location.origin + url('/' + handle);

@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Quick-nav button row, used by the Not-found / profile-not-found
 // stubs so users don't dead-end on those pages. On mobile the
 // sidebar is hidden behind the hamburger which isn't obvious, so
@@ -10,11 +11,11 @@ import { icon } from './icons.js';
 export function quickNavLinks() {
   const me = currentUser();
   const items = [
-    { href: '/',              ico: 'home',     label: 'Home' },
-    { href: '/spots',         ico: 'pin',      label: 'Spots' },
-    { href: '/notifications', ico: 'bell',     label: 'Notifications', signedInOnly: true },
-    { href: me ? '/' + me.handle : null, ico: 'user', label: 'Profile', signedInOnly: true },
-    { href: '/settings',      ico: 'gear',     label: 'Settings' },
+    { href: '/',              ico: 'home',     label: t("Home") },
+    { href: '/spots',         ico: 'pin',      label: t("Spots") },
+    { href: '/notifications', ico: 'bell',     label: t("Notifications"), signedInOnly: true },
+    { href: me ? '/' + me.handle : null, ico: 'user', label: t("Profile"), signedInOnly: true },
+    { href: '/settings',      ico: 'gear',     label: t("Settings") },
   ];
   return (
     '<div class="quick-nav">' +

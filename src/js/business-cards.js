@@ -1,8 +1,9 @@
+import { t } from './i18n.js';
 import { getClient } from './supa.js';
 import { currentUser } from './auth.js';
 
-export const themes = { midnight: 'ミッドナイト', paper: 'ペーパー', aurora: 'オーロラ', mono: 'Mono', ghost: 'Ghost', spring: '春', summer: '夏', autumn: '秋', winter: '冬' };
-export const baseColors = [['#18181b','チャコール'],['#1d4ed8','ブルー'],['#4f46e5','インディゴ'],['#7c3aed','パープル'],['#be185d','ピンク'],['#b91c1c','レッド'],['#c2410c','オレンジ'],['#0f766e','ティール'],['#15803d','グリーン'],['#f4e8d0','アイボリー'],['#e5e7eb','グレー'],['#ffffff','ホワイト']];
+export const themes = { midnight: t("ミッドナイト"), paper: t("ペーパー"), aurora: t("オーロラ"), mono: t("Mono"), ghost: t("Ghost"), spring: t("春"), summer: t("夏"), autumn: t("秋"), winter: t("冬") };
+export const baseColors = [['#18181b',t("チャコール")],['#1d4ed8',t("ブルー")],['#4f46e5',t("インディゴ")],['#7c3aed',t("パープル")],['#be185d',t("ピンク")],['#b91c1c',t("レッド")],['#c2410c',t("オレンジ")],['#0f766e',t("ティール")],['#15803d',t("グリーン")],['#f4e8d0',t("アイボリー")],['#e5e7eb',t("グレー")],['#ffffff',t("ホワイト")]];
 export function paletteFromBase(value, pattern = 'gradient', theme = 'midnight') {
   const frontColor = /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : '#18181b';
   const rgb = frontColor.slice(1).match(/../g).map(v => parseInt(v,16));
@@ -79,39 +80,39 @@ export function cardLink(handle) {
   return 'https://hrmcngs.github.io/spotcode-sns/#/' + encodeURIComponent(handle) + '/card';
 }
 function check(result) {
-  if (result.error) throw new Error('名刺を読み込み・保存できませんでした。接続を確認して再試行してください。');
+  if (result.error) throw new Error(t("名刺を読み込み・保存できませんでした。接続を確認して再試行してください。"));
   return result.data;
 }
 function actor() {
   const me = currentUser();
-  if (!me?.id) throw new Error('ログインしてください。');
+  if (!me?.id) throw new Error(t("ログインしてください。"));
   return me.id;
 }
 export async function loadCard(handle) {
   const db = await getClient();
   const profile = check(await db.from('profiles').select('id,handle,name').eq('handle', handle).maybeSingle());
-  if (!profile) throw new Error('ユーザーが見つかりません。');
+  if (!profile) throw new Error(t("ユーザーが見つかりません。"));
   const card = check(await db.from('business_cards').select('*').eq('owner_id', profile.id).maybeSingle());
   return { profile, card };
 }
 export async function saveCard(value) {
   const owner_id = actor();
   for (const link of [...inputLinks(value), { url: value.image_link }]) {
-    if (String(link?.url ?? '').trim() && !cardWebURL(link.url)) throw new Error('リンクは http:// または https:// から始まるURLを入力してください。');
+    if (String(link?.url ?? '').trim() && !cardWebURL(link.url)) throw new Error(t("リンクは http:// または https:// から始まるURLを入力してください。"));
   }
-  if (String(value.image_url ?? '').trim() && !cardImageURL(value.image_url)) throw new Error('画像を選び直すか、http(s)形式の画像URLを入力してください。');
+  if (String(value.image_url ?? '').trim() && !cardImageURL(value.image_url)) throw new Error(t("画像を選び直すか、http(s)形式の画像URLを入力してください。"));
   const card = normalizeCard(value);
   if (!['midnight','paper','aurora'].includes(card.theme)) {
     card.design.themeVariant = card.theme;
     card.theme = 'midnight';
   }
-  if (!card.name) throw new Error('名刺に表示する名前を入力してください。');
+  if (!card.name) throw new Error(t("名刺に表示する名前を入力してください。"));
   const db = await getClient();
   return check(await db.from('business_cards').upsert({ ...card, owner_id }).select().single());
 }
 export async function collectCard(owner_id) {
   const collector_id = actor();
-  if (collector_id === owner_id) throw new Error('自分の名刺はコレクションに追加できません。');
+  if (collector_id === owner_id) throw new Error(t("自分の名刺はコレクションに追加できません。"));
   const db = await getClient();
   check(await db.from('business_card_collection').upsert({ collector_id, card_owner_id: owner_id },
     { onConflict: 'collector_id,card_owner_id', ignoreDuplicates: true }));

@@ -1,8 +1,9 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 
-const context = vm.createContext({ AbortSignal });
+const context = vm.createContext({ ...createTestI18n(),  AbortSignal });
 vm.runInContext(fs.readFileSync('src/js/github-repositories.js', 'utf8').replace('export ', ''), context);
 const own = { id: 1, full_name: 'me/site', owner: { id: 10, type: 'User' } };
 const org = { id: 2, full_name: 'org/private', private: true, fork: true, owner: { id: 20, type: 'Organization' } };

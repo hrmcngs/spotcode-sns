@@ -182,7 +182,7 @@ final class AppModel: ObservableObject {
             for notice in fresh.prefix(5) {
                 guard !Task.isCancelled, session?.user.id == owner else { return }
                 let content = UNMutableNotificationContent()
-                content.title = String(format: NSLocalizedString("%@さんが%@で投稿しました", comment: ""), notice.post.displayAuthor?.name ?? NSLocalizedString("ユーザー", comment: ""), notice.district == "地区未設定" ? NSLocalizedString("地区未設定", comment: "") : notice.district)
+                content.title = String(format: NSLocalizedString("%@さんが%@で投稿しました", comment: ""), notice.post.displayAuthor?.name ?? NSLocalizedString("ユーザー", comment: ""), notice.district == NSLocalizedString("地区未設定", comment: "") ? NSLocalizedString("地区未設定", comment: "") : notice.district)
                 content.body = String(notice.post.body.prefix(80)); content.sound = .default
                 content.userInfo = ["spotcode_post": notice.post.id.uuidString]
                 try await center.add(UNNotificationRequest(identifier: "followed-post:" + owner.uuidString + ":" + notice.post.id.uuidString, content: content, trigger: nil))
@@ -352,7 +352,7 @@ final class AppModel: ObservableObject {
             sessionRestorePending = true
             // Include only the OS status, never keychain data or session tokens.
             let status = (error as NSError).code
-            errorMessage = "保存済みのログイン情報を読み込めませんでした（コード: \(status)）。ロック解除後に再試行してください。"
+            errorMessage = String(format: NSLocalizedString("保存済みのログイン情報を読み込めませんでした（コード: %d）。ロック解除後に再試行してください。", comment: ""), status)
         }
     }
 

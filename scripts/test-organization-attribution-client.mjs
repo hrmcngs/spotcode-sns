@@ -1,9 +1,10 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const script = path => fs.readFileSync(path, 'utf8').replace(/^import .*;\n/gm, '').replace(/^export \{.*;\n/gm, '').replace(/^export /gm, '');
 let stored;
-const context = vm.createContext({isHiddenUser: () => false,
+const context = vm.createContext({ ...createTestI18n(), isHiddenUser: () => false,
  refreshGithubMembershipsIfNeeded: async () => {}, canReadGithubOrganization: () => false, console, isDevMode: () => false, localStorage: {getItem: () => null, setItem() {}},
  KEYS: {users: 'users'}, read: (_, fallback) => fallback, write() {},
  currentUser: () => ({id: 'me', handle: 'me'}), isPostingAsOfficial: () => false,
@@ -13,7 +14,7 @@ const context = vm.createContext({isHiddenUser: () => false,
  })}),
 });
 vm.runInContext(script('src/js/data.js'), context);
-const renderer = vm.createContext({isHiddenUser: () => false,
+const renderer = vm.createContext({ ...createTestI18n(), isHiddenUser: () => false,
  getUser: handle => ({handle, name: handle === 'org' ? 'Organization' : 'Me'}), currentUser: () => ({id:'me', handle:'me'}),
  canDisplayCachedPost: p => context.canDisplayCachedPost(p),
  url: s => s, icon: () => '', isLiked: () => false, likeCount: () => 0,

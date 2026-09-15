@@ -35,7 +35,7 @@ function files(list) {
 // Composer-attached photos. Up to PHOTO_CAP (4) entries; layout is a
 // 1/2/2x2 grid depending on count so portrait/landscape mixes still
 // read cleanly without each photo eating a full row.
-function photos(list) {
+export function renderPostPhotos(list) {
   if (!list || !list.length) return '';
   // Validate every src against the image allowlist (data:image/* or
   // http(s)). The earlier version used safeLinkUrl which doesn't
@@ -214,7 +214,7 @@ const VIS_HINT = {
 };
 
 export function renderKindBadge(kind) {
-  if (!['idea', 'bug'].includes(kind)) return '';
+  if (![t("idea"), 'bug'].includes(kind)) return '';
   return ' <span class="post__kind post__kind--' + kind + '" title="' + escape(t('kind.' + kind + '.title')) + '">' +
     icon(kind === 'bug' ? 'bug' : 'spark', { size: 12, className: 'icon--inline' }) + escape(t('kind.' + kind)) + '</span>';
 }
@@ -316,7 +316,7 @@ export function renderPost(p) {
                 '</a>' +
               '</div>';
             })()) +
-            photos(p.photos) +
+            renderPostPhotos(p.photos) +
             poll(p.poll) +
             files(p.files) +
             commit(p.commit) +

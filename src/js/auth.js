@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Auth backed by Supabase. Replaces the previous localStorage-only
 // implementation so accounts survive across devices and browsers.
 //
@@ -68,9 +69,9 @@ async function requireSecondFactorIfNeeded(supa) {
 }
 
 export async function verifyLoginMfa(code) {
-  if (!pendingMfaFactorId) throw new Error('確認中の2段階認証がありません');
+  if (!pendingMfaFactorId) throw new Error(t("確認中の2段階認証がありません"));
   const value = String(code || '').replace(/\s/g, '');
-  if (!/^\d{6}$/.test(value)) throw new Error('6桁の確認コードを入力してください');
+  if (!/^\d{6}$/.test(value)) throw new Error(t("6桁の確認コードを入力してください"));
   const supa = await getClient();
   const { data: challenge, error: challengeError } = await supa.auth.mfa.challenge({ factorId: pendingMfaFactorId });
   if (challengeError) throw new Error(challengeError.message);
@@ -79,7 +80,7 @@ export async function verifyLoginMfa(code) {
     challengeId: challenge.id,
     code: value,
   });
-  if (error) throw new Error('確認コードが違うか、有効期限が切れています');
+  if (error) throw new Error(t("確認コードが違うか、有効期限が切れています"));
   pendingMfaFactorId = null;
   await adoptSession(data?.session || (await supa.auth.getSession()).data?.session || null);
   return cachedUser;
@@ -95,7 +96,7 @@ export async function mfaStatus() {
 export async function beginMfaEnrollment() {
   const supa = await getClient();
   const existing = await mfaStatus();
-  if (existing) throw new Error('2段階認証はすでに有効です');
+  if (existing) throw new Error(t("2段階認証はすでに有効です"));
   const { data: factors } = await supa.auth.mfa.listFactors();
   // `totp` contains verified factors only in some supabase-js versions;
   // abandoned enrollment attempts are still present in `all`.
@@ -109,12 +110,12 @@ export async function beginMfaEnrollment() {
 
 export async function confirmMfaEnrollment(factorId, code) {
   const value = String(code || '').replace(/\s/g, '');
-  if (!/^\d{6}$/.test(value)) throw new Error('6桁の確認コードを入力してください');
+  if (!/^\d{6}$/.test(value)) throw new Error(t("6桁の確認コードを入力してください"));
   const supa = await getClient();
   const { data: challenge, error: challengeError } = await supa.auth.mfa.challenge({ factorId });
   if (challengeError) throw new Error(challengeError.message);
   const { error } = await supa.auth.mfa.verify({ factorId, challengeId: challenge.id, code: value });
-  if (error) throw new Error('確認コードが違うか、有効期限が切れています');
+  if (error) throw new Error(t("確認コードが違うか、有効期限が切れています"));
 }
 
 export async function disableMfa(factorId) {
@@ -126,7 +127,7 @@ export async function disableMfa(factorId) {
 // Build the UI-facing user object from a Supabase auth user + profiles row.
 function projectUser(authUser, profile) {
   if (!authUser || !profile) return null;
-  const name = profile.name || authUser.email || 'User';
+  const name = profile.name || authUser.email || t("User");
   return {
     id:          authUser.id,
     email:       authUser.email,
@@ -357,29 +358,29 @@ async function isHandleTaken(handle) {
 }
 
 function translateAuthError(msg) {
-  if (!msg) return 'エラーが発生しました';
+  if (!msg) return t("エラーが発生しました");
   const m = String(msg).toLowerCase();
-  if (m.includes('invalid login'))           return 'メールアドレスかパスワードが違います';
-  if (m.includes('email not confirmed'))     return 'メール確認が完了していません';
-  if (m.includes('user already registered')) return 'このメールは既に登録されています';
-  if (m.includes('already registered'))      return 'このメールは既に登録されています';
+  if (m.includes('invalid login'))           return t("メールアドレスかパスワードが違います");
+  if (m.includes('email not confirmed'))     return t("メール確認が完了していません");
+  if (m.includes('user already registered')) return t("このメールは既に登録されています");
+  if (m.includes('already registered'))      return t("このメールは既に登録されています");
   return msg;
 }
 
 export async function register({ email, password, handle, name, role, githubHandle, kind }) {
-  if (!emailLooksValid(email))           throw new Error('メールアドレスの形式が正しくありません');
-  if (!password || password.length < 8)  throw new Error('パスワードは 8 文字以上にしてください');
-  if (!handleLooksValid(handle))         throw new Error('ハンドルは半角英数 _ - の 2〜20 文字（先頭は - 不可）');
-  if (!name || !name.trim())             throw new Error('表示名を入力してください');
+  if (!emailLooksValid(email))           throw new Error(t("メールアドレスの形式が正しくありません"));
+  if (!password || password.length < 8)  throw new Error(t("パスワードは 8 文字以上にしてください"));
+  if (!handleLooksValid(handle))         throw new Error(t("ハンドルは半角英数 _ - の 2〜20 文字（先頭は - 不可）"));
+  if (!name || !name.trim())             throw new Error(t("表示名を入力してください"));
   if (role === 'programmer' && !githubHandle) {
-    throw new Error('Programmer ロールは GitHub 連携が必須です');
+    throw new Error(t("Programmer ロールは GitHub 連携が必須です"));
   }
 
-  if (await isHandleTaken(handle)) throw new Error('そのハンドルは既に使われています');
+  if (await isHandleTaken(handle)) throw new Error(t("そのハンドルは既に使われています"));
 
   if (githubHandle) {
     const gh = await fetchGithubProfile(githubHandle);
-    if (!gh) throw new Error('GitHub ユーザー「' + githubHandle + '」が見つかりませんでした');
+    if (!gh) throw new Error(t("GitHub ユーザー「") + githubHandle + t("」が見つかりませんでした"));
   }
 
   const supa = await getClient();
@@ -390,7 +391,7 @@ export async function register({ email, password, handle, name, role, githubHand
   });
   if (error) throw new Error(translateAuthError(error.message));
   const user = data?.user;
-  if (!user) throw new Error('サインアップに失敗しました');
+  if (!user) throw new Error(t("サインアップに失敗しました"));
 
   // The handle_new_user trigger created the profile shell from raw_user_meta_data.
   // Patch the extra fields the trigger doesn't know about.
@@ -431,7 +432,7 @@ export async function login({ email, password }) {
   const { data, error } = await supa.auth.signInWithPassword({ email, password });
   if (error) throw new Error(translateAuthError(error.message));
   if (await requireSecondFactorIfNeeded(supa)) {
-    const err = new Error('ワンタイムパスワードを入力してください');
+    const err = new Error(t("ワンタイムパスワードを入力してください"));
     err.code = 'MFA_REQUIRED';
     throw err;
   }
@@ -445,7 +446,7 @@ export async function login({ email, password }) {
 export async function loginWithUsername({ identifier, password }) {
   const raw = String(identifier || '').trim();
   const handle = raw.replace(/^@/, '').toLowerCase();
-  if (!handle) throw new Error('ユーザー名を入力してください');
+  if (!handle) throw new Error(t("ユーザー名を入力してください"));
   const { url, anonKey } = getConfig();
   const response = await fetch(url.replace(/\/$/, '') + '/functions/v1/username-login', {
     method: 'POST',
@@ -458,7 +459,7 @@ export async function loginWithUsername({ identifier, password }) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.access_token || !payload?.refresh_token) {
-    throw new Error(payload?.error || 'ユーザー名かパスワードが違います');
+    throw new Error(payload?.error || t("ユーザー名かパスワードが違います"));
   }
   const supa = await getClient();
   const { data, error } = await supa.auth.setSession({
@@ -467,7 +468,7 @@ export async function loginWithUsername({ identifier, password }) {
   });
   if (error || !data?.session) throw new Error(translateAuthError(error?.message));
   if (await requireSecondFactorIfNeeded(supa)) {
-    const err = new Error('ワンタイムパスワードを入力してください');
+    const err = new Error(t("ワンタイムパスワードを入力してください"));
     err.code = 'MFA_REQUIRED';
     throw err;
   }
@@ -479,15 +480,15 @@ export async function loginWithUsername({ identifier, password }) {
 // A successful sign-in may rotate the session token, so adopt the returned
 // session immediately and keep the saved-account switcher token current.
 export async function verifyCurrentPassword(password) {
-  if (!cachedUser?.email) throw new Error('ログイン中のメールアドレスを確認できません');
-  if (!password) throw new Error('パスワードを入力してください');
+  if (!cachedUser?.email) throw new Error(t("ログイン中のメールアドレスを確認できません"));
+  if (!password) throw new Error(t("パスワードを入力してください"));
   const supa = await getClient();
   const { data, error } = await supa.auth.signInWithPassword({
     email: cachedUser.email,
     password: String(password),
   });
   if (error || !data?.session) {
-    throw new Error(translateAuthError(error?.message || 'パスワードを確認できませんでした'));
+    throw new Error(translateAuthError(error?.message || t("パスワードを確認できませんでした")));
   }
   await adoptSession(data.session);
   return true;
@@ -502,17 +503,17 @@ export async function verifyCurrentPassword(password) {
 // updateProfile does: writes against the wrong identity would
 // either RLS-403 or silently mutate the brand row.
 export async function updatePassword(newPassword) {
-  if (!cachedUser) throw new Error('ログインしていません');
+  if (!cachedUser) throw new Error(t("ログインしていません"));
   let postingAsOfficial = false;
   try {
     const { isPostingAsOfficial } = await import('./posting-identity.js');
     postingAsOfficial = !!isPostingAsOfficial();
   } catch {}
   if (postingAsOfficial) {
-    throw new Error('公式モード中はパスワードを変更できません。アバターメニューで自分に戻ってから変更してください。');
+    throw new Error(t("公式モード中はパスワードを変更できません。アバターメニューで自分に戻ってから変更してください。"));
   }
   const pw = String(newPassword || '');
-  if (pw.length < 8) throw new Error('パスワードは 8 文字以上で設定してください');
+  if (pw.length < 8) throw new Error(t("パスワードは 8 文字以上で設定してください"));
   const supa = await getClient();
   const { error } = await supa.auth.updateUser({ password: pw });
   if (error) throw new Error(translateAuthError(error.message));
@@ -550,7 +551,7 @@ export async function logout() {
 export function switchAccount(id) {
   if (cachedUser && cachedUser.id === id) return Promise.resolve(cachedUser);
   if (!getRefreshToken(id)) {
-    return Promise.reject(new Error('保存済みアカウントが見つかりません'));
+    return Promise.reject(new Error(t("保存済みアカウントが見つかりません")));
   }
   setPendingSwitch(id);
   // Defer the reload one tick so the caller's UI-disable code can
@@ -590,7 +591,7 @@ function parseMissingCol(error) {
 }
 
 export async function updateProfile(patch) {
-  if (!cachedUser) throw new Error('ログインしていません');
+  if (!cachedUser) throw new Error(t("ログインしていません"));
   let postingAsOfficial = false;
   try {
     const { isPostingAsOfficial } = await import('./posting-identity.js');
@@ -601,9 +602,9 @@ export async function updateProfile(patch) {
     const [{ isAdmin, isOperator }, { getOfficialAccount }] = await Promise.all([
       import('./dev-mode.js'), import('./official-account.js'),
     ]);
-    if (!isAdmin() && !isOperator()) throw new Error('公式プロフィールは管理者・運営者のみ編集できます');
+    if (!isAdmin() && !isOperator()) throw new Error(t("公式プロフィールは管理者・運営者のみ編集できます"));
     const official = await getOfficialAccount();
-    if (!official?.id) throw new Error('公式プロフィールを取得できませんでした');
+    if (!official?.id) throw new Error(t("公式プロフィールを取得できませんでした"));
     targetId = official.id;
   }
   const supa = await getClient();
@@ -647,11 +648,11 @@ export async function updateProfile(patch) {
       const { data: updatedRows, error } = await withTimeout(
         postingAsOfficial ? query.select('id') : query,
         20000,
-        postingAsOfficial ? '公式プロフィール保存' : 'プロフィール保存',
+        postingAsOfficial ? t("公式プロフィール保存") : t("プロフィール保存"),
       );
       if (!error) {
         if (postingAsOfficial && Array.isArray(updatedRows) && updatedRows.length === 0) {
-          throw new Error('公式プロフィールを保存できません。Supabase SQL Editorで Stage 32 を実行してください。');
+          throw new Error(t("公式プロフィールを保存できません。Supabase SQL Editorで Stage 32 を実行してください。"));
         }
         break;
       }
@@ -665,8 +666,8 @@ export async function updateProfile(patch) {
     }
     if (droppedCols.length && Object.keys(db).length === 0) {
       throw new Error(
-        'DB に列が無いため保存できませんでした: ' + droppedCols.join(', ') +
-        '。docs/supabase-schema.sql の該当 Stage を Supabase で実行してください。'
+        t("DB に列が無いため保存できませんでした: ") + droppedCols.join(', ') +
+        t("。docs/supabase-schema.sql の該当 Stage を Supabase で実行してください。")
       );
     }
   }
@@ -674,9 +675,9 @@ export async function updateProfile(patch) {
     const { data: row, error } = await withTimeout(
       supa.from('profiles').select('*').eq('id', targetId).maybeSingle(),
       12000,
-      '公式プロフィール確認',
+      t("公式プロフィール確認"),
     );
-    if (error || !row) throw new Error(error?.message || '公式プロフィールを再取得できませんでした');
+    if (error || !row) throw new Error(error?.message || t("公式プロフィールを再取得できませんでした"));
     const updated = projectUser({ id: row.id, email: '' }, row);
     const { setCachedOfficialAccount } = await import('./official-account.js');
     setCachedOfficialAccount({

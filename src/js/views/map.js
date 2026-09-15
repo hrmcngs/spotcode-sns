@@ -5,6 +5,7 @@
 // is within geo-gate's radius of the pin. Otherwise the popup explains
 // "come within Xm to read this idea".
 
+import { renderPostPhotos } from '../post.js';
 import { loadMaps } from '../gmap.js';
 import { postsWithSpots, cachedPosts, canDisplayCachedPost, canonicalCity } from '../data.js';
 import { t }        from '../i18n.js';
@@ -48,7 +49,6 @@ export function renderMap(city) {
 
 function pinPopupHtml(post) {
   const building = post.spot?.label || post.spot?.addressDetails?.full || '';
-  const author = post.author?.name || post.authorHandle || '';
   const handle = post.authorHandle || '';
   const near = isNearSpotSync(post.spot.lat, post.spot.lng);
   const me = currentUser();
@@ -63,7 +63,8 @@ function pinPopupHtml(post) {
 
   if (canRead) {
     return headerHtml +
-      '<div class="map-popup__body">' + escape(post.body || '') + '</div>';
+      '<div class="map-popup__body">' + escape(post.body || '') + '</div>' +
+      renderPostPhotos(post.photos);
   }
   return headerHtml +
     '<div class="map-popup__locked">' +
@@ -91,17 +92,17 @@ export async function hydrateMap(city, focus = null) {
   // Leaflet CDN round-trip; parallelising them cuts total wall-clock
   // to the slowest single leg.
   const cachedForPaint = cachedPosts('spots') || [];
-  const postsPromise = withTimeout(postsWithSpots(), 10000, '地図投稿取得').catch((err) => {
+  const postsPromise = withTimeout(postsWithSpots(), 10000, t("地図投稿取得")).catch((err) => {
     console.warn('hydrateMap: postsWithSpots failed, using cache', err);
     return cachedForPaint;
   });
-  const herePromise = withTimeout(getMyLocation(), 8000, '現在地取得').catch(() => null);
+  const herePromise = withTimeout(getMyLocation(), 8000, t("現在地取得")).catch(() => null);
   // Coarse IP fix only when the exact fix isn't already sitting in
   // the module-level cache. Fires in parallel so it's ready by the
   // time we know `here` is null.
   const approxPromise = cachedLocation()
     ? Promise.resolve(null)
-    : withTimeout(getApproxLocationViaIP(), 6000, '推定位置取得').catch(() => null);
+    : withTimeout(getApproxLocationViaIP(), 6000, t("推定位置取得")).catch(() => null);
 
   let L;
   try {
@@ -156,12 +157,12 @@ export async function hydrateMap(city, focus = null) {
     maxZoom: 19,
   });
   const gsiStandard = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>',
+    attribution: ("<a href=\"https://maps.gsi.go.jp/development/ichiran.html\" target=\"_blank\" rel=\"noopener\">" + t("国土地理院") + "</a>"),
     maxZoom: 18,
     maxNativeZoom: 18,
   });
   const gsiAerial = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
-    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院 シームレス空中写真</a>',
+    attribution: ("<a href=\"https://maps.gsi.go.jp/development/ichiran.html\" target=\"_blank\" rel=\"noopener\">" + t("国土地理院 シームレス空中写真") + "</a>"),
     maxZoom: 18,
     maxNativeZoom: 18,
   });
@@ -171,7 +172,7 @@ export async function hydrateMap(city, focus = null) {
   });
   osm.addTo(mapInst);
   L.control.layers(
-    { '地図 (OSM)': osm, '地図 (国土地理院)': gsiStandard, '航空写真 (日本)': gsiAerial, '航空写真 (世界)': esriAerial },
+    { [t("地図 (OSM)")]: osm, [t("地図 (国土地理院)")]: gsiStandard, [t("航空写真 (日本)")]: gsiAerial, [t("航空写真 (世界)")]: esriAerial },
     null,
     { position: 'topright', collapsed: true }
   ).addTo(mapInst);
@@ -188,7 +189,7 @@ export async function hydrateMap(city, focus = null) {
     usingFallbackTiles = true;
     try { mapInst.removeLayer(osm); } catch {}
     gsiStandard.addTo(mapInst);
-    if (status) status.textContent = 'モバイル回線向けの代替地図に切り替えました';
+    if (status) status.textContent = t("モバイル回線向けの代替地図に切り替えました");
   });
 
   if (here) {
@@ -222,7 +223,23 @@ export async function hydrateMap(city, focus = null) {
     const m = L.circleMarker([p.spot.lat, p.spot.lng], {
       radius: 7, weight: 2, color: '#f91880', fillColor: '#f91880', fillOpacity: 0.85,
     });
-    m.bindPopup(() => pinPopupHtml(p), { className: 'map-popup' });
+    m.bindPopup(() => {
+      const content = document.createElement('div');
+      content.innerHTML = pinPopupHtml(p);
+      // Leaflet stops popup clicks before they reach main.js's document
+      // handler, so bind the shared lightbox directly to this popup.
+      content.addEventListener('click', (event) => {
+        const photo = event.target.closest('.post__photo');
+        if (!photo) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const images = [...content.querySelectorAll('.post__photo')];
+        import('./photo-lightbox.js').then(({ openLightbox }) => {
+          openLightbox(images.map(image => image.getAttribute('src')), images.indexOf(photo));
+        });
+      });
+      return content;
+    }, { className: 'map-popup', maxWidth: 280, maxHeight: 360 });
     markerLayer.addLayer(m);
     if (hasFocus && (
       (focus.postId && p.id === focus.postId) ||
@@ -256,8 +273,8 @@ export async function hydrateMap(city, focus = null) {
     } else if (approxIp) {
       // IP-only fix — show the city name so the user knows the
       // centering is approximate and that the unlock gate is inactive.
-      const where = approxIp.city || approxIp.country || '推定位置';
-      status.textContent = spotted.length + ' 件のピン · 地図はおおよそ ' + where + ' 中心 (IP 推定)';
+      const where = approxIp.city || approxIp.country || t("推定位置");
+      status.textContent = t("{n} 件のピン · 地図はおおよそ {where} 中心 (IP 推定)", { n: spotted.length, where });
     } else if (permissionDenied()) {
       status.textContent = t('map.subtitle_denied', { n: spotted.length });
     } else {

@@ -1,10 +1,11 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const storage = new Map();
 let owner = 'me', requests = 0;
 let rows = Array.from({length: 40}, (_,i) => ({id:String(i),author_id:'author',body:'Pin',spot:{lat:35,lng:135,addressDetails:{city:i===39?'京都市':'世田谷区'}}}));
-const ctx = vm.createContext({
+const ctx = vm.createContext({ ...createTestI18n(), 
  refreshGithubMembershipsIfNeeded:async()=>{},
  currentUser:()=>({id:owner}), isHiddenUser:(_,id)=>id==='muted',isDevMode:()=>false,
  localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},

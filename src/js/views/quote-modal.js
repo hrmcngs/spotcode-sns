@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 // Quote modal — opens when the user picks "引用" from the repost menu.
 // Shows a small composer (body only — quotes don't take a spot or URL
 // in this first cut) with the quoted post embedded below for context.
@@ -30,7 +31,7 @@ export async function openQuoteModal(postId) {
   if (!me) return;
   let quoted;
   try { quoted = await getPost(postId); } catch { quoted = null; }
-  if (!quoted) { alert('引用元の投稿が見つかりません'); return; }
+  if (!quoted) { alert(t("引用元の投稿が見つかりません")); return; }
 
   if (rootEl) close();
   const host = document.createElement('div');
@@ -38,12 +39,12 @@ export async function openQuoteModal(postId) {
     '<div class="modal" id="quote-modal">' +
       '<div class="modal__backdrop" data-quote-close></div>' +
       '<div class="modal__card" role="dialog" aria-labelledby="quote-title">' +
-        '<button class="modal__close" data-quote-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
-        '<h2 id="quote-title" class="auth-form__h">引用</h2>' +
+        ("<button class=\"modal__close\" data-quote-close aria-label=\"" + t("Close") + "\">") + icon('close', { size: 18 }) + '</button>' +
+        ("<h2 id=\"quote-title\" class=\"auth-form__h\">" + t("引用") + "</h2>") +
         '<form class="quote-form" id="quote-form">' +
           '<div class="quote-form__row">' +
             renderAvatar(me, { size: 'lg' }) +
-            '<textarea name="body" rows="3" maxlength="1000" placeholder="このアイデアに加えて…" required></textarea>' +
+            ("<textarea name=\"body\" rows=\"3\" maxlength=\"1000\" placeholder=\"" + t("このアイデアに加えて…") + "\" required></textarea>") +
           '</div>' +
           '<div class="quote-card quote-card--preview">' +
             '<div class="quote-card__head">' +
@@ -56,8 +57,8 @@ export async function openQuoteModal(postId) {
             '</div>' +
           '</div>' +
           '<div class="edit-actions">' +
-            '<button type="button" class="btn btn--ghost" data-quote-close>Cancel</button>' +
-            '<button type="submit" class="btn btn--primary">引用してポスト</button>' +
+            ("<button type=\"button\" class=\"btn btn--ghost\" data-quote-close>" + t("Cancel") + "</button>") +
+            ("<button type=\"submit\" class=\"btn btn--primary\">" + t("引用してポスト") + "</button>") +
           '</div>' +
           '<p class="auth-error" data-error></p>' +
         '</form>' +
@@ -77,7 +78,7 @@ export async function openQuoteModal(postId) {
     const err = form.querySelector('[data-error]');
     err.textContent = '';
     const body = String(form.querySelector('textarea[name="body"]').value || '').trim();
-    if (!body) { err.textContent = '本文を入力してください'; return; }
+    if (!body) { err.textContent = t("本文を入力してください"); return; }
     const submitBtn = form.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
     try {

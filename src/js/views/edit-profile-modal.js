@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 import { navigate } from '../router.js';
 // Edit-profile modal. Pre-fills with the current user, lets them
 // change display name, avatar (image upload or 1-2 char fallback),
@@ -31,21 +32,21 @@ function githubVerifyBlock(u) {
     const linked = u.github?.verified && u.github?.handle;
     return '<div class="verify-row' + (linked ? ' verify-row--ok' : '') + '" id="verify-row">' +
       '<div class="verify-row__title">' + icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
-      (linked ? '@' + attr(u.github.handle) + ' と連携済み ✓' : 'GitHub Organization と連携') + '</div>' +
-      '<p class="verify-row__hint">組織アカウントは、Organizationが所有する公開の .github リポジトリに確認ファイルを追加して連携します。設定画面で確認コードを発行し、ファイルを保存してから承認してください。</p>' +
+      (linked ? '@' + attr(u.github.handle) + t(" と連携済み ✓") : t("GitHub Organization と連携")) + '</div>' +
+      ("<p class=\"verify-row__hint\">" + t("組織アカウントは、Organizationが所有する公開の .github リポジトリに確認ファイルを追加して連携します。設定画面で確認コードを発行し、ファイルを保存してから承認してください。") + "</p>") +
       '<div class="edit-actions"><button type="button" class="btn btn--primary btn--sm" id="verify-organization">' +
-      (linked ? 'Organizationの連携を確認・変更' : 'Organizationと連携する') + '</button></div></div>';
+      (linked ? t("Organizationの連携を確認・変更") : t("Organizationと連携する")) + '</button></div></div>';
   }
   if (u.github?.verified && u.github?.handle) {
     return (
       '<div class="verify-row verify-row--ok" id="verify-row">' +
         '<div class="verify-row__title">' +
           icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
-          '@' + attr(u.github.handle) + ' と連携済み ✓' +
+          '@' + attr(u.github.handle) + t(" と連携済み ✓") +
         '</div>' +
         '<div class="edit-actions">' +
-          '<button type="button" class="btn btn--ghost btn--sm" id="verify-permissions">GitHubの連携権限を更新</button>' +
-          '<button type="button" class="btn btn--ghost btn--sm" id="verify-unlink">連携を解除</button>' +
+          ("<button type=\"button\" class=\"btn btn--ghost btn--sm\" id=\"verify-permissions\">" + t("GitHubの連携権限を更新") + "</button>") +
+          ("<button type=\"button\" class=\"btn btn--ghost btn--sm\" id=\"verify-unlink\">" + t("連携を解除") + "</button>") +
           '<span class="verify-row__status" id="verify-status"></span>' +
         '</div>' +
       '</div>'
@@ -55,15 +56,15 @@ function githubVerifyBlock(u) {
     '<div class="verify-row" id="verify-row">' +
       '<div class="verify-row__title">' +
         icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
-        'GitHub と連携' +
+        t("GitHub と連携") +
       '</div>' +
       '<p class="verify-row__hint">' +
-        '最初のGitHub連携で、プロフィールとOrganizationへのアクセスをまとめて許可します。GitHubの認証画面で、連携するOrganizationの「Grant」または「Request」を選んでください。Organizationの設定によっては管理者の承認が必要です。非公開リポジトリへのアクセスは、別途許可した場合のみ利用します。連携後、プロフィールに GitHub アイコンと本人確認済みバッジが付きます。' +
+        t("最初のGitHub連携で、プロフィールとOrganizationへのアクセスをまとめて許可します。GitHubの認証画面で、連携するOrganizationの「Grant」または「Request」を選んでください。Organizationの設定によっては管理者の承認が必要です。非公開リポジトリへのアクセスは、別途許可した場合のみ利用します。連携後、プロフィールに GitHub アイコンと本人確認済みバッジが付きます。") +
       '</p>' +
       '<div class="edit-actions">' +
         '<button type="button" class="btn btn--primary btn--sm" id="verify-link">' +
           icon('github', { size: 14, fill: true, className: 'icon--inline' }) +
-          ' GitHub で連携する' +
+          t(" GitHub で連携する") +
         '</button>' +
         '<span class="verify-row__status" id="verify-status"></span>' +
       '</div>' +
@@ -76,8 +77,8 @@ function template(u, editingOfficial) {
     '<div class="modal" id="edit-profile-modal" hidden>' +
       '<div class="modal__backdrop" data-edit-close></div>' +
       '<div class="modal__card" role="dialog" aria-labelledby="edit-title">' +
-        '<button class="modal__close" data-edit-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
-        '<h2 id="edit-title" class="auth-form__h">Edit profile</h2>' +
+        ("<button class=\"modal__close\" data-edit-close aria-label=\"" + t("Close") + "\">") + icon('close', { size: 18 }) + '</button>' +
+        ("<h2 id=\"edit-title\" class=\"auth-form__h\">" + t("Edit profile") + "</h2>") +
 
         '<div class="avatar-edit">' +
           '<div class="avatar-edit__preview" id="avatar-preview">' +
@@ -85,26 +86,26 @@ function template(u, editingOfficial) {
           '</div>' +
           '<div class="avatar-edit__controls">' +
             '<label class="btn btn--ghost btn--sm">' +
-              '画像をアップロード' +
+              t("画像をアップロード") +
               '<input type="file" id="avatar-file" accept="image/*" hidden>' +
             '</label>' +
             (u.avatarImage
-              ? '<button type="button" class="btn btn--ghost btn--sm" id="avatar-clear">画像を消す</button>'
+              ? ("<button type=\"button\" class=\"btn btn--ghost btn--sm\" id=\"avatar-clear\">" + t("画像を消す") + "</button>")
               : '') +
             '<div class="avatar-shape">' +
               '<label class="shape-opt"><input type="radio" name="shape" value="round"' +
-                (u.avatarShape !== 'square' ? ' checked' : '') + '><span>● 円</span></label>' +
+                (u.avatarShape !== 'square' ? ' checked' : '') + ("><span>" + t("● 円") + "</span></label>") +
               '<label class="shape-opt"><input type="radio" name="shape" value="square"' +
-                (u.avatarShape === 'square' ? ' checked' : '') + '><span>■ 角丸</span></label>' +
+                (u.avatarShape === 'square' ? ' checked' : '') + ("><span>" + t("■ 角丸") + "</span></label>") +
             '</div>' +
           '</div>' +
         '</div>' +
 
         '<form class="auth-form" id="edit-profile-form">' +
-          '<label>Display name <span class="hint">(画像未設定時のイニシャルは表示名の先頭文字)</span>' +
+          ("<label>Display name <span class=\"hint\">" + t("(画像未設定時のイニシャルは表示名の先頭文字)") + "</span>") +
             '<input name="name" maxlength="40" value="' + attr(u.name) + '" required>' +
           '</label>' +
-          '<label>Bio <span class="hint">(280 文字まで)</span>' +
+          ("<label>Bio <span class=\"hint\">" + t("(280 文字まで)") + "</span>") +
             '<textarea name="bio" maxlength="280" rows="3">' + attr(u.bio || '') + '</textarea>' +
           '</label>' +
           '<label>Location' +
@@ -113,18 +114,18 @@ function template(u, editingOfficial) {
           '<label>Website' +
             '<input name="website" type="url" maxlength="200" value="' + attr(u.website || '') + '" placeholder="https://example.com" inputmode="url">' +
           '</label>' +
-          '<label>Twitter / X <span class="hint">(@ なしのハンドルでも URL でも OK)</span>' +
+          ("<label>Twitter / X <span class=\"hint\">" + t("(@ なしのハンドルでも URL でも OK)") + "</span>") +
             '<input name="twitter" maxlength="30" value="' + attr(u.twitter || '') + '" placeholder="hrmcngs">' +
           '</label>' +
-          '<label>Instagram <span class="hint">(@ なしのハンドルでも URL でも OK)</span>' +
+          ("<label>Instagram <span class=\"hint\">" + t("(@ なしのハンドルでも URL でも OK)") + "</span>") +
             '<input name="instagram" maxlength="30" value="' + attr(u.instagram || '') + '" placeholder="hrmcngs">' +
           '</label>' +
 
           (editingOfficial ? '' : githubVerifyBlock(u)) +
 
           '<div class="edit-actions">' +
-            '<button type="button" class="btn btn--ghost" data-edit-close>Cancel</button>' +
-            '<button type="submit" class="btn btn--primary">Save</button>' +
+            ("<button type=\"button\" class=\"btn btn--ghost\" data-edit-close>" + t("Cancel") + "</button>") +
+            ("<button type=\"submit\" class=\"btn btn--primary\">" + t("Save") + "</button>") +
           '</div>' +
           '<p class="auth-error" data-error></p>' +
         '</form>' +
@@ -133,12 +134,12 @@ function template(u, editingOfficial) {
         // single-purpose profile-fields write. Empty input + Save
         // does nothing; non-empty hits Supabase auth.updateUser.
         (editingOfficial ? '' : '<form class="auth-form" id="edit-password-form">' +
-          '<label>パスワード変更 <span class="hint">(8 文字以上、変更しないなら空のまま)</span>' +
+          ("<label>" + t("パスワード変更 ") + "<span class=\"hint\">" + t("(8 文字以上、変更しないなら空のまま)") + "</span>") +
             '<input name="newPassword" type="password" minlength="8" ' +
-              'autocomplete="new-password" placeholder="新しいパスワード">' +
+              ("autocomplete=\"new-password\" placeholder=\"" + t("新しいパスワード") + "\">") +
           '</label>' +
           '<div class="edit-actions">' +
-            '<button type="submit" class="btn btn--ghost btn--sm">パスワードを更新</button>' +
+            ("<button type=\"submit\" class=\"btn btn--ghost btn--sm\">" + t("パスワードを更新") + "</button>") +
             '<span class="verify-row__status" data-password-status></span>' +
           '</div>' +
         '</form>') +
@@ -189,9 +190,9 @@ export function openEditProfile(profile) {
       setPreview({ ...u, avatarImage: dataUrl, avatarShape: stagedAvatarShape });
     } catch (ex) {
       const map = {
-        NOT_IMAGE:    '画像ファイルを選んでください',
-        TOO_LARGE:    '8MB 以上のファイルは扱えません',
-        IMAGE_DECODE: '画像のデコードに失敗しました',
+        NOT_IMAGE:    t("画像ファイルを選んでください"),
+        TOO_LARGE:    t("8MB 以上のファイルは扱えません"),
+        IMAGE_DECODE: t("画像のデコードに失敗しました"),
       };
       err.textContent = map[ex.message] || ex.message;
     } finally {
@@ -235,7 +236,7 @@ export function openEditProfile(profile) {
     }
     vLink?.addEventListener('click', async () => {
       vLink.disabled = true;
-      showVerify('GitHub に移動します…');
+      showVerify(t("GitHub に移動します…"));
       try {
         // Redirects the browser away — after return, syncGithubIdentity()
         // in main.js writes the profile row and refreshProfile() picks
@@ -250,7 +251,7 @@ export function openEditProfile(profile) {
     document.getElementById('verify-permissions')?.addEventListener('click', async (event) => {
       const button = event.currentTarget;
       button.disabled = true;
-      showVerify('GitHub に移動します…');
+      showVerify(t("GitHub に移動します…"));
       try {
         if (currentUser()?.isOrg) { close(); navigate('/settings/organization'); }
         else await linkGithubForOrganizations(window.location.href);
@@ -262,9 +263,9 @@ export function openEditProfile(profile) {
       navigate('/settings/organization');
     });
     vUnlink?.addEventListener('click', async () => {
-      if (!confirm('GitHub との連携を解除しますか？ アイコンと本人確認済みバッジが消えます。')) return;
+      if (!confirm(t("GitHub との連携を解除しますか？ アイコンと本人確認済みバッジが消えます。"))) return;
       vUnlink.disabled = true;
-      showVerify('解除中…');
+      showVerify(t("解除中…"));
       try {
         await unlinkGithub();
         // Swap the verify-row markup in place with the "not linked"
@@ -312,7 +313,7 @@ export function openEditProfile(profile) {
       err.textContent = ex.message || String(ex);
       err.classList.add('is-visible');
       err.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = t("Save"); }
     }
   });
 
@@ -333,11 +334,11 @@ export function openEditProfile(profile) {
     if (!next) return;
     const submitBtn = pwForm.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
-    showPw('更新中…');
+    showPw(t("更新中…"));
     try {
       await updatePassword(next);
       if (input) input.value = '';
-      showPw('✓ パスワードを更新しました', 'ok');
+      showPw(t("✓ パスワードを更新しました"), 'ok');
     } catch (ex) {
       showPw(ex.message || String(ex), 'bad');
     } finally {

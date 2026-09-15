@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Periodic "nearby spot" detector. While the tab is visible and push
 // is enabled, sample geolocation every few minutes, compare against
 // the spots in the home timeline cache, and fire an OS banner when a
@@ -103,9 +104,9 @@ async function tick() {
       continue;
     }
     const author = p.author?.name || '@' + (p.authorHandle || '?');
-    const where = p.spot.label || p.spot.addressDetails?.city || 'すぐ近く';
+    const where = p.spot.label || p.spot.addressDetails?.city || t("すぐ近く");
     const excerpt = (p.body || '').slice(0, 60);
-    showPush('近くに ' + author + ' のアイデアがあります', {
+    showPush(t("近くに {name} のアイデアがあります", { name: author }), {
       body: where + (excerpt ? '\n' + excerpt : ''),
       tag: 'nearby:' + p.id,
       url: base + 'post/' + p.id,

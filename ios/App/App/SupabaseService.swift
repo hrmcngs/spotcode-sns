@@ -753,7 +753,7 @@ actor SupabaseService {
         result += try await followedPostsResult.compactMap { row in
             guard let actor = row.post.displayAuthor else { return nil }
             return AppNotification(id: "followed-post:\(row.post.id.uuidString)", kind: .followedPost, actor: actor,
-                createdAt: row.post.createdAt, post: row.post, context: String(format: NSLocalizedString("%@で投稿しました", comment: ""), row.district == "地区未設定" ? NSLocalizedString("地区未設定", comment: "") : row.district), followStatus: nil)
+                createdAt: row.post.createdAt, post: row.post, context: String(format: NSLocalizedString("%@で投稿しました", comment: ""), row.district == NSLocalizedString("地区未設定", comment: "") ? NSLocalizedString("地区未設定", comment: "") : row.district), followStatus: nil)
         }
         return Array(result.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.prefix(30))
     }
@@ -945,7 +945,7 @@ enum GitHubTaskLoader {
 }
 
 struct BusinessCardDesign: Codable, Equatable {
-    static let baseColors: [(String, String)] = [("#18181b","チャコール"),("#1d4ed8","ブルー"),("#4f46e5","インディゴ"),("#7c3aed","パープル"),("#be185d","ピンク"),("#b91c1c","レッド"),("#c2410c","オレンジ"),("#0f766e","ティール"),("#15803d","グリーン"),("#f4e8d0","アイボリー"),("#e5e7eb","グレー"),("#ffffff","ホワイト")]
+    static let baseColors: [(String, String)] = [("#18181b",NSLocalizedString("チャコール", comment: "")),("#1d4ed8",NSLocalizedString("ブルー", comment: "")),("#4f46e5",NSLocalizedString("インディゴ", comment: "")),("#7c3aed",NSLocalizedString("パープル", comment: "")),("#be185d",NSLocalizedString("ピンク", comment: "")),("#b91c1c",NSLocalizedString("レッド", comment: "")),("#c2410c",NSLocalizedString("オレンジ", comment: "")),("#0f766e",NSLocalizedString("ティール", comment: "")),("#15803d",NSLocalizedString("グリーン", comment: "")),("#f4e8d0",NSLocalizedString("アイボリー", comment: "")),("#e5e7eb",NSLocalizedString("グレー", comment: "")),("#ffffff",NSLocalizedString("ホワイト", comment: ""))]
     mutating func applyBaseColor(_ hex: String, theme: String = "midnight") {
         guard hex.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil,
               let value = UInt32(hex.dropFirst(), radix: 16) else { return }

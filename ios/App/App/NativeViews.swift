@@ -55,7 +55,7 @@ private enum SpotcodeLayout {
 private enum MacTextSize {
     static let baseScale: CGFloat = 1 / 0.77
     static let key = "spotcode.mac.textSize"
-    static let labels = ["小さい", "標準", "大きい", "特大", "最大"]
+    static let labels = [NSLocalizedString("小さい", comment: ""), NSLocalizedString("標準", comment: ""), NSLocalizedString("大きい", comment: ""), NSLocalizedString("特大", comment: ""), NSLocalizedString("最大", comment: "")]
     static func dynamicTypeSize(_ selection: Int) -> DynamicTypeSize {
         switch selection {
         case 0: return .small
@@ -230,7 +230,7 @@ struct RootView: View {
                                         HStack {
                                             Button { recommendedProfileHandle = nil } label: {
                                                 Image(systemName: "arrow.left").frame(width: 44, height: 44)
-                                            }.accessibilityLabel("戻る")
+                                            }.accessibilityLabel(NSLocalizedString("戻る", comment: ""))
                                             Spacer()
                                         }.padding(.horizontal, 12)
                                         ProfileLookupView(handle: recommendedProfileHandle ?? "")
@@ -307,6 +307,7 @@ struct RootView: View {
             if model.session != nil && !model.requiresReauthentication && !screenshotMode { showLogin = false }
         }
         .onChange(of: scenePhase) { phase in
+            PostLocationGate.shared.setActive(phase == .active)
             if phase == .active && model.sessionRestorePending {
                 Task { await model.bootstrap() }
             }
@@ -331,11 +332,11 @@ struct RootView: View {
         #endif
         .sheet(isPresented: $showLogin) { LoginView(isPresented: $showLogin).environmentObject(model) }
         .sheet(isPresented: $composing) { ComposeView(isPresented: $composing).environmentObject(model) }
-        .alert("エラー", isPresented: Binding(
+        .alert(NSLocalizedString("エラー", comment: ""), isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
         )) {
-            if model.sessionRestorePending { Button("再試行") { Task { await model.bootstrap() } } }
+            if model.sessionRestorePending { Button(NSLocalizedString("再試行", comment: "")) { Task { await model.bootstrap() } } }
             Button("OK") {}
         } message: { Text(LocalizedStringKey(model.errorMessage ?? "")) }
         .onChange(of: model.requiresReauthentication) { required in
@@ -363,8 +364,8 @@ struct RootView: View {
                 ProfileView(profile: profile).id(profile.id)
             } else {
                 VStack(spacing: 16) {
-                    ContentUnavailableViewCompat(title: "ログインしてください", icon: "person.crop.circle")
-                    Button("ログイン") {
+                    ContentUnavailableViewCompat(title: NSLocalizedString("ログインしてください", comment: ""), icon: "person.crop.circle")
+                    Button(NSLocalizedString("ログイン", comment: "")) {
                         if model.savedAccounts.isEmpty { showLogin = true }
                         else { showAccounts = true }
                     }.buttonStyle(OutlineButtonStyle(filled: true))
@@ -410,14 +411,14 @@ private struct TopBar: View {
             #endif
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass").foregroundColor(SpotcodeTheme.muted)
-                TextField("Search…", text: $query).foregroundColor(SpotcodeTheme.text)
+                TextField(NSLocalizedString("Search…", comment: ""), text: $query).foregroundColor(SpotcodeTheme.text)
                     .focused($searchFocused)
                     .onSubmit { if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { showSearch = true } }
                 #if targetEnvironment(macCatalyst)
                 Button { searchFocused = true } label: {
                     Text("/").foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 6)
                         .overlay(RoundedRectangle(cornerRadius: 4).stroke(SpotcodeTheme.border))
-                }.buttonStyle(SpotcodePlainButtonStyle()).keyboardShortcut("/", modifiers: []).accessibilityLabel("Search…")
+                }.buttonStyle(SpotcodePlainButtonStyle()).keyboardShortcut("/", modifiers: []).accessibilityLabel(NSLocalizedString("Search…", comment: ""))
                 #endif
             }
             .padding(.horizontal, 10).frame(height: SpotcodeLayout.iconSize)
@@ -427,7 +428,7 @@ private struct TopBar: View {
             Spacer(minLength: 0)
             #if targetEnvironment(macCatalyst)
             Button { section = .notifications; navigationReset = UUID() } label: { Image(systemName: "bell") }
-                .spotcodeIconButton().accessibilityLabel("Notifications")
+                .spotcodeIconButton().accessibilityLabel(NSLocalizedString("Notifications", comment: ""))
             #endif
             Button { section = .settings; navigationReset = UUID() } label: { Image(systemName: "gearshape") }.spotcodeIconButton()
             Button {
@@ -482,7 +483,7 @@ private struct DesktopNavigation: View {
                 } label: {
                     HStack {
                         Image(systemName: "plus")
-                        if !compact { Text("New idea").fontWeight(.bold) }
+                        if !compact { Text(NSLocalizedString("New idea", comment: "")).fontWeight(.bold) }
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
                     .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
@@ -503,7 +504,7 @@ private struct DesktopNavigation: View {
                     .padding(.horizontal, compact ? 0 : 16).padding(.vertical, 20)
                     .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
                     .contentShape(Rectangle()).foregroundColor(SpotcodeTheme.text)
-                }.buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel("アカウント")
+                }.buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel(NSLocalizedString("アカウント", comment: ""))
             }
         }
     }
@@ -542,7 +543,7 @@ private struct DesktopCommunity: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                DesktopRailCard("Your activity", subtitle: "last 12 months") {
+                DesktopRailCard("Your activity", subtitle: NSLocalizedString("last 12 months", comment: "")) {
                     if let handle = model.displayProfile?.githubHandle, !handle.isEmpty {
                         if contributions.isEmpty {
                             Color.clear.frame(height: 48)
@@ -573,7 +574,7 @@ private struct DesktopCommunity: View {
                     }
                 }
                 if loading || !profiles.isEmpty || message != nil {
-                DesktopRailCard("Who to follow") {
+                DesktopRailCard(NSLocalizedString("Who to follow", comment: "")) {
                     if loading { ProgressView() }
                     ForEach(profiles) { profile in
                         HStack(spacing: 10) {
@@ -589,7 +590,7 @@ private struct DesktopCommunity: View {
                             }.buttonStyle(SpotcodePlainButtonStyle())
                                 .accessibilityIdentifier("desktop.recommendation.\(profile.handle)")
                             if let id = profile.id {
-                                Button(requested.contains(id) ? "Requested" : (followed.contains(id) ? "Following" : "Follow")) { follow(profile) }
+                                Button(requested.contains(id) ? NSLocalizedString("Requested", comment: "") : (followed.contains(id) ? NSLocalizedString("Following", comment: "") : NSLocalizedString("Follow", comment: ""))) { follow(profile) }
                                     .buttonStyle(OutlineButtonStyle(filled: true))
                                     .disabled(model.session == nil || busy.contains(id) || followed.contains(id) || requested.contains(id))
                             }
@@ -597,7 +598,7 @@ private struct DesktopCommunity: View {
                     }
                     if let message { Text(message).spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted) }
                     if !loading && profiles.isEmpty && message == nil {
-                        Text("おすすめユーザーはありません").spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                        Text(NSLocalizedString("おすすめユーザーはありません", comment: "")).spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                     }
                 }
                 }
@@ -692,7 +693,7 @@ private struct SideDrawer: View {
                 }.foregroundColor(SpotcodeTheme.text)
             }
             Button { composing = true; open = false } label: {
-                Label("New idea", systemImage: "plus")
+                Label(NSLocalizedString("New idea", comment: ""), systemImage: "plus")
                     .spotcodeFont(14, weight: .bold, fallback: SpotcodeLayout.bodyFont.weight(.bold)).frame(maxWidth: .infinity).padding(.vertical, SpotcodeLayout.value(8, 14))
                     .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
             }.padding(.top, 10).disabled(model.session == nil)
@@ -722,11 +723,11 @@ private struct AccountSwitcher: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SpotcodeLayout.value(16, 16)) {
             HStack {
-                Text("アカウント").spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
+                Text(NSLocalizedString("アカウント", comment: "")).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
                 Spacer()
                 Button { isPresented = false } label: { Image(systemName: "xmark") }
                     .spotcodeIconButton().keyboardShortcut(.cancelAction)
-                    .accessibilityLabel("閉じる")
+                    .accessibilityLabel(NSLocalizedString("閉じる", comment: ""))
             }
             ForEach(model.savedAccounts) { account in
                 let active = account.id == model.session?.user.id && !model.isPostingAsOfficial
@@ -743,7 +744,7 @@ private struct AccountSwitcher: View {
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
                                 Text(account.profile.name).fontWeight(.bold)
-                                if active { Text("現在").spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent).padding(4).background(SpotcodeTheme.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }
+                                if active { Text(NSLocalizedString("現在", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent).padding(4).background(SpotcodeTheme.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }
                             }
                             Text("@\(account.profile.handle)").foregroundColor(SpotcodeTheme.muted)
                         }
@@ -774,8 +775,8 @@ private struct AccountSwitcher: View {
                         VStack(alignment: .leading) {
                             HStack {
                                 Text("spotcode").fontWeight(.bold)
-                                Text("公式").spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(.yellow).padding(4).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5))
-                                if model.isPostingAsOfficial { Text("現在").spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent) }
+                                Text(NSLocalizedString("公式", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(.yellow).padding(4).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5))
+                                if model.isPostingAsOfficial { Text(NSLocalizedString("現在", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent) }
                             }
                             Text("@spotcode_official").foregroundColor(SpotcodeTheme.muted)
                         }
@@ -794,10 +795,10 @@ private struct AccountSwitcher: View {
                     showLogin = true
                 }
             } label: {
-                Label("別のアカウントを追加", systemImage: "plus").spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.bodyFont.weight(.semibold))
+                Label(NSLocalizedString("別のアカウントを追加", comment: ""), systemImage: "plus").spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.bodyFont.weight(.semibold))
             }
             .disabled(switchingID != nil)
-            Button { model.signOut(); isPresented = false; showLogin = true } label: { Label("Log out", systemImage: "arrow.right").foregroundColor(Color(red: 248/255, green: 81/255, blue: 73/255)).spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont) }
+            Button { model.signOut(); isPresented = false; showLogin = true } label: { Label(NSLocalizedString("Log out", comment: ""), systemImage: "arrow.right").foregroundColor(Color(red: 248/255, green: 81/255, blue: 73/255)).spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont) }
         }
         .padding(15).background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(SpotcodeTheme.border)).clipShape(RoundedRectangle(cornerRadius: 14))
@@ -834,11 +835,11 @@ struct TimelineView: View {
                             VStack {
                                 if let error = model.timelinePageError {
                                     Text(LocalizedStringKey(error)).spotcodeFont(12, weight: .regular, fallback: .caption)
-                                    Button("再試行") { Task { await model.loadMoreTimeline() } }
+                                    Button(NSLocalizedString("再試行", comment: "")) { Task { await model.loadMoreTimeline() } }
                                 } else if model.isLoadingMoreTimeline {
-                                    ProgressView("読み込み中…")
+                                    ProgressView(NSLocalizedString("読み込み中…", comment: ""))
                                 } else {
-                                    Button("もっと昔の投稿を読み込む") { Task { await model.loadMoreTimeline() } }
+                                    Button(NSLocalizedString("もっと昔の投稿を読み込む", comment: "")) { Task { await model.loadMoreTimeline() } }
                                         .disabled(model.isLoading)
                                 }
                             }.padding().id(model.posts.last?.id).task(id: model.isLoading) {
@@ -874,7 +875,7 @@ struct TimelineView: View {
 
 private struct TimelineTabs: View {
     @Binding var selected: Int
-    private let labels = ["For you", "Following", "Spots"]
+    private let labels = [NSLocalizedString("For you", comment: ""), NSLocalizedString("Following", comment: ""), NSLocalizedString("Spots", comment: "")]
     var body: some View {
         HStack(spacing: 0) {
             ForEach(labels.indices, id: \.self) { index in
@@ -925,7 +926,7 @@ private struct InlineComposer: View {
                     ComposerTextView(text: $draft, isFocused: $editorFocused)
                         .frame(minHeight: SpotcodeLayout.value(88, 108))
                     if draft.isEmpty {
-                        Text("いまどうしてる？")
+                        Text(NSLocalizedString("いまどうしてる？", comment: ""))
                             .spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont).foregroundColor(SpotcodeTheme.muted)
                             .padding(.horizontal, 14).padding(.vertical, SpotcodeLayout.value(11, 17))
                             .allowsHitTesting(false)
@@ -936,8 +937,8 @@ private struct InlineComposer: View {
                 composerChips
                 if showLink {
                     TextField("https://github.com/…", text: $githubLink).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
-                    TextField("owner/repository（任意）", text: $repoFullName).textInputAutocapitalization(.never).autocorrectionDisabled(true).spotcodeURLField()
-                    Text("連携済みOrganizationのメンバーがそのリポジトリを指定すると、組織アカウント名義で表示されます。").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                    TextField(NSLocalizedString("owner/repository（任意）", comment: ""), text: $repoFullName).textInputAutocapitalization(.never).autocorrectionDisabled(true).spotcodeURLField()
+                    Text(NSLocalizedString("連携済みOrganizationのメンバーがそのリポジトリを指定すると、組織アカウント名義で表示されます。", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                 }
                 if showEvent {
                     TextField("https://connpass.com/event/…", text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
@@ -961,7 +962,7 @@ private struct InlineComposer: View {
                 }
                 if !draft.isEmpty && showDraftNotice {
                     HStack {
-                        Text("下書きを復元しました")
+                        Text(NSLocalizedString("下書きを復元しました", comment: ""))
                         Spacer()
                         Button(NSLocalizedString("破棄", comment: "")) { draft = ""; showDraftNotice = false }.foregroundColor(SpotcodeTheme.muted)
                     }.padding(.horizontal, 12).padding(.vertical, SpotcodeLayout.value(9, 11))
@@ -999,8 +1000,8 @@ private struct InlineComposer: View {
             ComposerChip(icon: "mappin", title: selectedSpot?.label ?? NSLocalizedString("場所を追加", comment: ""), active: selectedSpot != nil)
         }
     }
-    private var linkChip: some View { Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加", active: showLink) } }
-    private var eventChip: some View { Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: "イベントを追加", active: showEvent) } }
+    private var linkChip: some View { Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: NSLocalizedString("リンクを追加", comment: ""), active: showLink) } }
+    private var eventChip: some View { Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: NSLocalizedString("イベントを追加", comment: ""), active: showEvent) } }
     private var kindChip: some View { PostKindPicker(kind: $postKind) }
     private var audienceChip: some View { PostAudiencePicker(visibility: $visibility) }
 
@@ -1015,10 +1016,10 @@ private struct InlineComposer: View {
 
     private var composerActions: some View {
         HStack(spacing: 10) {
-            Button("下書き保存") { showDraftNotice = true }
+            Button(NSLocalizedString("下書き保存", comment: "")) { showDraftNotice = true }
                 .spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.bodyFont.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, SpotcodeLayout.value(8, 10))
                 .overlay(Capsule().stroke(SpotcodeTheme.border))
-            Button(sending ? NSLocalizedString("送信中…", comment: "") : "Push") { publish() }
+            Button(sending ? NSLocalizedString("送信中…", comment: "") : NSLocalizedString("Push", comment: "")) { publish() }
                 .spotcodeFont(14, weight: .bold, fallback: SpotcodeLayout.bodyFont.weight(.bold)).padding(.horizontal, SpotcodeLayout.value(18, 28)).padding(.vertical, SpotcodeLayout.value(9, 11))
                 .background(SpotcodeTheme.accent).foregroundColor(.white).clipShape(Capsule())
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending || model.session == nil)
@@ -1072,24 +1073,24 @@ private struct PostAudiencePicker: View {
     @Binding var visibility: String
 
     var body: some View {
-        Picker("公開範囲", selection: $visibility) {
-            Label("全員", systemImage: "globe").tag("public")
-            Label("相互フォロー", systemImage: "arrow.2.squarepath").tag("mutuals")
-            Label("フォロー中", systemImage: "person.badge.plus").tag("following")
-            Label("親しい友達", systemImage: "heart").tag("friends")
-            Label("同じ組織", systemImage: "building.2").tag("org")
+        Picker(NSLocalizedString("公開範囲", comment: ""), selection: $visibility) {
+            Label(NSLocalizedString("全員", comment: ""), systemImage: "globe").tag("public")
+            Label(NSLocalizedString("相互フォロー", comment: ""), systemImage: "arrow.2.squarepath").tag("mutuals")
+            Label(NSLocalizedString("フォロー中", comment: ""), systemImage: "person.badge.plus").tag("following")
+            Label(NSLocalizedString("親しい友達", comment: ""), systemImage: "heart").tag("friends")
+            Label(NSLocalizedString("同じ組織", comment: ""), systemImage: "building.2").tag("org")
             if model.displayProfile?.isOrg == true || !model.githubOrganizations.isEmpty || visibility == "github_org" {
-                Label("GitHub Organizationのみ", systemImage: "building.2").tag("github_org")
+                Label(NSLocalizedString("GitHub Organizationのみ", comment: ""), systemImage: "building.2").tag("github_org")
             }
-            Label("自分だけ", systemImage: "lock").tag("only_me")
+            Label(NSLocalizedString("自分だけ", comment: ""), systemImage: "lock").tag("only_me")
             if visibility == "restricted" {
-                Label("限定公開", systemImage: "lock").tag("restricted")
+                Label(NSLocalizedString("限定公開", comment: ""), systemImage: "lock").tag("restricted")
             }
         }
         .pickerStyle(.menu)
         .spotcodeFont(12, weight: .semibold, fallback: .caption.weight(.semibold))
         .tint(SpotcodeTheme.accent)
-        .accessibilityLabel("公開範囲")
+        .accessibilityLabel(NSLocalizedString("公開範囲", comment: ""))
     }
 }
 
@@ -1098,14 +1099,14 @@ private struct PostKindPicker: View {
 
     var body: some View {
         Menu {
-            Picker("投稿タグ", selection: $kind) {
-                Text("タグなし").tag(String?.none)
-                Label("アイデア", systemImage: "sparkles").tag(String?.some("idea"))
-                Label("バグ", systemImage: "ladybug").tag(String?.some("bug"))
+            Picker(NSLocalizedString("投稿タグ", comment: ""), selection: $kind) {
+                Text(NSLocalizedString("タグなし", comment: "")).tag(String?.none)
+                Label(NSLocalizedString("アイデア", comment: ""), systemImage: "sparkles").tag(String?.some(NSLocalizedString("idea", comment: "")))
+                Label(NSLocalizedString("バグ", comment: ""), systemImage: "ladybug").tag(String?.some("bug"))
             }
         } label: {
             ComposerChip(icon: kind == "bug" ? "ladybug" : "sparkles",
-                         title: kind == "bug" ? NSLocalizedString("バグ", comment: "") : kind == "idea" ? NSLocalizedString("アイデア", comment: "") : NSLocalizedString("投稿タグ", comment: ""),
+                         title: kind == "bug" ? NSLocalizedString("バグ", comment: "") : kind == NSLocalizedString("idea", comment: "") ? NSLocalizedString("アイデア", comment: "") : NSLocalizedString("投稿タグ", comment: ""),
                          active: kind != nil)
         }
     }
@@ -1198,42 +1199,87 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
 private final class PostLocationGate: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = PostLocationGate()
     @Published private(set) var location: CLLocation?
+    @Published private(set) var errorMessage: String?
     private let manager = CLLocationManager()
-    private var requested = false
+    private var readers: Set<UUID> = []
+    private var active = true
+    private var updating = false
     private let radius: CLLocationDistance = 100
 
     private override init() {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 10
+    }
+
+    func observe(_ id: UUID) {
+        readers.insert(id)
+        request()
+    }
+
+    func removeObserver(_ id: UUID) {
+        readers.remove(id)
+        if readers.isEmpty { stop() }
+    }
+
+    func setActive(_ value: Bool) {
+        active = value
+        if active { request() } else { stop() }
+    }
+
+    private func stop() {
+        manager.stopUpdatingLocation()
+        updating = false
+        location = nil
     }
 
     func request() {
-        guard !requested else { return }
-        requested = true
-        manager.requestWhenInUseAuthorization()
-        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
-            manager.requestLocation()
+        guard active, !readers.isEmpty else { return }
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            guard !updating else { return }
+            errorMessage = nil
+            updating = true
+            manager.startUpdatingLocation()
+        case .denied, .restricted:
+            stop()
+            errorMessage = NSLocalizedString("現在地を表示するには、システム設定でspotcodeの位置情報を許可してください。", comment: "")
+        @unknown default:
+            stop()
         }
     }
 
     func isNear(_ spot: Spot) -> Bool {
-        guard let location else { return false }
+        guard let location, Self.isUsable(location) else { return false }
         let destination = CLLocation(latitude: spot.lat, longitude: spot.lng)
         return location.distance(from: destination) <= radius
     }
 
+    private static func isUsable(_ location: CLLocation) -> Bool {
+        CLLocationCoordinate2DIsValid(location.coordinate) &&
+        location.horizontalAccuracy >= 0 && abs(location.timestamp.timeIntervalSinceNow) < 120
+    }
+
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let latest = locations.last else { return }
+        guard active, updating, !readers.isEmpty,
+              let latest = locations.last(where: Self.isUsable) else { return }
+        errorMessage = nil
         location = latest
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        guard updating else { return }
+        location = nil
+        errorMessage = NSLocalizedString("現在地を取得できませんでした。位置情報の設定を確認して再試行してください。", comment: "")
+        // A temporary failure can recover on the next continuous update.
+        if (error as? CLError)?.code != .locationUnknown { stop() }
+    }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
-            manager.requestLocation()
-        }
+        request()
     }
 }
 
@@ -1361,17 +1407,17 @@ private struct PollEditorSheet: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 14) {
-                TextField("質問", text: $question).spotcodeField()
-                TextField("選択肢 1", text: $first).spotcodeField()
-                TextField("選択肢 2", text: $second).spotcodeField()
-                if poll != nil { Button("投票を削除", role: .destructive) { poll = nil; isPresented = false } }
+                TextField(NSLocalizedString("質問", comment: ""), text: $question).spotcodeField()
+                TextField(NSLocalizedString("選択肢 1", comment: ""), text: $first).spotcodeField()
+                TextField(NSLocalizedString("選択肢 2", comment: ""), text: $second).spotcodeField()
+                if poll != nil { Button(NSLocalizedString("投票を削除", comment: ""), role: .destructive) { poll = nil; isPresented = false } }
                 Spacer()
             }.padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
-                .navigationTitle("投票を作成").navigationBarTitleDisplayMode(.inline)
+                .navigationTitle(NSLocalizedString("投票を作成", comment: "")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
+                    ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("Cancel", comment: "")) { isPresented = false } }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Confirm") { poll = .init(question: question, options: [first, second]); isPresented = false }
+                        Button(NSLocalizedString("Confirm", comment: "")) { poll = .init(question: question, options: [first, second]); isPresented = false }
                             .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || second.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
@@ -1406,10 +1452,10 @@ private struct LocationPickerSheet: View {
                     Button {
                         locating = true
                         location.request()
-                    } label: { Label("現在地を使う", systemImage: "location") }
+                    } label: { Label(NSLocalizedString("現在地を使う", comment: ""), systemImage: "location") }
                         .spotcodeFont(15, weight: .semibold, fallback: .subheadline.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, SpotcodeLayout.value(8, 9))
                         .overlay(Capsule().stroke(SpotcodeTheme.border))
-                    TextField("ラベル（任意・建物名や店名）", text: $label).spotcodeURLField()
+                    TextField(NSLocalizedString("ラベル（任意・建物名や店名）", comment: ""), text: $label).spotcodeURLField()
                 }.padding(14)
                 HStack(spacing: 8) {
                     Image(systemName: "mappin.and.ellipse")
@@ -1427,19 +1473,19 @@ private struct LocationPickerSheet: View {
                 }
                 HStack(spacing: 12) {
                     HStack(spacing: 7) {
-                        Text("住所").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                        Text(NSLocalizedString("住所", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                         Text(address).spotcodeFont(12, weight: .regular, fallback: .caption).lineLimit(1)
                     }.padding(11).frame(maxWidth: .infinity, alignment: .leading)
                         .background(SpotcodeTheme.background).overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.border))
-                    Button("削除") { spot = nil; isPresented = false }.foregroundColor(.red).disabled(spot == nil)
+                    Button(NSLocalizedString("削除", comment: "")) { spot = nil; isPresented = false }.foregroundColor(.red).disabled(spot == nil)
                 }.padding(14)
             }
             .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
-            .navigationTitle("場所を選ぶ").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(NSLocalizedString("場所を選ぶ", comment: "")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
+                ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("Cancel", comment: "")) { isPresented = false } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Confirm") { confirm() }.disabled(coordinate == nil)
+                    Button(NSLocalizedString("Confirm", comment: "")) { confirm() }.disabled(coordinate == nil)
                 }
             }
             .onAppear {
@@ -1686,6 +1732,7 @@ struct PostRow: View {
     @State private var bookmarkCount: Int
     @State private var interactionInProgress: Set<String> = []
     @ObservedObject private var locationGate = PostLocationGate.shared
+    @State private var locationReaderID = UUID()
     @AppStorage("spotcode.native.dev-mode") private var developerMode = false
 
     init(post: Post, opensDetail: Bool = true, onSpotTap: ((Post) -> Void)? = nil) {
@@ -1718,12 +1765,12 @@ struct PostRow: View {
 
     private var moderationMenu: some View {
 Menu {
-                                Button { reporting = true } label: { Label("投稿を報告", systemImage: "flag") }
+                                Button { reporting = true } label: { Label(NSLocalizedString("投稿を報告", comment: ""), systemImage: "flag") }
                                 Button(role: .destructive) { confirmingBlock = true } label: {
-                                    Label("ユーザーをブロック", systemImage: "person.crop.circle.badge.xmark")
+                                    Label(NSLocalizedString("ユーザーをブロック", comment: ""), systemImage: "person.crop.circle.badge.xmark")
                                 }
                             } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
-                            .accessibilityLabel("通報・ブロック")
+                            .accessibilityLabel(NSLocalizedString("通報・ブロック", comment: ""))
     }
 
     private var postContent: some View {
@@ -1733,7 +1780,7 @@ Menu {
             }.buttonStyle(SpotcodePlainButtonStyle()).disabled(post.displayAuthor?.handle == nil)
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 5) {
-                    Text(post.displayAuthor?.name ?? "User").fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
+                    Text(post.displayAuthor?.name ?? NSLocalizedString("User", comment: "")).fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
                         .lineLimit(1).truncationMode(.tail).layoutPriority(1)
                     Text("@\(post.displayAuthor?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted)
                         .lineLimit(1).truncationMode(.tail)
@@ -1758,13 +1805,22 @@ Menu {
                                 PostMetadataBadge(icon: "mappin", text: spot.label ?? spot.address ?? NSLocalizedString("選択した場所", comment: ""), color: SpotcodeTheme.accent)
                             }.buttonStyle(SpotcodePlainButtonStyle())
                         }
-                        if post.kind == "idea" { PostMetadataBadge(icon: "sparkles", text: "アイデア", color: SpotcodeTheme.warning) }
-                        if post.kind == "bug" { PostMetadataBadge(icon: "ladybug", text: "バグ", color: .red) }
+                        if post.kind == NSLocalizedString("idea", comment: "") { PostMetadataBadge(icon: "sparkles", text: NSLocalizedString("アイデア", comment: ""), color: SpotcodeTheme.warning) }
+                        if post.kind == "bug" { PostMetadataBadge(icon: "ladybug", text: NSLocalizedString("バグ", comment: ""), color: .red) }
                         PostMetadataBadge(icon: visibilityBadge(post.visibility ?? "public").icon, text: visibilityBadge(post.visibility ?? "public").text, color: SpotcodeTheme.muted)
                     }
                 }
                 if !canReadContent {
-                    Label("この場所から半径100m以内に来ると内容を表示できます", systemImage: "location.slash")
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let message = locationGate.errorMessage {
+                            Label(message, systemImage: "location.slash")
+                            Button(NSLocalizedString("再試行", comment: "")) { locationGate.request() }
+                        } else if locationGate.location == nil {
+                            Label(NSLocalizedString("現在地を取得中…", comment: ""), systemImage: "location")
+                        } else {
+                            Label(NSLocalizedString("この場所から半径100m以内に来ると内容を表示できます", comment: ""), systemImage: "location.slash")
+                        }
+                    }
                         .spotcodeFont(15, weight: .regular, fallback: .subheadline).foregroundColor(SpotcodeTheme.muted)
                         .padding(SpotcodeLayout.value(10, 12)).frame(maxWidth: .infinity, alignment: .leading)
                         .background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 9))
@@ -1797,7 +1853,7 @@ Menu {
                 }
                 if canReadContent, let link = post.eventURL, let url = URL(string: link) {
                     Link(destination: url) {
-                        Label("イベントを開く", systemImage: "calendar")
+                        Label(NSLocalizedString("イベントを開く", comment: ""), systemImage: "calendar")
                             .spotcodeFont(12, weight: .regular, fallback: .caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
@@ -1828,13 +1884,13 @@ Menu {
                             Spacer()
                             NavigationLink(destination: PostDetailView(post: post)) {
                                 Image(systemName: "chart.bar")
-                            }.buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel("投稿の分析")
+                            }.buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel(NSLocalizedString("投稿の分析", comment: ""))
                             Spacer()
                             Button { editing = true } label: { Image(systemName: "pencil") }
-                                .buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel("投稿を編集")
+                                .buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel(NSLocalizedString("投稿を編集", comment: ""))
                             Spacer()
                             Button { confirmingDelete = true } label: { Image(systemName: "trash") }
-                                .buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel("投稿を削除")
+                                .buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel(NSLocalizedString("投稿を削除", comment: ""))
                         }
                     }
                     .spotcodeFont(15, fallback: .system(size: 15)).foregroundColor(SpotcodeTheme.muted).padding(.top, 7)
@@ -1854,7 +1910,7 @@ Menu {
         .sheet(isPresented: $showSpotMap) {
             NavigationView {
                 NativeMapView(focusPost: post)
-                    .navigationTitle(post.spot?.label ?? "Spot")
+                    .navigationTitle(post.spot?.label ?? NSLocalizedString("Spot", comment: ""))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { ToolbarItem(placement: .cancellationAction) { MapSheetCloseButton { showSpotMap = false } } }
             }
@@ -1865,15 +1921,16 @@ Menu {
         .sheet(isPresented: $reporting) {
             ReportPostView(post: post, isPresented: $reporting).environmentObject(model)
         }
-        .onAppear { if post.spot != nil { locationGate.request() } }
+        .onAppear { if post.spot != nil { locationGate.observe(locationReaderID) } }
+        .onDisappear { locationGate.removeObserver(locationReaderID) }
         .task(id: post.id) { await loadInteractions() }
-        .confirmationDialog("このユーザーをブロックしますか？投稿が非表示になり、運営へ通知されます。", isPresented: $confirmingBlock, titleVisibility: .visible) {
-            Button("ブロック", role: .destructive) { Task { await model.block(post) } }
-            Button("キャンセル", role: .cancel) {}
+        .confirmationDialog(NSLocalizedString("このユーザーをブロックしますか？投稿が非表示になり、運営へ通知されます。", comment: ""), isPresented: $confirmingBlock, titleVisibility: .visible) {
+            Button(NSLocalizedString("ブロック", comment: ""), role: .destructive) { Task { await model.block(post) } }
+            Button(NSLocalizedString("キャンセル", comment: ""), role: .cancel) {}
         }
-        .confirmationDialog("この投稿を削除しますか？", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("削除", role: .destructive) { Task { _ = await model.deletePost(post) } }
-            Button("キャンセル", role: .cancel) {}
+        .confirmationDialog(NSLocalizedString("この投稿を削除しますか？", comment: ""), isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button(NSLocalizedString("削除", comment: ""), role: .destructive) { Task { _ = await model.deletePost(post) } }
+            Button(NSLocalizedString("キャンセル", comment: ""), role: .cancel) {}
         }
     }
 
@@ -1934,34 +1991,34 @@ private struct ReportPostView: View {
     @State private var submitting = false
 
     private let reasons = [
-        ("spam", "スパム / 宣伝"),
-        ("inappropriate", "不適切な内容"),
-        ("harassment", "嫌がらせ / ヘイト"),
-        ("misinfo", "誤情報"),
-        ("other", "その他")
+        ("spam", NSLocalizedString("スパム / 宣伝", comment: "")),
+        ("inappropriate", NSLocalizedString("不適切な内容", comment: "")),
+        ("harassment", NSLocalizedString("嫌がらせ / ヘイト", comment: "")),
+        ("misinfo", NSLocalizedString("誤情報", comment: "")),
+        ("other", NSLocalizedString("その他", comment: ""))
     ]
 
     var body: some View {
         NavigationView {
             Form {
-                Section("報告する理由") {
-                    Picker("理由", selection: $reason) {
+                Section(NSLocalizedString("報告する理由", comment: "")) {
+                    Picker(NSLocalizedString("理由", comment: ""), selection: $reason) {
                         ForEach(reasons, id: \.0) { value, label in
                             Text(LocalizedStringKey(label)).tag(value)
                         }
                     }.pickerStyle(.inline).labelsHidden()
                 }
-                Section("追加のコメント（任意）") {
+                Section(NSLocalizedString("追加のコメント（任意）", comment: "")) {
                     TextEditor(text: $comment).frame(minHeight: 100)
-                    Text("400文字まで").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                    Text(NSLocalizedString("400文字まで", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                 }
             }
-            .navigationTitle("投稿を報告")
+            .navigationTitle(NSLocalizedString("投稿を報告", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { isPresented = false } }
+                ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("キャンセル", comment: "")) { isPresented = false } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("送信") { submit() }.disabled(submitting)
+                    Button(NSLocalizedString("送信", comment: "")) { submit() }.disabled(submitting)
                 }
             }
         }
@@ -2039,7 +2096,7 @@ private struct EditPostView: View {
                 }.spotcodeURLField()
                 HStack {
                     Image(systemName: "shippingbox")
-                    TextField("owner/repository（任意）", text: $repoFullName)
+                    TextField(NSLocalizedString("owner/repository（任意）", comment: ""), text: $repoFullName)
                         .textInputAutocapitalization(.never).autocorrectionDisabled(true)
                 }.spotcodeURLField()
                 HStack(spacing: 10) {
@@ -2049,17 +2106,17 @@ private struct EditPostView: View {
                 }
                 HStack {
                     Image(systemName: "calendar")
-                    TextField("イベントURL（任意）", text: $eventURL)
+                    TextField(NSLocalizedString("イベントURL（任意）", comment: ""), text: $eventURL)
                         .textInputAutocapitalization(.never).keyboardType(.URL)
                 }.spotcodeURLField()
                 Spacer()
             }
             .padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
-            .navigationTitle("投稿を編集").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(NSLocalizedString("投稿を編集", comment: "")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
+                ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("Cancel", comment: "")) { isPresented = false } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "Saving…" : "Save") {
+                    Button(saving ? "Saving…" : NSLocalizedString("Save", comment: "")) {
                         saving = true
                         Task {
                             let text = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2135,7 +2192,7 @@ struct PostDetailView: View {
     var onClose: (() -> Void)? = nil
     var body: some View {
         ScrollView { PostRow(post: post, opensDetail: false, onSpotTap: onSpotTap) }
-            .background(SpotcodeTheme.surface).navigationTitle("Post").navigationBarTitleDisplayMode(.inline)
+            .background(SpotcodeTheme.surface).navigationTitle(NSLocalizedString("Post", comment: "")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     if let onClose { MapSheetCloseButton(action: onClose) }
@@ -2150,7 +2207,7 @@ private struct MapSheetCloseButton: View {
         Button(action: action) {
             Image(systemName: "xmark").frame(width: 32, height: 32)
         }
-        .accessibilityLabel("閉じる")
+        .accessibilityLabel(NSLocalizedString("閉じる", comment: ""))
         .keyboardShortcut(.cancelAction)
     }
 }
@@ -2191,7 +2248,7 @@ struct ComposeView: View {
                         ZStack(alignment: .topLeading) {
                             ComposerTextView(text: $bodyText, isFocused: $editorFocused).frame(minHeight: 160)
                             if bodyText.isEmpty {
-                                Text("いまどうしてる？").spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont).foregroundColor(SpotcodeTheme.muted)
+                                Text(NSLocalizedString("いまどうしてる？", comment: "")).spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont).foregroundColor(SpotcodeTheme.muted)
                                     .padding(.horizontal, 14).padding(.vertical, SpotcodeLayout.value(11, 17)).allowsHitTesting(false)
                             }
                         }
@@ -2204,10 +2261,10 @@ struct ComposeView: View {
                             Button { showLocationPicker = true } label: {
                                 ComposerChip(icon: "mappin", title: selectedSpot?.label ?? NSLocalizedString("場所を追加", comment: ""), active: selectedSpot != nil)
                             }
-                            Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: "リンクを追加", active: showLink) }
+                            Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: NSLocalizedString("リンクを追加", comment: ""), active: showLink) }
                         }
                         HStack(spacing: 8) {
-                            Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: "イベントを追加", active: showEvent) }
+                            Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: NSLocalizedString("イベントを追加", comment: ""), active: showEvent) }
                             PostKindPicker(kind: $postKind)
                             audienceMenu
                         }
@@ -2220,14 +2277,14 @@ struct ComposeView: View {
                         }.spotcodeURLField()
                         HStack {
                             Image(systemName: "shippingbox")
-                            TextField("owner/repository（任意）", text: $repoFullName).textInputAutocapitalization(.never).autocorrectionDisabled(true)
+                            TextField(NSLocalizedString("owner/repository（任意）", comment: ""), text: $repoFullName).textInputAutocapitalization(.never).autocorrectionDisabled(true)
                         }.spotcodeURLField()
-                        Text("連携済みOrganizationのメンバーがそのリポジトリを指定すると、組織アカウント名義で表示されます。").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                        Text(NSLocalizedString("連携済みOrganizationのメンバーがそのリポジトリを指定すると、組織アカウント名義で表示されます。", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                     }
                     if showEvent {
                         HStack {
                             Image(systemName: "calendar")
-                            TextField("イベントURL（任意）", text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL)
+                            TextField(NSLocalizedString("イベントURL（任意）", comment: ""), text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL)
                         }.spotcodeURLField()
                     }
                     if !photos.isEmpty {
@@ -2253,11 +2310,11 @@ struct ComposeView: View {
                 }
                 .padding()
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
-             .navigationTitle("New idea").navigationBarTitleDisplayMode(.inline)
+             .navigationTitle(NSLocalizedString("New idea", comment: "")).navigationBarTitleDisplayMode(.inline)
              .toolbar {
-                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
+                 ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("Cancel", comment: "")) { isPresented = false } }
                  ToolbarItem(placement: .confirmationAction) {
-                     Button(sending ? "Posting…" : "Post") {
+                     Button(sending ? "Posting…" : NSLocalizedString("Post", comment: "")) {
                          publish()
                      }.disabled(bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending)
                  }
@@ -2341,7 +2398,7 @@ struct NativeMapView: View {
                 mapButton("minus") { zoom(2) }
                 mapButton("arrow.counterclockwise") { resetMap() }
                 mapButton("location.fill") { resetMap() }
-                    .accessibilityLabel("現在地")
+                    .accessibilityLabel(NSLocalizedString("現在地", comment: ""))
             }
             .padding(.trailing, 12)
             if loading { ProgressView().padding(10).background(.ultraThinMaterial).clipShape(Circle()) }
@@ -2350,10 +2407,10 @@ struct NativeMapView: View {
             if awaitingCurrentLocation, let message = location.errorMessage {
                 VStack(spacing: 8) {
                     Text(message).font(.caption)
-                    Button("再試行") { resetMap() }
+                    Button(NSLocalizedString("再試行", comment: "")) { resetMap() }
                 }.padding().background(.regularMaterial).cornerRadius(12).padding()
             } else if awaitingCurrentLocation {
-                ProgressView("現在地を取得中…")
+                ProgressView(NSLocalizedString("現在地を取得中…", comment: ""))
                     .padding().background(.regularMaterial).cornerRadius(12).padding()
             }
         }
@@ -2383,7 +2440,7 @@ struct NativeMapView: View {
                             // Only public pin metadata here; the detail view
                             // checks the location gate before showing the body.
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(post.displayAuthor?.name ?? "Spot")
+                                Text(post.displayAuthor?.name ?? NSLocalizedString("Spot", comment: ""))
                                 Text(post.spot?.label ?? NSLocalizedString("この場所の投稿", comment: ""))
                                     .font(.caption).foregroundColor(.secondary)
                                 Text(relativeTime(post.createdAt))
@@ -2391,7 +2448,7 @@ struct NativeMapView: View {
                             }
                         }
                     }
-                    .navigationTitle("この場所の投稿")
+                    .navigationTitle(NSLocalizedString("この場所の投稿", comment: ""))
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) { MapSheetCloseButton { selectedPosts = nil } }
                     }
@@ -2541,7 +2598,7 @@ private struct ClusteredPostMap: UIViewRepresentable {
 private final class PostMapAnnotation: NSObject, MKAnnotation {
     let post: Post
     let coordinate: CLLocationCoordinate2D
-    var title: String? { post.spot?.label ?? post.displayAuthor?.name ?? "Spot" }
+    var title: String? { post.spot?.label ?? post.displayAuthor?.name ?? NSLocalizedString("Spot", comment: "") }
     // Never expose the protected post body in an annotation callout.
     // PostDetailView applies the 100m gate after the user opens it.
     var subtitle: String? { NSLocalizedString("この場所の投稿", comment: "") }
@@ -2561,13 +2618,13 @@ struct RepositoriesView: View {
             ScrollView {
                 VStack(spacing: 6) {
                     RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 22, height: 22).foregroundColor(SpotcodeTheme.accent)
-                    Text("Repos").spotcodeFont(16, weight: .bold, fallback: SpotcodeLayout.titleFont.weight(.bold))
-                    Text("自分と許可済みOrganizationのリポジトリ")
+                    Text(NSLocalizedString("Repos", comment: "")).spotcodeFont(16, weight: .bold, fallback: SpotcodeLayout.titleFont.weight(.bold))
+                    Text(NSLocalizedString("自分と許可済みOrganizationのリポジトリ", comment: ""))
                         .spotcodeFont(15, weight: .regular, fallback: .subheadline).foregroundColor(SpotcodeTheme.muted)
                 }.frame(maxWidth: .infinity).padding(.vertical, 22)
                 if !repositoryNotice.isEmpty { Text(repositoryNotice).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted).padding(.horizontal) }
-                if loading && repositories.isEmpty { ProgressView("リポジトリを読み込み中…").padding(.top, 50) }
-            else if model.me?.githubHandle == nil { Spacer(); ContentUnavailableViewCompat(title: "GitHubをプロフィールに連携してください", icon: "link"); Spacer() }
+                if loading && repositories.isEmpty { ProgressView(NSLocalizedString("リポジトリを読み込み中…", comment: "")).padding(.top, 50) }
+            else if model.me?.githubHandle == nil { Spacer(); ContentUnavailableViewCompat(title: NSLocalizedString("GitHubをプロフィールに連携してください", comment: ""), icon: "link"); Spacer() }
             else {
                 LazyVStack(spacing: 12) {
                     ForEach(repositoryOwner == model.session?.user.id ? repositories : []) { repo in
@@ -2594,7 +2651,7 @@ struct RepositoriesView: View {
                 }
                 Spacer(minLength: 8)
                 Button { onCompose(repo.htmlURL) } label: {
-                    Label("このリポで投稿", systemImage: "plus")
+                    Label(NSLocalizedString("このリポで投稿", comment: ""), systemImage: "plus")
                         .spotcodeFont(12, weight: .regular, fallback: .caption).padding(.horizontal, 10).padding(.vertical, 5)
                         .foregroundColor(SpotcodeTheme.accent)
                         .overlay(Capsule().stroke(SpotcodeTheme.accent.opacity(0.55)))
@@ -2612,7 +2669,7 @@ struct RepositoriesView: View {
             }.spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
             Divider().overlay(SpotcodeTheme.border)
             if posts.isEmpty {
-                Text("関連投稿はありません").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                Text(NSLocalizedString("関連投稿はありません", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
             } else {
                 Text(String(format: NSLocalizedString("関連投稿 %lld件", comment: ""), Int64(posts.count))).spotcodeFont(12, weight: .semibold, fallback: .caption.weight(.semibold)).foregroundColor(SpotcodeTheme.muted)
                 ForEach(posts.prefix(4)) { post in
@@ -2694,13 +2751,13 @@ struct NotificationsView: View {
     var body: some View {
         VStack(spacing: 0) {
             #if targetEnvironment(macCatalyst)
-            Text("Notifications").spotcodeFont(18, weight: .bold, fallback: .headline)
+            Text(NSLocalizedString("Notifications", comment: "")).spotcodeFont(18, weight: .bold, fallback: .headline)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(20)
             #else
-            PageHeader(title: "Notifications")
+            PageHeader(title: NSLocalizedString("Notifications", comment: ""))
             #endif
-            if loading && notifications.isEmpty { Spacer(); ProgressView("通知を読み込み中…"); Spacer() }
-            else if notifications.isEmpty { Spacer(); ContentUnavailableViewCompat(title: "通知はありません", icon: "bell"); Spacer() }
+            if loading && notifications.isEmpty { Spacer(); ProgressView(NSLocalizedString("通知を読み込み中…", comment: "")); Spacer() }
+            else if notifications.isEmpty { Spacer(); ContentUnavailableViewCompat(title: NSLocalizedString("通知はありません", comment: ""), icon: "bell"); Spacer() }
             else { ScrollView { LazyVStack(spacing: 0) { ForEach(filterNotifications(notifications)) { notification in
                 NotificationRow(notification: notification) {
                     await respond(to: notification, accept: $0)
@@ -2803,8 +2860,8 @@ private struct NotificationRow: View {
                 }
                 if notification.kind == .followRequest {
                     HStack {
-                        Button("承認") { act(true) }.buttonStyle(OutlineButtonStyle(filled: true))
-                        Button("拒否") { act(false) }.buttonStyle(OutlineButtonStyle())
+                        Button(NSLocalizedString("承認", comment: "")) { act(true) }.buttonStyle(OutlineButtonStyle(filled: true))
+                        Button(NSLocalizedString("拒否", comment: "")) { act(false) }.buttonStyle(OutlineButtonStyle())
                     }.disabled(responding)
                 }
             }
@@ -2871,8 +2928,8 @@ private struct ProfileLookupView: View {
     var body: some View {
         Group {
             if let profile { ProfileView(profile: profile) }
-            else if loading { ProgressView("プロフィールを読み込み中…") }
-            else { ContentUnavailableViewCompat(title: "プロフィールを取得できませんでした", icon: "person.crop.circle.badge.exclamationmark") }
+            else if loading { ProgressView(NSLocalizedString("プロフィールを読み込み中…", comment: "")) }
+            else { ContentUnavailableViewCompat(title: NSLocalizedString("プロフィールを取得できませんでした", comment: ""), icon: "person.crop.circle.badge.exclamationmark") }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
@@ -2918,10 +2975,10 @@ struct ProfileView: View {
                             )
                         )
                         HStack(spacing: 0) {
-                            ForEach(["Posts", "Spots", "Likes"].indices, id: \.self) { index in
+                            ForEach([NSLocalizedString("Posts", comment: ""), NSLocalizedString("Spots", comment: ""), NSLocalizedString("Likes", comment: "")].indices, id: \.self) { index in
                                 Button { selectedTab = index } label: {
                                     VStack(spacing: 13) {
-                                        Text(["Posts", "Spots", "Likes"][index]).spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont)
+                                        Text([NSLocalizedString("Posts", comment: ""), NSLocalizedString("Spots", comment: ""), NSLocalizedString("Likes", comment: "")][index]).spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont)
                                         Capsule().fill(selectedTab == index ? SpotcodeTheme.accent : .clear).frame(width: 58, height: 4)
                                     }.frame(maxWidth: .infinity).padding(.top, 15)
                                 }.foregroundColor(selectedTab == index ? SpotcodeTheme.text : SpotcodeTheme.muted)
@@ -2932,10 +2989,10 @@ struct ProfileView: View {
                         } else if selectedTab == 1 {
                             LazyVStack(spacing: 0) { ForEach(profilePosts.filter { $0.spot != nil }) { post in PostRow(post: post) } }
                         } else {
-                            ContentUnavailableViewCompat(title: "いいねした投稿はありません", icon: "heart")
+                            ContentUnavailableViewCompat(title: NSLocalizedString("いいねした投稿はありません", comment: ""), icon: "heart")
                         }
                     }
-                } else { ContentUnavailableViewCompat(title: "ログインしてください", icon: "person.crop.circle") }
+                } else { ContentUnavailableViewCompat(title: NSLocalizedString("ログインしてください", comment: ""), icon: "person.crop.circle") }
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
          .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true)
@@ -3086,7 +3143,7 @@ private struct ProfileSearchView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                TextField("ユーザー・スポット・リポジトリを検索…", text: $initialQuery)
+                TextField(NSLocalizedString("ユーザー・スポット・リポジトリを検索…", comment: ""), text: $initialQuery)
                     .textInputAutocapitalization(.never).submitLabel(.search).spotcodeField().padding()
                     .onSubmit { Task { await search() } }
                 if loading { ProgressView().padding() }
@@ -3096,8 +3153,8 @@ private struct ProfileSearchView: View {
                     }.listRowBackground(SpotcodeTheme.surface)
                 }.listStyle(.plain)
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
-                .navigationTitle("Search").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { dismiss() } } }
+                .navigationTitle(NSLocalizedString("Search", comment: "")).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("閉じる", comment: "")) { dismiss() } } }
                 .task { await search() }
         }.preferredColorScheme(.dark)
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
@@ -3136,24 +3193,24 @@ private struct ProfileHero: View {
                     AvatarView(profile: profile, size: 104).padding(5).background(SpotcodeTheme.surface).clipShape(Circle()).offset(y: -63)
                     Spacer()
                     if isOwn {
-                        Button("Edit profile") { editing = true }.spotcodeFont(14, weight: .bold, fallback: SpotcodeLayout.bodyFont.weight(.bold)).foregroundColor(SpotcodeTheme.background)
+                        Button(NSLocalizedString("Edit profile", comment: "")) { editing = true }.spotcodeFont(14, weight: .bold, fallback: SpotcodeLayout.bodyFont.weight(.bold)).foregroundColor(SpotcodeTheme.background)
                             .padding(.horizontal, 20).padding(.vertical, SpotcodeLayout.value(9, 11)).background(SpotcodeTheme.text).clipShape(Capsule()).padding(.top, 14)
                     } else if model.session != nil {
                         HStack(spacing: 10) {
                             Menu {
-                                Button("プロフィールURLをコピー") {
+                                Button(NSLocalizedString("プロフィールURLをコピー", comment: "")) {
                                     UIPasteboard.general.string = "https://hrmcngs.github.io/spotcode-sns/#/\(profile.handle)"
                                 }
                                 if let handle = profile.githubHandle {
-                                    Link("GitHubで開く", destination: URL(string: "https://github.com/\(handle)")!)
+                                    Link(NSLocalizedString("GitHubで開く", comment: ""), destination: URL(string: "https://github.com/\(handle)")!)
                                 }
                                 if let id = profile.id { ProfileSocialActions(profile: profile, targetID: id) }
-                            } label: { Text("More").profileActionCapsule(filled: false) }
+                            } label: { Text(NSLocalizedString("More", comment: "")).profileActionCapsule(filled: false) }
                             if isFollowing && !model.isPostingAsOfficial {
-                                FollowAudienceMenu(profile: profile, title: "Following", unfollow: { toggleFollow() })
+                                FollowAudienceMenu(profile: profile, title: NSLocalizedString("Following", comment: ""), unfollow: { toggleFollow() })
                                     .profileActionCapsule(filled: false).disabled(followLoading)
                             } else {
-                                Button(followLoading ? "…" : (followState == "pending" ? "Requested" : "Follow")) { toggleFollow() }
+                                Button(followLoading ? "…" : (followState == "pending" ? NSLocalizedString("Requested", comment: "") : NSLocalizedString("Follow", comment: ""))) { toggleFollow() }
                                     .profileActionCapsule(filled: !isFollowing).disabled(followLoading)
                             }
                         }.padding(.top, 14)
@@ -3161,9 +3218,9 @@ private struct ProfileHero: View {
                 }.frame(height: 63)
                 HStack(spacing: 14) {
                     NavigationLink(destination: BusinessCardView(profile: profile)) {
-                        Label("名刺を共有", systemImage: "rectangle.on.rectangle")
+                        Label(NSLocalizedString("名刺を共有", comment: ""), systemImage: "rectangle.on.rectangle")
                     }
-                    if isOwn { NavigationLink("名刺コレクション", destination: BusinessCardCollectionView()) }
+                    if isOwn { NavigationLink(NSLocalizedString("名刺コレクション", comment: ""), destination: BusinessCardCollectionView()) }
                 }.font(.subheadline).padding(.vertical, 8)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 9) {
@@ -3211,10 +3268,10 @@ private struct ProfileHero: View {
                 }
                 HStack(spacing: 22) {
                     if let id = profile.id {
-                        NavigationLink(destination: FollowListView(userID: id, kind: .following)) { ProfileCount(value: counts.following, label: "Following") }.buttonStyle(SpotcodePlainButtonStyle())
-                        NavigationLink(destination: FollowListView(userID: id, kind: .followers)) { ProfileCount(value: counts.followers, label: "Followers") }.buttonStyle(SpotcodePlainButtonStyle())
+                        NavigationLink(destination: FollowListView(userID: id, kind: .following)) { ProfileCount(value: counts.following, label: NSLocalizedString("Following", comment: "")) }.buttonStyle(SpotcodePlainButtonStyle())
+                        NavigationLink(destination: FollowListView(userID: id, kind: .followers)) { ProfileCount(value: counts.followers, label: NSLocalizedString("Followers", comment: "")) }.buttonStyle(SpotcodePlainButtonStyle())
                     }
-                    ProfileCount(value: counts.posts, label: "Posts")
+                    ProfileCount(value: counts.posts, label: NSLocalizedString("Posts", comment: ""))
                 }.padding(.top, 5)
                 if profile.githubHandle != nil {
                     GitHubActivity(handle: profile.githubHandle ?? "", contributions: contributions)
@@ -3336,7 +3393,7 @@ private struct FollowAudienceMenu: View {
             Button { change("org", enabled: !organization) } label: {
                 Label(organization ? NSLocalizedString("同じ組織から解除", comment: "") : NSLocalizedString("同じ組織に登録", comment: ""), systemImage: organization ? "checkmark.circle.fill" : "building.2")
             }
-            if let unfollow { Button("フォロー解除", role: .destructive, action: unfollow) }
+            if let unfollow { Button(NSLocalizedString("フォロー解除", comment: ""), role: .destructive, action: unfollow) }
         } label: { Label(title ?? (friends || organization ? NSLocalizedString("登録済み", comment: "") : NSLocalizedString("リストに登録", comment: "")), systemImage: "person.crop.circle.badge.checkmark").spotcodeFont(12, weight: .regular, fallback: .caption) }
         .disabled(busy)
     }
@@ -3367,12 +3424,12 @@ private struct FollowListView: View {
                 }
             }.listRowBackground(SpotcodeTheme.surface)
         }.listStyle(.plain).background(SpotcodeTheme.surface)
-            .navigationTitle(kind == .following ? "Following" : "Followers")
+            .navigationTitle(kind == .following ? NSLocalizedString("Following", comment: "") : NSLocalizedString("Followers", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Group {
                         if let me = model.me {
-                            NavigationLink(destination: BusinessCardView(profile: me)) { Label("名刺を共有", systemImage: "rectangle.on.rectangle") }
+                            NavigationLink(destination: BusinessCardView(profile: me)) { Label(NSLocalizedString("名刺を共有", comment: ""), systemImage: "rectangle.on.rectangle") }
                         }
                     }
                 }
@@ -3404,20 +3461,20 @@ private struct EditProfileView: View {
               VStack(spacing: 14) {
                 AvatarView(profile: previewProfile, size: 92)
                 HStack {
-                    Button("画像をアップロード") { showingImagePicker = true }.buttonStyle(OutlineButtonStyle())
-                    if avatarURL != nil { Button("画像を消す") { avatarURL = nil }.buttonStyle(OutlineButtonStyle()) }
+                    Button(NSLocalizedString("画像をアップロード", comment: "")) { showingImagePicker = true }.buttonStyle(OutlineButtonStyle())
+                    if avatarURL != nil { Button(NSLocalizedString("画像を消す", comment: "")) { avatarURL = nil }.buttonStyle(OutlineButtonStyle()) }
                 }
-                Picker("アイコンの形", selection: $avatarShape) {
-                    Text("● 円").tag("round")
-                    Text("■ 角丸").tag("square")
+                Picker(NSLocalizedString("アイコンの形", comment: ""), selection: $avatarShape) {
+                    Text(NSLocalizedString("● 円", comment: "")).tag("round")
+                    Text(NSLocalizedString("■ 角丸", comment: "")).tag("square")
                 }.pickerStyle(.segmented)
-                TextField("表示名", text: $name).spotcodeField()
-                TextField("自己紹介", text: $bio).spotcodeField()
-                TextField("場所", text: $location).spotcodeField()
-                TextField("プロフィールURL", text: $website)
+                TextField(NSLocalizedString("表示名", comment: ""), text: $name).spotcodeField()
+                TextField(NSLocalizedString("自己紹介", comment: ""), text: $bio).spotcodeField()
+                TextField(NSLocalizedString("場所", comment: ""), text: $location).spotcodeField()
+                TextField(NSLocalizedString("プロフィールURL", comment: ""), text: $website)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).spotcodeField()
                 if !websiteIsValid {
-                    Label("http(s)形式のURLを入力してください。", systemImage: "exclamationmark.triangle.fill")
+                    Label(NSLocalizedString("http(s)形式のURLを入力してください。", comment: ""), systemImage: "exclamationmark.triangle.fill")
                         .spotcodeFont(13, weight: .regular, fallback: .footnote).foregroundColor(SpotcodeTheme.warning)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -3431,9 +3488,9 @@ private struct EditProfileView: View {
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).spotcodeField()
               }.padding()
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
-                .navigationTitle("Edit profile").navigationBarTitleDisplayMode(.inline)
+                .navigationTitle(NSLocalizedString("Edit profile", comment: "")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
+                    ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("Cancel", comment: "")) { isPresented = false } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button(saving ? NSLocalizedString("保存中…", comment: "") : NSLocalizedString("保存", comment: "")) { saving = true; Task { if await model.updateProfile(name: name, bio: bio, location: location, website: normalizedWebsiteValue, twitter: sanitizeSocialHandle(twitter), instagram: sanitizeSocialHandle(instagram), avatarURL: avatarURL, avatarShape: avatarShape) { isPresented = false }; saving = false } }.disabled(name.isEmpty || saving || !websiteIsValid)
                     }
@@ -3482,7 +3539,7 @@ private struct GitHubActivity: View {
         Link(destination: URL(string: "https://github.com/\(handle)?tab=contributions")!) {
           VStack(alignment: .leading, spacing: 8) {
             if showsTitle {
-                HStack(spacing: 5) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13); Text("GitHub activity"); Text("last 12 months").foregroundColor(SpotcodeTheme.muted) }.spotcodeFont(12, weight: .regular, fallback: .caption)
+                HStack(spacing: 5) { Image("GitHubMark").renderingMode(.template).resizable().scaledToFit().frame(width: 13, height: 13); Text(NSLocalizedString("GitHub activity", comment: "")); Text(NSLocalizedString("last 12 months", comment: "")).foregroundColor(SpotcodeTheme.muted) }.spotcodeFont(12, weight: .regular, fallback: .caption)
             }
             GeometryReader { geometry in
                 // Scale the entire 53-week grid to the available profile/rail
@@ -3546,7 +3603,7 @@ private struct OpenIssuesCard: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) { RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text("Open issues").foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text("公開リポの未クローズ issue (task)").spotcodeFont(11, weight: .regular, fallback: .caption2).foregroundColor(SpotcodeTheme.muted)
+            HStack(spacing: 6) { RepoMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: 13, height: 13).foregroundColor(SpotcodeTheme.muted); Text(NSLocalizedString("Open issues", comment: "")).foregroundColor(SpotcodeTheme.muted); Text("\(total)").fontWeight(.bold); Spacer(); Text(NSLocalizedString("公開リポの未クローズ issue (task)", comment: "")).spotcodeFont(11, weight: .regular, fallback: .caption2).foregroundColor(SpotcodeTheme.muted)
                 if !allowedIssues.isEmpty {
                     Button(listExpanded ? NSLocalizedString("折りたたむ", comment: "") : NSLocalizedString("リストを表示", comment: "")) { withAnimation { listExpanded.toggle() } }
                         .spotcodeFont(11, weight: .regular, fallback: .caption2).foregroundColor(SpotcodeTheme.muted).padding(.horizontal, 8).padding(.vertical, 3)
@@ -3567,9 +3624,9 @@ private struct OpenIssuesCard: View {
                 }.foregroundColor(SpotcodeTheme.text)
             }
             if result == nil {
-                ProgressView("Issueを読み込み中…").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                ProgressView(NSLocalizedString("Issueを読み込み中…", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
             } else if allowedIssues.isEmpty {
-                Text("未クローズのIssueはありません").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                Text(NSLocalizedString("未クローズのIssueはありません", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
             } else if listExpanded {
                 ForEach(visibleIssues) { issue in
                     VStack(alignment: .leading, spacing: 7) {
@@ -3842,13 +3899,13 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Settings").spotcodeFont(22, weight: .bold, fallback: .title2.weight(.bold))
+                Text(NSLocalizedString("Settings", comment: "")).spotcodeFont(22, weight: .bold, fallback: .title2.weight(.bold))
                 HStack(spacing: 0) {
-                    SettingsTab(title: "アカウント", icon: "person", selected: tab == 0) { tab = 0 }
-                    SettingsTab(title: "プライバシー", icon: "lock", selected: tab == 1) { tab = 1 }
-                    SettingsTab(title: "画面表示", icon: "gearshape", selected: tab == 2) { tab = 2 }
+                    SettingsTab(title: NSLocalizedString("アカウント", comment: ""), icon: "person", selected: tab == 0) { tab = 0 }
+                    SettingsTab(title: NSLocalizedString("プライバシー", comment: ""), icon: "lock", selected: tab == 1) { tab = 1 }
+                    SettingsTab(title: NSLocalizedString("画面表示", comment: ""), icon: "gearshape", selected: tab == 2) { tab = 2 }
                     if model.me?.isAdmin == true {
-                        SettingsTab(title: "開発", icon: "hammer", selected: tab == 3) { tab = 3 }
+                        SettingsTab(title: NSLocalizedString("開発", comment: ""), icon: "hammer", selected: tab == 3) { tab = 3 }
                     }
                 }
                 if tab == 0 { AccountSettings() }
@@ -3907,22 +3964,22 @@ private struct GitHubOrganizationSettings: View {
     var body: some View {
         SettingsCard("GitHub Organization") {
             if model.me?.isOrg == true {
-                Text("公開の.githubリポジトリに確認ファイルを追加して承認します。承認後もファイルは残してください。")
+                Text(NSLocalizedString("公開の.githubリポジトリに確認ファイルを追加して承認します。承認後もファイルは残してください。", comment: ""))
                     .foregroundColor(SpotcodeTheme.muted)
-                TextField("Organization名（Drowse-Lab）", text: $login)
+                TextField(NSLocalizedString("Organization名（Drowse-Lab）", comment: ""), text: $login)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().spotcodeField()
-                Button("確認コードを発行") { perform(issue: true) }.disabled(busy)
+                Button(NSLocalizedString("確認コードを発行", comment: "")) { perform(issue: true) }.disabled(busy)
                 if let challenge {
                     Text(challenge.login + "/.github → spotcode-verification.txt")
                         .spotcodeFont(12, weight: .regular, fallback: .caption).textSelection(.enabled)
-                    Text("次の内容をファイルに保存してください。有効期限は24時間です。")
+                    Text(NSLocalizedString("次の内容をファイルに保存してください。有効期限は24時間です。", comment: ""))
                     Text(challenge.content).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                    Button("確認コードをコピー") { UIPasteboard.general.string = challenge.content }
-                    Link("GitHubでファイルを追加", destination: challenge.create_url)
-                    Button("確認して承認") { perform(issue: false) }.disabled(busy)
+                    Button(NSLocalizedString("確認コードをコピー", comment: "")) { UIPasteboard.general.string = challenge.content }
+                    Link(NSLocalizedString("GitHubでファイルを追加", comment: ""), destination: challenge.create_url)
+                    Button(NSLocalizedString("確認して承認", comment: "")) { perform(issue: false) }.disabled(busy)
                 }
             }
-            Button("連携状態を確認") { synchronize() }.disabled(busy)
+            Button(NSLocalizedString("連携状態を確認", comment: "")) { synchronize() }.disabled(busy)
             if let linked = model.linkedGithubOrganization { Text(linked.login).fontWeight(.bold) }
             if busy { ProgressView() }
             if !message.isEmpty { Text(message).spotcodeFont(12, weight: .regular, fallback: .caption) }
@@ -3972,11 +4029,11 @@ private struct GitHubConnectionPermissions: View {
 
     var body: some View {
         SettingsCard("GitHub") {
-            Text("Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。")
+            Text(NSLocalizedString("Organizationへのアクセスは、最初のGitHub連携時にGitHubの認証画面で許可します。管理者の承認が必要な場合があります。", comment: ""))
                 .spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
             if let handle = model.me?.githubHandle { Text("@" + handle).fontWeight(.semibold) }
             Button(model.me?.githubHandle == nil ? NSLocalizedString("GitHubと連携", comment: "") : NSLocalizedString("GitHubの連携権限を更新", comment: "")) { authorize() }.disabled(busy)
-            if busy { ProgressView("GitHubで認証中…") }
+            if busy { ProgressView(NSLocalizedString("GitHubで認証中…", comment: "")) }
             if !message.isEmpty { Text(message).spotcodeFont(12, weight: .regular, fallback: .caption) }
         }
     }
@@ -4031,8 +4088,8 @@ private struct AccountSettings: View {
     @State private var savingIdentity = false
     var body: some View {
         VStack(spacing: SpotcodeLayout.value(12, 18)) {
-            SettingsCard("アカウント") {
-                Text("この端末にログイン済みのアカウントを切り替えられます。アカウント自体は削除されません。").foregroundColor(SpotcodeTheme.muted)
+            SettingsCard(NSLocalizedString("アカウント", comment: "")) {
+                Text(NSLocalizedString("この端末にログイン済みのアカウントを切り替えられます。アカウント自体は削除されません。", comment: "")).foregroundColor(SpotcodeTheme.muted)
                 ForEach(model.savedAccounts) { account in
                     let active = account.id == model.session?.user.id && !model.isPostingAsOfficial
                     Button {
@@ -4047,26 +4104,26 @@ private struct AccountSettings: View {
                                     Text("@\(account.profile.handle)")
                                     if active {
                                         Text("·")
-                                        Text("現在")
+                                        Text(NSLocalizedString("現在", comment: ""))
                                     }
                                 }.spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                             }
                             Spacer()
-                            if !active { Text("切り替え").spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent) }
+                            if !active { Text(NSLocalizedString("切り替え", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent) }
                         }
                         .padding(SpotcodeLayout.value(10, 12))
                         .background(active ? Color(red: 23/255, green: 40/255, blue: 54/255) : SpotcodeTheme.surface2)
                         .clipShape(RoundedRectangle(cornerRadius: 9))
                     }.buttonStyle(SpotcodePlainButtonStyle())
                 }
-                Button("＋ 別のアカウントでログイン") { showAddAccount = true }.buttonStyle(OutlineButtonStyle())
+                Button(NSLocalizedString("＋ 別のアカウントでログイン", comment: "")) { showAddAccount = true }.buttonStyle(OutlineButtonStyle())
             }
             MFASettingsCard()
-            SettingsCard("役割") {
+            SettingsCard(NSLocalizedString("役割", comment: "")) {
                 Label { Text(LocalizedStringKey(roleTitle)) } icon: { Image(systemName: model.me?.isAdmin == true ? "sparkles" : (model.me?.isOperator == true ? "flag" : "person")) }.foregroundColor(SpotcodeTheme.accent)
                 Text(LocalizedStringKey(roleDescription)).foregroundColor(SpotcodeTheme.muted)
             }
-            SettingsCard("アカウントの種類") {
+            SettingsCard(NSLocalizedString("アカウントの種類", comment: "")) {
                 SettingsStatusTag(text: isOrg ? NSLocalizedString("組織アカウント", comment: "") : NSLocalizedString("個人アカウント", comment: ""), enabled: isOrg)
                 Text(isOrg ? NSLocalizedString("プロフィールに組織バッジを表示します。", comment: "") : NSLocalizedString("個人のプログラマープロフィールとして表示します。", comment: "")).foregroundColor(SpotcodeTheme.muted)
                 Button(isOrg ? NSLocalizedString("個人アカウントに変更", comment: "") : NSLocalizedString("組織アカウントに変更", comment: "")) {
@@ -4074,10 +4131,10 @@ private struct AccountSettings: View {
                 }.buttonStyle(OutlineButtonStyle(filled: !isOrg)).disabled(savingIdentity)
             }
             GitHubOrganizationSettings()
-            SettingsCard("所属・組織名") {
-                Text("プロフィールに表示する会社・学校・コミュニティ名を設定します。").foregroundColor(SpotcodeTheme.muted)
-                TextField("所属名", text: $organization).spotcodeField()
-                Button("保存") { saveIdentity() }.buttonStyle(OutlineButtonStyle()).disabled(savingIdentity)
+            SettingsCard(NSLocalizedString("所属・組織名", comment: "")) {
+                Text(NSLocalizedString("プロフィールに表示する会社・学校・コミュニティ名を設定します。", comment: "")).foregroundColor(SpotcodeTheme.muted)
+                TextField(NSLocalizedString("所属名", comment: ""), text: $organization).spotcodeField()
+                Button(NSLocalizedString("保存", comment: "")) { saveIdentity() }.buttonStyle(OutlineButtonStyle()).disabled(savingIdentity)
             }
         }.sheet(isPresented: $showAddAccount) { LoginView(isPresented: $showAddAccount).environmentObject(model) }
          .onAppear { isOrg = model.me?.isOrg ?? false; organization = model.me?.organization ?? "" }
@@ -4110,33 +4167,33 @@ private struct DeveloperSettings: View {
 
     var body: some View {
         VStack(spacing: SpotcodeLayout.value(12, 18)) {
-            Text("この区画は管理者だけに表示されます。接続情報や内部IDは一般ユーザーには表示されません。")
+            Text(NSLocalizedString("この区画は管理者だけに表示されます。接続情報や内部IDは一般ユーザーには表示されません。", comment: ""))
                 .foregroundColor(SpotcodeTheme.muted)
-            SettingsCard("Developer mode") {
-                Toggle("開発者向けUIを表示", isOn: $developerMode)
+            SettingsCard(NSLocalizedString("Developer mode", comment: "")) {
+                Toggle(NSLocalizedString("開発者向けUIを表示", comment: ""), isOn: $developerMode)
                     .onChange(of: developerMode) { _ in Task { await model.loadTimeline() } }
-                Text("通知キューや内部IDなどの開発者向け表示を、この端末で切り替えます。")
+                Text(NSLocalizedString("通知キューや内部IDなどの開発者向け表示を、この端末で切り替えます。", comment: ""))
                     .foregroundColor(SpotcodeTheme.muted)
-                Text(developerMode ? "ON" : "OFF").spotcodeFont(12, weight: .bold, fallback: .caption.bold())
+                Text(developerMode ? NSLocalizedString("ON", comment: "") : NSLocalizedString("OFF", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.bold())
                     .foregroundColor(developerMode ? .green : SpotcodeTheme.muted)
             }
-            SettingsCard("dev test アカウントのパスワード") {
-                Text("社内QA用の @spotcode_dev アカウントを作成し、パスワードを設定／変更します。")
+            SettingsCard(NSLocalizedString("dev test アカウントのパスワード", comment: "")) {
+                Text(NSLocalizedString("社内QA用の @spotcode_dev アカウントを作成し、パスワードを設定／変更します。", comment: ""))
                     .foregroundColor(SpotcodeTheme.muted)
-                SecureField("新しいパスワード（8文字以上）", text: $password).spotcodeField()
-                Button("パスワードを設定") { setDevPassword() }
+                SecureField(NSLocalizedString("新しいパスワード（8文字以上）", comment: ""), text: $password).spotcodeField()
+                Button(NSLocalizedString("パスワードを設定", comment: "")) { setDevPassword() }
                     .buttonStyle(OutlineButtonStyle(filled: true)).disabled(busy || password.count < 8)
             }
-            SettingsCard("Supabase 接続") {
+            SettingsCard(NSLocalizedString("Supabase 接続", comment: "")) {
                 HStack {
-                    Text("CONNECTED").spotcodeFont(12, weight: .bold, fallback: .caption.bold()).foregroundColor(.green)
+                    Text(NSLocalizedString("CONNECTED", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.bold()).foregroundColor(.green)
                     Spacer()
                     Text(LocalizedStringKey(currentMode)).spotcodeFont(12, weight: .bold, fallback: .caption.bold()).foregroundColor(.green)
                 }
                 Text(URL(string: projectURL)?.host ?? projectURL).font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                 HStack {
-                    Button("接続テスト") { testConnection() }.buttonStyle(OutlineButtonStyle())
+                    Button(NSLocalizedString("接続テスト", comment: "")) { testConnection() }.buttonStyle(OutlineButtonStyle())
                     Button(showOverride ? NSLocalizedString("編集を閉じる", comment: "") : NSLocalizedString("自分のSupabaseに上書き", comment: "")) { showOverride.toggle() }
                         .buttonStyle(OutlineButtonStyle())
                 }
@@ -4145,11 +4202,11 @@ private struct DeveloperSettings: View {
                         .textInputAutocapitalization(.never).autocorrectionDisabled().spotcodeField()
                     SecureField("anon / publishable key", text: $publishableKey).spotcodeField()
                     HStack {
-                        Button("保存して上書き") { saveConnection() }
+                        Button(NSLocalizedString("保存して上書き", comment: "")) { saveConnection() }
                             .buttonStyle(OutlineButtonStyle(filled: true)).disabled(busy)
-                        Button("標準に戻す") { restoreDefault() }.buttonStyle(OutlineButtonStyle())
+                        Button(NSLocalizedString("標準に戻す", comment: "")) { restoreDefault() }.buttonStyle(OutlineButtonStyle())
                     }
-                    Text("⚠️ secret / service_role キーは保存できません。publishable key または旧形式の anon public JWT のみ使用できます。")
+                    Text(NSLocalizedString("⚠️ secret / service_role キーは保存できません。publishable key または旧形式の anon public JWT のみ使用できます。", comment: ""))
                         .spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.warning)
                 }
                 if !message.isEmpty {
@@ -4244,13 +4301,13 @@ private struct MFASettingsCard: View {
     @State private var showDisableConfirmation = false
 
     var body: some View {
-        SettingsCard("2段階認証") {
+        SettingsCard(NSLocalizedString("2段階認証", comment: "")) {
             HStack {
-                Text(factor == nil ? "OFF" : "ON").spotcodeFont(12, weight: .bold, fallback: .caption.bold())
+                Text(factor == nil ? NSLocalizedString("OFF", comment: "") : NSLocalizedString("ON", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.bold())
                     .foregroundColor(factor == nil ? SpotcodeTheme.muted : .green)
                 Spacer()
             }
-            Text("ログイン時に認証アプリが生成する6桁のワンタイムパスワードを要求します。")
+            Text(NSLocalizedString("ログイン時に認証アプリが生成する6桁のワンタイムパスワードを要求します。", comment: ""))
                 .foregroundColor(SpotcodeTheme.muted)
             Button(factor == nil ? NSLocalizedString("2段階認証を設定する", comment: "") : NSLocalizedString("2段階認証を無効にする", comment: "")) {
                 if factor != nil { showDisableConfirmation = true }
@@ -4272,8 +4329,8 @@ private struct MFASettingsCard: View {
                 Task { await refresh() }
             }.environmentObject(model)
         }
-        .confirmationDialog("2段階認証を無効にしますか？", isPresented: $showDisableConfirmation) {
-            Button("無効にする", role: .destructive) {
+        .confirmationDialog(NSLocalizedString("2段階認証を無効にしますか？", comment: ""), isPresented: $showDisableConfirmation) {
+            Button(NSLocalizedString("無効にする", comment: ""), role: .destructive) {
                 guard let factor else { return }
                 loading = true
                 Task {
@@ -4306,13 +4363,13 @@ private struct MFAEnrollmentView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: SpotcodeLayout.value(16, 16)) {
-                    Text("認証アプリでワンタイムパスワードの追加を選び、QRコードを読み取ってください。")
+                    Text(NSLocalizedString("認証アプリでワンタイムパスワードの追加を選び、QRコードを読み取ってください。", comment: ""))
                     if let image = qrImage(enrollment.totp.uri ?? enrollment.totp.secret) {
                         Image(uiImage: image).interpolation(.none).resizable().frame(width: 240, height: 240).padding(10).background(Color.white).cornerRadius(12)
                     }
-                    Text("読み取れない場合").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                    Text(NSLocalizedString("読み取れない場合", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                     Text(enrollment.totp.secret).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                    TextField("6桁コード", text: $code)
+                    TextField(NSLocalizedString("6桁コード", comment: ""), text: $code)
                         .keyboardType(.numberPad)
                         .textContentType(.oneTimeCode)
                         .onChange(of: code) { value in
@@ -4328,7 +4385,7 @@ private struct MFAEnrollmentView: View {
                     }.buttonStyle(OutlineButtonStyle(filled: true)).disabled(busy)
                     if !errorMessage.isEmpty { Text(errorMessage).foregroundColor(SpotcodeTheme.warning) }
                 }.padding()
-            }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle("2段階認証")
+            }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationTitle(NSLocalizedString("2段階認証", comment: ""))
         }.preferredColorScheme(.dark)
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
@@ -4352,17 +4409,17 @@ private struct PrivacySettings: View {
     @State private var orgMembers = ""
     @State private var saving = false
     var body: some View { VStack(spacing: SpotcodeLayout.value(12, 18)) {
-        SettingsCard("アカウントの公開範囲") {
+        SettingsCard(NSLocalizedString("アカウントの公開範囲", comment: "")) {
             SettingsStatusTag(text: privateAccount ? NSLocalizedString("非公開", comment: "") : NSLocalizedString("公開", comment: ""), enabled: privateAccount)
             Text(privateAccount ? NSLocalizedString("承認したフォロワーだけが投稿を表示できます。", comment: "") : NSLocalizedString("すべてのユーザーが投稿を表示できます。", comment: "")).foregroundColor(SpotcodeTheme.muted)
             Button(privateAccount ? NSLocalizedString("公開アカウントにする", comment: "") : NSLocalizedString("非公開アカウントにする", comment: "")) { privateAccount.toggle(); save() }
                 .buttonStyle(OutlineButtonStyle(filled: !privateAccount)).disabled(saving)
         }
-        SettingsCard("公開対象リスト") {
-            Text("「親しい友達」と「同じ組織」の投稿を表示できるユーザーを設定します。").foregroundColor(SpotcodeTheme.muted)
-            TextField("親しい友達（@handle、カンマ区切り）", text: $closeFriends).spotcodeField()
-            TextField("同じ組織（@handle、カンマ区切り）", text: $orgMembers).spotcodeField()
-            Button("保存") { save() }.buttonStyle(OutlineButtonStyle()).disabled(saving)
+        SettingsCard(NSLocalizedString("公開対象リスト", comment: "")) {
+            Text(NSLocalizedString("「親しい友達」と「同じ組織」の投稿を表示できるユーザーを設定します。", comment: "")).foregroundColor(SpotcodeTheme.muted)
+            TextField(NSLocalizedString("親しい友達（@handle、カンマ区切り）", comment: ""), text: $closeFriends).spotcodeField()
+            TextField(NSLocalizedString("同じ組織（@handle、カンマ区切り）", comment: ""), text: $orgMembers).spotcodeField()
+            Button(NSLocalizedString("保存", comment: "")) { save() }.buttonStyle(OutlineButtonStyle()).disabled(saving)
         }
     }.onAppear {
         privateAccount = model.me?.isPrivate ?? false
@@ -4406,81 +4463,81 @@ private struct DisplaySettings: View {
     private var appLanguage: String { Bundle.main.preferredLocalizations.first ?? "en" }
     var body: some View { VStack(spacing: SpotcodeLayout.value(12, 18)) {
         #if targetEnvironment(macCatalyst)
-        SettingsCard("文字サイズ") {
-            Picker("文字サイズ", selection: $macTextSize) {
+        SettingsCard(NSLocalizedString("文字サイズ", comment: "")) {
+            Picker(NSLocalizedString("文字サイズ", comment: ""), selection: $macTextSize) {
                 ForEach(MacTextSize.labels.indices, id: \.self) { index in
                     Text(LocalizedStringKey(MacTextSize.labels[index])).tag(index)
                 }
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("settings.macTextSize")
-            Text("投稿やメニュー、入力欄の文字サイズを変更します。")
+            Text(NSLocalizedString("投稿やメニュー、入力欄の文字サイズを変更します。", comment: ""))
                 .foregroundColor(SpotcodeTheme.muted)
-            Text("文字サイズのプレビュー").spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
-            Button("標準に戻す") { macTextSize = 1 }
+            Text(NSLocalizedString("文字サイズのプレビュー", comment: "")).spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
+            Button(NSLocalizedString("標準に戻す", comment: "")) { macTextSize = 1 }
                 .buttonStyle(OutlineButtonStyle()).disabled(macTextSize == 1)
         }
         #endif
-        SettingsCard("Language") {
+        SettingsCard(NSLocalizedString("Language", comment: "")) {
             #if targetEnvironment(macCatalyst)
-            Text("Macのシステム設定の「一般」→「言語と地域」で、アプリの言語を変更できます。")
+            Text(NSLocalizedString("Macのシステム設定の「一般」→「言語と地域」で、アプリの言語を変更できます。", comment: ""))
             #else
-            Button("iOS設定でアプリの言語を変更") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
+            Button(NSLocalizedString("iOS設定でアプリの言語を変更", comment: "")) { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
             #endif
-            Text("権限確認もアプリと同じ言語で表示されます。")
+            Text(NSLocalizedString("権限確認もアプリと同じ言語で表示されます。", comment: ""))
                 .foregroundColor(SpotcodeTheme.muted)
         }
-        SettingsCard("装飾バッジの表示") {
+        SettingsCard(NSLocalizedString("装飾バッジの表示", comment: "")) {
             SettingsStatusTag(text: hideBadges ? NSLocalizedString("非表示", comment: "") : NSLocalizedString("表示", comment: ""), enabled: !hideBadges)
-            Text("プロフィールや投稿の { }・言語・アイデア・WIPなどのバッジをまとめて切り替えます。").foregroundColor(SpotcodeTheme.muted)
+            Text(NSLocalizedString("プロフィールや投稿の { }・言語・アイデア・WIPなどのバッジをまとめて切り替えます。", comment: "")).foregroundColor(SpotcodeTheme.muted)
             Button(hideBadges ? NSLocalizedString("バッジを表示する", comment: "") : NSLocalizedString("バッジを非表示にする", comment: "")) { hideBadges.toggle() }
                 .buttonStyle(OutlineButtonStyle(filled: hideBadges))
         }
         issueDisplayCard
-        SettingsCard("通知") {
+        SettingsCard(NSLocalizedString("通知", comment: "")) {
             HStack {
                 Label { Text(LocalizedStringKey(notificationStatusText)) } icon: { Image(systemName: notificationStatus == .authorized ? "bell.badge.fill" : "bell.slash") }
                     .foregroundColor(notificationStatus == .authorized ? .green : SpotcodeTheme.muted)
                 Spacer()
             }
-            Text("いいね・コメント・メンション・フォローなどを端末の通知として受け取ります。")
+            Text(NSLocalizedString("いいね・コメント・メンション・フォローなどを端末の通知として受け取ります。", comment: ""))
                 .foregroundColor(SpotcodeTheme.muted)
             if notificationStatus == .denied {
-                Button("端末の通知設定を開く") { openSystemSettings() }
+                Button(NSLocalizedString("端末の通知設定を開く", comment: "")) { openSystemSettings() }
                     .buttonStyle(OutlineButtonStyle(filled: true))
-                Text("通知が拒否されています。端末の設定でSpotcodeの通知を許可してください。")
+                Text(NSLocalizedString("通知が拒否されています。端末の設定でSpotcodeの通知を許可してください。", comment: ""))
                     .spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.warning)
             } else if notificationStatus != .authorized && notificationStatus != .provisional {
                 Button(requestingNotifications ? NSLocalizedString("確認中…", comment: "") : NSLocalizedString("通知をONにする", comment: "")) { requestNotificationPermission() }
                     .buttonStyle(OutlineButtonStyle(filled: true)).disabled(requestingNotifications)
             } else {
-                Button("端末の通知設定を開く") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
+                Button(NSLocalizedString("端末の通知設定を開く", comment: "")) { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
             }
             Divider().overlay(SpotcodeTheme.border)
-            Text("通知する内容").spotcodeFont(15, weight: .bold, fallback: .subheadline.weight(.bold))
-            Toggle("いいね", isOn: $notifyLikes)
-            Toggle("コメント", isOn: $notifyComments)
-            Toggle("メンション", isOn: $notifyMentions)
-            Toggle("フォロー・フォローリクエスト", isOn: $notifyFollows)
-            Picker("投稿と地区の通知", selection: $followedPostScope) {
-                Text("OFF").tag("off")
-                Text("相互フォロー").tag("mutuals")
-                Text("フォロー中").tag("following")
+            Text(NSLocalizedString("通知する内容", comment: "")).spotcodeFont(15, weight: .bold, fallback: .subheadline.weight(.bold))
+            Toggle(NSLocalizedString("いいね", comment: ""), isOn: $notifyLikes)
+            Toggle(NSLocalizedString("コメント", comment: ""), isOn: $notifyComments)
+            Toggle(NSLocalizedString("メンション", comment: ""), isOn: $notifyMentions)
+            Toggle(NSLocalizedString("フォロー・フォローリクエスト", comment: ""), isOn: $notifyFollows)
+            Picker(NSLocalizedString("投稿と地区の通知", comment: ""), selection: $followedPostScope) {
+                Text(NSLocalizedString("OFF", comment: "")).tag("off")
+                Text(NSLocalizedString("相互フォロー", comment: "")).tag("mutuals")
+                Text(NSLocalizedString("フォロー中", comment: "")).tag("following")
             }
-            Text("投稿のスポットの市区町村を表示します。スポットがない投稿は地区未設定になります。アプリ利用中に新着を確認し、通知一覧と端末のバナーに表示します。")
+            Text(NSLocalizedString("投稿のスポットの市区町村を表示します。スポットがない投稿は地区未設定になります。アプリ利用中に新着を確認し、通知一覧と端末のバナーに表示します。", comment: ""))
                 .spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
-            Text("種類別の設定はSpotcode内の通知一覧に適用されます。通知音やバナー表示は端末の通知設定で変更できます。")
+            Text(NSLocalizedString("種類別の設定はSpotcode内の通知一覧に適用されます。通知音やバナー表示は端末の通知設定で変更できます。", comment: ""))
                 .spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
         }
-        SettingsCard("地図") {
-            Text("スポット機能で使用するApple Mapsと位置情報を確認します。").foregroundColor(SpotcodeTheme.muted)
-            Button("地図をテスト") { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
+        SettingsCard(NSLocalizedString("地図", comment: "")) {
+            Text(NSLocalizedString("スポット機能で使用するApple Mapsと位置情報を確認します。", comment: "")).foregroundColor(SpotcodeTheme.muted)
+            Button(NSLocalizedString("地図をテスト", comment: "")) { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
         }
         SafetySettingsCard()
-        SettingsCard("Spotcodeについて") {
-            Text("Spotcodeは、コード・スポット・アイデアを共有するSNSです。").foregroundColor(SpotcodeTheme.muted)
-            Link("利用規約", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
-            Link("プライバシーポリシー", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
+        SettingsCard(NSLocalizedString("Spotcodeについて", comment: "")) {
+            Text(NSLocalizedString("Spotcodeは、コード・スポット・アイデアを共有するSNSです。", comment: "")).foregroundColor(SpotcodeTheme.muted)
+            Link(NSLocalizedString("利用規約", comment: ""), destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
+            Link(NSLocalizedString("プライバシーポリシー", comment: ""), destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
                 .foregroundColor(SpotcodeTheme.accent)
         }
     }.task {
@@ -4534,26 +4591,26 @@ private struct DisplaySettings: View {
     private var issueDisplayCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("プロフィールに Open issue (task) を表示").spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
+                Text(NSLocalizedString("プロフィールに Open issue (task) を表示", comment: "")).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
                 Text(hideTasks ? NSLocalizedString("非表示", comment: "") : NSLocalizedString("表示", comment: ""))
                     .spotcodeFont(12, weight: .bold, fallback: .caption.bold()).foregroundColor(SpotcodeTheme.muted)
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .overlay(Capsule().stroke(SpotcodeTheme.border))
                     .fixedSize()
             }
-            Text("プロフィールページの下に「Open issues」カード (GitHub の未クローズ issue = task 一覧) を出します。OFF にするとカード自体が消え、GitHub Search API の呼び出しもスキップします。")
+            Text(NSLocalizedString("プロフィールページの下に「Open issues」カード (GitHub の未クローズ issue = task 一覧) を出します。OFF にするとカード自体が消え、GitHub Search API の呼び出しもスキップします。", comment: ""))
                 .foregroundColor(SpotcodeTheme.muted)
             Button(hideTasks ? NSLocalizedString("タスクを表示する", comment: "") : NSLocalizedString("タスクを非表示にする", comment: "")) { hideTasks.toggle() }
                 .buttonStyle(OutlineButtonStyle())
-            Text("表示するリポジトリ").spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
-            TextField("リポジトリ名で検索（owner/repo）", text: $issueRepositoryQuery)
+            Text(NSLocalizedString("表示するリポジトリ", comment: "")).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
+            TextField(NSLocalizedString("リポジトリ名で検索（owner/repo）", comment: ""), text: $issueRepositoryQuery)
                 .textInputAutocapitalization(.never).autocorrectionDisabled(true)
                 .spotcodeField()
-                .accessibilityLabel(Text("表示するリポジトリ"))
+                .accessibilityLabel(Text(NSLocalizedString("表示するリポジトリ", comment: "")))
             if issueRepositories.isEmpty {
-                Text("表示できるリポジトリがありません。").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                Text(NSLocalizedString("表示できるリポジトリがありません。", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
             } else if matchingIssueRepositories.isEmpty {
-                Text("一致するリポジトリがありません。").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                Text(NSLocalizedString("一致するリポジトリがありません。", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
@@ -4568,7 +4625,7 @@ private struct DisplaySettings: View {
             }
             .buttonStyle(OutlineButtonStyle())
             .disabled(authorizingPrivateIssues || model.me?.githubHandle == nil)
-            if authorizingPrivateIssues { ProgressView("GitHubで認証中…") }
+            if authorizingPrivateIssues { ProgressView(NSLocalizedString("GitHubで認証中…", comment: "")) }
             if !privateIssueMessage.isEmpty {
                 Text(privateIssueMessage).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
             }
@@ -4804,9 +4861,9 @@ private struct SafetySettingsCard: View {
     @State private var names: [UUID: String] = [:]
     @State private var message = ""
     var body: some View {
-        SettingsCard("安全・サポート") {
-            Link("サポート・お問い合わせ", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/support.html")!)
-            Text("ブロックしたユーザー").spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
+        SettingsCard(NSLocalizedString("安全・サポート", comment: "")) {
+            Link(NSLocalizedString("サポート・お問い合わせ", comment: ""), destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/support.html")!)
+            Text(NSLocalizedString("ブロックしたユーザー", comment: "")).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
             ForEach(Array(model.blockedAccountIDs).sorted { $0.uuidString < $1.uuidString }, id: \.self) { id in
                 HStack {
                     Text(names[id] ?? id.uuidString).lineLimit(2)
@@ -4815,13 +4872,13 @@ private struct SafetySettingsCard: View {
                 }
             }
             if model.me?.isAdmin == true || model.me?.isOperator == true {
-                Text("運営への通報・ブロック通知").spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
+                Text(NSLocalizedString("運営への通報・ブロック通知", comment: "")).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
                 ForEach(events) { event in
                     VStack(alignment: .leading) {
                         Text(event.kind + " · " + event.created_at).spotcodeFont(12, weight: .regular, fallback: .caption)
                         Text(event.detail)
                         if let post = event.post_id {
-                            Link("対象の投稿を開く", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/#/post/" + post.uuidString)!)
+                            Link(NSLocalizedString("対象の投稿を開く", comment: ""), destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/#/post/" + post.uuidString)!)
                         }
                     }
                 }
@@ -4845,11 +4902,11 @@ private struct TermsAgreementContent: View {
     @Binding var agreed: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("利用規約への同意").spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
-            Text("不適切な投稿、嫌がらせ、差別、脅迫、性的搾取、違法行為は禁止です。違反投稿の削除や利用停止を行います。通報・ブロック情報は運営に送信されます。")
-            Link("利用規約を読む", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
-            Link("プライバシーポリシー", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
-            Toggle("利用規約に同意します", isOn: $agreed)
+            Text(NSLocalizedString("利用規約への同意", comment: "")).spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.headlineFont)
+            Text(NSLocalizedString("不適切な投稿、嫌がらせ、差別、脅迫、性的搾取、違法行為は禁止です。違反投稿の削除や利用停止を行います。通報・ブロック情報は運営に送信されます。", comment: ""))
+            Link(NSLocalizedString("利用規約を読む", comment: ""), destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
+            Link(NSLocalizedString("プライバシーポリシー", comment: ""), destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
+            Toggle(NSLocalizedString("利用規約に同意します", comment: ""), isOn: $agreed)
         }
     }
 }
@@ -4860,8 +4917,8 @@ private struct TermsAgreementGate: View {
     var body: some View {
         ScrollView { VStack(spacing: 20) {
             TermsAgreementContent(agreed: $agreed)
-            Button("同意して続ける") { acceptedTerms = "2026-09-08" }.disabled(!agreed)
-            Button("ログアウト") { model.signOut() }
+            Button(NSLocalizedString("同意して続ける", comment: "")) { acceptedTerms = "2026-09-08" }.disabled(!agreed)
+            Button(NSLocalizedString("ログアウト", comment: "")) { model.signOut() }
         }.padding(24).frame(maxWidth: 600) }
         .interactiveDismissDisabled()
     }
@@ -4923,15 +4980,15 @@ struct LoginView: View {
                 TermsAgreementContent(agreed: $agreedToTerms)
                 Image(systemName: "chevron.left.forwardslash.chevron.right").spotcodeFont(34, weight: .regular, fallback: .largeTitle)
                 if model.requiresReauthentication && !model.requiresMFA {
-                    Label("ログインセッションが無効になりました。アカウントを継続するため、もう一度ログインしてください。", systemImage: "lock.rotation")
+                    Label(NSLocalizedString("ログインセッションが無効になりました。アカウントを継続するため、もう一度ログインしてください。", comment: ""), systemImage: "lock.rotation")
                         .spotcodeFont(13, weight: .regular, fallback: .footnote).foregroundColor(SpotcodeTheme.warning)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10).background(SpotcodeTheme.warning.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 if model.requiresMFA {
-                    Text("2段階認証").spotcodeFont(20, weight: .bold, fallback: .title3.bold())
-                    Text("認証アプリに表示されている6桁コードを入力してください。")
+                    Text(NSLocalizedString("2段階認証", comment: "")).spotcodeFont(20, weight: .bold, fallback: .title3.bold())
+                    Text(NSLocalizedString("認証アプリに表示されている6桁コードを入力してください。", comment: ""))
                         .foregroundColor(SpotcodeTheme.muted)
                     TextField("123456", text: $otpCode)
                         .keyboardType(.numberPad)
@@ -4963,7 +5020,7 @@ struct LoginView: View {
                     .contentShape(Capsule())
                     .disabled(signing || !agreedToTerms)
                 } else {
-                TextField("メールまたはログイン名", text: $email)
+                TextField(NSLocalizedString("メールまたはログイン名", comment: ""), text: $email)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
                     .textContentType(.username)
@@ -4972,9 +5029,9 @@ struct LoginView: View {
                 HStack {
                     Group {
                         if showsPassword {
-                            TextField("パスワード", text: $password)
+                            TextField(NSLocalizedString("パスワード", comment: ""), text: $password)
                         } else {
-                            SecureField("パスワード", text: $password)
+                            SecureField(NSLocalizedString("パスワード", comment: ""), text: $password)
                         }
                     }
                     .textContentType(.password)
@@ -5032,13 +5089,13 @@ struct LoginView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 HStack(spacing: 16) {
                     Button { isPresented = false } label: {
-                        Text("閉じる").fixedSize(horizontal: true, vertical: false)
+                        Text(NSLocalizedString("閉じる", comment: "")).fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 16).frame(minHeight: 44)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain).keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("login.close")
-                    Text("spotcodeへログイン")
+                    Text(NSLocalizedString("spotcodeへログイン", comment: ""))
                         .spotcodeFont(18, weight: .bold, fallback: .headline)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -5058,11 +5115,11 @@ struct LoginView: View {
                 }
             }
             #else
-            .navigationTitle("spotcodeへログイン")
+            .navigationTitle(NSLocalizedString("spotcodeへログイン", comment: ""))
             .desktopInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("閉じる") { isPresented = false }
+                    Button(NSLocalizedString("閉じる", comment: "")) { isPresented = false }
                         .keyboardShortcut(.cancelAction)
                         .accessibilityIdentifier("login.close")
                 }
@@ -5109,12 +5166,12 @@ private struct DesktopLoginView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                tab("Log in", selected: !signup) { signup = false }
-                tab("Sign up", selected: signup) { signup = true }
+                tab(NSLocalizedString("Log in", comment: ""), selected: !signup) { signup = false }
+                tab(NSLocalizedString("Sign up", comment: ""), selected: signup) { signup = true }
                 Button { isPresented = false } label: {
                     Image(systemName: "xmark").frame(width: 36, height: 44).contentShape(Rectangle())
                 }.buttonStyle(.plain).keyboardShortcut(.cancelAction)
-                    .accessibilityLabel("閉じる").accessibilityIdentifier("login.close")
+                    .accessibilityLabel(NSLocalizedString("閉じる", comment: "")).accessibilityIdentifier("login.close")
             }.padding(.horizontal, 24).padding(.top, 12)
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -5122,35 +5179,35 @@ private struct DesktopLoginView: View {
                         Text("signup.confirm_email")
                         Text(email).textSelection(.enabled)
                     } else {
-                        Text("不適切な投稿、嫌がらせ、差別、脅迫、性的搾取、違法行為は禁止です。違反投稿の削除や利用停止を行います。通報・ブロック情報は運営に送信されます。")
+                        Text(NSLocalizedString("不適切な投稿、嫌がらせ、差別、脅迫、性的搾取、違法行為は禁止です。違反投稿の削除や利用停止を行います。通報・ブロック情報は運営に送信されます。", comment: ""))
                             .fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: 8) {
-                            Link("利用規約を読む", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
+                            Link(NSLocalizedString("利用規約を読む", comment: ""), destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/terms.html")!)
                             Text("·")
-                            Link("プライバシーポリシー", destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
+                            Link(NSLocalizedString("プライバシーポリシー", comment: ""), destination: URL(string: "https://hrmcngs.github.io/spotcode-sns/privacy.html")!)
                         }.spotcodeFont(12, fallback: .caption)
                         Button { agreed.toggle() } label: {
                             HStack(alignment: .top, spacing: 8) {
                                 Image(systemName: agreed ? "checkmark.square.fill" : "square")
                                     .foregroundColor(agreed ? SpotcodeTheme.accent : SpotcodeTheme.muted)
-                                Text("利用規約に同意します").fixedSize(horizontal: false, vertical: true)
+                                Text(NSLocalizedString("利用規約に同意します", comment: "")).fixedSize(horizontal: false, vertical: true)
                             }.frame(maxWidth: .infinity, minHeight: 32, alignment: .leading).contentShape(Rectangle())
-                        }.buttonStyle(.plain).accessibilityValue(agreed ? "ON" : "OFF")
+                        }.buttonStyle(.plain).accessibilityValue(agreed ? NSLocalizedString("ON", comment: "") : NSLocalizedString("OFF", comment: ""))
                         if !model.requiresMFA {
                             Button { githubLogin() } label: {
-                                Text("Continue with GitHub").fontWeight(.semibold)
+                                Text(NSLocalizedString("Continue with GitHub", comment: "")).fontWeight(.semibold)
                                     .frame(maxWidth: .infinity, minHeight: 44)
                                     .background(SpotcodeTheme.background).clipShape(Capsule())
                                     .overlay(Capsule().stroke(SpotcodeTheme.border)).contentShape(Capsule())
                             }.buttonStyle(.plain).disabled(busy || !agreed)
                             HStack(spacing: 12) {
                                 Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
-                                Text("or").spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                                Text(NSLocalizedString("or", comment: "")).spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                                 Rectangle().fill(SpotcodeTheme.border).frame(height: 1)
                             }
                                 .padding(.vertical, 8)
                         }
-                        Text(LocalizedStringKey(model.requiresMFA ? "2段階認証" : (signup ? "Sign up" : "Log in")))
+                        Text(LocalizedStringKey(model.requiresMFA ? NSLocalizedString("2段階認証", comment: "") : (signup ? NSLocalizedString("Sign up", comment: "") : NSLocalizedString("Log in", comment: ""))))
                             .spotcodeFont(18, weight: .bold, fallback: .headline).padding(.top, 6)
                         if model.requiresMFA {
                             TextField("123456", text: $code).textContentType(.oneTimeCode).spotcodeField()
@@ -5160,11 +5217,11 @@ private struct DesktopLoginView: View {
                                 field("signup.name") { TextField("", text: $name).textContentType(.name) }
                                 field("signup.handle") { TextField("", text: $handle).textInputAutocapitalization(.never).autocorrectionDisabled() }
                             }
-                            field(signup ? "signup.email" : "メールまたはログイン名") {
+                            field(signup ? "signup.email" : NSLocalizedString("メールまたはログイン名", comment: "")) {
                                 TextField("", text: $email).textContentType(.username)
                                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                             }
-                            field("パスワード") {
+                            field(NSLocalizedString("パスワード", comment: "")) {
                                 HStack {
                                     Group {
                                         if visiblePassword { TextField("", text: $password) }
@@ -5174,12 +5231,12 @@ private struct DesktopLoginView: View {
                                         Image(systemName: visiblePassword ? "eye.slash" : "eye")
                                             .frame(width: 32, height: 28)
                                     }.buttonStyle(.plain).foregroundColor(SpotcodeTheme.accent)
-                                        .accessibilityLabel("パスワードを表示")
+                                        .accessibilityLabel(NSLocalizedString("パスワードを表示", comment: ""))
                                 }
                             }
                         }
                         Button { submit() } label: {
-                            Text(LocalizedStringKey(busy ? "確認中…" : (model.requiresMFA ? "確認してログイン" : (signup ? "Sign up" : "Log in"))))
+                            Text(LocalizedStringKey(busy ? NSLocalizedString("確認中…", comment: "") : (model.requiresMFA ? NSLocalizedString("確認してログイン", comment: "") : (signup ? NSLocalizedString("Sign up", comment: "") : NSLocalizedString("Log in", comment: "")))))
                                 .spotcodeFont(14, weight: .bold, fallback: .headline)
                                 .frame(maxWidth: .infinity, minHeight: 44)
                                 .background(SpotcodeTheme.text).foregroundColor(SpotcodeTheme.background)
@@ -5540,7 +5597,7 @@ private struct BusinessCardPreview: View {
         #if targetEnvironment(macCatalyst)
         .background(CardHorizontalScroll(flip: flip))
         #endif
-        .accessibilityAction(named: "名刺を裏返す", flip)
+        .accessibilityAction(named: NSLocalizedString("名刺を裏返す", comment: ""), flip)
         .accessibilityElement(children: .contain)
     }
     private func flip() { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.55)) { flipped.toggle() } }
@@ -5557,12 +5614,12 @@ private struct BusinessCardPreview: View {
             HStack(spacing: 14) {
                 if (card.image_side ?? "front") == (back ? "back" : "front"), let source = card.image_url, !source.isEmpty {
                     if let destination = BusinessCardLink.webURL(card.image_link ?? "") {
-                        Link(destination: destination) { picture(source) }.accessibilityLabel("画像のリンクを開く")
+                        Link(destination: destination) { picture(source) }.accessibilityLabel(NSLocalizedString("画像のリンクを開く", comment: ""))
                     } else { picture(source) }
                 }
                 VStack(alignment: horizontal, spacing: 8) {
                     if back {
-                        Text(card.bio.isEmpty ? "よろしくお願いします。" : card.bio).font(.system(size: 14, design: fontDesign)).minimumScaleFactor(0.6)
+                        Text(card.bio.isEmpty ? NSLocalizedString("よろしくお願いします。", comment: "") : card.bio).font(.system(size: 14, design: fontDesign)).minimumScaleFactor(0.6)
                         Text(card.contact).font(.system(size: 12, design: fontDesign)).minimumScaleFactor(0.6)
                     } else {
                         Text(card.name).font(.system(size: CGFloat(d.nameSize ?? 26), weight: .bold, design: fontDesign)).minimumScaleFactor(0.5)
@@ -5590,7 +5647,7 @@ private struct BusinessCardPreview: View {
                         ZStack(alignment: .bottomTrailing) {
                             DataURLImage(value: card.image_url ?? "", fit: true)
                                 .frame(width: geometry.size.width, height: geometry.size.height)
-                                .accessibilityLabel("名刺画像")
+                                .accessibilityLabel(NSLocalizedString("名刺画像", comment: ""))
                         }
                     }
                 }
@@ -5603,7 +5660,7 @@ private struct BusinessCardPreview: View {
         let size = CGFloat(min(100, max(48, card.image_size ?? 64)))
         return DataURLImage(value: source).frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: card.image_shape == "round" ? size / 2 : 8))
-            .accessibilityLabel("\(card.name) の名刺画像")
+            .accessibilityLabel(String(format: NSLocalizedString("%@ の名刺画像", comment: ""), card.name))
     }
     private func background(back: Bool) -> some View {
         let front = businessCardColor(d.frontColor), rear = businessCardColor(d.backColor)
@@ -5668,7 +5725,7 @@ private struct FullscreenBusinessCardView: View {
             HStack {
                 Spacer()
                 Button { dismiss() } label: {
-                    Label("閉じる", systemImage: "xmark").padding(8)
+                    Label(NSLocalizedString("閉じる", comment: ""), systemImage: "xmark").padding(8)
                 }
                 .buttonStyle(.bordered)
                 .keyboardShortcut(.cancelAction)
@@ -5682,12 +5739,12 @@ private struct FullscreenBusinessCardView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            DisclosureGroup("実寸調整（91 × 55 mm）") {
-                Text("定規を当て、長辺が91mmになるよう調整してください。画面や表示倍率を変えた場合は調整し直してください。")
+            DisclosureGroup(NSLocalizedString("実寸調整（91 × 55 mm）", comment: "")) {
+                Text(NSLocalizedString("定規を当て、長辺が91mmになるよう調整してください。画面や表示倍率を変えた場合は調整し直してください。", comment: ""))
                     .font(.caption)
                 Slider(value: $physicalScale, in: 0.5...2, step: 0.005)
-                    .accessibilityLabel("実寸の補正倍率")
-                Button("補正をリセット") { physicalScale = 1 }
+                    .accessibilityLabel(NSLocalizedString("実寸の補正倍率", comment: ""))
+                Button(NSLocalizedString("補正をリセット", comment: "")) { physicalScale = 1 }
             }
             .padding(16).frame(maxWidth: 440).background(Color.black)
         }
@@ -5767,13 +5824,13 @@ private struct BusinessCardView: View {
         ScrollView {
             VStack(spacing: 0) {
                 if loading { ProgressView() }
-                else if failed { Button("再読み込み") { Task { await load() } } }
+                else if failed { Button(NSLocalizedString("再読み込み", comment: "")) { Task { await load() } } }
                 else if published || own {
                     BusinessCardPreview(card: draft)
                         .frame(width: viewport.size.width, height: viewport.size.height)
                         .overlay(alignment: .topTrailing) {
                             Button { fullscreenCard = true } label: {
-                                Label("全画面", systemImage: "arrow.up.left.and.arrow.down.right")
+                                Label(NSLocalizedString("全画面", comment: ""), systemImage: "arrow.up.left.and.arrow.down.right")
                             }
                             .buttonStyle(.bordered).padding(16)
                         }
@@ -5785,25 +5842,25 @@ private struct BusinessCardView: View {
                     VStack(alignment: .leading, spacing: 20) {
                     if published {
                         HStack {
-                            Button("名刺を共有") { sharing = true }.buttonStyle(.borderedProminent)
-                            Button("リンクをコピー") { UIPasteboard.general.url = link; message = "リンクをコピーしました。" }.buttonStyle(.bordered)
+                            Button(NSLocalizedString("名刺を共有", comment: "")) { sharing = true }.buttonStyle(.borderedProminent)
+                            Button(NSLocalizedString("リンクをコピー", comment: "")) { UIPasteboard.general.url = link; message = NSLocalizedString("リンクをコピーしました。", comment: "") }.buttonStyle(.bordered)
                         }
-                        Text("共有メニューのAirDropから名刺リンクを送れます。相手にも名刺を送り返してもらうと交換できます。")
+                        Text(NSLocalizedString("共有メニューのAirDropから名刺リンクを送れます。相手にも名刺を送り返してもらうと交換できます。", comment: ""))
                             .font(.caption).foregroundColor(.secondary)
                         if !own {
-                            Button("コレクションに保存") { collect() }.buttonStyle(.borderedProminent).disabled(busy || model.session == nil)
-                            if model.session == nil { Text("保存するにはログインしてください。").font(.caption) }
+                            Button(NSLocalizedString("コレクションに保存", comment: "")) { collect() }.buttonStyle(.borderedProminent).disabled(busy || model.session == nil)
+                            if model.session == nil { Text(NSLocalizedString("保存するにはログインしてください。", comment: "")).font(.caption) }
                         }
                     }
                     if own {
-                        Button(editingCard ? "編集を閉じる" : "名刺を編集") { editingCard.toggle() }
+                        Button(editingCard ? NSLocalizedString("編集を閉じる", comment: "") : NSLocalizedString("名刺を編集", comment: "")) { editingCard.toggle() }
                             .buttonStyle(.borderedProminent)
                         if editingCard { editor }
                     }
                     }.padding(24).frame(maxWidth: 600)
-                } else { Text("このユーザーはまだ名刺を公開していません。") }
+                } else { Text(NSLocalizedString("このユーザーはまだ名刺を公開していません。", comment: "")) }
                 if !message.isEmpty { Text(message).font(.callout).accessibilityAddTraits(.updatesFrequently) }
-                if own { NavigationLink("名刺コレクション", destination: BusinessCardCollectionView()) }
+                if own { NavigationLink(NSLocalizedString("名刺コレクション", comment: ""), destination: BusinessCardCollectionView()) }
             }.frame(maxWidth: .infinity)
         }.navigationTitle("")
             .task(id: profile.id) { await load() }
@@ -5816,7 +5873,7 @@ private struct BusinessCardView: View {
             .fileExporter(isPresented: $exportingTemplate,
                           document: BusinessCardTemplateDocument(design: (draft.design ?? BusinessCardDesign()).resolved(theme: draft.effectiveTheme, layout: draft.layout)),
                           contentType: .svg, defaultFilename: "spotcode-card-template") { result in
-                if case .failure = result { message = "テンプレートを保存できませんでした。" }
+                if case .failure = result { message = NSLocalizedString("テンプレートを保存できませんでした。", comment: "") }
             }
             .fileImporter(isPresented: $pickingCardImageFile, allowedContentTypes: [.image]) { result in
                 do {
@@ -5824,32 +5881,32 @@ private struct BusinessCardView: View {
                     let scoped = url.startAccessingSecurityScopedResource()
                     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                     let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                    guard size <= 8 * 1024 * 1024 else { message = "8MB以下の画像を選んでください。"; return }
+                    guard size <= 8 * 1024 * 1024 else { message = NSLocalizedString("8MB以下の画像を選んでください。", comment: ""); return }
                     let data = try Data(contentsOf: url)
                     guard data.count <= 8 * 1024 * 1024, let image = UIImage(data: data),
                           let resized = image.resizedForPost(maxSide: 1650).jpegData(compressionQuality: 0.85) else {
-                        message = "画像を読み込めませんでした。別の画像を選んでください。"; return
+                        message = NSLocalizedString("画像を読み込めませんでした。別の画像を選んでください。", comment: ""); return
                     }
                     draft.image_url = "data:image/jpeg;base64," + resized.base64EncodedString()
                 } catch {
-                    if (error as NSError).code != NSUserCancelledError { message = "画像ファイルを開けませんでした。" }
+                    if (error as NSError).code != NSUserCancelledError { message = NSLocalizedString("画像ファイルを開けませんでした。", comment: "") }
                 }
             }
-            .confirmationDialog("名刺の公開を停止すると、相手のコレクションからも削除されます。", isPresented: $confirmingUnpublish, titleVisibility: .visible) {
-                Button("公開を停止", role: .destructive) { unpublish() }
+            .confirmationDialog(NSLocalizedString("名刺の公開を停止すると、相手のコレクションからも削除されます。", comment: ""), isPresented: $confirmingUnpublish, titleVisibility: .visible) {
+                Button(NSLocalizedString("公開を停止", comment: ""), role: .destructive) { unpublish() }
             }
         }
     }
     private var editor: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("自分の名刺をデザイン").font(.headline)
-            Text("保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。").font(.caption).foregroundColor(.secondary)
-            BusinessCardTextField(placeholder: "名前（表・60文字まで）", text: $draft.name).frame(height: 44)
-            BusinessCardTextField(placeholder: "肩書き・組織（表・100文字まで）", text: $draft.title).frame(height: 44)
-            Text("自己紹介（裏・280文字まで）").font(.caption)
-            TextEditor(text: $draft.bio).frame(minHeight: 80).modifier(BusinessCardInputStyle()).accessibilityLabel("自己紹介（裏）")
-            BusinessCardTextField(placeholder: "連絡先・リンク（裏・160文字まで）", text: $draft.contact).frame(height: 44)
-            Picker("テーマ", selection: Binding(get: { draft.design?.pattern == "solid" ? "solid" : draft.effectiveTheme }, set: { theme in
+            Text(NSLocalizedString("自分の名刺をデザイン", comment: "")).font(.headline)
+            Text(NSLocalizedString("保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。", comment: "")).font(.caption).foregroundColor(.secondary)
+            BusinessCardTextField(placeholder: NSLocalizedString("名前（表・60文字まで）", comment: ""), text: $draft.name).frame(height: 44)
+            BusinessCardTextField(placeholder: NSLocalizedString("肩書き・組織（表・100文字まで）", comment: ""), text: $draft.title).frame(height: 44)
+            Text(NSLocalizedString("自己紹介（裏・280文字まで）", comment: "")).font(.caption)
+            TextEditor(text: $draft.bio).frame(minHeight: 80).modifier(BusinessCardInputStyle()).accessibilityLabel(NSLocalizedString("自己紹介（裏）", comment: ""))
+            BusinessCardTextField(placeholder: NSLocalizedString("連絡先・リンク（裏・160文字まで）", comment: ""), text: $draft.contact).frame(height: 44)
+            Picker(NSLocalizedString("テーマ", comment: ""), selection: Binding(get: { draft.design?.pattern == "solid" ? "solid" : draft.effectiveTheme }, set: { theme in
                 if theme == "solid" {
                     var design = (draft.design ?? BusinessCardDesign()).resolved(theme: draft.effectiveTheme, layout: draft.layout)
                     design.pattern = "solid"
@@ -5867,17 +5924,17 @@ private struct BusinessCardView: View {
                 design.font = theme == "mono" ? "mono" : "sans"
                 draft.design = design
             })) {
-                Text("ミッドナイト").tag("midnight"); Text("ペーパー").tag("paper"); Text("オーロラ").tag("aurora")
-                Text("Mono").tag("mono"); Text("Ghost").tag("ghost")
-                Text("春").tag("spring"); Text("夏").tag("summer"); Text("秋").tag("autumn"); Text("冬").tag("winter")
-                Text("単色").tag("solid")
+                Text(NSLocalizedString("ミッドナイト", comment: "")).tag("midnight"); Text(NSLocalizedString("ペーパー", comment: "")).tag("paper"); Text(NSLocalizedString("オーロラ", comment: "")).tag("aurora")
+                Text(NSLocalizedString("Mono", comment: "")).tag("mono"); Text(NSLocalizedString("Ghost", comment: "")).tag("ghost")
+                Text(NSLocalizedString("春", comment: "")).tag("spring"); Text(NSLocalizedString("夏", comment: "")).tag("summer"); Text(NSLocalizedString("秋", comment: "")).tag("autumn"); Text(NSLocalizedString("冬", comment: "")).tag("winter")
+                Text(NSLocalizedString("単色", comment: "")).tag("solid")
             }
-            Picker("レイアウト", selection: Binding(get: { draft.layout }, set: { layout in
+            Picker(NSLocalizedString("レイアウト", comment: ""), selection: Binding(get: { draft.layout }, set: { layout in
                 draft.layout = layout
                 var design = draft.design ?? BusinessCardDesign()
                 design.frontAlign = layout; design.backAlign = layout; draft.design = design
             })) {
-                Text("左揃え").tag("classic"); Text("中央揃え").tag("centered")
+                Text(NSLocalizedString("左揃え", comment: "")).tag("classic"); Text(NSLocalizedString("中央揃え", comment: "")).tag("centered")
             }
             BusinessCardBaseColorPicker(design: Binding(get: {
                 (draft.design ?? BusinessCardDesign()).resolved(theme: draft.effectiveTheme, layout: draft.layout)
@@ -5886,51 +5943,51 @@ private struct BusinessCardView: View {
             BusinessCardDesignEditor(design: Binding(get: {
                 (draft.design ?? BusinessCardDesign()).resolved(theme: draft.effectiveTheme, layout: draft.layout)
             }, set: { draft.design = $0 }))
-            Button("保存して公開") { save() }.buttonStyle(.borderedProminent).disabled(busy)
-            if published { Button("公開を停止", role: .destructive) { confirmingUnpublish = true }.disabled(busy) }
+            Button(NSLocalizedString("保存して公開", comment: "")) { save() }.buttonStyle(.borderedProminent).disabled(busy)
+            if published { Button(NSLocalizedString("公開を停止", comment: ""), role: .destructive) { confirmingUnpublish = true }.disabled(busy) }
         }.textFieldStyle(.plain).disabled(busy)
 
     }
     private var mediaEditor: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Button("デザイン用テンプレートをダウンロード（SVG）") { exportingTemplate = true }
-            Text("テンプレートを編集後、PNG/JPEGで書き出して取り込めます。実物の名刺は周囲を切り抜いた写真・スキャン画像を選んでください。画像は表または裏の1面に使えます。")
+            Button(NSLocalizedString("デザイン用テンプレートをダウンロード（SVG）", comment: "")) { exportingTemplate = true }
+            Text(NSLocalizedString("テンプレートを編集後、PNG/JPEGで書き出して取り込めます。実物の名刺は周囲を切り抜いた写真・スキャン画像を選んでください。画像は表または裏の1面に使えます。", comment: ""))
                 .font(.caption).foregroundColor(.secondary)
-            Picker("画像の使い方", selection: Binding(get: { draft.design?.imagePlacement ?? "inline" }, set: { value in
+            Picker(NSLocalizedString("画像の使い方", comment: ""), selection: Binding(get: { draft.design?.imagePlacement ?? "inline" }, set: { value in
                 var design = draft.design ?? BusinessCardDesign()
                 design.imagePlacement = value; draft.design = design
             })) {
-                Text("画像を差し込む").tag("inline")
-                Text("名刺の1面として使う").tag("artwork")
+                Text(NSLocalizedString("画像を差し込む", comment: "")).tag("inline")
+                Text(NSLocalizedString("名刺の1面として使う", comment: "")).tag("artwork")
             }
-            Text("画像を差し込む").font(.headline)
+            Text(NSLocalizedString("画像を差し込む", comment: "")).font(.headline)
             HStack {
-                Button("写真から選択") { pickingCardImage = true }
-                Button("ファイルから選択") { pickingCardImageFile = true }
+                Button(NSLocalizedString("写真から選択", comment: "")) { pickingCardImage = true }
+                Button(NSLocalizedString("ファイルから選択", comment: "")) { pickingCardImageFile = true }
                 if !(draft.image_url ?? "").isEmpty {
-                    Button("画像を取り除く", role: .destructive) { draft.image_url = ""; cardImageURL = "" }
+                    Button(NSLocalizedString("画像を取り除く", comment: ""), role: .destructive) { draft.image_url = ""; cardImageURL = "" }
                 }
             }
-            BusinessCardTextField(placeholder: "画像URL（https://…）", text: $cardImageURL).frame(height: 44)
-            Button("このURLの画像を使う") {
-                guard let url = BusinessCardLink.webURL(cardImageURL) else { message = "http(s)形式の画像URLを入力してください。"; return }
+            BusinessCardTextField(placeholder: NSLocalizedString("画像URL（https://…）", comment: ""), text: $cardImageURL).frame(height: 44)
+            Button(NSLocalizedString("このURLの画像を使う", comment: "")) {
+                guard let url = BusinessCardLink.webURL(cardImageURL) else { message = NSLocalizedString("http(s)形式の画像URLを入力してください。", comment: ""); return }
                 draft.image_url = url.absoluteString
             }
-            Picker("表示する面", selection: Binding(get: { draft.image_side ?? "front" }, set: { draft.image_side = $0 })) {
-                Text("表").tag("front"); Text("裏").tag("back")
+            Picker(NSLocalizedString("表示する面", comment: ""), selection: Binding(get: { draft.image_side ?? "front" }, set: { draft.image_side = $0 })) {
+                Text(NSLocalizedString("表", comment: "")).tag("front"); Text(NSLocalizedString("裏", comment: "")).tag("back")
             }
-            Picker("画像の形", selection: Binding(get: { draft.image_shape ?? "square" }, set: { draft.image_shape = $0 })) {
-                Text("角丸").tag("square"); Text("丸").tag("round")
+            Picker(NSLocalizedString("画像の形", comment: ""), selection: Binding(get: { draft.image_shape ?? "square" }, set: { draft.image_shape = $0 })) {
+                Text(NSLocalizedString("角丸", comment: "")).tag("square"); Text(NSLocalizedString("丸", comment: "")).tag("round")
             }
-            Stepper("画像の大きさ: \(draft.image_size ?? 64)px", value: Binding(get: { draft.image_size ?? 64 }, set: { draft.image_size = $0 }), in: 48...100)
-            BusinessCardTextField(placeholder: "画像を押したときのURL", text: Binding(get: { draft.image_link ?? "" }, set: { draft.image_link = $0 })).frame(height: 44)
-            Text("名刺に載せるリンク（3件まで）").font(.headline)
-            Picker("リンクを表示する面", selection: Binding(get: { draft.links_side ?? "front" }, set: { draft.links_side = $0 })) {
-                Text("表").tag("front"); Text("裏").tag("back")
+            Stepper(String(format: NSLocalizedString("画像の大きさ: %dpx", comment: ""), draft.image_size ?? 64), value: Binding(get: { draft.image_size ?? 64 }, set: { draft.image_size = $0 }), in: 48...100)
+            BusinessCardTextField(placeholder: NSLocalizedString("画像を押したときのURL", comment: ""), text: Binding(get: { draft.image_link ?? "" }, set: { draft.image_link = $0 })).frame(height: 44)
+            Text(NSLocalizedString("名刺に載せるリンク（3件まで）", comment: "")).font(.headline)
+            Picker(NSLocalizedString("リンクを表示する面", comment: ""), selection: Binding(get: { draft.links_side ?? "front" }, set: { draft.links_side = $0 })) {
+                Text(NSLocalizedString("表", comment: "")).tag("front"); Text(NSLocalizedString("裏", comment: "")).tag("back")
             }
             ForEach(0..<3) { index in
-                BusinessCardTextField(placeholder: "リンク\(index + 1)の表示名", text: linkBinding(index, label: true)).frame(height: 44)
-                BusinessCardTextField(placeholder: "リンク\(index + 1)のURL（https://…）", text: linkBinding(index, label: false)).frame(height: 44)
+                BusinessCardTextField(placeholder: String(format: NSLocalizedString("リンク%dの表示名", comment: ""), index + 1), text: linkBinding(index, label: true)).frame(height: 44)
+                BusinessCardTextField(placeholder: String(format: NSLocalizedString("リンク%dのURL（https://…）", comment: ""), index + 1), text: linkBinding(index, label: false)).frame(height: 44)
             }
         }
     }
@@ -5948,14 +6005,14 @@ private struct BusinessCardView: View {
     private func load() async {
         loading = true; failed = false; message = ""
         defer { loading = false }
-        guard let id = profile.id else { failed = true; message = "プロフィールが見つかりません。"; return }
+        guard let id = profile.id else { failed = true; message = NSLocalizedString("プロフィールが見つかりません。", comment: ""); return }
         do {
             let card = try await SupabaseService.shared.businessCard(ownerID: id, token: model.session?.accessToken)
             draft = card ?? BusinessCard(owner_id: id, name: profile.name)
             loadedCard = draft
             cardImageURL = draft.image_url?.hasPrefix("data:") == false ? draft.image_url! : ""
             published = card != nil
-        } catch { failed = true; message = "名刺を読み込めませんでした。接続を確認して再試行してください。" }
+        } catch { failed = true; message = NSLocalizedString("名刺を読み込めませんでした。接続を確認して再試行してください。", comment: "") }
     }
     private func syncCard() async {
         guard let id = profile.id, !loading, !syncing, !busy, !editingCard, draft == loadedCard else { return }
@@ -5968,21 +6025,21 @@ private struct BusinessCardView: View {
             loadedCard = draft
             cardImageURL = draft.image_url?.hasPrefix("data:") == false ? draft.image_url! : ""
             published = card != nil
-        } catch { message = "最新の名刺を取得できませんでした。接続を確認してください。" }
+        } catch { message = NSLocalizedString("最新の名刺を取得できませんでした。接続を確認してください。", comment: "") }
     }
     private func save() {
         guard model.session != nil, own, !busy else { return }
         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !draft.name.isEmpty, draft.name.unicodeScalars.count <= 60, draft.title.unicodeScalars.count <= 100,
               draft.bio.unicodeScalars.count <= 280, draft.contact.unicodeScalars.count <= 160 else {
-            message = "名前を入力し、各項目の文字数上限以内にしてください。"; return
+            message = NSLocalizedString("名前を入力し、各項目の文字数上限以内にしてください。", comment: ""); return
         }
         let links = (draft.links ?? []).filter { !$0.url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard links.allSatisfy({ $0.destination != nil }),
               (draft.image_link ?? "").isEmpty || BusinessCardLink.webURL(draft.image_link ?? "") != nil else {
-            message = "リンクは http:// または https:// から始まるURLを入力してください。"; return
+            message = NSLocalizedString("リンクは http:// または https:// から始まるURLを入力してください。", comment: ""); return
         }
-        guard (draft.image_url ?? "").utf8.count <= 1_000_000 else { message = "画像が大きすぎます。小さい画像を選んでください。"; return }
+        guard (draft.image_url ?? "").utf8.count <= 1_000_000 else { message = NSLocalizedString("画像が大きすぎます。小さい画像を選んでください。", comment: ""); return }
         draft.links = links
         let submitted = draft
         busy = true
@@ -5995,9 +6052,9 @@ private struct BusinessCardView: View {
                 guard model.session?.user.id == submitted.owner_id else { return }
                 loadedCard = submitted
                 published = true
-                message = "名刺を保存しました。同じアカウントのWeb版・アプリ版に反映されます。"
+                message = NSLocalizedString("名刺を保存しました。同じアカウントのWeb版・アプリ版に反映されます。", comment: "")
             }
-            catch { message = "保存できませんでした。接続を確認して再試行してください。" }
+            catch { message = NSLocalizedString("保存できませんでした。接続を確認して再試行してください。", comment: "") }
         }
     }
     private func collect() {
@@ -6005,8 +6062,8 @@ private struct BusinessCardView: View {
         busy = true
         Task {
             defer { busy = false }
-            do { try await SupabaseService.shared.collectBusinessCard(ownerID: id, collectorID: session.user.id, token: session.accessToken); message = "コレクションに保存しました。自分の名刺も共有しましょう。" }
-            catch { message = "保存できませんでした。再試行してください。" }
+            do { try await SupabaseService.shared.collectBusinessCard(ownerID: id, collectorID: session.user.id, token: session.accessToken); message = NSLocalizedString("コレクションに保存しました。自分の名刺も共有しましょう。", comment: "") }
+            catch { message = NSLocalizedString("保存できませんでした。再試行してください。", comment: "") }
         }
     }
     private func unpublish() {
@@ -6014,8 +6071,8 @@ private struct BusinessCardView: View {
         busy = true
         Task {
             defer { busy = false }
-            do { try await SupabaseService.shared.unpublishBusinessCard(ownerID: id, token: session.accessToken); published = false; message = "公開を停止しました。" }
-            catch { message = "公開を停止できませんでした。再試行してください。" }
+            do { try await SupabaseService.shared.unpublishBusinessCard(ownerID: id, token: session.accessToken); published = false; message = NSLocalizedString("公開を停止しました。", comment: "") }
+            catch { message = NSLocalizedString("公開を停止できませんでした。再試行してください。", comment: "") }
         }
     }
 }
@@ -6030,25 +6087,25 @@ private struct BusinessCardCollectionView: View {
         ScrollView {
             VStack(spacing: 24) {
                 if loading { ProgressView() }
-                else if cards.isEmpty { Text("まだ名刺がありません。相手の名刺を開いて保存しましょう。") }
-                Text("保存した名刺 \(cards.count) 枚").font(.headline)
+                else if cards.isEmpty { Text(NSLocalizedString("まだ名刺がありません。相手の名刺を開いて保存しましょう。", comment: "")) }
+                Text(String(format: NSLocalizedString("保存した名刺 %d 枚", comment: ""), cards.count)).font(.headline)
                 ForEach(cards) { row in
                     VStack(alignment: .leading) {
                         BusinessCardPreview(card: row.card)
-                        Text("\(String(row.collected_at.prefix(10))) に保存").font(.caption).foregroundColor(.secondary)
-                        Button("コレクションから取り除く", role: .destructive) { remove(row) }.disabled(busy)
+                        Text(String(format: NSLocalizedString("%@ に保存", comment: ""), String(row.collected_at.prefix(10)))).font(.caption).foregroundColor(.secondary)
+                        Button(NSLocalizedString("コレクションから取り除く", comment: ""), role: .destructive) { remove(row) }.disabled(busy)
                     }
                 }
-                if !message.isEmpty { Text(message); Button("再読み込み") { Task { await load() } } }
+                if !message.isEmpty { Text(message); Button(NSLocalizedString("再読み込み", comment: "")) { Task { await load() } } }
             }.padding(24).frame(maxWidth: 600)
-        }.navigationTitle("名刺コレクション").task { await load() }
+        }.navigationTitle(NSLocalizedString("名刺コレクション", comment: "")).task { await load() }
     }
     private func load() async {
         defer { loading = false }
-        guard let session = model.session else { cards = []; message = "ログインしてください。"; return }
+        guard let session = model.session else { cards = []; message = NSLocalizedString("ログインしてください。", comment: ""); return }
         loading = true
         do { cards = try await SupabaseService.shared.businessCardCollection(collectorID: session.user.id, token: session.accessToken); message = "" }
-        catch { message = "コレクションを読み込めませんでした。" }
+        catch { message = NSLocalizedString("コレクションを読み込めませんでした。", comment: "") }
     }
     private func remove(_ row: CollectedBusinessCard) {
         guard let session = model.session, !busy else { return }
@@ -6058,7 +6115,7 @@ private struct BusinessCardCollectionView: View {
             do {
                 try await SupabaseService.shared.removeBusinessCard(ownerID: row.id, collectorID: session.user.id, token: session.accessToken)
                 cards.removeAll { $0.id == row.id }
-            } catch { message = "名刺を取り除けませんでした。" }
+            } catch { message = NSLocalizedString("名刺を取り除けませんでした。", comment: "") }
         }
     }
 }
@@ -6066,37 +6123,37 @@ private struct BusinessCardCollectionView: View {
 private struct BusinessCardDesignEditor: View {
     @Binding var design: BusinessCardDesign
     var body: some View {
-        DisclosureGroup("細かくデザイン") {
+        DisclosureGroup(NSLocalizedString("細かくデザイン", comment: "")) {
             VStack(alignment: .leading, spacing: 16) {
-                ColorPicker("表の背景", selection: color(\.frontColor), supportsOpacity: false)
-                ColorPicker("裏の背景", selection: color(\.backColor), supportsOpacity: false)
-                ColorPicker("文字色", selection: color(\.textColor), supportsOpacity: false)
-                ColorPicker("見出しの色", selection: color(\.accentColor), supportsOpacity: false)
-                Picker("書体", selection: text(\.font)) {
-                    Text("ゴシック").tag("sans"); Text("明朝").tag("serif"); Text("等幅").tag("mono")
+                ColorPicker(NSLocalizedString("表の背景", comment: ""), selection: color(\.frontColor), supportsOpacity: false)
+                ColorPicker(NSLocalizedString("裏の背景", comment: ""), selection: color(\.backColor), supportsOpacity: false)
+                ColorPicker(NSLocalizedString("文字色", comment: ""), selection: color(\.textColor), supportsOpacity: false)
+                ColorPicker(NSLocalizedString("見出しの色", comment: ""), selection: color(\.accentColor), supportsOpacity: false)
+                Picker(NSLocalizedString("書体", comment: ""), selection: text(\.font)) {
+                    Text(NSLocalizedString("ゴシック", comment: "")).tag("sans"); Text(NSLocalizedString("明朝", comment: "")).tag("serif"); Text(NSLocalizedString("等幅", comment: "")).tag("mono")
                 }
-                Picker("背景の装飾", selection: text(\.pattern)) {
-                    Text("単色").tag("solid"); Text("グラデーション").tag("gradient"); Text("ストライプ").tag("stripe")
+                Picker(NSLocalizedString("背景の装飾", comment: ""), selection: text(\.pattern)) {
+                    Text(NSLocalizedString("単色", comment: "")).tag("solid"); Text(NSLocalizedString("グラデーション", comment: "")).tag("gradient"); Text(NSLocalizedString("ストライプ", comment: "")).tag("stripe")
                 }
-                alignment("表の文字揃え", key: \.frontAlign)
-                alignment("裏の文字揃え", key: \.backAlign)
-                Picker("名刺の向き", selection: text(\.orientation)) {
-                    Text("横向き").tag("landscape"); Text("縦向き").tag("portrait")
+                alignment(NSLocalizedString("表の文字揃え", comment: ""), key: \.frontAlign)
+                alignment(NSLocalizedString("裏の文字揃え", comment: ""), key: \.backAlign)
+                Picker(NSLocalizedString("名刺の向き", comment: ""), selection: text(\.orientation)) {
+                    Text(NSLocalizedString("横向き", comment: "")).tag("landscape"); Text(NSLocalizedString("縦向き", comment: "")).tag("portrait")
                 }
-                Picker("角の形", selection: text(\.cornerStyle)) {
-                    Text("すべて丸い").tag("rounded"); Text("すべて直角").tag("square")
-                    Text("左上・右下が丸い").tag("diagonal")
-                    Text("右上・左下が丸い").tag("diagonalReverse")
+                Picker(NSLocalizedString("角の形", comment: ""), selection: text(\.cornerStyle)) {
+                    Text(NSLocalizedString("すべて丸い", comment: "")).tag("rounded"); Text(NSLocalizedString("すべて直角", comment: "")).tag("square")
+                    Text(NSLocalizedString("左上・右下が丸い", comment: "")).tag("diagonal")
+                    Text(NSLocalizedString("右上・左下が丸い", comment: "")).tag("diagonalReverse")
                 }
-                Stepper("名前の大きさ: \(design.nameSize ?? 26)px", value: Binding(get: { design.nameSize ?? 26 }, set: { design.nameSize = $0 }), in: 18...36)
-                Stepper("角丸: \(design.radius ?? 18)px", value: Binding(get: { design.radius ?? 18 }, set: { design.radius = $0 }), in: 0...28)
-                BusinessCardTextField(placeholder: "表の見出し（空欄で非表示）", text: text(\.frontLabel)).frame(height: 44)
-                BusinessCardTextField(placeholder: "裏の見出し（空欄で非表示）", text: text(\.backLabel)).frame(height: 44)
+                Stepper(String(format: NSLocalizedString("名前の大きさ: %dpx", comment: ""), design.nameSize ?? 26), value: Binding(get: { design.nameSize ?? 26 }, set: { design.nameSize = $0 }), in: 18...36)
+                Stepper(String(format: NSLocalizedString("角丸: %dpx", comment: ""), design.radius ?? 18), value: Binding(get: { design.radius ?? 18 }, set: { design.radius = $0 }), in: 0...28)
+                BusinessCardTextField(placeholder: NSLocalizedString("表の見出し（空欄で非表示）", comment: ""), text: text(\.frontLabel)).frame(height: 44)
+                BusinessCardTextField(placeholder: NSLocalizedString("裏の見出し（空欄で非表示）", comment: ""), text: text(\.backLabel)).frame(height: 44)
             }.padding(.vertical, 12)
         }
     }
     private func alignment(_ title: String, key: WritableKeyPath<BusinessCardDesign, String?>) -> some View {
-        Picker(title, selection: text(key)) { Text("左揃え").tag("classic"); Text("中央揃え").tag("centered"); Text("右揃え").tag("right") }
+        Picker(title, selection: text(key)) { Text(NSLocalizedString("左揃え", comment: "")).tag("classic"); Text(NSLocalizedString("中央揃え", comment: "")).tag("centered"); Text(NSLocalizedString("右揃え", comment: "")).tag("right") }
     }
     private func text(_ key: WritableKeyPath<BusinessCardDesign, String?>) -> Binding<String> {
         Binding(get: { design[keyPath: key] ?? "" }, set: { design[keyPath: key] = String($0.prefix(40)) })
@@ -6229,16 +6286,16 @@ private struct BusinessCardBaseColorPicker: View {
             }) }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("ベースカラー").font(.headline)
+            Text(NSLocalizedString("ベースカラー", comment: "")).font(.headline)
             Button { showingPalette = true } label: {
                 HStack {
                     Circle().fill(businessCardColor(design.frontColor)).frame(width: 28, height: 28)
-                    Label("カラーパレットを開く", systemImage: "paintpalette")
+                    Label(NSLocalizedString("カラーパレットを開く", comment: ""), systemImage: "paintpalette")
                 }.padding(8)
             }.buttonStyle(.bordered)
             .sheet(isPresented: $showingPalette) {
                 VStack(spacing: 0) {
-                    HStack { Text("ベースカラー").font(.headline); Spacer(); Button("完了") { showingPalette = false } }.padding()
+                    HStack { Text(NSLocalizedString("ベースカラー", comment: "")).font(.headline); Spacer(); Button(NSLocalizedString("完了", comment: "")) { showingPalette = false } }.padding()
                     BusinessCardColorPalette(color: baseColor)
                 }.frame(minWidth: 300, minHeight: 420)
             }
@@ -6257,7 +6314,7 @@ private struct BusinessCardBaseColorPicker: View {
                      .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
-            Text("選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。")
+            Text(NSLocalizedString("選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。", comment: ""))
                 .font(.caption).foregroundColor(.secondary)
         }.padding(.vertical, 8)
     }

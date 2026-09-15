@@ -19,7 +19,7 @@ final class NearbyCardExchange: NSObject, ObservableObject {
     @Published private(set) var peers: [MCPeerID] = []
     @Published private(set) var invitationName: String?
     @Published private(set) var receivedOwnerID: UUID?
-    @Published private(set) var status = "近くで名刺画面を開いている相手を探しています。"
+    @Published private(set) var status = NSLocalizedString("近くで名刺画面を開いている相手を探しています。", comment: "")
     @Published private(set) var busy = false
     @Published private(set) var peerSaved = false
     private var ownerID: UUID?
@@ -43,7 +43,7 @@ final class NearbyCardExchange: NSObject, ObservableObject {
         let browser = MCNearbyServiceBrowser(peer: peer, serviceType: service)
         advertiser.delegate = self; browser.delegate = self
         self.advertiser = advertiser; self.browser = browser
-        status = "近くで名刺画面を開いている相手を探しています。"
+        status = NSLocalizedString("近くで名刺画面を開いている相手を探しています。", comment: "")
         advertiser.startAdvertisingPeer(); browser.startBrowsingForPeers()
     }
     func stop() {
@@ -60,13 +60,13 @@ final class NearbyCardExchange: NSObject, ObservableObject {
         guard !busy, peers.contains(peer), let session else { return }
         expectedPeer = peer; busy = true; sent = false; peerSaved = false; receivedOwnerID = nil
         browser?.invitePeer(peer, to: session, withContext: Data("spotcode-card-v1".utf8), timeout: 30)
-        status = "相手の確認を待っています。"
+        status = NSLocalizedString("相手の確認を待っています。", comment: "")
         armTimeout(session)
     }
     func respond(accept: Bool) {
         let handler = invitation; invitation = nil; invitationName = nil
         handler?(accept, accept ? session : nil)
-        if accept, let session { status = "接続しています。"; armTimeout(session) }
+        if accept, let session { status = NSLocalizedString("接続しています。", comment: ""); armTimeout(session) }
         else { expectedPeer = nil; busy = false; deadline?.cancel() }
     }
     func saved(_ ownerID: UUID) {
@@ -77,7 +77,7 @@ final class NearbyCardExchange: NSObject, ObservableObject {
         guard let session, let peer = expectedPeer, session.connectedPeers.contains(peer),
               let data = try? JSONEncoder().encode(NearbyCardMessage(version: 1, kind: kind, ownerID: ownerID)) else { return }
         do { try session.send(data, toPeers: [peer], with: .reliable) }
-        catch { status = "送信できませんでした。画面を閉じて再試行してください。" }
+        catch { status = NSLocalizedString("送信できませんでした。画面を閉じて再試行してください。", comment: "") }
     }
     private func armTimeout(_ session: MCSession) {
         deadline?.cancel()
@@ -85,7 +85,7 @@ final class NearbyCardExchange: NSObject, ObservableObject {
             guard let self, let session, self.session === session, self.receivedOwnerID == nil else { return }
             self.invitation?(false, nil); self.invitation = nil; self.invitationName = nil
             session.disconnect(); self.expectedPeer = nil; self.busy = false
-            self.status = "接続が完了しませんでした。相手を選んで再試行してください。"
+            self.status = NSLocalizedString("接続が完了しませんでした。相手を選んで再試行してください。", comment: "")
         }
         deadline = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 35, execute: task)
@@ -108,13 +108,13 @@ extension NearbyCardExchange: MCNearbyServiceBrowserDelegate, MCNearbyServiceAdv
     func browser(_ browser: MCNearbyServiceBrowser, didNotStartBrowsingForPeers error: Error) {
         DispatchQueue.main.async { [weak self] in
             guard self?.browser === browser else { return }
-            self?.status = "相手を検索できません。ローカルネットワークの許可とWi-Fiを確認してください。"
+            self?.status = NSLocalizedString("相手を検索できません。ローカルネットワークの許可とWi-Fiを確認してください。", comment: "")
         }
     }
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: Error) {
         DispatchQueue.main.async { [weak self] in
             guard self?.advertiser === advertiser else { return }
-            self?.status = "交換待機を開始できません。ローカルネットワークの許可を確認してください。"
+            self?.status = NSLocalizedString("交換待機を開始できません。ローカルネットワークの許可を確認してください。", comment: "")
         }
     }
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID,
@@ -135,11 +135,11 @@ extension NearbyCardExchange: MCSessionDelegate {
             guard let self, self.session === session, self.expectedPeer == peerID else { return }
             if state == .connected, !self.sent, let owner = self.ownerID {
                 self.sent = true
-                self.status = "公開済みの名刺を交換しています。"
+                self.status = NSLocalizedString("公開済みの名刺を交換しています。", comment: "")
                 self.send(kind: "card", ownerID: owner)
             } else if state == .notConnected {
                 self.deadline?.cancel(); self.busy = false; self.expectedPeer = nil
-                if self.receivedOwnerID == nil { self.status = "接続が終了しました。相手を選んで再試行できます。" }
+                if self.receivedOwnerID == nil { self.status = NSLocalizedString("接続が終了しました。相手を選んで再試行できます。", comment: "") }
             }
         }
     }
@@ -172,7 +172,7 @@ struct NearbyBusinessCardExchangeView: View {
     @State private var retry = 0
     var body: some View {
         Button { showingPeers = true } label: {
-            Label(exchange.peers.isEmpty ? "近くの相手と交換" : "近くの相手と交換（\(exchange.peers.count)）", systemImage: "iphone.radiowaves.left.and.right")
+            Label(exchange.peers.isEmpty ? NSLocalizedString("近くの相手と交換", comment: "") : String(format: NSLocalizedString("近くの相手と交換（%d）", comment: ""), exchange.peers.count), systemImage: "iphone.radiowaves.left.and.right")
                 .font(.callout).padding(10)
         }
         .background(.regularMaterial).clipShape(Capsule()).padding(12)
@@ -184,31 +184,31 @@ struct NearbyBusinessCardExchangeView: View {
         .sheet(isPresented: $showingPeers) {
             NavigationView {
                 List {
-                    Text("両方の端末で自分の公開済み名刺を開き、相手を選んでください。交換に同意すると、互いの名刺をコレクションに保存します。近づけた距離は判定しません。保存にはインターネット接続が必要です。")
+                    Text(NSLocalizedString("両方の端末で自分の公開済み名刺を開き、相手を選んでください。交換に同意すると、互いの名刺をコレクションに保存します。近づけた距離は判定しません。保存にはインターネット接続が必要です。", comment: ""))
                         .font(.callout)
                     if let name = exchange.invitationName {
-                        Section("交換リクエスト") {
-                            Text("\(name) から交換のリクエスト")
-                            Button("名刺を交換する") { exchange.respond(accept: true) }
-                            Button("断る", role: .cancel) { exchange.respond(accept: false) }
+                        Section(NSLocalizedString("交換リクエスト", comment: "")) {
+                            Text(String(format: NSLocalizedString("%@ から交換のリクエスト", comment: ""), name))
+                            Button(NSLocalizedString("名刺を交換する", comment: "")) { exchange.respond(accept: true) }
+                            Button(NSLocalizedString("断る", comment: ""), role: .cancel) { exchange.respond(accept: false) }
                         }
                     } else if !exchange.busy {
-                        Section("近くの相手") {
+                        Section(NSLocalizedString("近くの相手", comment: "")) {
                             ForEach(exchange.peers, id: \.self) { peer in
                                 Button(peer.displayName) { exchange.invite(peer) }
                             }
-                            if exchange.peers.isEmpty { Text("相手を探しています…") }
+                            if exchange.peers.isEmpty { Text(NSLocalizedString("相手を探しています…", comment: "")) }
                         }
                     }
                     Text(exchange.status).font(.caption)
                     if let received = exchange.receivedOwnerID, received == savedOwnerID {
-                        Text(exchange.peerSaved ? "互いの名刺の保存を確認しました。" : "自分のコレクションに保存しました。相手の保存確認を待っています。")
+                        Text(exchange.peerSaved ? NSLocalizedString("互いの名刺の保存を確認しました。", comment: "") : NSLocalizedString("自分のコレクションに保存しました。相手の保存確認を待っています。", comment: ""))
                     }
-                    if let saveError { Text(saveError); Button("保存を再試行") { retry += 1 } }
+                    if let saveError { Text(saveError); Button(NSLocalizedString("保存を再試行", comment: "")) { retry += 1 } }
                 }
-                .navigationTitle("近くの相手と交換")
+                .navigationTitle(NSLocalizedString("近くの相手と交換", comment: ""))
                 .toolbar { ToolbarItem(placement: .confirmationAction) {
-                    Button("閉じる") { showingPeers = false; exchange.stop(); savedOwnerID = nil; saveError = nil; updateDiscovery() }
+                    Button(NSLocalizedString("閉じる", comment: "")) { showingPeers = false; exchange.stop(); savedOwnerID = nil; saveError = nil; updateDiscovery() }
                 } }
             }.navigationViewStyle(.stack)
         }
@@ -226,7 +226,7 @@ struct NearbyBusinessCardExchangeView: View {
             let session = try await model.validSession()
             guard session.user.id == ownerID else { return }
             guard try await SupabaseService.shared.businessCard(ownerID: received, token: session.accessToken) != nil else {
-                saveError = "相手の名刺が公開されていません。"; return
+                saveError = NSLocalizedString("相手の名刺が公開されていません。", comment: ""); return
             }
             try Task.checkCancellation()
             guard model.session?.user.id == ownerID, exchange.receivedOwnerID == received else { return }
@@ -235,6 +235,6 @@ struct NearbyBusinessCardExchangeView: View {
             guard model.session?.user.id == ownerID, exchange.receivedOwnerID == received else { return }
             savedOwnerID = received; exchange.saved(received)
         } catch is CancellationError { }
-        catch { saveError = "名刺を保存できませんでした。接続を確認して再試行してください。" }
+        catch { saveError = NSLocalizedString("名刺を保存できませんでした。接続を確認して再試行してください。", comment: "") }
     }
 }

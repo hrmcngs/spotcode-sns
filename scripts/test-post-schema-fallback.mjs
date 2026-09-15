@@ -1,9 +1,10 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const source = fs.readFileSync('src/js/data.js','utf8').replace(/^import .*;\n/gm,'').replace(/^export /gm,'');
 function context() {
-  const ctx = vm.createContext({isHiddenUser: () => false,console,localStorage:{getItem:()=>null,setItem(){}},
+  const ctx = vm.createContext({ ...createTestI18n(), isHiddenUser: () => false,console,localStorage:{getItem:()=>null,setItem(){}},
     refreshGithubMembershipsIfNeeded:async()=>{},KEYS:{},read:(_,fallback)=>fallback});
   vm.runInContext(source,ctx);
   return ctx;

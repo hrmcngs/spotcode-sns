@@ -1,9 +1,10 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const strip = file => fs.readFileSync(file,'utf8').replace(/^import .*;\n/gm,'').replace(/^export /gm,'');
 let user='a',shared='new-grant',local='old-grant',fresh='old-session-grant',writes=0,switchDuringRead=false;
-const ctx=vm.createContext({
+const ctx=vm.createContext({ ...createTestI18n(), 
   getClient:async()=>({auth:{getSession:async()=>({data:{session:user?{user:{id:user},provider_token:fresh}:null}})},
     rpc:async(name)=>{if(name==='get_github_private_issue_token'){if(switchDuringRead)user='b';return {data:shared};}writes++;return {};}}),
   tokenModule:{restoreGithubApiToken:()=>local,setGithubApiToken:(token)=>{local=token;}},
@@ -17,7 +18,7 @@ shared='other-device';switchDuringRead=true;assert.equal(await ctx.getGithubToke
 user=null;assert.equal(await ctx.getGithubToken(),null);
 console.log('PASS shared grant wins over old device/session, refresh omission, fallback, initial capture, account switch and logout');
 const storage=new Map();let finish;
-const language=vm.createContext({read:(_,fallback)=>fallback,write(){},AbortController,setTimeout,clearTimeout,
+const language=vm.createContext({ ...createTestI18n(), read:(_,fallback)=>fallback,write(){},AbortController,setTimeout,clearTimeout,
  window:{sessionStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},
  fetch:()=>new Promise(resolve=>{finish=resolve;}),
 });

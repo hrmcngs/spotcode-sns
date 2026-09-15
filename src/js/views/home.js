@@ -33,17 +33,17 @@ function emptyTimeline(tab, loggedIn) {
     if (!loggedIn) {
       return (
         '<div class="stub">' +
-          '<h2 class="stub__title">サインインしてください</h2>' +
-          '<p class="stub__sub">フォロー中の人の投稿を見るにはサインインが必要です。</p>' +
-          '<button class="btn btn--primary" data-auth="login">Log in</button>' +
+          ("<h2 class=\"stub__title\">" + t("サインインしてください") + "</h2>") +
+          ("<p class=\"stub__sub\">" + t("フォロー中の人の投稿を見るにはサインインが必要です。") + "</p>") +
+          ("<button class=\"btn btn--primary\" data-auth=\"login\">" + t("Log in") + "</button>") +
         '</div>'
       );
     }
     return (
       '<div class="stub">' +
-        '<h2 class="stub__title">まだフォローしている人がいません</h2>' +
-        '<p class="stub__sub">気になる人をフォローすると、その人の投稿だけがここに集まります。</p>' +
-        '<a class="back-home" href="' + url('/') + '">For you を見る</a>' +
+        ("<h2 class=\"stub__title\">" + t("まだフォローしている人がいません") + "</h2>") +
+        ("<p class=\"stub__sub\">" + t("気になる人をフォローすると、その人の投稿だけがここに集まります。") + "</p>") +
+        '<a class="back-home" href="' + url('/') + ("\">" + t("For you を見る") + "</a>") +
       '</div>'
     );
   }
@@ -134,11 +134,11 @@ export async function hydrateHome(tab = 'foryou') {
       const request = tab === 'following'
         ? followingPosts({ limit })
         : allPosts({ limit });
-      posts = await withTimeout(request, TIMELINE_TIMEOUT_MS, 'タイムライン取得');
+      posts = await withTimeout(request, TIMELINE_TIMEOUT_MS, t("タイムライン取得"));
     } catch (err) {
       if (myVersion !== renderVersion) return;
       console.error('hydrateHome: fetch failed', err);
-      list.innerHTML = errorTimeline(err.message || '通信エラー');
+      list.innerHTML = errorTimeline(err.message || t("通信エラー"));
       return;
     }
   }
@@ -181,12 +181,12 @@ async function hydrateForYou(list, version, owner) {
   const load = async () => {
     if (loading || !hasMore || !active()) return;
     loading = true;
-    if (button) { button.hidden = true; status.textContent = '読み込み中…'; }
+    if (button) { button.hidden = true; status.textContent = t("読み込み中…"); }
     try {
-      const page = await withTimeout(forYouPage({ before: cursor }), TIMELINE_TIMEOUT_MS, 'タイムライン取得');
+      const page = await withTimeout(forYouPage({ before: cursor }), TIMELINE_TIMEOUT_MS, t("タイムライン取得"));
       if (!active()) return;
       if (first) {
-        list.innerHTML = '<div data-timeline-feed></div><p data-timeline-status role="status"></p><div data-timeline-end aria-hidden="true" style="height:1px"></div><button type="button" class="btn btn--ghost" data-timeline-more hidden>再試行</button>';
+        list.innerHTML = ("<div data-timeline-feed></div><p data-timeline-status role=\"status\"></p><div data-timeline-end aria-hidden=\"true\" style=\"height:1px\"></div><button type=\"button\" class=\"btn btn--ghost\" data-timeline-more hidden>" + t("再試行") + "</button>");
         feed = list.querySelector('[data-timeline-feed]');
         button = list.querySelector('[data-timeline-more]');
         status = list.querySelector('[data-timeline-status]');
@@ -211,9 +211,9 @@ async function hydrateForYou(list, version, owner) {
         .catch(() => {});
     } catch (error) {
       if (!active()) return;
-      if (first) { list.innerHTML = errorTimeline(error.message || '通信エラー'); return; }
+      if (first) { list.innerHTML = errorTimeline(error.message || t("通信エラー")); return; }
       autoPaused = true;
-      status.textContent = '続きを取得できませんでした。再試行してください。';
+      status.textContent = t("続きを取得できませんでした。再試行してください。");
     } finally {
       loading = false;
       if (active() && button) { button.disabled = false; button.hidden = !autoPaused; }

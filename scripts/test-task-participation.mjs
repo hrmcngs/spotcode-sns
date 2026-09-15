@@ -1,3 +1,4 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
@@ -16,7 +17,7 @@ function fixture({ contributor = false, branchContributor = false, privateRepo =
   let user = { id: 'member-a', github: { handle: 'alice' } }, selected = ['team/project'], token = true;
   const calls = [], local = storage(), session = storage();
   let pause;
-  const ctx = vm.createContext({ localStorage: local, sessionStorage: session,
+  const ctx = vm.createContext({ ...createTestI18n(),  localStorage: local, sessionStorage: session,
     currentUser: () => user, selectedTaskRepos: () => selected,
     hasGithubApiToken: () => token, isRateLimited: () => false,
     fetchJson: async raw => {

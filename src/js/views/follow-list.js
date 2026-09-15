@@ -58,8 +58,8 @@ export function renderFollowList(handle, kind) {
         t('profile.stat.followers') +
       '</a>' +
     '</div>' +
-    '<div class="card-actions"><a class="btn btn--ghost" href="' + url('/' + handle + '/card') + '">名刺を共有</a>' +
-      (currentUser()?.handle === handle ? '<a class="btn btn--ghost" href="' + url('/' + handle + '/cards') + '">名刺コレクション</a>' : '') + '</div>' +
+    '<div class="card-actions"><a class="btn btn--ghost" href="' + url('/' + handle + '/card') + ("\">" + t("名刺を共有") + "</a>") +
+      (currentUser()?.handle === handle ? '<a class="btn btn--ghost" href="' + url('/' + handle + '/cards') + ("\">" + t("名刺コレクション") + "</a>") : '') + '</div>' +
     '<div id="follow-list">' +
       '<div class="stub"><p class="stub__sub">' + t('follow.loading') + '</p></div>' +
     '</div>'
@@ -96,8 +96,8 @@ export async function hydrateFollowList(handle, kind) {
     if (list) {
       list.innerHTML =
         '<div class="stub">' +
-          '<p class="stub__sub">取得に失敗しました: ' + escape(err.message || '') + '</p>' +
-          '<button class="btn btn--ghost btn--sm" data-follow-list-retry="1">再試行</button>' +
+          ("<p class=\"stub__sub\">" + t("取得に失敗しました: ")) + escape(err.message || '') + '</p>' +
+          ("<button class=\"btn btn--ghost btn--sm\" data-follow-list-retry=\"1\">" + t("再試行") + "</button>") +
         '</div>';
     }
     return;
@@ -139,7 +139,7 @@ function paintFollowUsers(list, users, kind) {
             (u.bio ? '<div class="followlist__bio">' + escape(maskMentionsInText(u.bio)) + '</div>' : '') +
           '</div>' +
           (showBtn && !official && followed && kind === 'following'
-            ? '<div class="followlist__audience">' + [['friends', 'closeFriends', '親しい友達'], ['org', 'orgMembers', '同じ組織']].map(([kind, field, label]) =>
+            ? '<div class="followlist__audience">' + [['friends', 'closeFriends', t("親しい友達")], ['org', 'orgMembers', t("同じ組織")]].map(([kind, field, label]) =>
               '<label><input type="checkbox" data-audience-member="' + escape(u.handle) + '" data-audience-kind="' + kind + '"' +
               ((me[field] || []).includes(u.handle) ? ' checked' : '') + '> ' + label + '</label>').join('') + '</div>' : '') +
           (showBtn

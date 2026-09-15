@@ -1,3 +1,4 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
@@ -14,7 +15,7 @@ const db = { from(table) {
   return query;
 } };
 const source = fs.readFileSync('src/js/business-cards.js', 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
-const ctx = vm.createContext({ getClient: async () => db, currentUser: () => user, URL, console });
+const ctx = vm.createContext({ ...createTestI18n(),  getClient: async () => db, currentUser: () => user, URL, console });
 vm.runInContext(source, ctx);
 const run = code => vm.runInContext(code, ctx);
 assert.equal(run("normalizeCard({theme: '__proto__', layout: 'bad'}).theme"), 'midnight');

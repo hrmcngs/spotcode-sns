@@ -37,7 +37,7 @@ function renderEventHead(eventId, meta) {
         icon('calendar', { size: 18, className: 'icon--inline' }) +
         '<h2 class="event-head__title">' + escapeHtml(title) + '</h2>' +
         '<a class="event-head__ext" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" ' +
-            'title="connpass で開く">↗</a>' +
+            ("title=\"" + t("connpass で開く") + "\">↗</a>") +
       '</div>' +
       (when || place
         ? '<div class="event-head__meta">' +
@@ -94,7 +94,7 @@ export async function hydrateEvent(eventId) {
       list.innerHTML =
         '<div class="stub">' +
           '<p class="stub__sub">' + t('event.error') + ': ' + escapeHtml(err.message || '') + '</p>' +
-          '<button class="btn btn--ghost btn--sm" data-event-retry="' + escapeHtml(eventId) + '">再試行</button>' +
+          '<button class="btn btn--ghost btn--sm" data-event-retry="' + escapeHtml(eventId) + ("\">" + t("再試行") + "</button>") +
         '</div>';
     }
     return;

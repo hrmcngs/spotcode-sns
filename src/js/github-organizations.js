@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { currentUser, refreshProfile } from './auth.js';
 import { getClient } from './supa.js';
 import { getGithubToken } from './github-oauth.js';
@@ -10,24 +11,24 @@ export function canReadGithubOrganization(orgId) {
 
 export async function syncGithubOrganizations(options = {}) {
   const owner = currentUser()?.id;
-  if (!owner) throw new Error('ログインしてください');
+  if (!owner) throw new Error(t("ログインしてください"));
   const organizationAccount = currentUser()?.isOrg === true;
   const token = organizationAccount ? null : await getGithubToken();
-  if (!token && !organizationAccount) throw new Error('GitHub Organizationを連携してください');
+  if (!token && !organizationAccount) throw new Error(t("GitHub Organizationを連携してください"));
   const client = await getClient();
   const { data, error } = await client.functions.invoke('github-organizations', { body: { ...options, github_token: token } });
   if (error || data?.error) {
     let message = data?.error || error?.message;
     try { message = (await error.context.json()).error || message; } catch {}
     if (error?.name === 'FunctionsFetchError' || /Failed to (send|fetch)|Failed to send a request/i.test(message || '')) {
-      message = 'Organizationの取得サービスに接続できません。時間をおいて再試行してください。';
+      message = t("Organizationの取得サービスに接続できません。時間をおいて再試行してください。");
     }
-    throw new Error(message || 'Organizationの確認に失敗しました');
+    throw new Error(message || t("Organizationの確認に失敗しました"));
   }
-  if (currentUser()?.id !== owner) throw new Error('アカウントが変更されました');
+  if (currentUser()?.id !== owner) throw new Error(t("アカウントが変更されました"));
   if (options.action === 'issue_file') return data;
   if (options.organization_id != null || options.action === 'confirm_file') await refreshProfile();
-  if (currentUser()?.id !== owner) throw new Error('アカウントが変更されました');
+  if (currentUser()?.id !== owner) throw new Error(t("アカウントが変更されました"));
   snapshot = { owner, organizations: data.organizations || [], expires: Date.now() + 55 * 60 * 1000 };
   return data;
 }

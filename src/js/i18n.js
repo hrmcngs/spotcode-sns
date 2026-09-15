@@ -4,6 +4,7 @@
 // captured at render time and a reload is the cheapest way to refresh
 // every modal / cached HTML fragment.
 
+import { UI_EN, UI_JA } from './ui-messages.js';
 import { KEYS, read, write } from './storage.js';
 
 const SUPPORTED = ['ja', 'en'];
@@ -13,26 +14,26 @@ const DICT = {
   ja: {
     // ---------------- nav / topbar ----------------
     'nav.search.placeholder':  'ユーザー・スポット・アイデア・リポジトリを検索…',
-    'nav.home':                'Home',
-    'nav.explore':             'Explore',
-    'nav.notifications':       'Notifications',
-    'nav.profile':             'Profile',
-    'nav.settings':            'Settings',
-    'nav.compose':             'New idea',
-    'nav.login':               'Log in',
-    'nav.logout':              'Log out',
+    'nav.home':                'ホーム',
+    'nav.explore':             '探す',
+    'nav.notifications':       '通知',
+    'nav.profile':             'プロフィール',
+    'nav.settings':            '設定',
+    'nav.compose':             '新しいアイデア',
+    'nav.login':               'ログイン',
+    'nav.logout':              'ログアウト',
 
     // ---------------- home / timeline ----------------
-    'home.tab.foryou':         'For you',
-    'home.tab.following':      'Following',
-    'home.tab.spots':          'Spots',
+    'home.tab.foryou':         'おすすめ',
+    'home.tab.following':      'フォロー中',
+    'home.tab.spots':          'スポット',
     'home.composer.placeholder': 'いまどうしてる?',
     'home.composer.url':       '関連 URL (任意)',
     'home.composer.add_url':   '+ リンクを追加',
     'home.composer.add_event': '+ イベントを追加',
     'home.composer.event_url': 'イベント URL (connpass)',
     'home.composer.add_spot':  '場所を追加',
-    'home.composer.submit':    'Push',
+    'home.composer.submit':    '投稿',
     'home.composer.draft':     '下書き保存',
     'home.composer.draft_hint':'端末に保存 (オフライン可)',
     'home.composer.draft_saved': '下書きを保存しました',
@@ -40,7 +41,7 @@ const DICT = {
     'home.composer.draft_discard': '破棄',
     'home.composer.error_empty': '本文を入力してください',
     'composer.gate.title':     'アイデアを投稿するにはサインインしてください',
-    'composer.gate.signup':    'Sign up',
+    'composer.gate.signup':    '新規登録',
     'composer.clear_spot':     '位置を外す',
     'home.empty.title':        'タイムラインはまだ空です',
     'home.empty.signed_in':    '上のコンポーザーから最初のアイデアを投稿してみましょう。',
@@ -50,13 +51,13 @@ const DICT = {
     'home.error.reload':       'リロード',
 
     // ---------------- profile ----------------
-    'profile.tab.posts':       'Posts',
-    'profile.tab.spots':       'Spots',
-    'profile.tab.likes':       'Likes',
-    'profile.btn.follow':      'Follow',
-    'profile.btn.following':   'Following',
-    'profile.btn.edit':        'Edit profile',
-    'profile.btn.more':        'More',
+    'profile.tab.posts':       '投稿',
+    'profile.tab.spots':       'スポット',
+    'profile.tab.likes':       'いいね',
+    'profile.btn.follow':      'フォロー',
+    'profile.btn.following':   'フォロー中',
+    'profile.btn.edit':        'プロフィールを編集',
+    'profile.btn.more':        'その他',
     'profile.btn.follow_overlay_blocked':'公式モード中はフォロー操作できません — アバターメニューで自分に戻ってからフォローしてください',
     'profile.more.copy_link':  'プロフィールリンクをコピー',
     'profile.more.copied':     'リンクをコピーしました',
@@ -65,11 +66,11 @@ const DICT = {
     'profile.more.report_confirm':'@{handle} を運営に通報しますか？',
     'profile.more.report_prompt':'通報の理由を入力してください（400 字まで）',
     'profile.more.report_sent':'通報を受け付けました',
-    'profile.stat.following':  'Following',
-    'profile.stat.followers':  'Followers',
-    'profile.stat.posts':      'Posts',
+    'profile.stat.following':  'フォロー中',
+    'profile.stat.followers':  'フォロワー',
+    'profile.stat.posts':      '投稿',
     'profile.loading':         'プロフィールを読み込み中…',
-    'profile.tasks.title':     'Open issues',
+    'profile.tasks.title':     '未完了のIssue',
     'profile.tasks.hint':      '公開リポの未クローズ issue (task)',
     'profile.tasks.loading':   '読み込み中…',
     'profile.tasks.empty':     '選択したリポジトリに、コミット履歴または関連PRの条件を満たす未完了Issueはありません。',
@@ -83,8 +84,8 @@ const DICT = {
     'profile.empty.likes':     'まだいいねした投稿はありません。',
     'profile.not_found.title': 'は登録されていません',
     'profile.not_found.sub':   'このアカウントは存在しないか、まだ何も投稿していません。',
-    'profile.back':            '← Back to home',
-    'profile.joined':          'Joined ',
+    'profile.back':            '← ホームに戻る',
+    'profile.joined':          '登録日: ',
 
     // ---------------- follow list ----------------
     'follow.empty.followers':  'まだフォロワーはいません。',
@@ -105,8 +106,8 @@ const DICT = {
     'picker.label_placeholder':'ラベル（任意・建物名や店名）',
     'picker.address':          '住所',
     'picker.address_placeholder':'地図をクリックして取得…',
-    'picker.confirm':          'Confirm',
-    'picker.cancel':           'Cancel',
+    'picker.confirm':          '確定',
+    'picker.cancel':           'キャンセル',
     'picker.geo.no_browser':   'このブラウザは Geolocation に対応していません',
     'picker.geo.denied':       '位置情報の利用が許可されていません。ブラウザの設定を確認してください。',
     'picker.reset_auto':       '自動取得に戻す',
@@ -140,7 +141,7 @@ const DICT = {
     'notif.label.follow_request': 'フォローリクエストされました',
 
     // ---------------- settings ----------------
-    'settings.title':          'Settings',
+    'settings.title':          '設定',
     'settings.overlay.banner': '公式モード中です — 自分のプロフィールを編集するには「自分に戻る」を押してから保存してください。',
     'settings.overlay.revert': '自分に戻る',
     'settings.tab.account':    'アカウント',
@@ -161,7 +162,7 @@ const DICT = {
     'settings.display.tasks.hide':   'タスクを非表示にする',
     'settings.push.title':           'プッシュ通知',
     'settings.push.hint':            'タブを開いている間、いいね・コメント・メンション・フォロー・近くにあるアイデアを OS の通知バナーでお知らせします。Service Worker は使っていません、タブを閉じてる間は届きません。',
-    'settings.push.on':              'ON',
+    'settings.push.on':              'オン',
     'settings.push.paused':          '一時停止',
     'settings.push.not_asked':       '未許可',
     'settings.push.denied':          'ブロック',
@@ -181,13 +182,13 @@ const DICT = {
     'settings.lang.hint':      'UI の言語を選びます。投稿の本文は元のまま表示されます。',
     'settings.lang.ja':        '日本語',
     'settings.lang.en':        'English',
-    'settings.map.title':      'Map',
+    'settings.map.title':      '地図',
     'settings.map.test':       '地図ライブラリの動作確認',
     'settings.map.hint':       'スポットの pin 選択には <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a> のタイル、住所取得には <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a>、描画には <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a> を使っています。<strong>API キーや課金アカウントは不要</strong>、誰でもそのまま使えます。',
     'settings.map.loading':    'Leaflet を読み込み中…',
     'settings.map.ok':         'OK — Leaflet と OpenStreetMap が読み込めました',
     'settings.map.failed':     '読み込みに失敗しました',
-    'settings.about.title':    'About',
+    'settings.about.title':    'このアプリについて',
     'settings.about.body':     'spotcode-sns は、歩いた場所に紐づくアイデアを残すための SNS のプロトタイプです。アカウント・投稿は標準同梱の共有 DB に自動で保存されるので、何も設定しなくても他の端末からログインしたり他のユーザーの投稿を見たりできます。',
     'profile.btn.requested':   '申請中',
     'settings.about.terms':    '利用規約',
@@ -305,9 +306,9 @@ const DICT = {
     'post.poll.hours':              'あと {n} 時間',
     'post.poll.days':               'あと {n} 日',
     'post.poll.votes':              '{n} 票',
-    'settings.dev.section':    'Developer settings',
+    'settings.dev.section':    '開発者設定',
     'settings.dev.section_hint':'この区画はホワイトリストに載っているアカウントだけに表示されます。一般ユーザーには Supabase の上書きや内部 DB の情報は出ません。',
-    'settings.dev.title':      'Developer mode',
+    'settings.dev.title':      '開発者モード',
     'settings.dev.hint':       '通報キューや内部 ID などの開発者向け UI を表示するかどうかのトグル。topbar に黄色い「dev」チップが立つかどうかで現在の状態が分かる。',
     'settings.dev.on':         'OFF にする',
     'settings.dev.off':        'ON にする',
@@ -323,7 +324,7 @@ const DICT = {
     'settings.privacy_mode.hint':              'スクリーンショット / 画面共有用に、<strong>自分以外</strong>のユーザーのハンドル・表示名を <code>@user_a3f8</code> / <code>User a3f8</code> のような特定できない文字列に置き換えます。同じ人は常に同じ識別子になります。admin / operator / @spotcode_dev 専用。',
     'settings.privacy_mode.on':                'OFF にする',
     'settings.privacy_mode.off':               'ON にする',
-    'settings.supa.connected': 'connected',
+    'settings.supa.connected': '接続済み',
     'settings.supa.not_set':   '未設定',
     'settings.supa.hint_default': '現在は <strong>spotcode-sns に標準同梱の共有プロジェクト</strong>に接続しています。アカウント・投稿・いいね等が他のユーザーと同じ DB に保存されるので、別端末からのログインや他のユーザーの検索が動きます。何も設定する必要はありません。',
     'settings.supa.hint_override':'現在は <strong>あなたが /settings で設定した独自プロジェクト</strong>に接続しています。',
@@ -362,21 +363,21 @@ const DICT = {
     'report.submit':           '送信',
     'report.done':             '報告を受け付けました。確認します。',
     'report.already':          'この投稿は既に報告済みです。',
-    'common.cancel':           'Cancel',
-    'common.save':             'Save',
+    'common.cancel':           'キャンセル',
+    'common.save':             '保存',
     'common.delete':           '削除',
-    'common.unfollow':         'Following',
-    'common.idea':             'idea',
-    'common.ideas':            'ideas',
-    'common.not_found':        'Not found',
-    'common.coming_soon':      'Coming soon',
+    'common.unfollow':         'フォロー中',
+    'common.idea':             'アイデア',
+    'common.ideas':            'アイデア',
+    'common.not_found':        '見つかりません',
+    'common.coming_soon':      '近日公開',
 
     // ---------------- right rail ----------------
-    'rail.activity':           'Your activity <span class="dim">last 12 months</span>',
+    'rail.activity':           'あなたの活動 <span class="dim">過去12か月</span>',
     'rail.trending':           'Trending spots <span class="dim">市区町村別</span>',
-    'rail.who_to_follow':      'Who to follow',
+    'rail.who_to_follow':      'おすすめのユーザー',
 
-    'repos.title':             'Repos',
+    'repos.title':             'リポジトリ',
     'repos.subtitle':          '自分と許可済みOrganizationのリポジトリ',
     'repos.loading':           'リポジトリを読み込み中…',
     'repos.signin':            'リポジトリを見るにはログインしてください。',
@@ -796,6 +797,7 @@ let active = (() => {
 })();
 
 export function getLang() { return active; }
+export function getLocale() { return active === 'ja' ? 'ja-JP' : 'en-US'; }
 
 export function setLang(lang) {
   if (!SUPPORTED.includes(lang)) return false;
@@ -814,7 +816,7 @@ export function setLang(lang) {
 // matched string.
 export function t(key, params) {
   const table = DICT[active] || DICT[DEFAULT_LANG];
-  const raw = (table && table[key]) || (DICT[DEFAULT_LANG] && DICT[DEFAULT_LANG][key]) || key;
+  const raw = table?.[key] ?? (Object.hasOwn(UI_JA, key) ? (active === 'ja' ? UI_JA[key] : key) : undefined) ?? (Object.hasOwn(UI_EN, key) ? (active === 'ja' ? key : UI_EN[key]) : DICT[DEFAULT_LANG]?.[key]) ?? key;
   if (!params) return raw;
   return raw.replace(/\{(\w+)\}/g, (_, name) =>
     params[name] != null ? String(params[name]) : '{' + name + '}'
@@ -824,4 +826,6 @@ export function t(key, params) {
 // Apply the current language to <html lang> on boot.
 export function initI18n() {
   document.documentElement.setAttribute('lang', active);
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n || el.textContent); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.title); });
 }

@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 // "Pending follow requests" page — only meaningful for private accounts
 // (public accounts auto-accept), but renders an empty state cleanly for
 // anyone who lands on /requests.
@@ -21,10 +22,10 @@ export function renderRequests() {
   renderVersion++;
   return (
     '<div class="follow-head">' +
-      '<h2 style="margin:0;font-size:1.05rem;">フォローリクエスト</h2>' +
+      ("<h2 style=\"margin:0;font-size:1.05rem;\">" + t("フォローリクエスト") + "</h2>") +
     '</div>' +
     '<div id="requests-list">' +
-      '<div class="stub"><p class="stub__sub">読み込み中…</p></div>' +
+      ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込み中…") + "</p></div>") +
     '</div>'
   );
 }
@@ -40,8 +41,8 @@ function rowHtml(req) {
         (u.bio ? '<div class="followlist__bio">' + escape(u.bio) + '</div>' : '') +
       '</div>' +
       '<div class="request-actions">' +
-        '<button type="button" class="btn btn--primary btn--sm" data-action="accept">承認</button>' +
-        '<button type="button" class="btn btn--ghost btn--sm" data-action="deny">拒否</button>' +
+        ("<button type=\"button\" class=\"btn btn--primary btn--sm\" data-action=\"accept\">" + t("承認") + "</button>") +
+        ("<button type=\"button\" class=\"btn btn--ghost btn--sm\" data-action=\"deny\">" + t("拒否") + "</button>") +
       '</div>' +
     '</div>'
   );
@@ -53,22 +54,22 @@ export async function hydrateRequests() {
   if (!list) return;
   const me = currentUser();
   if (!me) {
-    list.innerHTML = '<div class="stub"><p class="stub__sub">ログインしてください。</p></div>';
+    list.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("ログインしてください。") + "</p></div>");
     return;
   }
   let reqs;
   try { reqs = await pendingFollowRequests(); }
   catch (err) {
     if (myVersion !== renderVersion) return;
-    list.innerHTML = '<div class="stub"><p class="stub__sub">取得失敗: ' + escape(err.message || '') + '</p></div>';
+    list.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("取得失敗: ")) + escape(err.message || '') + '</p></div>';
     return;
   }
   if (myVersion !== renderVersion) return;
   pending = reqs;
   if (!pending.length) {
     const hint = me.isPrivate
-      ? '誰かがあなたをフォローすると、ここに承認待ちのリクエストが並びます。'
-      : 'あなたは公開アカウントなのでフォローは自動承認されます。鍵をかけるとここでリクエストを管理できます。';
+      ? t("誰かがあなたをフォローすると、ここに承認待ちのリクエストが並びます。")
+      : t("あなたは公開アカウントなのでフォローは自動承認されます。鍵をかけるとここでリクエストを管理できます。");
     list.innerHTML = '<div class="stub"><p class="stub__sub">' + hint + '</p></div>';
     return;
   }
@@ -100,10 +101,10 @@ function bindActions() {
       const remaining = document.querySelectorAll('#requests-list .followlist__row').length;
       if (remaining === 0) {
         document.getElementById('requests-list').innerHTML =
-          '<div class="stub"><p class="stub__sub">全部処理しました。</p></div>';
+          ("<div class=\"stub\"><p class=\"stub__sub\">" + t("全部処理しました。") + "</p></div>");
       }
     } catch (err) {
-      alert('失敗しました: ' + (err.message || ''));
+      alert(t("失敗しました: ") + (err.message || ''));
       btn.disabled = false;
     }
   });

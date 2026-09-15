@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // GitHub identity linking via Supabase's built-in OAuth provider.
 //
 // Why via Supabase (not straight to GitHub's OAuth endpoint):
@@ -31,7 +32,7 @@ async function saveSharedGithubToken(token) {
   if (!token) return;
   const supa = await getClient();
   const { error } = await supa.rpc('save_github_private_issue_token', { p_token: token });
-  if (error) throw new Error('GitHub連携の保存に失敗しました。' + error.message);
+  if (error) throw new Error(t("GitHub連携の保存に失敗しました。") + error.message);
 }
 
 async function getSharedGithubToken() {
@@ -66,7 +67,7 @@ export async function linkGithub(redirectTo = window.location.href) {
 export async function linkGithubForPrivateIssues(redirectTo = window.location.href, includePrivate = true, purpose = 'private_issues') {
   const supa = await getClient();
   const { data: before } = await supa.auth.getSession();
-  if (!before?.session) throw new Error('先にspotcodeへログインしてください');
+  if (!before?.session) throw new Error(t("先にspotcodeへログインしてください"));
   try {
     sessionStorage.setItem(PRIVATE_ISSUE_SESSION_KEY, JSON.stringify({
       access_token: before.session.access_token,
@@ -251,7 +252,7 @@ export async function githubTokenCanReadPrivateRepos(token) {
 export async function unlinkGithub() {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしてください');
+  if (!user) throw new Error(t("ログインしてください"));
   const gh = (user.identities || []).find((i) => i.provider === 'github');
   if (gh) {
     const { error } = await supa.auth.unlinkIdentity(gh);

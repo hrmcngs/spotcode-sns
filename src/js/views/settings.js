@@ -44,14 +44,14 @@ function requestSettingsPassword() {
     root.innerHTML =
       '<div class="modal__backdrop" data-password-cancel></div>' +
       '<div class="modal__card" role="dialog" aria-modal="true" aria-labelledby="settings-password-title">' +
-        '<button type="button" class="modal__close" data-password-cancel aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
+        ("<button type=\"button\" class=\"modal__close\" data-password-cancel aria-label=\"" + t("Close") + "\">") + icon('close', { size: 18 }) + '</button>' +
         '<form class="auth-form" data-password-form>' +
           '<h2 id="settings-password-title">' + attr(t('settings.password.title')) + '</h2>' +
           '<p class="settings__hint">' + attr(t('settings.password.hint')) + '</p>' +
           '<label>' + attr(t('settings.password.label')) +
             '<span class="password-input">' +
               '<input type="password" name="password" required autocomplete="current-password">' +
-              '<button type="button" class="password-input__toggle" data-settings-password-toggle>表示</button>' +
+              ("<button type=\"button\" class=\"password-input__toggle\" data-settings-password-toggle>" + t("表示") + "</button>") +
             '</span>' +
           '</label>' +
           '<button type="submit" class="btn btn--primary btn--block">' + attr(t('settings.password.confirm')) + '</button>' +
@@ -73,7 +73,7 @@ function requestSettingsPassword() {
     root.querySelector('[data-settings-password-toggle]').addEventListener('click', (e) => {
       const showing = input.type === 'text';
       input.type = showing ? 'password' : 'text';
-      e.currentTarget.textContent = showing ? '表示' : '隠す';
+      e.currentTarget.textContent = showing ? t("表示") : t("隠す");
     });
     root.querySelector('[data-password-form]').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -136,14 +136,14 @@ function privacyCard() {
 // rule (visibility is still about close_friends / org_members lists).
 function githubOrganizationCard() {
   if (currentUser()?.isOrg) return '<section class="settings-card" id="github-organization"><h2>GitHub Organization</h2>' +
-    '<p>公開の.githubリポジトリに確認ファイルを追加して、Organizationを連携します。</p>' +
-    '<label>Organization名<input id="github-org-login" placeholder="Drowse-Lab" autocapitalize="none" spellcheck="false"></label>' +
-    '<button type="button" class="btn btn--ghost" id="github-org-issue">確認コードを発行</button>' +
-    '<div id="github-org-file" hidden><p>.githubリポジトリのルートに spotcode-verification.txt を作成し、次の内容を保存してください。有効期限は24時間です。</p>' +
-    '<textarea id="github-org-code" readonly aria-label="確認ファイルの内容"></textarea>' +
-    '<a id="github-org-create" target="_blank" rel="noopener">GitHubでファイルを追加</a> ' +
-    '<button type="button" class="btn btn--primary" id="github-org-confirm">確認して承認</button></div>' +
-    '<button type="button" class="btn btn--ghost" id="github-org-sync">連携状態を確認</button>' +
+    ("<p>" + t("公開の.githubリポジトリに確認ファイルを追加して、Organizationを連携します。") + "</p>") +
+    ("<label>" + t("Organization名") + "<input id=\"github-org-login\" placeholder=\"Drowse-Lab\" autocapitalize=\"none\" spellcheck=\"false\"></label>") +
+    ("<button type=\"button\" class=\"btn btn--ghost\" id=\"github-org-issue\">" + t("確認コードを発行") + "</button>") +
+    ("<div id=\"github-org-file\" hidden><p>" + t(".githubリポジトリのルートに spotcode-verification.txt を作成し、次の内容を保存してください。有効期限は24時間です。") + "</p>") +
+    ("<textarea id=\"github-org-code\" readonly aria-label=\"" + t("確認ファイルの内容") + "\"></textarea>") +
+    ("<a id=\"github-org-create\" target=\"_blank\" rel=\"noopener\">" + t("GitHubでファイルを追加") + "</a> ") +
+    ("<button type=\"button\" class=\"btn btn--primary\" id=\"github-org-confirm\">" + t("確認して承認") + "</button></div>") +
+    ("<button type=\"button\" class=\"btn btn--ghost\" id=\"github-org-sync\">" + t("連携状態を確認") + "</button>") +
     '<div id="github-org-choices"></div><p id="github-org-status" role="status"></p></section>';
   return '<section class="settings-card"><h2>GitHub Organization</h2>' +
     '<p>' + t('settings.github_org.hint') + '</p>' +
@@ -256,7 +256,7 @@ function audienceChip(kind, handle) {
       '<span class="audience-chip__handle">@' + attr(handle) + '</span>' +
       '<button type="button" class="audience-chip__remove" ' +
         'data-audience-remove="' + kind + '" data-handle="' + attr(handle) + '" ' +
-        'aria-label="削除">×</button>' +
+        ("aria-label=\"" + t("削除") + "\">×</button>") +
     '</span>'
   );
 }
@@ -364,9 +364,9 @@ function accountSection() {
 
 function mfaCard() {
   return '<section class="settings-card" id="mfa-card">' +
-    '<h2>2段階認証 <span class="settings-tag" id="mfa-tag">確認中…</span></h2>' +
-    '<p class="settings__hint">ログイン時に、認証アプリが生成する6桁のワンタイムパスワードを要求します。</p>' +
-    '<div class="settings-form__actions"><button type="button" class="btn btn--primary" id="mfa-toggle" disabled>読み込み中…</button></div>' +
+    ("<h2>" + t("2段階認証 ") + "<span class=\"settings-tag\" id=\"mfa-tag\">" + t("確認中…") + "</span></h2>") +
+    ("<p class=\"settings__hint\">" + t("ログイン時に、認証アプリが生成する6桁のワンタイムパスワードを要求します。") + "</p>") +
+    ("<div class=\"settings-form__actions\"><button type=\"button\" class=\"btn btn--primary\" id=\"mfa-toggle\" disabled>" + t("読み込み中…") + "</button></div>") +
     '<p class="settings-status" id="mfa-status"></p>' +
   '</section>';
 }
@@ -415,10 +415,10 @@ function pushNotifyCard() {
           )
       ) +
       '<div class="settings-notification-types">' +
-        '<label>投稿と地区の通知<select id="followed-post-scope">' +
-        [['off', 'OFF'], ['mutuals', '相互フォロー'], ['following', 'フォロー中']].map(([value, label]) =>
+        ("<label>" + t("投稿と地区の通知") + "<select id=\"followed-post-scope\">") +
+        [['off', t("OFF")], ['mutuals', t("相互フォロー")], ['following', t("フォロー中")]].map(([value, label]) =>
           '<option value="' + value + '"' + (followedPostScope() === value ? ' selected' : '') + '>' + label + '</option>').join('') +
-        '</select></label><p>投稿のスポットの市区町村を通知します。スポットがない場合は地区未設定と表示します。</p>' +
+        ("</select></label><p>" + t("投稿のスポットの市区町村を通知します。スポットがない場合は地区未設定と表示します。") + "</p>") +
         '<h3>' + t('settings.push.types') + '</h3>' +
         [['like', 'like'], ['comment', 'comment'], ['mention', 'mention'], ['follow', 'follow'], ['nearby', 'nearby']].map(([type, key]) =>
           '<label class="settings-check"><input type="checkbox" data-notification-type="' + type + '"' +
@@ -438,7 +438,7 @@ function privacySection() {
   // no-op).
   const privacyModeCard = canUsePrivacyMode()
     ? '<section class="settings-card">' +
-        '<h2>' + t('settings.privacy_mode.title') + ' <span class="settings-tag">' + (isPrivacyMode() ? 'ON' : 'OFF') + '</span></h2>' +
+        '<h2>' + t('settings.privacy_mode.title') + ' <span class="settings-tag">' + (isPrivacyMode() ? t("ON") : t("OFF")) + '</span></h2>' +
         '<p class="settings__hint">' + t('settings.privacy_mode.hint') + '</p>' +
         '<div class="settings-form__actions">' +
           '<button type="button" class="btn btn--' + (isPrivacyMode() ? 'ghost' : 'primary') + '" id="privacy-mode-toggle">' +
@@ -463,9 +463,9 @@ function displaySection() {
         '<label class="settings-check"' + (repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase()) ? '' : ' hidden') + '><input type="checkbox" data-task-repo="' + attr(repo) + '"' +
           (selectedRepos.has(repo.toLowerCase()) ? ' checked' : '') + '> <span>' + attr(repo) + '</span></label>'
       ).join('') + '</div>'
-    : '<p class="settings__hint">' + (taskRepoCandidates.owner === me?.id ? '表示できるリポジトリがありません。' : 'リポジトリ一覧を取得しています…') + '</p>';
+    : '<p class="settings__hint">' + (taskRepoCandidates.owner === me?.id ? t("表示できるリポジトリがありません。") : t("リポジトリ一覧を取得しています…")) + '</p>';
   const privateStatus = privateIssueAuthError
-    ? '<p class="settings-status is-bad">' + attr(privateIssueAuthError) + '</p><button type="button" class="btn btn--ghost" id="private-tasks-reauthorize">GitHubを再認証</button>' : '';
+    ? '<p class="settings-status is-bad">' + attr(privateIssueAuthError) + ("</p><button type=\"button\" class=\"btn btn--ghost\" id=\"private-tasks-reauthorize\">" + t("GitHubを再認証") + "</button>") : '';
   return (
     '<section class="settings-card">' +
       '<h2>' + t('settings.lang.title') + '</h2>' +
@@ -504,12 +504,12 @@ function displaySection() {
           (tHidden ? t('settings.display.tasks.show') : t('settings.display.tasks.hide')) +
         '</button>' +
       '</div>' +
-      '<h3>表示するリポジトリ</h3>' +
-      '<input type="search" id="task-repo-search" autocomplete="off" aria-controls="task-repo-suggestions" aria-label="リポジトリを検索" placeholder="リポジトリ名で検索（owner/repo）" value="' + attr(taskRepoSearch) + '">' +
-      '<div id="task-repo-suggestions" class="settings-repo-suggestions" aria-label="リポジトリの候補" hidden></div>' +
-      repoChoices + (taskRepoCandidates.owner === me?.id && taskRepoCandidates.error ? '<p class="settings__hint">' + attr(taskRepoCandidates.error) + '</p>' : '') + '<p id="task-repo-search-empty" class="settings__hint"' + (taskRepos.length && !taskRepos.some(repo => repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase())) ? '' : ' hidden') + '>一致するリポジトリがありません。</p>' +
+      ("<h3>" + t("表示するリポジトリ") + "</h3>") +
+      ("<input type=\"search\" id=\"task-repo-search\" autocomplete=\"off\" aria-controls=\"task-repo-suggestions\" aria-label=\"" + t("リポジトリを検索") + "\" placeholder=\"" + t("リポジトリ名で検索（owner/repo）") + "\" value=\"") + attr(taskRepoSearch) + '">' +
+      ("<div id=\"task-repo-suggestions\" class=\"settings-repo-suggestions\" aria-label=\"" + t("リポジトリの候補") + "\" hidden></div>") +
+      repoChoices + (taskRepoCandidates.owner === me?.id && taskRepoCandidates.error ? '<p class="settings__hint">' + attr(taskRepoCandidates.error) + '</p>' : '') + '<p id="task-repo-search-empty" class="settings__hint"' + (taskRepos.length && !taskRepos.some(repo => repo.toLowerCase().includes(taskRepoSearch.trim().toLowerCase())) ? '' : ' hidden') + (">" + t("一致するリポジトリがありません。") + "</p>") +
       '<div class="settings-form__actions"><button type="button" class="btn btn--ghost" id="private-tasks-toggle">' +
-        (privateTasksEnabled() ? '非公開Issue表示をOFF' : '非公開Issueを表示する（GitHub再認証）') +
+        (privateTasksEnabled() ? t("非公開Issue表示をOFF") : t("非公開Issueを表示する（GitHub再認証）")) +
       '</button></div>' +
       privateStatus +
     '</section>' +
@@ -577,7 +577,7 @@ function devCards({ cfg, override, usingOverride }) {
     '<p class="settings__section-hint">' + t('settings.dev.section_hint') + '</p>' +
 
     '<section class="settings-card">' +
-      '<h2>' + t('settings.dev.title') + ' <span class="settings-tag">' + (isDevMode() ? 'ON' : 'OFF') + '</span></h2>' +
+      '<h2>' + t('settings.dev.title') + ' <span class="settings-tag">' + (isDevMode() ? t("ON") : t("OFF")) + '</span></h2>' +
       '<p class="settings__hint">' + t('settings.dev.hint') + '</p>' +
       '<div class="settings-form__actions">' +
         '<button type="button" class="btn btn--' + (isDevMode() ? 'ghost' : 'primary') + '" id="dev-mode-toggle">' +
@@ -732,7 +732,7 @@ export function bindSettings() {
       document.getElementById('github-org-code').value = result.content;
       document.getElementById('github-org-create').href = result.create_url;
       panel.hidden = false;
-      status.textContent = 'ファイルをコミットしたら「確認して承認」を押してください。承認後もファイルは残してください。';
+      status.textContent = t("ファイルをコミットしたら「確認して承認」を押してください。承認後もファイルは残してください。");
     } catch (error) { if (status.isConnected) status.textContent = error.message; }
     finally { orgBusy = false; }
   });
@@ -755,10 +755,10 @@ export function bindSettings() {
   let activeMfaFactor = null;
   const paintMfa = (factor) => {
     activeMfaFactor = factor;
-    if (mfaTag) { mfaTag.textContent = factor ? 'ON' : 'OFF'; mfaTag.className = 'settings-tag' + (factor ? ' is-ok' : ''); }
+    if (mfaTag) { mfaTag.textContent = factor ? t("ON") : t("OFF"); mfaTag.className = 'settings-tag' + (factor ? ' is-ok' : ''); }
     if (mfaButton) {
       mfaButton.disabled = false;
-      mfaButton.textContent = factor ? '2段階認証を無効にする' : '2段階認証を設定する';
+      mfaButton.textContent = factor ? t("2段階認証を無効にする") : t("2段階認証を設定する");
       mfaButton.className = 'btn btn--' + (factor ? 'ghost' : 'primary');
     }
   };
@@ -769,11 +769,11 @@ export function bindSettings() {
     mfaButton.addEventListener('click', async () => {
       mfaButton.disabled = true;
       if (activeMfaFactor) {
-        if (!confirm('2段階認証を無効にしますか？')) { mfaButton.disabled = false; return; }
+        if (!confirm(t("2段階認証を無効にしますか？"))) { mfaButton.disabled = false; return; }
         try {
           await disableMfa(activeMfaFactor.id);
           paintMfa(null);
-          if (mfaStatusEl) { mfaStatusEl.textContent = '2段階認証を無効にしました'; mfaStatusEl.className = 'settings-status is-ok'; }
+          if (mfaStatusEl) { mfaStatusEl.textContent = t("2段階認証を無効にしました"); mfaStatusEl.className = 'settings-status is-ok'; }
         } catch (error) {
           if (mfaStatusEl) { mfaStatusEl.textContent = error.message || String(error); mfaStatusEl.className = 'settings-status is-bad'; }
           mfaButton.disabled = false;
@@ -784,7 +784,7 @@ export function bindSettings() {
         const enrollment = await beginMfaEnrollment();
         openMfaEnrollment(enrollment, () => {
           paintMfa({ id: enrollment.id, status: 'verified' });
-          if (mfaStatusEl) { mfaStatusEl.textContent = '2段階認証を有効にしました'; mfaStatusEl.className = 'settings-status is-ok'; }
+          if (mfaStatusEl) { mfaStatusEl.textContent = t("2段階認証を有効にしました"); mfaStatusEl.className = 'settings-status is-ok'; }
         });
       } catch (error) {
         if (mfaStatusEl) { mfaStatusEl.textContent = error.message || String(error); mfaStatusEl.className = 'settings-status is-bad'; }
@@ -810,7 +810,7 @@ export function bindSettings() {
               names = repositories.map(repo => repo.full_name).filter(Boolean);
             } catch (error) {
               names = await publicTaskRepositories(settingsGh);
-              repoError = error.message + ' 自分の公開リポジトリを表示しています。';
+              repoError = error.message + t(" 自分の公開リポジトリを表示しています。");
             }
           } else { names = await publicTaskRepositories(settingsGh); }
         } catch (error) { repoError = error.message; }
@@ -820,7 +820,7 @@ export function bindSettings() {
           const token = await getGithubToken();
           const permission = token ? await githubTokenCanReadPrivateRepos(token) : false;
           if (!token || permission === false) {
-            privateIssueAuthError = '非公開Issueの表示には追加のrepo権限が必要です。Organization連携の成否とは別です。非公開Issueを表示する場合は「GitHubを再認証」を押してください。';
+            privateIssueAuthError = t("非公開Issueの表示には追加のrepo権限が必要です。Organization連携の成否とは別です。非公開Issueを表示する場合は「GitHubを再認証」を押してください。");
             await fetchTasks(settingsGh, false);
           } else {
             // getGithubToken already restored/stored this account's token.
@@ -828,7 +828,7 @@ export function bindSettings() {
             const tasks = await fetchTasks(settingsGh, true);
             // A temporary GitHub/network failure should keep the saved repo
             // selection and cached issues instead of claiming auth expired.
-            if (!tasks && permission === true) privateIssueAuthError = 'GitHubに接続できません。しばらくしてから再試行してください。';
+            if (!tasks && permission === true) privateIssueAuthError = t("GitHubに接続できません。しばらくしてから再試行してください。");
             else privateIssueAuthError = '';
           }
         } else {
@@ -1516,14 +1516,14 @@ function openMfaEnrollment(enrollment, onComplete) {
   const secret = enrollment?.totp?.secret || '';
   root.innerHTML = '<div class="modal__backdrop" data-mfa-close></div>' +
     '<div class="modal__card" role="dialog" aria-modal="true" aria-labelledby="mfa-enroll-title">' +
-      '<button type="button" class="modal__close" data-mfa-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
+      ("<button type=\"button\" class=\"modal__close\" data-mfa-close aria-label=\"" + t("Close") + "\">") + icon('close', { size: 18 }) + '</button>' +
       '<form class="auth-form" data-mfa-enroll-form>' +
-        '<h2 id="mfa-enroll-title">認証アプリを登録</h2>' +
-        '<p class="settings__hint">認証アプリでワンタイムパスワードの追加を選び、このQRコードを読み取ってください。</p>' +
-        (qr ? '<img class="mfa-qr" src="' + attr(qr) + '" alt="2段階認証QRコード">' : '') +
-        '<details><summary>QRを読めない場合</summary><code class="mfa-secret">' + attr(secret) + '</code></details>' +
-        '<label>表示された6桁コード<input name="code" type="text" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="123456" required></label>' +
-        '<button type="submit" class="btn btn--primary btn--block">確認して有効にする</button>' +
+        ("<h2 id=\"mfa-enroll-title\">" + t("認証アプリを登録") + "</h2>") +
+        ("<p class=\"settings__hint\">" + t("認証アプリでワンタイムパスワードの追加を選び、このQRコードを読み取ってください。") + "</p>") +
+        (qr ? '<img class="mfa-qr" src="' + attr(qr) + ("\" alt=\"" + t("2段階認証QRコード") + "\">") : '') +
+        ("<details><summary>" + t("QRを読めない場合") + "</summary><code class=\"mfa-secret\">") + attr(secret) + '</code></details>' +
+        ("<label>" + t("表示された6桁コード") + "<input name=\"code\" type=\"text\" maxlength=\"6\" inputmode=\"numeric\" pattern=\"[0-9]{6}\" autocomplete=\"one-time-code\" placeholder=\"123456\" required></label>") +
+        ("<button type=\"submit\" class=\"btn btn--primary btn--block\">" + t("確認して有効にする") + "</button>") +
         '<p class="auth-error" data-mfa-error></p>' +
       '</form>' +
     '</div>';
@@ -1536,20 +1536,20 @@ function openMfaEnrollment(enrollment, onComplete) {
     const button = form.querySelector('button[type="submit"]');
     const errorEl = form.querySelector('[data-mfa-error]');
     button.disabled = true;
-    button.textContent = '確認中…';
+    button.textContent = t("確認中…");
     errorEl.textContent = '';
     try {
       await withTimeout(
         confirmMfaEnrollment(enrollment.id, new FormData(form).get('code')),
         15000,
-        '2段階認証',
+        t("2段階認証"),
       );
       close();
       onComplete?.();
     } catch (error) {
       errorEl.textContent = error.message || String(error);
       button.disabled = false;
-      button.textContent = '確認して有効にする';
+      button.textContent = t("確認して有効にする");
     }
   });
   setTimeout(() => root.querySelector('input[name="code"]')?.focus(), 0);

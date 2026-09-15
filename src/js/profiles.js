@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Read-only profile lookups against public.profiles (Supabase).
 //
 // Fetches are cached into the same localStorage map that `data.js#getUser`
@@ -13,7 +14,7 @@ import { cacheHandleId } from './data.js';
 // the app uses (same fields as auth.js#projectUser, minus id/email).
 function shapeProfile(row) {
   if (!row) return null;
-  const name = row.name || 'User';
+  const name = row.name || t("User");
   return {
     handle:      row.handle,
     name,

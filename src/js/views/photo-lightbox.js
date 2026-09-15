@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 // Tap-a-post-photo → fullscreen lightbox with pinch / wheel zoom and
 // swipe-to-dismiss. One singleton element shared across the whole app
 // — open() injects it on first call, then reuses it. Operates only on
@@ -24,9 +25,9 @@ function ensure() {
   rootEl.hidden = true;
   rootEl.innerHTML =
     '<div class="lightbox__backdrop" data-lb-close></div>' +
-    '<button type="button" class="lightbox__close" data-lb-close aria-label="閉じる">×</button>' +
-    '<button type="button" class="lightbox__nav lightbox__nav--prev" data-lb-prev aria-label="前へ">‹</button>' +
-    '<button type="button" class="lightbox__nav lightbox__nav--next" data-lb-next aria-label="次へ">›</button>' +
+    ("<button type=\"button\" class=\"lightbox__close\" data-lb-close aria-label=\"" + t("閉じる") + "\">×</button>") +
+    ("<button type=\"button\" class=\"lightbox__nav lightbox__nav--prev\" data-lb-prev aria-label=\"" + t("前へ") + "\">‹</button>") +
+    ("<button type=\"button\" class=\"lightbox__nav lightbox__nav--next\" data-lb-next aria-label=\"" + t("次へ") + "\">›</button>") +
     '<div class="lightbox__stage" data-lb-stage>' +
       '<img class="lightbox__img" alt="">' +
     '</div>' +

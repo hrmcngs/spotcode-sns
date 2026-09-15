@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 // Per-post analytics dashboard, visible only to the post author.
 // Route: /post/<id>/analytics
 //
@@ -37,14 +38,14 @@ function userRow(u, sub) {
 }
 
 function emptyList(label) {
-  return '<div class="stub stub--inline"><p class="stub__sub">まだ ' + escape(label) + ' はありません。</p></div>';
+  return ("<div class=\"stub stub--inline\"><p class=\"stub__sub\">" + t("まだ ")) + escape(label) + (t(" はありません。") + "</p></div>");
 }
 
 export function renderPostAnalytics(id) {
   renderVersion++;
   return (
     '<div class="post-analytics" id="post-analytics-' + escape(id) + '">' +
-      '<div class="stub"><p class="stub__sub">読み込み中…</p></div>' +
+      ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込み中…") + "</p></div>") +
     '</div>'
   );
 }
@@ -57,12 +58,12 @@ export async function hydratePostAnalytics(id) {
 
   let post;
   try { post = await getPost(id); } catch (err) {
-    root.innerHTML = '<div class="stub"><h2 class="stub__title">読み込みに失敗</h2><p class="stub__sub">' + escape(err.message || String(err)) + '</p></div>';
+    root.innerHTML = ("<div class=\"stub\"><h2 class=\"stub__title\">" + t("読み込みに失敗") + "</h2><p class=\"stub__sub\">") + escape(err.message || String(err)) + '</p></div>';
     return;
   }
   if (myVersion !== renderVersion) return;
   if (!post) {
-    root.innerHTML = '<div class="stub"><h2 class="stub__title">投稿が見つかりません</h2><a class="back-home" href="/">← Home</a></div>';
+    root.innerHTML = ("<div class=\"stub\"><h2 class=\"stub__title\">" + t("投稿が見つかりません") + "</h2><a class=\"back-home\" href=\"/\">← Home</a></div>");
     return;
   }
 
@@ -71,9 +72,9 @@ export async function hydratePostAnalytics(id) {
   if (!mayInspect) {
     root.innerHTML =
       '<div class="stub">' +
-        '<h2 class="stub__title">権限がありません</h2>' +
-        '<p class="stub__sub">この画面は投稿主だけが見られます。</p>' +
-        '<a class="back-home" href="' + url('/post/' + post.id) + '">← 投稿に戻る</a>' +
+        ("<h2 class=\"stub__title\">" + t("権限がありません") + "</h2>") +
+        ("<p class=\"stub__sub\">" + t("この画面は投稿主だけが見られます。") + "</p>") +
+        '<a class="back-home" href="' + url('/post/' + post.id) + ("\">" + t("← 投稿に戻る") + "</a>") +
       '</div>';
     return;
   }
@@ -89,26 +90,26 @@ export async function hydratePostAnalytics(id) {
 
   root.innerHTML =
     '<a class="back-home" href="' + url('/post/' + post.id) + '">' +
-      icon('reply', { size: 14, className: 'icon--inline' }) + '投稿に戻る' +
+      icon('reply', { size: 14, className: 'icon--inline' }) + t("投稿に戻る") +
     '</a>' +
     '<header class="analytics-head">' +
-      '<h2>アクティビティ</h2>' +
+      ("<h2>" + t("アクティビティ") + "</h2>") +
       '<p class="dim">' + escape(post.body).slice(0, 120) +
         (post.body.length > 120 ? '…' : '') + '</p>' +
     '</header>' +
     '<section class="analytics-summary">' +
-      summaryTile(icon('heart', { size: 18 }), 'いいね',     likers.length,      '#likers') +
-      summaryTile(icon('reply', { size: 18 }), 'コメント',   comments.length,    '#commenters') +
-      summaryTile(icon('fork',  { size: 18 }), 'リポスト',   reposters.length,   '#reposters') +
-      summaryTile(icon('chart', { size: 18 }), '引用',       quoters.length,     '#quoters') +
-      summaryTile(icon('star',  { size: 18 }), '保存',       bookmarkers.length, '#bookmarkers') +
-      summaryTile(icon('share', { size: 18 }), '共有',       '—', null, '集計は未対応 (クライアント側のみ)') +
+      summaryTile(icon('heart', { size: 18 }), t("いいね"),     likers.length,      '#likers') +
+      summaryTile(icon('reply', { size: 18 }), t("コメント"),   comments.length,    '#commenters') +
+      summaryTile(icon('fork',  { size: 18 }), t("リポスト"),   reposters.length,   '#reposters') +
+      summaryTile(icon('chart', { size: 18 }), t("引用"),       quoters.length,     '#quoters') +
+      summaryTile(icon('star',  { size: 18 }), t("保存"),       bookmarkers.length, '#bookmarkers') +
+      summaryTile(icon('share', { size: 18 }), t("共有"),       '—', null, t("集計は未対応 (クライアント側のみ)")) +
     '</section>' +
-    sectionHtml('likers',      icon('heart', { size: 14, className: 'icon--inline' }), 'いいねした人',     likers.map(r => userRow(r.user, r.createdAt ? relTime(new Date(r.createdAt).getTime()) : ''))) +
-    sectionHtml('commenters',  icon('reply', { size: 14, className: 'icon--inline' }), 'コメントした人',   comments.map(c => userRow(c.author, relTime(c.createdAt)))) +
-    sectionHtml('reposters',   icon('fork',  { size: 14, className: 'icon--inline' }), 'リポストした人',   reposters.map(r => userRow(r.user, r.createdAt ? relTime(new Date(r.createdAt).getTime()) : ''))) +
-    sectionHtml('quoters',     icon('chart', { size: 14, className: 'icon--inline' }), '引用した人',       quoters.map(q => userRow(q.user, q.createdAt ? relTime(new Date(q.createdAt).getTime()) : ''))) +
-    sectionHtml('bookmarkers', icon('star',  { size: 14, className: 'icon--inline' }), '保存した人',       bookmarkers.map(b => userRow(b.user, b.createdAt ? relTime(new Date(b.createdAt).getTime()) : '')));
+    sectionHtml('likers',      icon('heart', { size: 14, className: 'icon--inline' }), t("いいねした人"),     likers.map(r => userRow(r.user, r.createdAt ? relTime(new Date(r.createdAt).getTime()) : ''))) +
+    sectionHtml('commenters',  icon('reply', { size: 14, className: 'icon--inline' }), t("コメントした人"),   comments.map(c => userRow(c.author, relTime(c.createdAt)))) +
+    sectionHtml('reposters',   icon('fork',  { size: 14, className: 'icon--inline' }), t("リポストした人"),   reposters.map(r => userRow(r.user, r.createdAt ? relTime(new Date(r.createdAt).getTime()) : ''))) +
+    sectionHtml('quoters',     icon('chart', { size: 14, className: 'icon--inline' }), t("引用した人"),       quoters.map(q => userRow(q.user, q.createdAt ? relTime(new Date(q.createdAt).getTime()) : ''))) +
+    sectionHtml('bookmarkers', icon('star',  { size: 14, className: 'icon--inline' }), t("保存した人"),       bookmarkers.map(b => userRow(b.user, b.createdAt ? relTime(new Date(b.createdAt).getTime()) : '')));
 }
 
 function sectionHtml(anchor, iconHtml, label, rows) {

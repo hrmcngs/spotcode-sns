@@ -33,7 +33,7 @@ function template() {
       '<div class="modal__card modal__card--map" role="dialog" aria-labelledby="picker-title">' +
         '<header class="picker-head">' +
           '<h2 id="picker-title">' + t('picker.title') + '</h2>' +
-          '<button class="modal__close" data-picker-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
+          ("<button class=\"modal__close\" data-picker-close aria-label=\"" + t("Close") + "\">") + icon('close', { size: 18 }) + '</button>' +
         '</header>' +
 
         '<div class="picker-toolbar">' +
@@ -151,7 +151,7 @@ function setPick(lat, lng, { autoFillLabel = false } = {}) {
   const hint = document.getElementById('picker-address-hint');
   if (meta) meta.innerHTML = '';
   if (hint) {
-    hint.textContent = '住所を取得中…';
+    hint.textContent = t("住所を取得中…");
     hint.className   = 'picker-address-hint is-loading';
   }
   doReverseGeocode(lat, lng, autoFillLabel);
@@ -212,7 +212,7 @@ async function doReverseGeocode(lat, lng, autoFillLabel) {
 
   if (nomRes.status !== 'fulfilled' && gsiRes.status !== 'fulfilled') {
     if (hint) {
-      hint.textContent = '住所の取得に失敗しました（ネットワーク？）';
+      hint.textContent = t("住所の取得に失敗しました（ネットワーク？）");
       hint.className = 'picker-address-hint is-bad';
     }
     return;
@@ -292,7 +292,7 @@ async function initMap() {
   try {
     L = await loadMaps();
   } catch (err) {
-    showError('地図ライブラリの読み込みに失敗しました: ' + err.message + '（ネットワーク接続を確認してください）');
+    showError(t("地図ライブラリの読み込みに失敗しました: ") + err.message + t("（ネットワーク接続を確認してください）"));
     return;
   }
   const container = document.getElementById('picker-map');
@@ -346,10 +346,10 @@ async function initMap() {
 
 function useGeolocation() {
   if (!navigator.geolocation) {
-    showError('このブラウザは Geolocation に対応していません');
+    showError(t("このブラウザは Geolocation に対応していません"));
     return;
   }
-  showError('現在地を取得中…');
+  showError(t("現在地を取得中…"));
 
   function onSuccess(pos) {
     showError('');
@@ -374,17 +374,17 @@ function useGeolocation() {
     (err) => {
       // PERMISSION_DENIED (code 1) won't get any better with a retry.
       if (err.code === 1) {
-        showError('位置情報の利用が許可されていません。ブラウザの設定を確認してください。');
+        showError(t("位置情報の利用が許可されていません。ブラウザの設定を確認してください。"));
         return;
       }
       // Position unavailable / timeout → retry with high accuracy and
       // a much longer window. On phones this kicks the GPS in.
-      showError('現在地を再取得中…（高精度モード）');
+      showError(t("現在地を再取得中…（高精度モード）"));
       navigator.geolocation.getCurrentPosition(
         onSuccess,
         (err2) => {
-          showError('現在地を取得できませんでした: ' + (err2.message || 'timeout') +
-                    '。手動で地図上をクリックして場所を選んでください。');
+          showError(t("現在地を取得できませんでした: ") + (err2.message || 'timeout') +
+                    t("。手動で地図上をクリックして場所を選んでください。"));
         },
         { enableHighAccuracy: true, timeout: 25000, maximumAge: 60000 }
       );

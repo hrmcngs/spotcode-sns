@@ -410,7 +410,7 @@ function openAccountMenu(anchorRect) {
     '<div class="account-menu__card" role="document">' +
       '<header class="account-menu__head">' +
         '<span class="account-menu__title">' + escapeText(t('account_menu.title')) + '</span>' +
-        '<button type="button" class="account-menu__close" data-account-menu-close aria-label="Close">' +
+        ("<button type=\"button\" class=\"account-menu__close\" data-account-menu-close aria-label=\"" + t("Close") + "\">") +
           icon('close', { size: 18 }) +
         '</button>' +
       '</header>' +
@@ -508,7 +508,7 @@ function openAccountMenu(anchorRect) {
     }
     if (e.target.closest('[data-account-menu-logout]')) {
       closeAccountMenu();
-      if (!confirm(t('settings.accounts.confirm_logout') || 'ログアウトしますか？')) return;
+      if (!confirm(t('settings.accounts.confirm_logout') || t("ログアウトしますか？"))) return;
       logout().finally(() => navigate('/'));
       return;
     }
@@ -620,7 +620,7 @@ function dispatch(path) {
     app.innerHTML = renderSpot(city);
     hydrateSpot(city);
   } else if (cardMatch) {
-    document.title = '名刺 / spotcode-sns';
+    document.title = t("名刺 / spotcode-sns");
     app.innerHTML = renderBusinessCard(cardMatch[1], cardMatch[2] === 'cards');
     hydrateBusinessCard(cardMatch[1], cardMatch[2] === 'cards');
   } else if (followMatch) {
@@ -680,7 +680,7 @@ function dispatch(path) {
     // renders event head) isn't needed on any hot path so it stays
     // out of the initial main.js bundle. First-time visitor pays a
     // ~10ms import cost; every subsequent visit is instant.
-    app.innerHTML = '<div class="stub"><p class="stub__sub">読み込み中…</p></div>';
+    app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込み中…") + "</p></div>");
     import('./views/event.js').then(({ renderEvent, hydrateEvent }) => {
       // Guard against a rapid navigation away — dispatch may have
       // fired again for a different route by the time the import
@@ -690,7 +690,7 @@ function dispatch(path) {
       hydrateEvent(eid);
     }).catch((err) => {
       console.warn('event view load', err);
-      app.innerHTML = '<div class="stub"><p class="stub__sub">読み込みに失敗しました</p></div>';
+      app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込みに失敗しました") + "</p></div>");
     });
   } else if (userMatch) {
     const handle = userMatch[1];
@@ -706,8 +706,8 @@ function dispatch(path) {
     document.title = 'Not found / spotcode-sns';
     app.innerHTML =
       '<div class="stub">' +
-        '<h2 class="stub__title">ページが見つかりません</h2>' +
-        '<p class="stub__sub">URL が間違っているか、削除されたページです。</p>' +
+        ("<h2 class=\"stub__title\">" + t("ページが見つかりません") + "</h2>") +
+        ("<p class=\"stub__sub\">" + t("URL が間違っているか、削除されたページです。") + "</p>") +
       '</div>' +
       quickNavLinks();
   }
@@ -721,7 +721,7 @@ function syncSpotChip(spot) {
   if (!btn) return;
   const textEl = btn.querySelector('[data-spot-text]');
   if (!spot) {
-    if (textEl) textEl.textContent = '場所を追加';
+    if (textEl) textEl.textContent = t("場所を追加");
     btn.classList.remove('spot-chip--set');
     btn.classList.add('spot-chip--add');
     delete btn.dataset.spotLat;
@@ -759,10 +759,10 @@ function openRepostMenu(forkBtn) {
   menu.className = 'repost-menu';
   menu.innerHTML =
     '<button type="button" class="repost-menu__item" data-repost-action="repost" data-post-id="' + postId + '">' +
-      (reposted ? 'リポストを取り消す' : 'リポスト') +
+      (reposted ? t("リポストを取り消す") : t("リポスト")) +
     '</button>' +
     '<button type="button" class="repost-menu__item" data-repost-action="quote" data-post-id="' + postId + '">' +
-      '引用' +
+      t("引用") +
     '</button>';
   // Anchor the menu below the fork button — uses viewport coordinates
   // so it stays in place during scroll within a single open session.
@@ -784,10 +784,10 @@ async function sharePost(postId, btn) {
   } catch { /* user cancelled — silent */ return; }
   try {
     await navigator.clipboard.writeText(link);
-    flashShareToast(btn, 'リンクをコピーしました');
+    flashShareToast(btn, t("リンクをコピーしました"));
     return;
   } catch {
-    alert('リンク: ' + link);
+    alert(t("リンク: ") + link);
   }
 }
 
@@ -897,8 +897,8 @@ function renderPollChip() {
   const labelOpts = pendingPoll.options.slice(0, 2).join(' / ') +
     (pendingPoll.options.length > 2 ? ` …+${pendingPoll.options.length - 2}` : '');
   const html =
-    '<button type="button" class="spot-chip spot-chip--set" id="compose-poll-chip" title="クリックして編集">' +
-      icon('chart', { size: 12, className: 'icon--inline' }) + '投票: ' + labelOpts +
+    ("<button type=\"button\" class=\"spot-chip spot-chip--set\" id=\"compose-poll-chip\" title=\"" + t("クリックして編集") + "\">") +
+      icon('chart', { size: 12, className: 'icon--inline' }) + t("投票: ") + labelOpts +
     '</button>';
   if (chip) chip.outerHTML = html;
   else {
@@ -921,7 +921,7 @@ function renderPhotoPreviews() {
   row.innerHTML = pendingPhotos.map((src, i) => (
     '<div class="compose-photo">' +
       '<img src="' + src + '" alt="">' +
-      '<button type="button" class="compose-photo__remove" data-idx="' + i + '" aria-label="削除">×</button>' +
+      '<button type="button" class="compose-photo__remove" data-idx="' + i + ("\" aria-label=\"" + t("削除") + "\">×</button>") +
     '</div>'
   )).join('');
 }
@@ -947,7 +947,7 @@ document.addEventListener('change', async (e) => {
   e.target.value = ''; // allow re-picking the same file later
   if (!files.length) return;
   const room = Math.max(0, PHOTO_CAP - pendingPhotos.length);
-  if (!room) { alert('写真は最大 ' + PHOTO_CAP + ' 枚までです'); return; }
+  if (!room) { alert(t("写真は最大 {n} 枚までです", { n: PHOTO_CAP })); return; }
   const toProcess = files.slice(0, room);
   try {
     const urls = await Promise.all(toProcess.map(f => fileToPhotoDataUrl(f)));
@@ -956,11 +956,11 @@ document.addEventListener('change', async (e) => {
     autosaveComposerDraft();
   } catch (err) {
     const reason =
-      err.message === 'NOT_IMAGE' ? '画像ファイルだけ選んでください'
-      : err.message === 'TOO_LARGE' ? '画像が大きすぎます（20MB まで）'
-      : err.message === 'IMAGE_DECODE' ? '画像を読み込めませんでした'
+      err.message === 'NOT_IMAGE' ? t("画像ファイルだけ選んでください")
+      : err.message === 'TOO_LARGE' ? t("画像が大きすぎます（20MB まで）")
+      : err.message === 'IMAGE_DECODE' ? t("画像を読み込めませんでした")
       : err.message;
-    alert('写真の処理に失敗: ' + reason);
+    alert(t("写真の処理に失敗: ") + reason);
   }
 });
 
@@ -1041,7 +1041,7 @@ function restoreComposerDraft() {
     pendingSpot = d.spot;
     syncSpotChip(d.spot);
   }
-  if (['idea', 'bug'].includes(d.kind)) {
+  if ([t("idea"), 'bug'].includes(d.kind)) {
     pendingKind = d.kind;
     syncKindToggle();
   }
@@ -1441,7 +1441,7 @@ document.addEventListener('click', (e) => {
     // re-typing. Kind badges live in the post head.
     // GitHub link: `.post__meta > .post__link` sibling of the body
     // (NOT inside the body — escape() in renderPost puts it after).
-    const selectedKind = post.querySelector('.post__kind--bug') ? 'bug' : post.querySelector('.post__kind--idea') ? 'idea' : null;
+    const selectedKind = post.querySelector('.post__kind--bug') ? 'bug' : post.querySelector('.post__kind--idea') ? t("idea") : null;
     const ghLink = post.querySelector('.post__meta .post__link')?.getAttribute('href') || '';
     const repoFullName = post.getAttribute('data-repo-full-name') || '';
     const visibility = post.getAttribute('data-visibility') || 'public';
@@ -1455,7 +1455,7 @@ document.addEventListener('click', (e) => {
         String(original).replace(/&/g, '&amp;').replace(/</g, '&lt;') +
       '</textarea>' +
       '<div class="post__edit-meta">' +
-        ['idea', 'bug'].map((kind) =>
+        [t("idea"), 'bug'].map((kind) =>
           '<button type="button" class="post__edit-pill act--edit-toggle-kind' +
             (selectedKind === kind ? ' is-active' : '') + '" data-edit-kind="' + kind + '" aria-pressed="' + (selectedKind === kind) + '">' +
             escape(t('kind.' + kind)) + '</button>'
@@ -1519,7 +1519,7 @@ document.addEventListener('click', (e) => {
     const ta = body.querySelector('textarea');
     if (!ta) return;
     const newBody = ta.value.trim();
-    if (!newBody) { alert('本文を入力してください'); return; }
+    if (!newBody) { alert(t("本文を入力してください")); return; }
     // Pull the metadata fields from the inline editor. Kind toggle
     // state lives on the pill (.is-active class); the link input is
     // text, trimmed; empty → null so the backing column gets cleared.
@@ -1558,7 +1558,7 @@ document.addEventListener('click', (e) => {
           const head = post.querySelector('.post__head');
           if (head && !head.querySelector('.post__edited')) {
             head.querySelector('.post__time')?.insertAdjacentHTML('afterend',
-              '<span class="post__edited">（編集済み）</span>');
+              ("<span class=\"post__edited\">" + t("（編集済み）") + "</span>"));
           }
           // Match the badge used by a full render after changing the tag.
           if (head) {
@@ -1600,7 +1600,7 @@ document.addEventListener('click', (e) => {
         });
       })
       .catch((err) => {
-        alert('編集に失敗しました: ' + err.message);
+        alert(t("編集に失敗しました: ") + err.message);
         visInput.disabled = false;
         if (repoInput) repoInput.disabled = false;
         saveBtn.disabled = false;
@@ -1618,8 +1618,8 @@ document.addEventListener('click', (e) => {
     if (!post) return;
     const foreign = deleteBtn.hasAttribute('data-foreign-delete');
     const msg = foreign
-      ? '他のユーザーの投稿を削除します。本当によろしいですか？元に戻せません。'
-      : 'この投稿を削除しますか？元に戻せません。';
+      ? t("他のユーザーの投稿を削除します。本当によろしいですか？元に戻せません。")
+      : t("この投稿を削除しますか？元に戻せません。");
     if (!confirm(msg)) return;
     deleteBtn.disabled = true;
     const id = post.getAttribute('data-post-id');
@@ -1641,7 +1641,7 @@ document.addEventListener('click', (e) => {
       })
       .catch((err) => {
         unmarkPendingDelete(id);
-        alert('削除に失敗しました: ' + err.message);
+        alert(t("削除に失敗しました: ") + err.message);
         post.style.opacity = '';
         post.style.pointerEvents = '';
         deleteBtn.disabled = false;
@@ -1665,7 +1665,7 @@ document.addEventListener('click', (e) => {
         const span = likeBtn.querySelector('span');
         if (span) span.textContent = String(likeCount(postId));
       })
-      .catch((err) => alert('いいねに失敗しました: ' + err.message))
+      .catch((err) => alert(t("いいねに失敗しました: ") + err.message))
       .finally(() => { likeBtn.disabled = false; });
     return;
   }
@@ -1764,7 +1764,7 @@ document.addEventListener('click', (e) => {
         if (!acct) { try { acct = await getOfficialAccount(); } catch {} }
         actorUserId = acct?.id;
         if (!actorUserId) {
-          alert('公式アカウントの読み込みに失敗しました。リロードしてもう一度お試しください。');
+          alert(t("公式アカウントの読み込みに失敗しました。リロードしてもう一度お試しください。"));
           return;
         }
       }
@@ -1779,13 +1779,13 @@ document.addEventListener('click', (e) => {
         followBtn.classList.toggle('is-following', isFollowed);
         followBtn.classList.toggle('btn--primary', !isFollowed);
         followBtn.classList.toggle('btn--ghost', isFollowed);
-        followBtn.textContent = state === 'following' ? 'Following'
-                              : state === 'requested' ? 'Requested'
-                              :                          'Follow';
+        followBtn.textContent = state === 'following' ? t("Following")
+                              : state === 'requested' ? t("Requested")
+                              :                          t("Follow");
         // Re-render so any visible follower/following counts re-read the cache.
         refresh();
       })
-      .catch((err) => alert('フォロー操作に失敗しました: ' + err.message))
+      .catch((err) => alert(t("フォロー操作に失敗しました: ") + err.message))
       .finally(() => { followBtn.disabled = false; });
     return;
   }
@@ -1948,7 +1948,7 @@ document.addEventListener('click', (e) => {
       votePoll(post.getAttribute('data-post-id'), idx)
         .then(() => refresh())
         .catch((err) => {
-          alert(err.message || '投票に失敗しました');
+          alert(err.message || t("投票に失敗しました"));
           voteBtn.disabled = false;
         });
     });
@@ -2013,7 +2013,7 @@ document.addEventListener('click', (e) => {
             taskBox.disabled = false;
           })
           .catch((err) => {
-            alert('チェック更新に失敗: ' + err.message);
+            alert(t("チェック更新に失敗: ") + err.message);
             taskBox.disabled = false;
           });
       });
@@ -2148,7 +2148,7 @@ document.addEventListener('submit', (e) => {
       refresh();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     })
-    .catch((err) => alert('投稿に失敗しました: ' + err.message))
+    .catch((err) => alert(t("投稿に失敗しました: ") + err.message))
     .finally(() => {
       delete form.dataset.posting;
       if (submitBtn) submitBtn.disabled = false;

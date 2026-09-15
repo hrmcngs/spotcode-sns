@@ -24,7 +24,7 @@ function template() {
     '<div class="modal" id="report-modal" hidden>' +
       '<div class="modal__backdrop" data-report-close></div>' +
       '<div class="modal__card" role="dialog" aria-labelledby="report-title">' +
-        '<button class="modal__close" data-report-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
+        ("<button class=\"modal__close\" data-report-close aria-label=\"" + t("Close") + "\">") + icon('close', { size: 18 }) + '</button>' +
         '<h2 id="report-title" class="auth-form__h">' + t('report.title') + '</h2>' +
         '<p class="report-hint">' + t('report.hint') + '</p>' +
         '<form class="auth-form" id="report-form">' +
@@ -67,8 +67,8 @@ function mount() {
     const done = form.querySelector('[data-done]');
     err.textContent = '';
     const me = currentUser();
-    if (!me) { err.textContent = 'ログインしてください'; return; }
-    if (!activePostId) { err.textContent = '対象投稿が不明です'; return; }
+    if (!me) { err.textContent = t("ログインしてください"); return; }
+    if (!activePostId) { err.textContent = t("対象投稿が不明です"); return; }
     const fd = new FormData(form);
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;

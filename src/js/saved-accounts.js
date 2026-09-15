@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Multi-account switcher backing store.
 //
 // Keeps a localStorage list of accounts the user has signed into on this
@@ -36,7 +37,7 @@ function publicView(row) {
     id:          row.id,
     email:       row.email || '',
     handle:      row.handle || '',
-    name:        row.name || row.handle || 'User',
+    name:        row.name || row.handle || t("User"),
     avatarUrl:   row.avatarUrl || null,
     avatarShape: row.avatarShape || 'round',
     lastUsed:    row.lastUsed || 0,
@@ -68,7 +69,7 @@ export function rememberAccount({ user, session }) {
     id:           user.id,
     email:        user.email || '',
     handle:       user.handle || '',
-    name:         user.name || user.handle || 'User',
+    name:         user.name || user.handle || t("User"),
     avatarUrl:    user.avatarImage || null,
     avatarShape:  user.avatarShape || 'round',
     refreshToken: session.refresh_token,

@@ -1,3 +1,4 @@
+import { t, getLang, getLocale } from './i18n.js';
 import { isHiddenUser } from './social-controls.js';
 import { canReadGithubOrganization, refreshGithubMembershipsIfNeeded } from './github-organizations.js';
 import { isDevMode } from './dev-mode.js';
@@ -221,7 +222,7 @@ function isMissingOptionalColumn(error) {
 
 function shapeAuthor(a) {
   if (!a) return null;
-  const name = a.name || 'User';
+  const name = a.name || t("User");
   return {
     handle:      a.handle,
     name,
@@ -282,7 +283,7 @@ function shapePost(row) {
     // Post kind tag. Currently 'idea', 'bug' or null (= regular note). Read
     // as a single source of truth so the composer toggle, the badge
     // renderer and any future "Ideas only" filter all agree.
-    kind:          ['idea', 'bug'].includes(row.kind) ? row.kind : null,
+    kind:          [t("idea"), 'bug'].includes(row.kind) ? row.kind : null,
     // Audience for the post. One of:
     //   'public' (default), 'mutuals', 'following', 'friends', 'org',
     //   or the legacy 'restricted' (= friends OR org).
@@ -316,7 +317,7 @@ function shapePost(row) {
 export async function addQuote(post, quotedPostId) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしていません');
+  if (!user) throw new Error(t("ログインしていません"));
   const row = {
     author_id:   user.id,
     body:        post.body,
@@ -680,7 +681,7 @@ export function postsWithSpots({ limit = SPOT_POST_LIMIT } = {}) {
         .limit(limit)
     );
     if (error) throw new Error(error.message);
-    if ((currentUser()?.id || null) !== owner) throw new Error('アカウントが変更されました');
+    if ((currentUser()?.id || null) !== owner) throw new Error(t("アカウントが変更されました"));
     const shaped = mergeOptimistic((data || []).map(shapePost), 'spots');
     savePostsCache('spots', shaped);
     return shaped;
@@ -901,10 +902,10 @@ export async function hydrateQuotedPosts(posts) {
 }
 
 const PHOTOS_MIGRATION_MSG =
-  '写真機能のマイグレーションが未実行です。Supabase で次の SQL を一度だけ実行してください: ' +
+  t("写真機能のマイグレーションが未実行です。Supabase で次の SQL を一度だけ実行してください: ") +
   'ALTER TABLE posts ADD COLUMN IF NOT EXISTS photos jsonb DEFAULT \'[]\'::jsonb;';
 const POLL_MIGRATION_MSG =
-  '投票機能のマイグレーションが未実行です。Supabase で次の SQL を一度だけ実行してください: ' +
+  t("投票機能のマイグレーションが未実行です。Supabase で次の SQL を一度だけ実行してください: ") +
   'ALTER TABLE posts ADD COLUMN IF NOT EXISTS poll jsonb; ' +
   'CREATE TABLE IF NOT EXISTS poll_votes (post_id uuid REFERENCES posts(id) ON DELETE CASCADE, ' +
   'user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE, option_idx int NOT NULL, ' +
@@ -918,9 +919,9 @@ export async function addPost(post) {
   // refresh lock, making Push appear broken until a reload. PostgREST still
   // validates the JWT and RLS server-side, so this does not weaken auth.
   const me = currentUser();
-  if (!me?.id) throw new Error('ログイン情報を確認できません。もう一度ログインしてください');
+  if (!me?.id) throw new Error(t("ログイン情報を確認できません。もう一度ログインしてください"));
   await refreshGithubMembershipsIfNeeded({ required: !!me.github?.handle && !!(post.githubLink || post.repoFullName) });
-  if (currentUser()?.id !== me.id) throw new Error("アカウントが変更されました");
+  if (currentUser()?.id !== me.id) throw new Error(t("アカウントが変更されました"));
   const wantsPhotos = Array.isArray(post.photos) && post.photos.length > 0;
   const wantsPoll = post.poll && Array.isArray(post.poll.options) && post.poll.options.length >= 2;
 
@@ -931,7 +932,7 @@ export async function addPost(post) {
   let authorId = me.id;
   if (isPostingAsOfficial()) {
     const official = await getOfficialAccount();
-    if (!official) throw new Error('公式アカウントが設定されていません (Stage 25 マイグレーション未実行?)');
+    if (!official) throw new Error(t("公式アカウントが設定されていません (Stage 25 マイグレーション未実行?)"));
     authorId = official.id;
   }
 
@@ -944,7 +945,7 @@ export async function addPost(post) {
     status:      post.status || 'wip',
   };
   if (wantsPhotos) row.photos = post.photos;
-  if (['idea', 'bug'].includes(post.kind) && hasKind) row.kind = post.kind;
+  if ([t("idea"), 'bug'].includes(post.kind) && hasKind) row.kind = post.kind;
   if (hasEventUrl && post.eventUrl) row.event_url = post.eventUrl;
   if (typeof post.visibility === 'string' &&
       ['mutuals','following','friends','org','only_me','github_org','restricted'].includes(post.visibility)) {
@@ -1008,7 +1009,7 @@ export async function updatePost(postId, fields) {
   const patch = {};
   if (Object.prototype.hasOwnProperty.call(fields, 'visibility')) {
     if (!['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'github_org', 'restricted'].includes(fields.visibility)) {
-      throw new Error('表示先が正しくありません');
+      throw new Error(t("表示先が正しくありません"));
     }
     // Never omit an explicitly selected audience because of a stale schema cache.
     patch.visibility = fields.visibility;
@@ -1016,7 +1017,7 @@ export async function updatePost(postId, fields) {
   }
   if (typeof fields.body === 'string') patch.body = fields.body;
   // `kind` accepts 'idea' or 'bug' to tag, or null to untag.
-  if (['idea', 'bug'].includes(fields.kind) || fields.kind === null) {
+  if ([t("idea"), 'bug'].includes(fields.kind) || fields.kind === null) {
     if (hasKind) patch.kind = fields.kind;
   }
   // `githubLink` is always optional — undefined means "leave alone",
@@ -1042,7 +1043,7 @@ export async function updatePost(postId, fields) {
   );
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) {
-    throw new Error('編集権限がありません（RLS により拒否）');
+    throw new Error(t("編集権限がありません（RLS により拒否）"));
   }
   const updated = shapePost(data[0]);
   // Evict old audience/body snapshots so navigation cannot restore stale metadata.
@@ -1063,7 +1064,7 @@ export async function removePost(postId) {
     // run — own-post deletes hit a different policy and don't end up
     // here.
     throw new Error(
-      '削除権限がありません。他ユーザーの投稿を消すには Stage 15 SQL を実行してください: ' +
+      t("削除権限がありません。他ユーザーの投稿を消すには Stage 15 SQL を実行してください: ") +
       'ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_admin boolean DEFAULT false; ' +
       'UPDATE profiles SET is_admin = true WHERE handle IN (\'hrmcngs\'); ' +
       'CREATE POLICY "admins can delete any post" ON posts FOR DELETE ' +
@@ -1145,7 +1146,7 @@ export async function votePoll(postId, optionIdx) {
   if (!postId) throw new Error('NO_POST');
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしていません');
+  if (!user) throw new Error(t("ログインしていません"));
   const { error } = await supa.from('poll_votes')
     .upsert({ post_id: postId, user_id: user.id, option_idx: optionIdx },
             { onConflict: 'post_id,user_id' });
@@ -1162,10 +1163,10 @@ export async function votePoll(postId, optionIdx) {
 // Relative-time formatter ("just now", "5m", "3h", "2d").
 export function relTime(ts) {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
-  if (s < 60)       return s + 's';
-  if (s < 3600)     return Math.floor(s / 60) + 'm';
-  if (s < 86400)    return Math.floor(s / 3600) + 'h';
-  if (s < 86400*7)  return Math.floor(s / 86400) + 'd';
+  if (s < 60)       return getLang() === 'ja' ? s + '秒前' : s + 's';
+  if (s < 3600)     return getLang() === 'ja' ? Math.floor(s / 60) + '分前' : Math.floor(s / 60) + 'm';
+  if (s < 86400)    return getLang() === 'ja' ? Math.floor(s / 3600) + '時間前' : Math.floor(s / 3600) + 'h';
+  if (s < 86400*7)  return getLang() === 'ja' ? Math.floor(s / 86400) + '日前' : Math.floor(s / 86400) + 'd';
   const d = new Date(ts);
-  return d.getMonth() + 1 + '/' + d.getDate();
+  return d.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' });
 }

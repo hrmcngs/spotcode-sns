@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Auth identifier aliasing.
 //
 // Supabase Auth requires `local@domain.tld` format on every signup
@@ -102,10 +103,10 @@ export function reservedSignupReason({ email, handle } = {}) {
   const cleanHandle = String(handle || '').trim().toLowerCase();
 
   if (cleanHandle && RESERVED_HANDLES.has(cleanHandle)) {
-    return 'このハンドルは予約されています（@' + cleanHandle + ' は運営専用です）。別のハンドルを選んでください。';
+    return t("このハンドルは予約されています（@") + cleanHandle + t(" は運営専用です）。別のハンドルを選んでください。");
   }
   if (RESERVED_BARE_LOGINS.has(bareEmail)) {
-    return 'この識別子は予約されています（' + bareEmail + ' は運営専用）。';
+    return t("この識別子は予約されています（") + bareEmail + t(" は運営専用）。");
   }
   // (No blanket `@spotcode-sns.local` reservation — the alias
   //  machinery has to be able to mint addresses there for first-

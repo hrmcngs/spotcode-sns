@@ -1,9 +1,10 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 let user={id:'me',github:{handle:'me'}},notices=[],shown=[],publicCalls=0;
 const list={isConnected:true,querySelectorAll:()=>[],before:el=>notices.push(el),innerHTML:''};
-const ctx=vm.createContext({
+const ctx=vm.createContext({ ...createTestI18n(), 
  document:{getElementById:()=>list,querySelectorAll:()=>[],createElement:()=>({dataset:{},setAttribute(){}})},
  currentUser:()=>user,currentPath:()=>'/repos',getGithubToken:async()=> 'test-grant',
  githubRepositories:async()=>{throw new Error('Failed to send a request to the Edge Function');},

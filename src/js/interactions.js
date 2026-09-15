@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { followedPostScope } from './push-notify.js';
 // Likes / follows / reports backed by Supabase (Stage 5).
 //
@@ -83,7 +84,7 @@ export async function hydratePostLikes(postIds) {
 export async function toggleLike(postId /* , _handle ignored */) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしてください');
+  if (!user) throw new Error(t("ログインしてください"));
   const state = likes.get(postId) || { count: 0, mine: false };
   if (state.mine) {
     const { error } = await supa.from('likes')
@@ -244,7 +245,7 @@ export function cachedFollowList(handle, kind) {
 }
 
 function shapeProfile(p) {
-  const name = p.name || 'User';
+  const name = p.name || t("User");
   return {
     handle:      p.handle,
     name,
@@ -268,12 +269,12 @@ function shapeProfile(p) {
 export async function toggleFollow(myHandle, targetHandle, opts = {}) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしてください');
+  if (!user) throw new Error(t("ログインしてください"));
   const meta = await userMetaByHandle(targetHandle);
-  if (!meta) throw new Error('対象ユーザーが見つかりません');
+  if (!meta) throw new Error(t("対象ユーザーが見つかりません"));
   const asOverlay = !!opts.actorUserId;
   const actorId   = asOverlay ? opts.actorUserId : user.id;
-  if (actorId === meta.id) throw new Error('自分自身はフォローできません');
+  if (actorId === meta.id) throw new Error(t("自分自身はフォローできません"));
 
   // Overlay path can't trust the followsMine cache (it tracks the
   // signed-in user, not the overlay identity). Round-trip to DB
@@ -371,9 +372,9 @@ export async function pendingFollowRequests() {
 export async function acceptFollowRequest(followerHandle) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしてください');
+  if (!user) throw new Error(t("ログインしてください"));
   const followerId = await userIdFromHandle(followerHandle);
-  if (!followerId) throw new Error('そのユーザーが見つかりません');
+  if (!followerId) throw new Error(t("そのユーザーが見つかりません"));
   const { error } = await supa.from('follows')
     .update({ status: 'accepted' })
     .eq('follower_id', followerId).eq('target_id', user.id);
@@ -384,9 +385,9 @@ export async function acceptFollowRequest(followerHandle) {
 export async function denyFollowRequest(followerHandle) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしてください');
+  if (!user) throw new Error(t("ログインしてください"));
   const followerId = await userIdFromHandle(followerHandle);
-  if (!followerId) throw new Error('そのユーザーが見つかりません');
+  if (!followerId) throw new Error(t("そのユーザーが見つかりません"));
   const { error } = await supa.from('follows')
     .delete().eq('follower_id', followerId).eq('target_id', user.id);
   if (error) throw new Error(error.message);
@@ -762,20 +763,20 @@ export async function hydratePolls(posts) {
       btn.disabled = closed || tally.myChoice != null;
     });
     const totalSlot = card.querySelector('.poll__total');
-    if (totalSlot) totalSlot.textContent = tally.total + ' 票';
+    if (totalSlot) totalSlot.textContent = tally.total + t(" 票");
   }
 }
 
 export async function toggleRepost(postId) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしてください');
+  if (!user) throw new Error(t("ログインしてください"));
   const state = reposts.get(postId) || { mine: false };
   if (state.mine) {
     const { error } = await supa.from('reposts')
       .delete().eq('post_id', postId).eq('user_id', user.id);
     if (error) {
-      if (isTableMissing(error, 'reposts')) throw new Error('リポスト機能はまだセットアップされていません (Stage 11 SQL を実行してください)');
+      if (isTableMissing(error, 'reposts')) throw new Error(t("リポスト機能はまだセットアップされていません (Stage 11 SQL を実行してください)"));
       throw new Error(error.message);
     }
     reposts.set(postId, { mine: false });
@@ -783,7 +784,7 @@ export async function toggleRepost(postId) {
   }
   const { error } = await supa.from('reposts').insert({ post_id: postId, user_id: user.id });
   if (error) {
-    if (isTableMissing(error, 'reposts')) throw new Error('リポスト機能はまだセットアップされていません (Stage 11 SQL を実行してください)');
+    if (isTableMissing(error, 'reposts')) throw new Error(t("リポスト機能はまだセットアップされていません (Stage 11 SQL を実行してください)"));
     throw new Error(error.message);
   }
   reposts.set(postId, { mine: true });
@@ -793,13 +794,13 @@ export async function toggleRepost(postId) {
 export async function toggleBookmark(postId) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしてください');
+  if (!user) throw new Error(t("ログインしてください"));
   const state = bookmarks.get(postId) || { mine: false };
   if (state.mine) {
     const { error } = await supa.from('bookmarks')
       .delete().eq('post_id', postId).eq('user_id', user.id);
     if (error) {
-      if (isTableMissing(error, 'bookmarks')) throw new Error('保存機能はまだセットアップされていません (Stage 11 SQL を実行してください)');
+      if (isTableMissing(error, 'bookmarks')) throw new Error(t("保存機能はまだセットアップされていません (Stage 11 SQL を実行してください)"));
       throw new Error(error.message);
     }
     bookmarks.set(postId, { mine: false });
@@ -807,7 +808,7 @@ export async function toggleBookmark(postId) {
   }
   const { error } = await supa.from('bookmarks').insert({ post_id: postId, user_id: user.id });
   if (error) {
-    if (isTableMissing(error, 'bookmarks')) throw new Error('保存機能はまだセットアップされていません (Stage 11 SQL を実行してください)');
+    if (isTableMissing(error, 'bookmarks')) throw new Error(t("保存機能はまだセットアップされていません (Stage 11 SQL を実行してください)"));
     throw new Error(error.message);
   }
   bookmarks.set(postId, { mine: true });
@@ -915,17 +916,17 @@ export async function getComments(postId) {
 
 export async function addComment(postId, body) {
   const text = String(body || '').trim();
-  if (!text) throw new Error('コメントを入力してください');
+  if (!text) throw new Error(t("コメントを入力してください"));
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしてください');
+  if (!user) throw new Error(t("ログインしてください"));
   const { data, error } = await supa.from('comments')
     .insert({ post_id: postId, author_id: user.id, body: text.slice(0, 500) })
     .select('id, body, created_at, author:profiles!comments_author_id_fkey(handle, name, avatar_url, avatar_shape)')
     .single();
   if (error) {
     if (isCommentsTableMissing(error)) {
-      throw new Error('コメント機能はまだセットアップされていません (Stage 10 SQL を実行してください)');
+      throw new Error(t("コメント機能はまだセットアップされていません (Stage 10 SQL を実行してください)"));
     }
     throw new Error(error.message);
   }
@@ -942,7 +943,7 @@ export async function removeComment(commentId) {
   const { data, error } = await supa
     .from('comments').delete().eq('id', commentId).select('id');
   if (error) throw new Error(error.message);
-  if (!data || !data.length) throw new Error('削除権限がありません');
+  if (!data || !data.length) throw new Error(t("削除権限がありません"));
   return true;
 }
 
@@ -974,7 +975,7 @@ export async function likersOf(postId) {
 export async function reportPost({ postId, reason, comment }) {
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
-  if (!user) throw new Error('ログインしてください');
+  if (!user) throw new Error(t("ログインしてください"));
   const { data: existing } = await supa.from('reports')
     .select('id')
     .eq('post_id', postId)

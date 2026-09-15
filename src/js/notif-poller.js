@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { url as routeUrl } from './router.js';
 // Periodic poll of the (synthetic) notifications inbox. Diffs against
 // the last-seen timestamp persisted in localStorage so a returning
@@ -56,39 +57,39 @@ function formatNotif(n) {
   const base = (window.__BASE__ || '/');
   switch (n.type) {
     case 'followed_post':
-      return { title: actorName + 'さんが' + (n.district || '地区未設定') + 'で投稿しました',
+      return { title: t("{name}さんが{district}で投稿しました", { name: actorName, district: n.district || t("地区未設定") }),
         body: postExcerpt, tag: 'followed_post:' + n.post.id, url: routeUrl('/post/' + n.post.id) };
     case 'like':
       return {
-        title: actorName + 'さんがいいねしました',
+        title: t("{name}さんがいいねしました", { name: actorName }),
         body:  postExcerpt,
         tag:   'like:' + (n.post?.id || actorHandle),
         url:   n.post?.id ? base + 'post/' + n.post.id : base + actorHandle,
       };
     case 'comment':
       return {
-        title: actorName + 'さんがコメントしました',
+        title: t("{name}さんがコメントしました", { name: actorName }),
         body:  postExcerpt,
         tag:   'comment:' + (n.post?.id || actorHandle) + ':' + n.createdAt,
         url:   n.post?.id ? base + 'post/' + n.post.id : base,
       };
     case 'mention':
       return {
-        title: actorName + 'さんがあなたをメンションしました',
+        title: t("{name}さんがあなたをメンションしました", { name: actorName }),
         body:  postExcerpt,
         tag:   'mention:' + (n.post?.id || actorHandle) + ':' + n.createdAt,
         url:   n.post?.id ? base + 'post/' + n.post.id : base,
       };
     case 'follow':
       return {
-        title: actorName + 'さんにフォローされました',
+        title: t("{name}さんにフォローされました", { name: actorName }),
         body:  '@' + actorHandle,
         tag:   'follow:' + actorHandle,
         url:   base + actorHandle,
       };
     case 'follow_request':
       return {
-        title: actorName + 'さんからフォローリクエスト',
+        title: t("{name}さんからフォローリクエスト", { name: actorName }),
         body:  '@' + actorHandle,
         tag:   'follow_request:' + actorHandle,
         url:   base + 'notifications',
@@ -168,7 +169,7 @@ async function tick() {
     });
   }
   if (fresh.length > MAX_BURST) {
-    showPush('+' + (fresh.length - MAX_BURST) + ' 件の新着通知', {
+    showPush('+' + (fresh.length - MAX_BURST) + t(" 件の新着通知"), {
       tag: 'notif-summary',
       url: (window.__BASE__ || '/') + 'notifications',
       skipIfVisible: n.type !== 'followed_post',

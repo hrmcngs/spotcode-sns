@@ -1,9 +1,10 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 let refreshed=0;
 const calls=[];
-const ctx=vm.createContext({
+const ctx=vm.createContext({ ...createTestI18n(), 
  currentUser:()=>({id:'org-account',isOrg:true}),
  getGithubToken:async()=>{throw new Error('File approval must not require OAuth');},
  refreshProfile:async()=>{refreshed++;},

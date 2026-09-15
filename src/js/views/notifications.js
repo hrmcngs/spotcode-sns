@@ -101,7 +101,7 @@ function renderRow(n) {
     '<div class="notif__title">' +
       '<span class="notif__name">' + escape(displayName) + '</span>' +
       ' <span class="notif__handle">@' + escape(displayHandle) + '</span>' +
-      ' <span class="notif__action">' + escape(n.type === 'followed_post' ? (n.district || '地区未設定') + 'で投稿しました' : t(meta.labelKey)) + '</span>' +
+      ' <span class="notif__action">' + escape(n.type === 'followed_post' ? t("{district}で投稿しました", { district: n.district || t("地区未設定") }) : t(meta.labelKey)) + '</span>' +
       ' <span class="notif__time">· ' + escape(relTime(n.createdAt)) + '</span>' +
     '</div>';
 
@@ -216,7 +216,7 @@ export async function hydrateNotifications() {
       '<div class="stub">' +
         '<h2 class="stub__title">' + t('notif.error.title') + '</h2>' +
         '<p class="stub__sub">' + escape(err.message || '') + '</p>' +
-        '<button class="btn btn--ghost btn--sm" data-notif-retry="1">再試行</button>' +
+        ("<button class=\"btn btn--ghost btn--sm\" data-notif-retry=\"1\">" + t("再試行") + "</button>") +
       '</div>';
     return;
   }
@@ -270,6 +270,6 @@ export function handleNotifAction(e) {
   const fn = accept ? acceptFollowRequest : denyFollowRequest;
   fn(handle)
     .then(() => hydrateNotifications())
-    .catch((err) => alert((accept ? '承認' : '拒否') + 'に失敗しました: ' + err.message));
+    .catch((err) => alert((accept ? t("承認") : t("拒否")) + t("に失敗しました: ") + err.message));
   return true;
 }

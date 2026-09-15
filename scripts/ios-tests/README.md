@@ -63,3 +63,14 @@ sbcl --script scripts/test-signed-keychain-persistence.lisp
 This uses a random fixture account with three test bytes, the preview build's
 signing identity and entitlements, and the production KeychainStore implementation.
 It does not read login tokens. It removes its fixture after the rebuild/read check.
+
+Post reading location regression tests:
+
+```sh
+node scripts/test-post-location-gate.mjs
+```
+
+Runs the production reader gate with a fake location manager and real
+CoreLocation distances. Covers moving into/out of 100 m, shared subscriptions,
+invalid/stale fixes, GPS failures and retries, permission restoration, and
+foreground/background cleanup. No device location or network access is used.

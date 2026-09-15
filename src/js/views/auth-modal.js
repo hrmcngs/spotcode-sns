@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 // Login / Sign-up modal. Mounts itself on first open() and stays in the DOM.
 import { register, login, loginWithUsername, verifyLoginMfa, fetchGithubProfile } from '../auth.js';
 import { icon } from '../icons.js';
@@ -9,37 +10,37 @@ let rootEl = null;
 // Shown when the user types a bare identifier that isn't a known
 // alias. login-aliases.js's ALIASES map is the source of truth for
 // what we accept without an `@`.
-const BARE_EMAIL_REJECTED = 'メールアドレスまたはユーザー名を入力してください';
+const BARE_EMAIL_REJECTED = t("メールアドレスまたはユーザー名を入力してください");
 
 function template() {
   return (
     '<div class="modal" id="auth-modal" hidden>' +
       '<div class="modal__backdrop" data-close></div>' +
       '<div class="modal__card" role="dialog" aria-labelledby="auth-title">' +
-        '<button class="modal__close" data-close aria-label="Close">' + icon('close', { size: 18 }) + '</button>' +
+        ("<button class=\"modal__close\" data-close aria-label=\"" + t("Close") + "\">") + icon('close', { size: 18 }) + '</button>' +
         '<div class="auth-tabs">' +
-          '<button class="auth-tab is-active" data-tab="login">Log in</button>' +
-          '<button class="auth-tab" data-tab="register">Sign up</button>' +
+          ("<button class=\"auth-tab is-active\" data-tab=\"login\">" + t("Log in") + "</button>") +
+          ("<button class=\"auth-tab\" data-tab=\"register\">" + t("Sign up") + "</button>") +
         '</div>' +
 
-        '<section class="auth-terms" aria-label="利用規約への同意 / Terms agreement">' +
+        ("<section class=\"auth-terms\" aria-label=\"" + t("利用規約への同意 / Terms agreement") + "\">") +
           '<div class="auth-terms__notice">' +
-            '<p lang="ja">不適切な投稿・嫌がらせは禁止です。違反投稿の削除や利用停止を行います。</p>' +
+            ("<p lang=\"ja\">" + t("不適切な投稿・嫌がらせは禁止です。違反投稿の削除や利用停止を行います。") + "</p>") +
             '<p lang="en">Objectionable content and abusive behavior are prohibited; violations may result in removal or suspension.</p>' +
           '</div>' +
           '<div class="auth-terms__links">' +
-            '<a href="' + new URL('../../terms.html', import.meta.url).href + '" target="_blank" rel="noopener">利用規約 / Terms of Use</a>' +
+            '<a href="' + new URL('../../terms.html', import.meta.url).href + ("\" target=\"_blank\" rel=\"noopener\">" + t("利用規約 / Terms of Use") + "</a>") +
             '<a href="' + new URL('../../privacy.html', import.meta.url).href + '" target="_blank" rel="noopener">Privacy Policy</a>' +
           '</div>' +
           '<label class="auth-terms__agreement" for="auth-terms-agreed">' +
             '<input type="checkbox" id="auth-terms-agreed">' +
-            '<span><span lang="ja">利用規約に同意します</span><span lang="en">I agree to the Terms of Use</span></span>' +
+            ("<span><span lang=\"ja\">" + t("利用規約に同意します") + "</span><span lang=\"en\">I agree to the Terms of Use</span></span>") +
           '</label>' +
         '</section>' +
         '<div class="auth-social">' +
-          '<button type="button" class="btn btn--social btn--gh" data-social="github">' + icon('github', { size: 18, fill: true }) + 'Continue with GitHub</button>' +
+          '<button type="button" class="btn btn--social btn--gh" data-social="github">' + icon('github', { size: 18, fill: true }) + (t("Continue with GitHub") + "</button>") +
         '</div>' +
-        '<div class="auth-divider"><span>or</span></div>' +
+        ("<div class=\"auth-divider\"><span>" + t("or") + "</span></div>") +
 
         // login pane
         // For password managers to recognise and autofill the form
@@ -58,7 +59,7 @@ function template() {
         // submit event when autofill has not committed a field value yet.
         // We validate below so every tap produces visible feedback.
         '<form class="auth-form" data-pane="login" method="post" action="#" novalidate>' +
-          '<h2 id="auth-title">Log in</h2>' +
+          ("<h2 id=\"auth-title\">" + t("Log in") + "</h2>") +
           // type="text" (not "email") so internal aliased identifiers
           // like `dev.test.account` are accepted at the field level —
           // login-aliases.js expands them before they hit Supabase,
@@ -68,24 +69,24 @@ function template() {
             '<input id="auth-login-email" type="text" name="email" required ' +
               'autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false">' +
           '</label>' +
-          '<label for="auth-login-password">Password' +
+          ("<label for=\"auth-login-password\">" + t("Password")) +
             '<span class="password-input">' +
               '<input id="auth-login-password" type="password" name="password" required autocomplete="current-password">' +
-              '<button type="button" class="password-input__toggle" data-password-toggle aria-label="パスワードを表示">表示</button>' +
+              ("<button type=\"button\" class=\"password-input__toggle\" data-password-toggle aria-label=\"" + t("パスワードを表示") + "\">" + t("表示") + "</button>") +
             '</span>' +
           '</label>' +
-          '<button type="submit" class="btn btn--primary btn--block">Log in</button>' +
+          ("<button type=\"submit\" class=\"btn btn--primary btn--block\">" + t("Log in") + "</button>") +
           '<p class="auth-error" data-error></p>' +
         '</form>' +
 
         '<form class="auth-form" data-pane="mfa" hidden method="post" action="#" novalidate>' +
-          '<h2>2段階認証</h2>' +
-          '<p class="settings__hint">認証アプリに表示されている6桁のワンタイムパスワードを入力してください。</p>' +
-          '<label for="auth-mfa-code">確認コード' +
+          ("<h2>" + t("2段階認証") + "</h2>") +
+          ("<p class=\"settings__hint\">" + t("認証アプリに表示されている6桁のワンタイムパスワードを入力してください。") + "</p>") +
+          ("<label for=\"auth-mfa-code\">" + t("確認コード")) +
             '<input id="auth-mfa-code" name="code" type="text" required maxlength="6" ' +
               'inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="123456">' +
           '</label>' +
-          '<button type="submit" class="btn btn--primary btn--block">確認してログイン</button>' +
+          ("<button type=\"submit\" class=\"btn btn--primary btn--block\">" + t("確認してログイン") + "</button>") +
           '<p class="auth-error" data-error></p>' +
         '</form>' +
 
@@ -101,41 +102,41 @@ function template() {
           '</label>' +
           '<label for="auth-reg-handle">Handle <span class="hint">(profile URL: /your_handle)</span>' +
             '<input id="auth-reg-handle" name="handle" required ' +
-              'pattern="[A-Za-z0-9_][A-Za-z0-9_-]{1,19}" placeholder="2〜20 文字 半角英数 _ -" ' +
+              ("pattern=\"[A-Za-z0-9_][A-Za-z0-9_-]{1,19}\" placeholder=\"" + t("2〜20 文字 半角英数 _ -") + "\" ") +
               'autocomplete="off" autocapitalize="off" spellcheck="false">' +
           '</label>' +
           // Same type="text" relaxation as the login pane — internal
           // aliased identifiers (login-aliases.js) get expanded into a
           // valid email before Supabase ever sees them, so we don't
           // need the browser to enforce the format here.
-          '<label for="auth-reg-email">Email' +
+          ("<label for=\"auth-reg-email\">" + t("Email")) +
             '<input id="auth-reg-email" type="text" name="email" required ' +
               'autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false">' +
           '</label>' +
-          '<label for="auth-reg-password">Password <span class="hint">(8 文字以上)</span>' +
+          ("<label for=\"auth-reg-password\">Password <span class=\"hint\">" + t("(8 文字以上)") + "</span>") +
             '<span class="password-input">' +
               '<input id="auth-reg-password" type="password" name="password" required minlength="8" autocomplete="new-password">' +
-              '<button type="button" class="password-input__toggle" data-password-toggle aria-label="パスワードを表示">表示</button>' +
+              ("<button type=\"button\" class=\"password-input__toggle\" data-password-toggle aria-label=\"" + t("パスワードを表示") + "\">" + t("表示") + "</button>") +
             '</span>' +
           '</label>' +
 
           '<fieldset class="role-group">' +
             '<legend>Account type</legend>' +
             '<label class="role-opt"><input type="radio" name="kind" value="user" checked>' +
-              '<span><b>個人 / Personal</b><small>個人アカウント (通常)</small></span></label>' +
+              ("<span><b>" + t("個人 / Personal") + "</b><small>" + t("個人アカウント (通常)") + "</small></span></label>") +
             '<label class="role-opt"><input type="radio" name="kind" value="org">' +
-              '<span><b>組織 / Organization</b><small>会社・学校・コミュニティのアカウント</small></span></label>' +
+              ("<span><b>" + t("組織 / Organization") + "</b><small>" + t("会社・学校・コミュニティのアカウント") + "</small></span></label>") +
           '</fieldset>' +
 
           '<fieldset class="role-group">' +
             '<legend>Role</legend>' +
             '<label class="role-opt"><input type="radio" name="role" value="programmer" checked>' +
-              '<span><b>Programmer</b><small>GitHub 連携が必須</small></span></label>' +
+              (("<span><b>" + t("Programmer") + "</b><small>") + t("GitHub 連携が必須") + "</small></span></label>") +
             '<label class="role-opt"><input type="radio" name="role" value="general">' +
-              '<span><b>General</b><small>GitHub は任意</small></span></label>' +
+              ("<span><b>General</b><small>" + t("GitHub は任意") + "</small></span></label>") +
           '</fieldset>' +
 
-          '<label data-gh-row>GitHub username <span class="hint" data-gh-hint>(Programmer は必須)</span>' +
+          ("<label data-gh-row>GitHub username <span class=\"hint\" data-gh-hint>" + t("(Programmer は必須)") + "</span>") +
             '<input id="auth-reg-github" name="githubHandle" placeholder="octocat" pattern="[A-Za-z0-9-]{1,39}" ' +
               'autocomplete="off" autocapitalize="off" spellcheck="false">' +
             '<span class="gh-status" data-gh-status></span>' +
@@ -175,8 +176,8 @@ function bindEvents() {
       if (!input) return;
       const showing = input.type === 'text';
       input.type = showing ? 'password' : 'text';
-      passwordToggle.textContent = showing ? '表示' : '隠す';
-      passwordToggle.setAttribute('aria-label', showing ? 'パスワードを表示' : 'パスワードを隠す');
+      passwordToggle.textContent = showing ? t("表示") : t("隠す");
+      passwordToggle.setAttribute('aria-label', showing ? t("パスワードを表示") : t("パスワードを隠す"));
       return;
     }
 
@@ -186,7 +187,7 @@ function bindEvents() {
       showTab('register');
       const reg = rootEl.querySelector('[data-pane="register"]');
       reg.querySelector('input[name="githubHandle"]').focus();
-      setError(reg, 'GitHub ユーザー名を入力すると公開プロフィールから情報を取り込みます。');
+      setError(reg, t("GitHub ユーザー名を入力すると公開プロフィールから情報を取り込みます。"));
     }
   });
 
@@ -215,7 +216,7 @@ function bindEvents() {
   reg.querySelectorAll('input[name="role"]').forEach(r => {
     r.addEventListener('change', () => {
       const isProg = reg.querySelector('input[name="role"]:checked').value === 'programmer';
-      reg.querySelector('[data-gh-hint]').textContent = isProg ? '(Programmer は必須)' : '(任意)';
+      reg.querySelector('[data-gh-hint]').textContent = isProg ? t("(Programmer は必須)") : t("(任意)");
       ghInput.required = isProg;
     });
   });
@@ -224,7 +225,7 @@ function bindEvents() {
   // Login submit
   rootEl.querySelector('[data-pane="login"]').addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!rootEl.querySelector('#auth-terms-agreed')?.checked) { alert('利用規約への同意が必要です / Please agree to the Terms of Use'); return; }
+    if (!rootEl.querySelector('#auth-terms-agreed')?.checked) { alert(t("利用規約への同意が必要です / Please agree to the Terms of Use")); return; }
 
     const form = e.currentTarget;
     if (form.dataset.busy === '1') return;
@@ -233,7 +234,7 @@ function bindEvents() {
     const rawEmail = String(fd.get('email') || '').trim();
     const password = String(fd.get('password') || '');
     if (!rawEmail || !password) {
-      setError(form, 'Email と Password を入力してください');
+      setError(form, t("Email と Password を入力してください"));
       return;
     }
     // Reject bare strings that aren't a known alias before Supabase
@@ -244,9 +245,9 @@ function bindEvents() {
       return;
     }
     const submit = form.querySelector('button[type="submit"]');
-    const originalLabel = submit?.textContent || 'Log in';
+    const originalLabel = submit?.textContent || t("Log in");
     form.dataset.busy = '1';
-    if (submit) { submit.disabled = true; submit.textContent = 'ログイン中…'; }
+    if (submit) { submit.disabled = true; submit.textContent = t("ログイン中…"); }
     try {
       // Expand internal bare identifiers (e.g. dev.test.account →
       // dev.test.account@spotcode-sns.local) before calling Supabase.
@@ -274,7 +275,7 @@ function bindEvents() {
 
   rootEl.querySelector('[data-pane="mfa"]').addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!rootEl.querySelector('#auth-terms-agreed')?.checked) { alert('利用規約への同意が必要です / Please agree to the Terms of Use'); return; }
+    if (!rootEl.querySelector('#auth-terms-agreed')?.checked) { alert(t("利用規約への同意が必要です / Please agree to the Terms of Use")); return; }
 
     const form = e.currentTarget;
     const submit = form.querySelector('button[type="submit"]');
@@ -292,7 +293,7 @@ function bindEvents() {
   // Register submit
   reg.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!rootEl.querySelector('#auth-terms-agreed')?.checked) { alert('利用規約への同意が必要です / Please agree to the Terms of Use'); return; }
+    if (!rootEl.querySelector('#auth-terms-agreed')?.checked) { alert(t("利用規約への同意が必要です / Please agree to the Terms of Use")); return; }
 
     setError(reg, '');
     const fd = new FormData(reg);

@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { currentUser, refreshProfile } from './auth.js';
 import { getClient } from './supa.js';
 
@@ -32,13 +33,13 @@ export async function hydrateSocialControls() {
 }
 export async function setUserControl(handle, kind, enabled) {
   const owner = currentUser()?.id;
-  if (!owner) throw new Error('ログインしてください');
-  if (!['mutes', 'blocks'].includes(kind)) throw new Error('無効な操作です');
+  if (!owner) throw new Error(t("ログインしてください"));
+  if (!['mutes', 'blocks'].includes(kind)) throw new Error(t("無効な操作です"));
   const client = await getClient();
   const { data: target, error: lookupError } = await client.from('profiles').select('id,handle').eq('handle', handle).single();
   if (lookupError) throw lookupError;
-  if (currentUser()?.id !== owner) throw new Error('アカウントが変更されました');
-  if (target.id === owner) throw new Error('自分自身は選択できません');
+  if (currentUser()?.id !== owner) throw new Error(t("アカウントが変更されました"));
+  if (target.id === owner) throw new Error(t("自分自身は選択できません"));
   const result = kind === 'blocks'
     ? enabled ? await client.rpc('block_user', { p_target: target.id })
       : await client.from('user_blocks').delete().eq('blocker_id', owner).eq('blocked_id', target.id)
@@ -53,11 +54,11 @@ export async function setUserControl(handle, kind, enabled) {
 }
 export async function setAudienceMember(handle, kind, enabled) {
   const owner = currentUser()?.id;
-  if (!owner) throw new Error('ログインしてください');
+  if (!owner) throw new Error(t("ログインしてください"));
   const client = await getClient();
   const { data, error: lookupError } = await client.from('profiles').select('id').eq('handle', handle).single();
   if (lookupError) throw lookupError;
-  if (currentUser()?.id !== owner) throw new Error('アカウントが変更されました');
+  if (currentUser()?.id !== owner) throw new Error(t("アカウントが変更されました"));
   const { error } = await client.rpc('set_audience_member', { p_target: data.id, p_kind: kind, p_enabled: enabled });
   if (error) throw error;
   if (currentUser()?.id === owner) await refreshProfile();

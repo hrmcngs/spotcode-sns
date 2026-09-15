@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // iOS Safari / WKWebView safety net.
 //
 // CSS already floors form-control font-size to 16px so focus shouldn't
@@ -41,7 +42,7 @@ export function initIosZoomGuard() {
   const resetBtn = document.createElement('button');
   resetBtn.type = 'button';
   resetBtn.className = 'zoom-reset-btn';
-  resetBtn.textContent = '表示倍率を戻す';
+  resetBtn.textContent = t("表示倍率を戻す");
   resetBtn.hidden = true;
   resetBtn.addEventListener('click', resetZoom);
   document.body.appendChild(resetBtn);

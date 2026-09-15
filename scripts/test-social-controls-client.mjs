@@ -1,3 +1,4 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
@@ -5,7 +6,7 @@ const storage = new Map();
 let owner = {id:'me',handle:'me'}, rpcError = null, switchDuringLookup = false;
 let refreshed = 0;
 const writes = [];
-const context = vm.createContext({
+const context = vm.createContext({ ...createTestI18n(), 
  currentUser: () => owner,
  refreshProfile: async () => {refreshed++;},
  localStorage: {getItem:key=>storage.get(key) ?? null,setItem:(key,value)=>storage.set(key,value)},

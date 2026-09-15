@@ -1,8 +1,9 @@
+import { createTestI18n } from './helpers/i18n.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const storage=new Map();let owner='a';const rows=[];
-const ctx=vm.createContext({currentUser:()=>owner?{id:owner}:null,
+const ctx=vm.createContext({ ...createTestI18n(), currentUser:()=>owner?{id:owner}:null,
  localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
  supaModule:{getClient:async()=>({from:()=>({upsert:async row=>{rows.push(row);return {};}})})},
 });

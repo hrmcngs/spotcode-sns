@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 // Topbar search → live dropdown of matching users.
 //
 // Local matches (allUsers, including cached fetched profiles) render
@@ -116,8 +117,8 @@ function render(items, q) {
   if (!items.length) {
     dropdownEl.innerHTML =
       '<div class="search-results__empty">' +
-        '「' + escapeHtml(q) + '」 に一致するユーザーが見つかりません' +
-        '<div class="search-results__hint">サインアップ済みのアカウントは Supabase に保存されているので、別端末で登録されたユーザーも検索できます。</div>' +
+        '「' + escapeHtml(q) + t("」 に一致するユーザーが見つかりません") +
+        ("<div class=\"search-results__hint\">" + t("サインアップ済みのアカウントは Supabase に保存されているので、別端末で登録されたユーザーも検索できます。") + "</div>") +
       '</div>';
     activeIndex = -1;
     lastResults = [];
@@ -140,7 +141,7 @@ function render(items, q) {
         '<a class="search-result search-result--alt" data-idx="' + i + '" href="' + url(it.path) + '">' +
           '<span class="search-result__icon">' + icon('pin', { size: 18 }) + '</span>' +
           '<div class="search-result__main">' +
-            '<div class="search-result__name">' + escapeHtml(it.label) + ' のアイデアを見る</div>' +
+            '<div class="search-result__name">' + escapeHtml(it.label) + (t(" のアイデアを見る") + "</div>") +
             '<div class="search-result__handle">' + escapeHtml(it.romaji) + ' → ' + escapeHtml(it.label) + '</div>' +
           '</div>' +
         '</a>'
@@ -151,8 +152,8 @@ function render(items, q) {
         '<a class="search-result search-result--alt" data-idx="' + i + '" href="' + url(it.path) + '">' +
           '<span class="search-result__icon">' + icon('user', { size: 18 }) + '</span>' +
           '<div class="search-result__main">' +
-            '<div class="search-result__name">プロフィールを開く: /' + escapeHtml(it.handle) + '</div>' +
-            '<div class="search-result__handle">この端末に登録が無くてもページは開きます</div>' +
+            ("<div class=\"search-result__name\">" + t("プロフィールを開く: /")) + escapeHtml(it.handle) + '</div>' +
+            ("<div class=\"search-result__handle\">" + t("この端末に登録が無くてもページは開きます") + "</div>") +
           '</div>' +
         '</a>'
       );
@@ -161,7 +162,7 @@ function render(items, q) {
       '<a class="search-result search-result--alt" data-idx="' + i + '" href="https://github.com/' + encodeURIComponent(it.handle) + '" target="_blank" rel="noopener">' +
         '<span class="search-result__icon">' + icon('github', { size: 18, fill: true }) + '</span>' +
         '<div class="search-result__main">' +
-          '<div class="search-result__name">GitHub で @' + escapeHtml(it.handle) + ' を見る</div>' +
+          ("<div class=\"search-result__name\">" + t("GitHub で @")) + escapeHtml(it.handle) + (t(" を見る") + "</div>") +
           '<div class="search-result__handle">github.com/' + escapeHtml(it.handle) + '</div>' +
         '</div>' +
       '</a>'

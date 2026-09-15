@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Tiny promise timeout helper. Wraps a fetch / RPC call so the view
 // can surface an error state instead of sitting on the loading stub
 // forever — Supabase's auth-refresh queue occasionally stalls, and
@@ -17,7 +18,7 @@ export function withTimeout(promise, ms, label = 'request') {
     promise,
     new Promise((_, reject) =>
       setTimeout(
-        () => reject(new Error('タイムアウトしました (' + label + ' / ' + Math.round(ms / 1000) + 's)')),
+        () => reject(new Error(t("タイムアウトしました ({label} / {seconds}s)", { label, seconds: Math.round(ms / 1000) }))),
         ms,
       ),
     ),
