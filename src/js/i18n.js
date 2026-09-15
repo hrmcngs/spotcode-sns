@@ -12,6 +12,7 @@ const DEFAULT_LANG = 'en';
 
 const DICT = {
   ja: {
+    'settings.supa.title': 'Supabase 接続',
     // ---------------- nav / topbar ----------------
     'nav.search.placeholder':  'ユーザー・スポット・アイデア・リポジトリを検索…',
     'nav.home':                'ホーム',
@@ -406,6 +407,7 @@ const DICT = {
   },
 
   en: {
+    'settings.supa.title': 'Supabase connection',
     'nav.search.placeholder':  'Search users, spots, ideas, repos…',
     'nav.home':                'Home',
     'nav.explore':             'Explore',

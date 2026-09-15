@@ -613,8 +613,8 @@ function devCards({ cfg, override, usingOverride }) {
         (usingOverride ? t('settings.supa.hint_override') : t('settings.supa.hint_default')) +
       '</p>' +
       '<dl class="settings-kv">' +
-        '<dt>Project URL</dt><dd><code>' + attr(maskHost(cfg.url)) + '</code></dd>' +
-        '<dt>Mode</dt><dd>' +
+        ("<dt>" + t("Project URL") + "</dt><dd><code>") + attr(maskHost(cfg.url)) + '</code></dd>' +
+        ("<dt>" + t("Mode") + "</dt><dd>") +
           (usingOverride
             ? '<span class="settings-tag">' + t('settings.supa.mode_override') + '</span>'
             : '<span class="settings-tag is-ok">' + t('settings.supa.mode_default') + '</span>') +
@@ -630,7 +630,7 @@ function devCards({ cfg, override, usingOverride }) {
 
       '<form class="settings-form" id="supa-form" hidden>' +
         '<p class="settings__hint">' + t('settings.supa.howto') + '</p>' +
-        '<label>Project URL' +
+        ("<label>" + t("Project URL")) +
           '<input name="url" type="url" autocomplete="off" spellcheck="false" ' +
             'placeholder="https://xxxx.supabase.co" value="' + attr(override.url) + '">' +
         '</label>' +

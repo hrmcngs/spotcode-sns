@@ -143,7 +143,7 @@ export async function hydrateBusinessCard(handle, collection = false, canRefresh
       form.querySelector('[data-card-template]').onclick = () => {
         const d = normalizeCard(value()).design;
         const w = d.orientation === 'portrait' ? 1000 : 1650, h = d.orientation === 'portrait' ? 1650 : 1000;
-        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '"><rect width="100%" height="100%" fill="' + d.frontColor + '"/><text x="80" y="200" font-family="sans-serif" font-size="72" fill="' + d.textColor + '">YOUR NAME</text><text x="80" y="300" font-family="sans-serif" font-size="36" fill="' + d.textColor + '">Title / Organization</text></svg>';
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '"><rect width="100%" height="100%" fill="' + d.frontColor + '"/><text x="80" y="200" font-family="sans-serif" font-size="72" fill="' + d.textColor + ("\">" + t("YOUR NAME") + "</text><text x=\"80\" y=\"300\" font-family=\"sans-serif\" font-size=\"36\" fill=\"") + d.textColor + ("\">" + t("Title / Organization") + "</text></svg>");
         const objectURL = URL.createObjectURL(new Blob([svg], {type:'image/svg+xml'}));
         const a = document.createElement('a'); a.href = objectURL; a.download = 'spotcode-card-template.svg'; a.click();
         setTimeout(() => URL.revokeObjectURL(objectURL), 1000);

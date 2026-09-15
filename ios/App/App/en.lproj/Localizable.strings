@@ -700,3 +700,42 @@
 "Toggle menu" = "Toggle menu";
 "Zoom in" = "Zoom in";
 "Zoom out" = "Zoom out";
+
+// Counts, relative times, and post status.
+"Privacy Policy" = "Privacy Policy";
+"Create your account" = "Create your account";
+"Email / Username" = "Email / Username";
+"Handle " = "Handle ";
+"(profile URL: /your_handle)" = "(profile URL: /your_handle)";
+"Password " = "Password ";
+"Account type" = "Account type";
+"Role" = "Role";
+"General" = "General";
+"GitHub username " = "GitHub username ";
+"Create account" = "Create account";
+"Display name " = "Display name ";
+"Bio " = "Bio ";
+"Project URL" = "Project URL";
+"Mode" = "Mode";
+"← Home" = "← Home";
+"All " = "All ";
+"YOUR NAME" = "YOUR NAME";
+"Title / Organization" = "Title / Organization";
+"active" = "active";
+"abandoned" = "abandoned";
+"released" = "released";
+"WIP" = "WIP";
+"ACTIVE" = "ACTIVE";
+"ABANDONED" = "ABANDONED";
+"RELEASED" = "RELEASED";
+"注目 · #%d" = "Trending · #%d";
+"登録日: %@" = "Joined %@";
+"%@、%d個のリポジトリ" = "%@, %d repositories";
+"すべて %d" = "All %d";
+"アイデア %d件" = "Ideas: %d";
+"%d秒前" = "%ds";
+"%d分前" = "%dm";
+"%d時間前" = "%dh";
+"%d日前" = "%dd";
+
+"English" = "English";

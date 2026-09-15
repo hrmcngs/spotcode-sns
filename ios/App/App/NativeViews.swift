@@ -558,14 +558,14 @@ private struct DesktopCommunity: View {
                             Button { openCity(CityMapDestination(name: city.name, posts: city.posts)) } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 8) {
-                                        Text("Trending · #\(index + 1)").spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                                        Text(String(format: NSLocalizedString("注目 · #%d", comment: ""), index + 1)).spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                                         Label(city.name, systemImage: "mappin.and.ellipse").spotcodeFont(16, weight: .bold, fallback: .headline)
                                         if !city.prefecture.isEmpty {
                                             Text(city.prefecture).spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                                         }
                                     }
                                     Spacer()
-                                    Text("\(city.posts.count) \(city.posts.count == 1 ? "idea" : "ideas")")
+                                    Text(String(format: NSLocalizedString("アイデア %d件", comment: ""), city.posts.count))
                                         .spotcodeFont(12, fallback: .caption).foregroundColor(.green)
                                 }.padding(.vertical, 10).frame(maxWidth: .infinity).contentShape(Rectangle())
                             }.buttonStyle(.plain)
@@ -1787,7 +1787,7 @@ Menu {
                     Text("· \(relativeTime(post.createdAt))").foregroundColor(SpotcodeTheme.muted)
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                     Spacer(minLength: 2)
-                    Text((post.status ?? "wip").uppercased()).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold))
+                    Text(NSLocalizedString((post.status ?? "wip").uppercased(), comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold))
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                         .foregroundColor((post.status ?? "wip") == "active" ? .black : SpotcodeTheme.text)
                         .padding(.horizontal, 9).padding(.vertical, 4)
@@ -3238,7 +3238,7 @@ private struct ProfileHero: View {
                 if let bio = profile.bio, !bio.isEmpty { Text(bio) }
                 HStack(spacing: 14) {
                     if let location = profile.location, !location.isEmpty { Label(location, systemImage: "mappin") }
-                    if let joined = profile.createdAt { Label("Joined \(String(joined.prefix(7)))", systemImage: "calendar") }
+                    if let joined = profile.createdAt { Label(String(format: NSLocalizedString("登録日: %@", comment: ""), String(joined.prefix(7))), systemImage: "calendar") }
                 }.foregroundColor(SpotcodeTheme.muted)
                 if let handle = profile.githubHandle, let url = URL(string: "https://github.com/\(handle)") {
                     Link(destination: url) {
@@ -3351,7 +3351,7 @@ private struct LanguageMedal: View {
                     .offset(x: 7, y: 5)
             }
         }.padding(.trailing, language.repositoryCount > 1 ? 7 : 0)
-         .accessibilityLabel("\(language.name), \(language.repositoryCount) repositories")
+         .accessibilityLabel(String(format: NSLocalizedString("%@、%d個のリポジトリ", comment: ""), language.name, language.repositoryCount))
     }
 }
 
@@ -3613,7 +3613,7 @@ private struct OpenIssuesCard: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
                     Button { selectedRepository = nil; listExpanded = true; expandedIssues.removeAll() } label: {
-                        Text("All \(total)").issueFilterPill(selected: selectedRepository == nil)
+                        Text(String(format: NSLocalizedString("すべて %d", comment: ""), total)).issueFilterPill(selected: selectedRepository == nil)
                     }.buttonStyle(SpotcodePlainButtonStyle())
                     ForEach(issueGroups, id: \.key) { entry in
                         Button { selectedRepository = entry.key; listExpanded = true; expandedIssues.removeAll() } label: {
@@ -5483,10 +5483,10 @@ private func relativeTime(_ value: String?) -> String {
     let date = parser.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     guard let date else { return "" }
     let seconds = max(0, Int(Date().timeIntervalSince(date)))
-    if seconds < 60 { return "\(seconds)s" }
-    if seconds < 3_600 { return "\(seconds / 60)m" }
-    if seconds < 86_400 { return "\(seconds / 3_600)h" }
-    return "\(seconds / 86_400)d"
+    if seconds < 60 { return String(format: NSLocalizedString("%d秒前", comment: ""), seconds) }
+    if seconds < 3_600 { return String(format: NSLocalizedString("%d分前", comment: ""), seconds / 60) }
+    if seconds < 86_400 { return String(format: NSLocalizedString("%d時間前", comment: ""), seconds / 3_600) }
+    return String(format: NSLocalizedString("%d日前", comment: ""), seconds / 86_400)
 }
 
 private func githubLinkLabel(_ value: String) -> String {
@@ -5707,8 +5707,8 @@ private struct BusinessCardTemplateDocument: FileDocument {
         data = Data("""
         <svg xmlns="http://www.w3.org/2000/svg" width="\(width)" height="\(height)" viewBox="0 0 \(width) \(height)">
         <rect width="100%" height="100%" fill="\(background)"/>
-        <text x="80" y="200" font-family="sans-serif" font-size="72" fill="\(text)">YOUR NAME</text>
-        <text x="80" y="300" font-family="sans-serif" font-size="36" fill="\(text)">Title / Organization</text>
+        <text x="80" y="200" font-family="sans-serif" font-size="72" fill="\(text)">\(NSLocalizedString("YOUR NAME", comment: ""))</text>
+        <text x="80" y="300" font-family="sans-serif" font-size="36" fill="\(text)">\(NSLocalizedString("Title / Organization", comment: ""))</text>
         </svg>
         """.utf8)
     }

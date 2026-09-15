@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const ctx=vm.createContext({ ...createTestI18n(), AbortSignal});
-vm.runInContext(fs.readFileSync('src/js/task-repositories.js','utf8').replace(/^export /gm,''),ctx);
+vm.runInContext(fs.readFileSync('src/js/task-repositories.js','utf8').replace(/^import .*;\n/gm,'').replace(/^export /gm,''),ctx);
 const requests=[];
 const names=await ctx.publicTaskRepositories('hrmcngs',async url=>{
   requests.push(url);

@@ -12,6 +12,22 @@
 -  **アイデア投稿** — その場で思いついた事を書き込み
 -  **GitHub リンク** — 実装方法を共有
 
+## 表示言語 / Display language
+
+名刺の編集・共有・コレクション・近距離交換を含め、操作画面は日本語と英語に対応しています。初期言語は英語です。明示的に選択した日本語は維持します。投稿本文、プロフィール、名刺に入力した内容は自動翻訳しません。
+
+- Web / Electron: 設定の言語選択で「日本語」または「English」を選びます。選択は端末に保存され、画面を再読み込みします。
+- iOS / Mac: アプリの設定にある言語案内から、システム設定でアプリの言語を変更します。
+
+Controls and messages, including business card editing, sharing, collections, and nearby exchange, support Japanese and English. English is the default; an explicit Japanese preference is preserved. User-authored content stays unchanged. Select a language in Web/Electron Settings, or change the app language in iOS/macOS system settings.
+
+翻訳の回帰テスト:
+
+```sh
+node scripts/test-localization.mjs
+sbcl --script scripts/test-ios.lisp localization
+```
+
 ## 起動
 
 ```bash

@@ -26,7 +26,22 @@ func dictionary(_ language: String) throws -> [String: String] {
     return result
 }
 let en = try dictionary("en"), ja = try dictionary("ja")
-for filename in ["AppModel.swift", "SupabaseService.swift", "NativeViews.swift", "NativeModels.swift"] {
+precondition(Set(en.keys) == Set(ja.keys), "English and Japanese must expose identical keys")
+func orderedKeys(_ language: String) throws -> [String] {
+    let source = try String(contentsOfFile: app + "/" + language + ".lproj/Localizable.strings", encoding: .utf8)
+    return try matches(stringPattern + #"\s*="#, source).map { entry in
+        try JSONDecoder().decode(String.self, from: Data(matches(stringPattern, entry)[0].utf8))
+    }
+}
+let englishKeys = try orderedKeys("en"), japaneseKeys = try orderedKeys("ja")
+precondition(englishKeys == japaneseKeys, "Keep both catalogues in the same order")
+precondition(AppLanguageDefaults.preferredLanguages(saved: nil) == ["en", "ja"])
+precondition(AppLanguageDefaults.preferredLanguages(saved: []) == ["en", "ja"])
+precondition(AppLanguageDefaults.preferredLanguages(saved: ["en"]) == ["en", "ja"])
+precondition(AppLanguageDefaults.preferredLanguages(saved: ["ja"]) == ["ja"])
+precondition(AppLanguageDefaults.preferredLanguages(saved: ["ja", "en"]) == ["ja", "en"])
+print("Matching catalogue keys/order and English default with explicit Japanese preference passed.")
+for filename in ["AppModel.swift", "SupabaseService.swift", "NativeViews.swift", "NativeModels.swift", "NearbyBusinessCardExchange.swift"] {
     let source = try String(contentsOfFile: app + "/" + filename, encoding: .utf8)
     for line in source.components(separatedBy: .newlines) {
         if line.trimmingCharacters(in: .whitespaces).hasPrefix("//") { continue }
@@ -63,3 +78,21 @@ for lang in ["en", "ja"] {
     precondition(due == (lang == "en" ? "3 days left" : "あと3日"))
 }
 print("Native localization: English/Japanese authentication, notifications, and deadline checks passed.")
+
+// Every explicit localization lookup, including English source keys, must be
+// available in both languages. Include nearby exchange and UIKit placeholders.
+for filename in ["AppModel.swift", "SupabaseService.swift", "NativeViews.swift", "NearbyBusinessCardExchange.swift"] {
+    let source = try String(contentsOfFile: app + "/" + filename, encoding: .utf8)
+    for call in try matches(#"NSLocalizedString\("# + stringPattern, source) {
+        let token = try matches(stringPattern, call)[0]
+        let key = try JSONDecoder().decode(String.self, from: Data(token.utf8))
+        precondition(en[key] != nil && ja[key] != nil, "Missing explicit UI key: \(key)")
+    }
+}
+for lang in ["ja", "en"] {
+    language = lang
+    precondition(NSLocalizedString("名刺を編集", comment: "") == (lang == "ja" ? "名刺を編集" : "Edit business card"))
+    precondition(String(format: NSLocalizedString("保存した名刺 %d 枚", comment: ""), 3) == (lang == "ja" ? "保存した名刺 3 枚" : "Saved cards: 3"))
+    precondition(String(format: NSLocalizedString("%@ から交換のリクエスト", comment: ""), "Alice") == (lang == "ja" ? "Alice から交換のリクエスト" : "Exchange request from Alice"))
+}
+print("Business card, nearby exchange, and explicit UI translation checks passed.")

@@ -574,7 +574,11 @@ export const UI_EN = {
   "写真は最大 {n} 枚までです": "You can attach up to {n} photos",
   "タイムアウトしました ({label} / {seconds}s)": "Request timed out ({label} / {seconds}s)",
   "{n} 件のピン · 地図はおおよそ {where} 中心 (IP 推定)": "{n} pins · Map centered approximately on {where} (IP estimate)",
-  "まだ {kind} はありません。": "No {kind} yet."
+  "まだ {kind} はありません。": "No {kind} yet.",
+  "{n}秒前": "{n}s",
+  "{n}分前": "{n}m",
+  "{n}時間前": "{n}h",
+  "{n}日前": "{n}d"
 };
 
 // English source labels shared with the native app and static web chrome.
@@ -650,5 +654,37 @@ export const UI_JA = {
   "Menu": "メニュー",
   "Toggle menu": "メニューを切り替え",
   "Zoom in": "拡大",
-  "Zoom out": "縮小"
+  "Zoom out": "縮小",
+  "Privacy Policy": "プライバシーポリシー",
+  "Create your account": "アカウントを作成",
+  "Email / Username": "メールアドレス / ユーザー名",
+  "Handle ": "ハンドル ",
+  "(profile URL: /your_handle)": "(プロフィールURL: /your_handle)",
+  "Password ": "パスワード ",
+  "Account type": "アカウントの種類",
+  "Role": "ロール",
+  "General": "一般",
+  "GitHub username ": "GitHubユーザー名 ",
+  "Create account": "アカウントを作成",
+  "Display name ": "表示名 ",
+  "Bio ": "自己紹介 ",
+  "Project URL": "プロジェクトURL",
+  "Mode": "モード",
+  "← Home": "← ホーム",
+  "All ": "すべて ",
+  "YOUR NAME": "お名前",
+  "Title / Organization": "肩書き / 組織",
+  "Trending spots": "注目のスポット",
+  "by city / ward": "市区町村別",
+  "Your activity": "あなたの活動",
+  "active": "活動中",
+  "abandoned": "中止",
+  "released": "リリース済み",
+  "WIP": "作業中",
+  "Display name": "表示名",
+  "Location": "場所",
+  "Website": "ウェブサイト",
+  "Trending · #": "注目 · #",
+  "Insert code": "コードを挿入",
+  "Create poll": "投票を作成"
 };

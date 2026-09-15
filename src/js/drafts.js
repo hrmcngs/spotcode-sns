@@ -1,4 +1,3 @@
-import { t } from './i18n.js';
 // Composer drafts — pure localStorage so it keeps working offline.
 //
 // One slot per user (Twitter / X style). Logged-out users share a single
@@ -23,7 +22,7 @@ export function saveDraft(handle, draft) {
   const link = (draft.githubLink || '').trim();
   const spot = draft.spot || null;
   const eventUrl = (draft.eventUrl || '').trim();
-  const kind = [t("idea"), 'bug'].includes(draft.kind) ? draft.kind : null;
+  const kind = ['idea', 'bug'].includes(draft.kind) ? draft.kind : null;
   const visibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'github_org', 'restricted'].includes(draft.visibility)
     ? draft.visibility : 'public';
   // Don't persist a draft that has nothing in it — clear instead so

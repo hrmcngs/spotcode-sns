@@ -2,6 +2,15 @@ import UIKit
 import SwiftUI
 import UserNotifications
 
+// One startup policy for both localized bundles. Never replace a user's
+// explicit Japanese selection with the default.
+enum AppLanguageDefaults {
+    static func preferredLanguages(saved: [String]?) -> [String] {
+        guard let saved, !saved.isEmpty else { return ["en", "ja"] }
+        return saved == ["en"] ? ["en", "ja"] : saved
+    }
+}
+
 @main
 enum SpotcodeApplication {
     static func main() {
@@ -14,8 +23,9 @@ enum SpotcodeApplication {
             // Keep English UI by default, but retain Japanese as the CJK font
             // fallback. Migrate the English-only value written by older builds.
             // Explicit language choices made in system settings stay intact.
-            if languages == nil || languages == ["en"] {
-                defaults.set(["en", "ja"], forKey: "AppleLanguages")
+            let preferred = AppLanguageDefaults.preferredLanguages(saved: languages)
+            if languages != preferred {
+                defaults.set(preferred, forKey: "AppleLanguages")
             }
         }
         UIApplicationMain(CommandLine.argc, CommandLine.unsafeArgv, nil, NSStringFromClass(AppDelegate.self))

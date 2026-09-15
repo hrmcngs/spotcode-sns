@@ -1,4 +1,3 @@
-import { t } from './i18n.js';
 // Per-user GitHub language stats — direct port of the logic in
 // hrmcngs/github-stats-charts (server-side Node script). Same idea:
 // gather the user's repos (own + public-member orgs + inferred from
@@ -253,7 +252,7 @@ export async function getLanguageStats(handle) {
   let meta;
   try { meta = await fetchJson('https://api.github.com/users/' + encodeURIComponent(handle)); }
   catch { meta = null; }
-  if (meta?.type === t("Organization")) {
+  if (meta?.type === 'Organization') {
     const empty = { langs: [], total: 0, repoCounts: {} };
     storeCache(handle, empty);
     return empty;

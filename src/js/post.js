@@ -214,7 +214,7 @@ const VIS_HINT = {
 };
 
 export function renderKindBadge(kind) {
-  if (![t("idea"), 'bug'].includes(kind)) return '';
+  if (!['idea', 'bug'].includes(kind)) return '';
   return ' <span class="post__kind post__kind--' + kind + '" title="' + escape(t('kind.' + kind + '.title')) + '">' +
     icon(kind === 'bug' ? 'bug' : 'spark', { size: 12, className: 'icon--inline' }) + escape(t('kind.' + kind)) + '</span>';
 }

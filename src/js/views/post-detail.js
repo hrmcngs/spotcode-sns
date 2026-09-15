@@ -95,12 +95,12 @@ export async function hydratePostDetail(id) {
   try { post = await withTimeout(getPost(id), DETAIL_TIMEOUT_MS, t("投稿取得")); }
   catch (err) {
     if (myVersion !== renderVersion) return;
-    root.innerHTML = ("<div class=\"stub\"><h2 class=\"stub__title\">" + t("読み込みに失敗") + "</h2><p class=\"stub__sub\">") + escape(err.message || String(err)) + '</p><a class="back-home" href="/">← Home</a></div>';
+    root.innerHTML = ("<div class=\"stub\"><h2 class=\"stub__title\">" + t("読み込みに失敗") + "</h2><p class=\"stub__sub\">") + escape(err.message || String(err)) + ("</p><a class=\"back-home\" href=\"/\">" + t("← Home") + "</a></div>");
     return;
   }
   if (myVersion !== renderVersion) return;
   if (!post) {
-    root.innerHTML = ("<div class=\"stub\"><h2 class=\"stub__title\">" + t("投稿が見つかりません") + "</h2><p class=\"stub__sub\">" + t("削除されたか、閲覧権限がありません。") + "</p><a class=\"back-home\" href=\"/\">← Home</a></div>");
+    root.innerHTML = ("<div class=\"stub\"><h2 class=\"stub__title\">" + t("投稿が見つかりません") + "</h2><p class=\"stub__sub\">" + t("削除されたか、閲覧権限がありません。") + ("</p><a class=\"back-home\" href=\"/\">" + t("← Home") + "</a></div>"));
     return;
   }
 

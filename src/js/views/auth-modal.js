@@ -25,16 +25,15 @@ function template() {
 
         ("<section class=\"auth-terms\" aria-label=\"" + t("利用規約への同意 / Terms agreement") + "\">") +
           '<div class="auth-terms__notice">' +
-            ("<p lang=\"ja\">" + t("不適切な投稿・嫌がらせは禁止です。違反投稿の削除や利用停止を行います。") + "</p>") +
-            '<p lang="en">Objectionable content and abusive behavior are prohibited; violations may result in removal or suspension.</p>' +
+            ("<p>" + t("不適切な投稿・嫌がらせは禁止です。違反投稿の削除や利用停止を行います。") + "</p>") +
           '</div>' +
           '<div class="auth-terms__links">' +
             '<a href="' + new URL('../../terms.html', import.meta.url).href + ("\" target=\"_blank\" rel=\"noopener\">" + t("利用規約 / Terms of Use") + "</a>") +
-            '<a href="' + new URL('../../privacy.html', import.meta.url).href + '" target="_blank" rel="noopener">Privacy Policy</a>' +
+            '<a href="' + new URL('../../privacy.html', import.meta.url).href + ("\" target=\"_blank\" rel=\"noopener\">" + t("Privacy Policy") + "</a>") +
           '</div>' +
           '<label class="auth-terms__agreement" for="auth-terms-agreed">' +
             '<input type="checkbox" id="auth-terms-agreed">' +
-            ("<span><span lang=\"ja\">" + t("利用規約に同意します") + "</span><span lang=\"en\">I agree to the Terms of Use</span></span>") +
+            ("<span>" + t("利用規約に同意します") + "</span>") +
           '</label>' +
         '</section>' +
         '<div class="auth-social">' +
@@ -65,7 +64,7 @@ function template() {
           // login-aliases.js expands them before they hit Supabase,
           // which still receives a well-formed email. inputmode="email"
           // keeps the right mobile keyboard for the common case.
-          '<label for="auth-login-email">Email / Username' +
+          ("<label for=\"auth-login-email\">" + t("Email / Username")) +
             '<input id="auth-login-email" type="text" name="email" required ' +
               'autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false">' +
           '</label>' +
@@ -96,11 +95,11 @@ function template() {
         // Tag handle as autocomplete="off" so the manager doesn\'t save
         // handle+password (which couldn\'t log in via Supabase anyway).
         '<form class="auth-form" data-pane="register" hidden method="post" action="#">' +
-          '<h2>Create your account</h2>' +
-          '<label for="auth-reg-name">Display name' +
+          ("<h2>" + t("Create your account") + "</h2>") +
+          '<label for="auth-reg-name">' + t("Display name") +
             '<input id="auth-reg-name" name="name" required maxlength="40" autocomplete="name">' +
           '</label>' +
-          '<label for="auth-reg-handle">Handle <span class="hint">(profile URL: /your_handle)</span>' +
+          ("<label for=\"auth-reg-handle\">" + t("Handle ") + "<span class=\"hint\">" + t("(profile URL: /your_handle)") + "</span>") +
             '<input id="auth-reg-handle" name="handle" required ' +
               ("pattern=\"[A-Za-z0-9_][A-Za-z0-9_-]{1,19}\" placeholder=\"" + t("2〜20 文字 半角英数 _ -") + "\" ") +
               'autocomplete="off" autocapitalize="off" spellcheck="false">' +
@@ -113,7 +112,7 @@ function template() {
             '<input id="auth-reg-email" type="text" name="email" required ' +
               'autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false">' +
           '</label>' +
-          ("<label for=\"auth-reg-password\">Password <span class=\"hint\">" + t("(8 文字以上)") + "</span>") +
+          (("<label for=\"auth-reg-password\">" + t("Password ") + "<span class=\"hint\">") + t("(8 文字以上)") + "</span>") +
             '<span class="password-input">' +
               '<input id="auth-reg-password" type="password" name="password" required minlength="8" autocomplete="new-password">' +
               ("<button type=\"button\" class=\"password-input__toggle\" data-password-toggle aria-label=\"" + t("パスワードを表示") + "\">" + t("表示") + "</button>") +
@@ -121,7 +120,7 @@ function template() {
           '</label>' +
 
           '<fieldset class="role-group">' +
-            '<legend>Account type</legend>' +
+            ("<legend>" + t("Account type") + "</legend>") +
             '<label class="role-opt"><input type="radio" name="kind" value="user" checked>' +
               ("<span><b>" + t("個人 / Personal") + "</b><small>" + t("個人アカウント (通常)") + "</small></span></label>") +
             '<label class="role-opt"><input type="radio" name="kind" value="org">' +
@@ -129,20 +128,20 @@ function template() {
           '</fieldset>' +
 
           '<fieldset class="role-group">' +
-            '<legend>Role</legend>' +
+            ("<legend>" + t("Role") + "</legend>") +
             '<label class="role-opt"><input type="radio" name="role" value="programmer" checked>' +
               (("<span><b>" + t("Programmer") + "</b><small>") + t("GitHub 連携が必須") + "</small></span></label>") +
             '<label class="role-opt"><input type="radio" name="role" value="general">' +
-              ("<span><b>General</b><small>" + t("GitHub は任意") + "</small></span></label>") +
+              (("<span><b>" + t("General") + "</b><small>") + t("GitHub は任意") + "</small></span></label>") +
           '</fieldset>' +
 
-          ("<label data-gh-row>GitHub username <span class=\"hint\" data-gh-hint>" + t("(Programmer は必須)") + "</span>") +
+          (("<label data-gh-row>" + t("GitHub username ") + "<span class=\"hint\" data-gh-hint>") + t("(Programmer は必須)") + "</span>") +
             '<input id="auth-reg-github" name="githubHandle" placeholder="octocat" pattern="[A-Za-z0-9-]{1,39}" ' +
               'autocomplete="off" autocapitalize="off" spellcheck="false">' +
             '<span class="gh-status" data-gh-status></span>' +
           '</label>' +
 
-          '<button type="submit" class="btn btn--primary btn--block">Create account</button>' +
+          ("<button type=\"submit\" class=\"btn btn--primary btn--block\">" + t("Create account") + "</button>") +
           '<p class="auth-error" data-error></p>' +
         '</form>' +
 

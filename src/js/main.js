@@ -170,7 +170,7 @@ function buildRailHtml() {
           trending.map((s, i) => (
             '<a class="trend-item" href="' + url('/spots/' + encodeURIComponent(jpToRomaji(s.city) || s.city)) + '">' +
               '<div class="trend-item__main">' +
-                '<span class="trend-item__cat">Trending · #' + (i + 1) + '</span>' +
+                '<span class="trend-item__cat">' + t("Trending \u00b7 #") + (i + 1) + '</span>' +
                 '<span class="trend-item__name">' +
                   icon('pin', { size: 14, className: 'icon--inline' }) + escape(s.city) +
                 '</span>' +
@@ -601,13 +601,13 @@ function dispatch(path) {
   } else if (path === '/following') {
     // Same Home view, Following tab active — must come BEFORE userMatch
     // which would otherwise swallow "following" as a handle.
-    document.title = 'Following / spotcode-sns';
+    document.title = t('Following') + ' / spotcode-sns';
     app.innerHTML = renderHome('following');
     restoreComposerDraft();
     if (pendingSpot) syncSpotChip(pendingSpot);
     hydrateHome('following');
   } else if (path === '/settings' || /^\/settings\/[a-z]+$/.test(path)) {
-    document.title = 'Settings / spotcode-sns';
+    document.title = t('Settings') + ' / spotcode-sns';
     app.innerHTML = renderSettings();
     bindSettings();
   } else if (spotMatch) {
@@ -635,7 +635,7 @@ function dispatch(path) {
       lng: Number(mapFocusMatch[2]),
       postId: mapFocusMatch[3] || null,
     };
-    document.title = 'Spot / spotcode-sns';
+    document.title = t('Spot') + ' / spotcode-sns';
     app.innerHTML = renderMap();
     hydrateMap(null, focus);
   } else if (mapCityMatch) {
@@ -648,17 +648,17 @@ function dispatch(path) {
     app.innerHTML = renderMap(city);
     hydrateMap(city);
   } else if (mapMatch) {
-    document.title = 'Map / spotcode-sns';
+    document.title = t('Map') + ' / spotcode-sns';
     app.innerHTML = renderMap();
     hydrateMap();
   } else if (analyticsMatch) {
     const pid = analyticsMatch[1];
-    document.title = 'Analytics / spotcode-sns';
+    document.title = t('Analytics') + ' / spotcode-sns';
     app.innerHTML = renderPostAnalytics(pid);
     hydratePostAnalytics(pid);
   } else if (postMatch) {
     const pid = postMatch[1];
-    document.title = 'Post / spotcode-sns';
+    document.title = t('Post') + ' / spotcode-sns';
     app.innerHTML = renderPostDetail(pid);
     hydratePostDetail(pid);
   } else if (path === '/notifications' || path === '/notifications/' ||
@@ -666,11 +666,11 @@ function dispatch(path) {
     // /requests is an alias for /notifications — the inbox shows
     // follow_request rows with inline Accept / Deny. The old route
     // stays valid so existing bookmarks don't 404.
-    document.title = 'Notifications / spotcode-sns';
+    document.title = t('Notifications') + ' / spotcode-sns';
     app.innerHTML = renderNotifications();
     hydrateNotifications();
   } else if (reposMatch) {
-    document.title = 'Repos / spotcode-sns';
+    document.title = t('Repos') + ' / spotcode-sns';
     app.innerHTML = renderRepos();
     hydrateRepos();
   } else if (eventMatch) {
@@ -703,7 +703,7 @@ function dispatch(path) {
     // them again here doubled work on every profile navigation.
     hydrateProfile(handle);
   } else {
-    document.title = 'Not found / spotcode-sns';
+    document.title = t('Not found') + ' / spotcode-sns';
     app.innerHTML =
       '<div class="stub">' +
         ("<h2 class=\"stub__title\">" + t("ページが見つかりません") + "</h2>") +
@@ -1041,7 +1041,7 @@ function restoreComposerDraft() {
     pendingSpot = d.spot;
     syncSpotChip(d.spot);
   }
-  if ([t("idea"), 'bug'].includes(d.kind)) {
+  if (['idea', 'bug'].includes(d.kind)) {
     pendingKind = d.kind;
     syncKindToggle();
   }
@@ -1441,7 +1441,7 @@ document.addEventListener('click', (e) => {
     // re-typing. Kind badges live in the post head.
     // GitHub link: `.post__meta > .post__link` sibling of the body
     // (NOT inside the body — escape() in renderPost puts it after).
-    const selectedKind = post.querySelector('.post__kind--bug') ? 'bug' : post.querySelector('.post__kind--idea') ? t("idea") : null;
+    const selectedKind = post.querySelector('.post__kind--bug') ? 'bug' : post.querySelector('.post__kind--idea') ? 'idea' : null;
     const ghLink = post.querySelector('.post__meta .post__link')?.getAttribute('href') || '';
     const repoFullName = post.getAttribute('data-repo-full-name') || '';
     const visibility = post.getAttribute('data-visibility') || 'public';
@@ -1455,7 +1455,7 @@ document.addEventListener('click', (e) => {
         String(original).replace(/&/g, '&amp;').replace(/</g, '&lt;') +
       '</textarea>' +
       '<div class="post__edit-meta">' +
-        [t("idea"), 'bug'].map((kind) =>
+        ['idea', 'bug'].map((kind) =>
           '<button type="button" class="post__edit-pill act--edit-toggle-kind' +
             (selectedKind === kind ? ' is-active' : '') + '" data-edit-kind="' + kind + '" aria-pressed="' + (selectedKind === kind) + '">' +
             escape(t('kind.' + kind)) + '</button>'
@@ -1905,7 +1905,7 @@ document.addEventListener('click', (e) => {
   // Chart tool — open the poll-attach modal. Modal resolves with
   // { question, options[], deadlineAt } on Confirm, { delete: true }
   // on Remove, null on Cancel.
-  const pollBtn = e.target.closest('.composer .compose-tool[title="poll"]');
+  const pollBtn = e.target.closest('.composer .compose-tool[data-compose-tool="poll"]');
   if (pollBtn) {
     e.preventDefault();
     import('./views/poll-modal.js').then(({ openPollModal }) => {
@@ -1958,7 +1958,7 @@ document.addEventListener('click', (e) => {
   // Code tool — insert a ``` fenced block at the textarea caret with
   // the caret landing on the inner blank line. Saves the user typing
   // the syntax (and gives a discoverability hint for Markdown).
-  const codeBtn = e.target.closest('.composer .compose-tool[title="code"]');
+  const codeBtn = e.target.closest('.composer .compose-tool[data-compose-tool="code"]');
   if (codeBtn) {
     e.preventDefault();
     const ta = document.querySelector('.composer textarea[name="text"]');

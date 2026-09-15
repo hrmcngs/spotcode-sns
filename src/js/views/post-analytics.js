@@ -63,7 +63,7 @@ export async function hydratePostAnalytics(id) {
   }
   if (myVersion !== renderVersion) return;
   if (!post) {
-    root.innerHTML = ("<div class=\"stub\"><h2 class=\"stub__title\">" + t("投稿が見つかりません") + "</h2><a class=\"back-home\" href=\"/\">← Home</a></div>");
+    root.innerHTML = ("<div class=\"stub\"><h2 class=\"stub__title\">" + t("投稿が見つかりません") + ("</h2><a class=\"back-home\" href=\"/\">" + t("← Home") + "</a></div>"));
     return;
   }
 

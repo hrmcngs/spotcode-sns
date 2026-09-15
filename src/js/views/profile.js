@@ -328,7 +328,7 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = fals
   const chips = [];
   chips.push(
     '<button type="button" class="profile-tasks__chip' + (activeRepo ? '' : ' is-active') + '" ' +
-      'data-tasks-filter="">All <b>' + all.length + '</b></button>'
+      ("data-tasks-filter=\"\">" + t("All ") + "<b>") + all.length + '</b></button>'
   );
   Array.from(repoCounts.entries())
     .sort((a, b) => b[1] - a[1])

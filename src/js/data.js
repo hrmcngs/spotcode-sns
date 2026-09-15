@@ -1,4 +1,4 @@
-import { t, getLang, getLocale } from './i18n.js';
+import { t, getLocale } from './i18n.js';
 import { isHiddenUser } from './social-controls.js';
 import { canReadGithubOrganization, refreshGithubMembershipsIfNeeded } from './github-organizations.js';
 import { isDevMode } from './dev-mode.js';
@@ -283,7 +283,7 @@ function shapePost(row) {
     // Post kind tag. Currently 'idea', 'bug' or null (= regular note). Read
     // as a single source of truth so the composer toggle, the badge
     // renderer and any future "Ideas only" filter all agree.
-    kind:          [t("idea"), 'bug'].includes(row.kind) ? row.kind : null,
+    kind:          ['idea', 'bug'].includes(row.kind) ? row.kind : null,
     // Audience for the post. One of:
     //   'public' (default), 'mutuals', 'following', 'friends', 'org',
     //   or the legacy 'restricted' (= friends OR org).
@@ -945,7 +945,7 @@ export async function addPost(post) {
     status:      post.status || 'wip',
   };
   if (wantsPhotos) row.photos = post.photos;
-  if ([t("idea"), 'bug'].includes(post.kind) && hasKind) row.kind = post.kind;
+  if (['idea', 'bug'].includes(post.kind) && hasKind) row.kind = post.kind;
   if (hasEventUrl && post.eventUrl) row.event_url = post.eventUrl;
   if (typeof post.visibility === 'string' &&
       ['mutuals','following','friends','org','only_me','github_org','restricted'].includes(post.visibility)) {
@@ -1017,7 +1017,7 @@ export async function updatePost(postId, fields) {
   }
   if (typeof fields.body === 'string') patch.body = fields.body;
   // `kind` accepts 'idea' or 'bug' to tag, or null to untag.
-  if ([t("idea"), 'bug'].includes(fields.kind) || fields.kind === null) {
+  if (['idea', 'bug'].includes(fields.kind) || fields.kind === null) {
     if (hasKind) patch.kind = fields.kind;
   }
   // `githubLink` is always optional — undefined means "leave alone",
@@ -1163,10 +1163,10 @@ export async function votePoll(postId, optionIdx) {
 // Relative-time formatter ("just now", "5m", "3h", "2d").
 export function relTime(ts) {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
-  if (s < 60)       return getLang() === 'ja' ? s + '秒前' : s + 's';
-  if (s < 3600)     return getLang() === 'ja' ? Math.floor(s / 60) + '分前' : Math.floor(s / 60) + 'm';
-  if (s < 86400)    return getLang() === 'ja' ? Math.floor(s / 3600) + '時間前' : Math.floor(s / 3600) + 'h';
-  if (s < 86400*7)  return getLang() === 'ja' ? Math.floor(s / 86400) + '日前' : Math.floor(s / 86400) + 'd';
+  if (s < 60)       return t("{n}秒前", { n: s });
+  if (s < 3600)     return t("{n}分前", { n: Math.floor(s / 60) });
+  if (s < 86400)    return t("{n}時間前", { n: Math.floor(s / 3600) });
+  if (s < 86400*7)  return t("{n}日前", { n: Math.floor(s / 86400) });
   const d = new Date(ts);
   return d.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' });
 }

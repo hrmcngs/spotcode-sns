@@ -21,7 +21,7 @@ export async function githubRepositories(token, expectedHandle, fetcher = fetch)
     const rows = await get('/user/repos?affiliation=owner,organization_member&sort=pushed&per_page=100&page=' + page);
     if (!Array.isArray(rows)) throw new Error(t("GitHubの応答が正しくありません。"));
     for (const repo of rows) {
-      if (repo.owner?.id === user.id || repo.owner?.type === t("Organization")) repositories.set(repo.id, repo);
+      if (repo.owner?.id === user.id || repo.owner?.type === 'Organization') repositories.set(repo.id, repo);
     }
     if (rows.length < 100) return [...repositories.values()];
   }

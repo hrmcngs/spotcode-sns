@@ -102,16 +102,16 @@ function template(u, editingOfficial) {
         '</div>' +
 
         '<form class="auth-form" id="edit-profile-form">' +
-          ("<label>Display name <span class=\"hint\">" + t("(画像未設定時のイニシャルは表示名の先頭文字)") + "</span>") +
+          (("<label>" + t("Display name ") + "<span class=\"hint\">") + t("(画像未設定時のイニシャルは表示名の先頭文字)") + "</span>") +
             '<input name="name" maxlength="40" value="' + attr(u.name) + '" required>' +
           '</label>' +
-          ("<label>Bio <span class=\"hint\">" + t("(280 文字まで)") + "</span>") +
+          (("<label>" + t("Bio ") + "<span class=\"hint\">") + t("(280 文字まで)") + "</span>") +
             '<textarea name="bio" maxlength="280" rows="3">' + attr(u.bio || '') + '</textarea>' +
           '</label>' +
-          '<label>Location' +
+          '<label>' + t("Location") +
             '<input name="location" maxlength="60" value="' + attr(u.location || '') + '" placeholder="shibuya">' +
           '</label>' +
-          '<label>Website' +
+          '<label>' + t("Website") +
             '<input name="website" type="url" maxlength="200" value="' + attr(u.website || '') + '" placeholder="https://example.com" inputmode="url">' +
           '</label>' +
           ("<label>Twitter / X <span class=\"hint\">" + t("(@ なしのハンドルでも URL でも OK)") + "</span>") +

@@ -60,7 +60,7 @@ export function renderIdeaForm({ user = null } = {}) {
             '<span>' + t('home.composer.add_event') + '</span>' +
           '</button>' +
           // Pick one optional post kind; pressing the active tag clears it.
-          [t("idea"), 'bug'].map((kind) =>
+          ['idea', 'bug'].map((kind) =>
             '<button type="button" class="compose-kind-toggle" data-compose-kind="' + kind + '" aria-pressed="false">' +
               icon(kind === 'bug' ? 'bug' : 'spark', { size: 12, className: 'icon--inline' }) +
               '<span class="compose-kind-toggle__label">' + t('kind.' + kind) + '</span>' +
@@ -105,9 +105,9 @@ export function renderIdeaForm({ user = null } = {}) {
         '<div class="compose-actions">' +
           '<div class="compose-tools">' +
             ("<button type=\"button\" class=\"compose-tool\" id=\"compose-photo-btn\" title=\"" + t("写真を追加") + "\">") + icon('image', { size: 18 }) + '</button>' +
-            '<button type="button" class="compose-tool" title="code">'  + icon('code',  { size: 18 }) + '</button>' +
+            '<button type="button" class="compose-tool" data-compose-tool="code" title="' + t('Insert code') + '">'  + icon('code',  { size: 18 }) + '</button>' +
             '<button type="button" class="compose-tool" data-spot-pick title="' + t('picker.title') + '">' + icon('pin', { size: 18 }) + '</button>' +
-            '<button type="button" class="compose-tool" title="poll">'  + icon('chart', { size: 18 }) + '</button>' +
+            '<button type="button" class="compose-tool" data-compose-tool="poll" title="' + t('Create poll') + '">'  + icon('chart', { size: 18 }) + '</button>' +
           '</div>' +
           '<div class="compose-submit">' +
             '<button type="button" class="btn btn--ghost compose-draft" data-compose-draft title="' + t('home.composer.draft_hint') + '">' + t('home.composer.draft') + '</button>' +
