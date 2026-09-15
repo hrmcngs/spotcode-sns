@@ -74,3 +74,19 @@ Runs the production reader gate with a fake location manager and real
 CoreLocation distances. Covers moving into/out of 100 m, shared subscriptions,
 invalid/stale fixes, GPS failures and retries, permission restoration, and
 foreground/background cleanup. No device location or network access is used.
+
+Authenticated request retries (including the Mac recommendations sidebar):
+
+```sh
+node scripts/test-native-authenticated-request.mjs
+```
+
+Exercises the shared request wrapper with an expired JWT, a successful refresh,
+a repeated rejection, an offline failure, and an account switch during a request.
+The test uses fake sessions and does not read credentials or contact the network.
+
+Followingタブの取得条件（フォローなし、個人・組織、ページ送り、取得失敗）:
+
+```sh
+node scripts/test-native-following.mjs
+```

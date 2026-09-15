@@ -260,7 +260,14 @@ actor SupabaseService {
         return profile
     }
 
-    func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = true, before: Post? = nil) async throws -> [Post] {
+    func posts(limit: Int = 24, authorID: UUID? = nil, token: String? = nil, includePhotos: Bool = true, before: Post? = nil, followingUserID: UUID? = nil) async throws -> [Post] {
+        var followedIDs: String?
+        if let followingUserID {
+            let profiles = try await following(userID: followingUserID, token: token)
+            let ids = profiles.compactMap(\.id).map(\.uuidString)
+            guard !ids.isEmpty else { return [] }
+            followedIDs = ids.joined(separator: ",")
+        }
         let photoColumn = includePhotos ? ",photos" : ""
         let common = "id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count\(photoColumn),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)"
         while true {
@@ -268,6 +275,9 @@ actor SupabaseService {
             var path = "rest/v1/posts?select=\(common)\(extras)&order=created_at.desc,id.desc&limit=\(limit)"
             if let before, let createdAt = before.createdAt?.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
                 path += "&or=(created_at.lt.\(createdAt),and(created_at.eq.\(createdAt),id.lt.\(before.id.uuidString)))"
+            }
+            if let followedIDs {
+                path += "&and=(or(author_id.in.(\(followedIDs)),organization_author_id.in.(\(followedIDs))))"
             }
             if let authorID { path += "&or=(author_id.eq.\(authorID.uuidString),organization_author_id.eq.\(authorID.uuidString))" }
             do { return try await request(path, token: token) }

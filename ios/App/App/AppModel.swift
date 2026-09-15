@@ -634,15 +634,24 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func withRefreshedSession<T>(_ operation: (String) async throws -> T) async throws -> T {
+    // Shared by native views as well as model operations. Refresh at most once
+    // after a server rejects the token, and discard results after account changes.
+    func withRefreshedSession<T>(_ operation: (String) async throws -> T) async throws -> T {
         var current = try await validSession()
+        let accountID = current.user.id
         do {
-            return try await operation(current.accessToken)
+            let result = try await operation(current.accessToken)
+            guard session?.user.id == accountID else { throw CancellationError() }
+            return result
         } catch where Self.isExpiredSessionError(error) {
+            guard session?.user.id == accountID else { throw CancellationError() }
             current = try await validSession(forceRefresh: true)
             do {
-                return try await operation(current.accessToken)
+                let result = try await operation(current.accessToken)
+                guard session?.user.id == accountID else { throw CancellationError() }
+                return result
             } catch where Self.isExpiredSessionError(error) {
+                guard session?.user.id == accountID else { throw CancellationError() }
                 throw NSError(
                     domain: "SpotcodeAuth", code: 401,
                     userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("ログインセッションが無効になりました。もう一度ログインしてください。", comment: "")]

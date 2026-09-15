@@ -219,7 +219,7 @@
 "非表示" = "Hidden";
 "バッジを表示する" = "Show badges";
 "バッジを非表示にする" = "Hide badges";
-"プロフィールや投稿の { }・言語・アイデア・WIPなどのバッジをまとめて切り替えます。" = "Toggle profile and post badges such as { }, languages, ideas, and WIP.";
+"プロフィールや投稿の { }・言語・アイデアなどのバッジをまとめて切り替えます。" = "Toggle profile and post badges such as { }, languages, and ideas.";
 "Issueカードを表示する" = "Show Issue card";
 "Issueカードを非表示にする" = "Hide Issue card";
 "プロフィールのOpen issuesカードを表示するかどうかを切り替えます。" = "Toggle the Open issues card on profiles.";
@@ -739,3 +739,8 @@
 "%d日前" = "%dd";
 
 "English" = "English";
+
+"おすすめユーザーを取得できませんでした。接続を確認して再試行してください。" = "Could not load suggested users. Check your connection and try again.";
+"フォロー中の投稿を見るにはログインしてください。" = "Log in to see posts from people you follow.";
+"フォロー中のユーザーの投稿はまだありません。" = "No posts from people you follow yet.";
+"名刺を見る" = "View business card";

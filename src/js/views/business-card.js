@@ -65,9 +65,10 @@ export async function hydrateBusinessCard(handle, collection = false, canRefresh
     const own = currentUser()?.id === profile.id;
     if (!card && !own) { content.innerHTML = ("<p>" + t("このユーザーはまだ名刺を公開していません。") + "</p>"); return; }
     const initial = normalizeCard(card || { name: profile.name });
-    content.innerHTML = `<div class="card-showcase-wrap"><button type="button" class="btn btn--ghost card-fullscreen-open" data-card-fullscreen aria-label="${t("名刺を全画面で表示")}">${t("⛶ 全画面")}</button><div class="card-showcase" data-card-preview>${cardMarkup(initial, handle)}</div></div><div class="card-actions" data-card-sharing ${card ? '' : 'hidden'}><button class="btn btn--primary" data-share-card>${t("名刺を共有")}</button><button class="btn btn--ghost" data-copy-card>${t("リンクをコピー")}</button>${!own ? ("<button class=\"btn btn--primary\" data-collect-card>" + t("コレクションに保存") + "</button>") : ''}</div><p>${t("共有メニューからAirDropなどでリンクを送れます。相手が名刺を保存し、自分の名刺も送り返すと交換できます。")}</p>${own ? ("<button class=\"btn btn--primary\" data-edit-card aria-expanded=\"false\">" + t("名刺を編集") + "</button><div data-card-editor hidden>") + editor(initial, !!card) + '</div>' : ''}`;
+    content.innerHTML = `<div class="card-showcase-wrap"><button type="button" class="btn btn--ghost card-fullscreen-open" data-card-fullscreen aria-label="${t("名刺を全画面で表示")}">${t("⛶ 全画面")}</button><div class="card-showcase" data-card-preview>${cardMarkup(initial, handle)}</div></div><div class="card-actions" data-card-sharing ${card ? '' : 'hidden'}>${own ? `<button class="btn btn--primary" data-share-card>${t("名刺を共有")}</button>` : ''}<button class="btn btn--ghost" data-copy-card>${t("リンクをコピー")}</button>${!own ? ("<button class=\"btn btn--primary\" data-collect-card>" + t("コレクションに保存") + "</button>") : ''}</div><p>${t("共有メニューからAirDropなどでリンクを送れます。相手が名刺を保存し、自分の名刺も送り返すと交換できます。")}</p>${own ? ("<button class=\"btn btn--primary\" data-edit-card aria-expanded=\"false\">" + t("名刺を編集") + "</button><div data-card-editor hidden>") + editor(initial, !!card) + '</div>' : ''}`;
     const link = cardLink(handle);
-    content.querySelector('[data-share-card]').onclick = async () => {
+    const share = content.querySelector('[data-share-card]');
+    if (share) share.onclick = async () => {
       try {
         if (!navigator.share) { message(t("この端末では共有メニューを利用できません。「リンクをコピー」をお使いください。")); return; }
         await navigator.share({ title: t("{name} の名刺", { name: profile.name }), url: link });

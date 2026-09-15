@@ -3541,7 +3541,7 @@ html.account-menu-locked { overflow: hidden; }
 .card-page p { line-height: 1.7; margin: 16px 0; }
 .card-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 18px 0; }
 .card-actions[hidden] { display: none; }
-.business-card { display: block; width: 91mm; height: 55mm; max-width: none; flex-shrink: 0; zoom: var(--card-physical-scale, 1); margin: 24px auto; padding: 0; border: 0; background: transparent; color: #f8fafc; perspective: 1400px; cursor: pointer; text-align: left; font: inherit; -webkit-tap-highlight-color: transparent; }
+.business-card { display: block; width: 91mm; height: 55mm; max-width: none; flex-shrink: 0; zoom: .85; margin: 24px auto; padding: 0; border: 0; background: transparent; color: #f8fafc; perspective: 1400px; cursor: pointer; text-align: left; font: inherit; -webkit-tap-highlight-color: transparent; }
 .business-card__body { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .65s cubic-bezier(.2,.7,.2,1); transform: rotateY(0deg); }
 .business-card.is-flipped .business-card__body { transform: rotateY(180deg); }
 .business-card__face { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: clamp(18px, 5vw, 32px); border: 1px solid #ffffff40; border-radius: 18px; background: linear-gradient(125deg,#222e49,#0b1020); box-shadow: 0 16px 32px #0003, 0 3px 0 #38415a; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; overflow-wrap: anywhere; }
@@ -3623,10 +3623,9 @@ html.account-menu-locked { overflow: hidden; }
 .card-page--showcase { padding-top: 0; }
 .card-page--showcase > nav, .card-page--showcase > h1 { display: none; }
 .card-showcase {
-  min-height: calc(100vh - var(--topbar-h));
-  min-height: calc(100svh - var(--topbar-h));
+  min-height: 300px;
   display: flex; align-items: center; justify-content: center;
-  padding: 24px 0; overflow: auto; justify-content: flex-start;
+  padding: 64px 0 32px; overflow: auto; justify-content: flex-start;
 }
 .card-showcase > .business-card { margin: auto; }
 .business-card--aurora.business-card--pattern-gradient .business-card__face {
@@ -3665,7 +3664,7 @@ dialog.card-fullscreen[open] { display: flex; flex-direction: column; align-item
   flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
   overflow: auto; align-items: flex-start; justify-content: flex-start;
 }
-.card-fullscreen-stage > .business-card { margin: auto; }
+.card-fullscreen-stage > .business-card { margin: auto; zoom: var(--card-physical-scale, 1); }
 .card-size-calibration { flex-shrink: 0; width: min(100%, 440px); align-self: center; padding-top: 12px; }
 .card-size-calibration input { width: 100%; }
 

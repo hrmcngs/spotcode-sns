@@ -516,7 +516,7 @@ export function renderProfile(handle) {
       '<div class="profile-top">' +
         renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
-          '<a class="btn btn--ghost" href="' + url('/' + u.handle + '/card') + ("\">" + t("名刺を共有") + "</a>") +
+          '<a class="btn btn--ghost" href="' + url('/' + u.handle + '/card') + ("\">" + t(currentUser()?.id === u.id ? "名刺を共有" : "名刺を見る") + "</a>") +
           // Edit only fires when the row actually belongs to the
           // auth user AND the overlay is off (canEdit).
           // Follow as the selected identity; only hide its own Follow button.

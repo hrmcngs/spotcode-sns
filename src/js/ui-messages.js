@@ -252,6 +252,7 @@ export const UI_EN = {
   "名刺を全画面で表示": "View business card in full screen",
   "⛶ 全画面": "⛶ Full screen",
   "名刺を共有": "Share business card",
+  "名刺を見る": "View business card",
   "リンクをコピー": "Copy link",
   "共有メニューからAirDropなどでリンクを送れます。相手が名刺を保存し、自分の名刺も送り返すと交換できます。": "Use the share menu to send a link via AirDrop or another app. Exchange cards by saving each other’s cards and sharing yours in return.",
   "この端末では共有メニューを利用できません。「リンクをコピー」をお使いください。": "Sharing is unavailable on this device. Use Copy link instead.",

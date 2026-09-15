@@ -596,7 +596,11 @@ private struct DesktopCommunity: View {
                             }
                         }
                     }
-                    if let message { Text(message).spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted) }
+                    if let message {
+                        Text(message).spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                        Button(NSLocalizedString("再試行", comment: "")) { Task { await load() } }
+                            .buttonStyle(OutlineButtonStyle()).disabled(loading)
+                    }
                     if !loading && profiles.isEmpty && message == nil {
                         Text(NSLocalizedString("おすすめユーザーはありません", comment: "")).spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                     }
@@ -611,43 +615,65 @@ private struct DesktopCommunity: View {
         profiles = []; contributions = []; spotPosts = []; followed = []; requested = []; message = nil; loading = true
         defer { loading = false }
         let owner = model.displayProfile?.id
-        let spots = (try? await SupabaseService.shared.spottedPosts(token: model.session?.accessToken)) ?? []
-        guard owner == model.displayProfile?.id else { return }
-        spotPosts = spots
         do {
-            let candidates = try await SupabaseService.shared.searchProfiles(query: "", token: model.session?.accessToken)
-            var followingIDs: Set<UUID> = []
-            if let owner {
-                let rows = try await SupabaseService.shared.following(userID: owner, token: model.session?.accessToken)
-                followingIDs = Set(rows.compactMap(\.id))
+            let fetch = { (token: String?) async throws -> ([Profile], Set<UUID>, [Post]) in
+                let candidates = try await SupabaseService.shared.searchProfiles(query: "", token: token)
+                var followingIDs: Set<UUID> = []
+                if let owner {
+                    let rows = try await SupabaseService.shared.following(userID: owner, token: token)
+                    followingIDs = Set(rows.compactMap(\.id))
+                }
+                let spots = (try? await SupabaseService.shared.spottedPosts(token: token)) ?? []
+                return (candidates, followingIDs, spots)
             }
-            guard owner == model.displayProfile?.id else { return }
+            let snapshot: ([Profile], Set<UUID>, [Post])
+            if model.session != nil {
+                snapshot = try await model.withRefreshedSession { token in try await fetch(token) }
+            } else {
+                snapshot = try await fetch(nil)
+            }
+            guard owner == model.displayProfile?.id, !Task.isCancelled else { return }
+            let (candidates, followingIDs, spots) = snapshot
+            spotPosts = spots
             profiles = Array(candidates.filter { profile in
                 guard let id = profile.id else { return false }
                 return id != owner && !followingIDs.contains(id) && !model.blockedAccountIDs.contains(id) && !model.mutedAccountIDs.contains(id)
             }.prefix(5))
-        } catch { message = error.localizedDescription }
+        } catch {
+            guard owner == model.displayProfile?.id, !Task.isCancelled else { return }
+            message = AppModel.isExpiredSessionError(error)
+                ? NSLocalizedString("ログインセッションが無効になりました。もう一度ログインしてください。", comment: "")
+                : NSLocalizedString("おすすめユーザーを取得できませんでした。接続を確認して再試行してください。", comment: "")
+        }
         if let handle = model.displayProfile?.githubHandle, !handle.isEmpty {
             let rows = (try? await SupabaseService.shared.githubContributions(handle: handle)) ?? []
-            if owner == model.displayProfile?.id { contributions = rows }
+            if owner == model.displayProfile?.id, !Task.isCancelled { contributions = rows }
         }
     }
 
     private func follow(_ profile: Profile) {
         guard let id = profile.id, let owner = model.displayProfile?.id,
-              let token = model.session?.accessToken, !busy.contains(id) else { return }
+              model.session != nil, !busy.contains(id) else { return }
         busy.insert(id)
         Task {
             defer { busy.remove(id) }
             do {
                 // Search results omit privacy; fetch it before sending a request.
-                guard let target = try await SupabaseService.shared.profile(id: id, token: token) else { return }
-                guard owner == model.displayProfile?.id else { return }
-                try await SupabaseService.shared.follow(followerID: owner, targetID: id, isPrivate: target.isPrivate == true, token: token)
+                let target = try await model.withRefreshedSession { token in
+                    guard owner == model.displayProfile?.id else { throw CancellationError() }
+                    guard let target = try await SupabaseService.shared.profile(id: id, token: token) else { return nil as Profile? }
+                    guard owner == model.displayProfile?.id else { throw CancellationError() }
+                    try await SupabaseService.shared.follow(followerID: owner, targetID: id, isPrivate: target.isPrivate == true, token: token)
+                    return target
+                }
+                guard let target else { return }
                 if owner == model.displayProfile?.id {
                     if target.isPrivate == true { requested.insert(id) } else { followed.insert(id) }
                 }
-            } catch { model.errorMessage = error.localizedDescription }
+            } catch {
+                guard owner == model.displayProfile?.id, !(error is CancellationError) else { return }
+                model.errorMessage = error.localizedDescription
+            }
         }
     }
 }
@@ -818,6 +844,8 @@ struct TimelineView: View {
             TimelineTabs(selected: $selectedTab)
             if selectedTab == 2 {
                 NativeMapView(cityDestination: cityDestination).id(cityDestination?.id)
+            } else if selectedTab == 1 {
+                FollowingTimelineView()
             } else if model.posts.isEmpty && model.isLoading {
                 Spacer(); ProgressView("Loading timeline…").foregroundColor(SpotcodeTheme.muted); Spacer()
             } else {
@@ -870,6 +898,62 @@ struct TimelineView: View {
         .onAppear { if cityDestination != nil { selectedTab = 2 } }
         .onChange(of: cityDestination?.id) { value in if value != nil { selectedTab = 2 } }
         .sheet(isPresented: $composing) { ComposeView(isPresented: $composing).environmentObject(model) }
+    }
+}
+
+private struct FollowingTimelineView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var posts: [Post] = []
+    @State private var loading = false
+    @State private var failed = false
+    @State private var hasMore = true
+    @State private var generation = UUID()
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                if model.session == nil {
+                    Text(NSLocalizedString("フォロー中の投稿を見るにはログインしてください。", comment: "")).padding()
+                } else {
+                    ForEach(posts) { post in PostRow(post: post) }
+                    if loading { ProgressView(NSLocalizedString("読み込み中…", comment: "")).padding() }
+                    else if failed {
+                        Text(NSLocalizedString("続きを取得できませんでした。再試行してください。", comment: "")).padding()
+                        Button(NSLocalizedString("再試行", comment: "")) { Task { await load() } }
+                    } else if posts.isEmpty {
+                        Text(NSLocalizedString("フォロー中のユーザーの投稿はまだありません。", comment: "")).padding()
+                    } else if hasMore {
+                        Button(NSLocalizedString("もっと昔の投稿を読み込む", comment: "")) { Task { await load() } }.padding()
+                    }
+                }
+            }
+        }
+        .task(id: model.session?.user.id) { await load(reset: true) }
+        .refreshable { await load(reset: true) }
+        .onDisappear { generation = UUID(); loading = false }
+    }
+
+    @MainActor private func load(reset: Bool = false) async {
+        if !reset && loading { return }
+        let request = UUID()
+        generation = request
+        if reset { posts = []; hasMore = true }
+        guard let owner = model.session?.user.id else { loading = false; return }
+        loading = true; failed = false
+        let cursor = posts.last
+        defer { if generation == request { loading = false } }
+        do {
+            let page = try await model.withRefreshedSession { token in
+                try await SupabaseService.shared.posts(token: token, before: cursor, followingUserID: owner)
+            }
+            guard !Task.isCancelled, generation == request, model.session?.user.id == owner else { return }
+            let known = Set(posts.map(\.id))
+            posts.append(contentsOf: page.filter { !known.contains($0.id) })
+            hasMore = page.count == 24
+        } catch {
+            guard !Task.isCancelled, generation == request, model.session?.user.id == owner else { return }
+            failed = true
+        }
     }
 }
 
@@ -1787,11 +1871,13 @@ Menu {
                     Text("· \(relativeTime(post.createdAt))").foregroundColor(SpotcodeTheme.muted)
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                     Spacer(minLength: 2)
-                    Text(NSLocalizedString((post.status ?? "wip").uppercased(), comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold))
-                        .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                        .foregroundColor((post.status ?? "wip") == "active" ? .black : SpotcodeTheme.text)
-                        .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background((post.status ?? "wip") == "active" ? Color.cyan : SpotcodeTheme.warning).clipShape(Capsule())
+                    if let status = post.status, !status.isEmpty, status.lowercased() != "wip" {
+                        Text(NSLocalizedString(status.uppercased(), comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold))
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            .foregroundColor(status == "active" ? .black : SpotcodeTheme.text)
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(status == "active" ? Color.cyan : SpotcodeTheme.warning).clipShape(Capsule())
+                    }
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { if opensDetail { showingDetail = true } }
@@ -3218,7 +3304,7 @@ private struct ProfileHero: View {
                 }.frame(height: 63)
                 HStack(spacing: 14) {
                     NavigationLink(destination: BusinessCardView(profile: profile)) {
-                        Label(NSLocalizedString("名刺を共有", comment: ""), systemImage: "rectangle.on.rectangle")
+                        Label(isOwn ? NSLocalizedString("名刺を共有", comment: "") : NSLocalizedString("名刺を見る", comment: ""), systemImage: "rectangle.on.rectangle")
                     }
                     if isOwn { NavigationLink(NSLocalizedString("名刺コレクション", comment: ""), destination: BusinessCardCollectionView()) }
                 }.font(.subheadline).padding(.vertical, 8)
@@ -4489,7 +4575,7 @@ private struct DisplaySettings: View {
         }
         SettingsCard(NSLocalizedString("装飾バッジの表示", comment: "")) {
             SettingsStatusTag(text: hideBadges ? NSLocalizedString("非表示", comment: "") : NSLocalizedString("表示", comment: ""), enabled: !hideBadges)
-            Text(NSLocalizedString("プロフィールや投稿の { }・言語・アイデア・WIPなどのバッジをまとめて切り替えます。", comment: "")).foregroundColor(SpotcodeTheme.muted)
+            Text(NSLocalizedString("プロフィールや投稿の { }・言語・アイデアなどのバッジをまとめて切り替えます。", comment: "")).foregroundColor(SpotcodeTheme.muted)
             Button(hideBadges ? NSLocalizedString("バッジを表示する", comment: "") : NSLocalizedString("バッジを非表示にする", comment: "")) { hideBadges.toggle() }
                 .buttonStyle(OutlineButtonStyle(filled: hideBadges))
         }
@@ -5573,11 +5659,13 @@ private struct CardHorizontalScroll: UIViewRepresentable {
 
 private struct BusinessCardPreview: View {
     let card: BusinessCard
+    var actualSize = false
     @AppStorage("spotcode.card.physicalScale") private var physicalScale = 1.0
     @State private var flipped = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var d: BusinessCardDesign { (card.design ?? BusinessCardDesign()).resolved(theme: card.effectiveTheme, layout: card.layout) }
     private var fontDesign: Font.Design { d.font == "serif" ? .serif : d.font == "mono" ? .monospaced : .default }
+    private var displayScale: Double { actualSize ? min(2, max(0.5, physicalScale)) : 0.85 }
     var body: some View {
         ZStack {
             face(back: false).opacity(flipped ? 0 : 1).accessibilityHidden(flipped).allowsHitTesting(!flipped)
@@ -5586,9 +5674,9 @@ private struct BusinessCardPreview: View {
         .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0), perspective: 0.4)
         .frame(width: d.orientation == "portrait" ? 55 * 96 / 25.4 : 91 * 96 / 25.4,
                height: d.orientation == "portrait" ? 91 * 96 / 25.4 : 55 * 96 / 25.4)
-        .scaleEffect(min(2, max(0.5, physicalScale)))
-        .frame(width: (d.orientation == "portrait" ? 55 : 91) * 96 / 25.4 * min(2, max(0.5, physicalScale)),
-               height: (d.orientation == "portrait" ? 91 : 55) * 96 / 25.4 * min(2, max(0.5, physicalScale)))
+        .scaleEffect(displayScale)
+        .frame(width: (d.orientation == "portrait" ? 55 : 91) * 96 / 25.4 * displayScale,
+               height: (d.orientation == "portrait" ? 91 : 55) * 96 / 25.4 * displayScale)
         .contentShape(Rectangle())
         .onTapGesture { flip() }
         .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded { value in
@@ -5732,7 +5820,7 @@ private struct FullscreenBusinessCardView: View {
             }.padding(.horizontal, 16).padding(.top, 8)
             GeometryReader { viewport in
                 ScrollView([.horizontal, .vertical]) {
-                    BusinessCardPreview(card: card)
+                    BusinessCardPreview(card: card, actualSize: true)
                         .padding(16)
                         .frame(minWidth: viewport.size.width, minHeight: viewport.size.height)
                 }
@@ -5827,7 +5915,7 @@ private struct BusinessCardView: View {
                 else if failed { Button(NSLocalizedString("再読み込み", comment: "")) { Task { await load() } } }
                 else if published || own {
                     BusinessCardPreview(card: draft)
-                        .frame(width: viewport.size.width, height: viewport.size.height)
+                        .frame(width: viewport.size.width, height: ((draft.design?.orientation == "portrait" ? 91.0 : 55.0) * 96 / 25.4 * 0.85) + 160)
                         .overlay(alignment: .topTrailing) {
                             Button { fullscreenCard = true } label: {
                                 Label(NSLocalizedString("全画面", comment: ""), systemImage: "arrow.up.left.and.arrow.down.right")
@@ -5842,7 +5930,9 @@ private struct BusinessCardView: View {
                     VStack(alignment: .leading, spacing: 20) {
                     if published {
                         HStack {
-                            Button(NSLocalizedString("名刺を共有", comment: "")) { sharing = true }.buttonStyle(.borderedProminent)
+                            if own {
+                                Button(NSLocalizedString("名刺を共有", comment: "")) { sharing = true }.buttonStyle(.borderedProminent)
+                            }
                             Button(NSLocalizedString("リンクをコピー", comment: "")) { UIPasteboard.general.url = link; message = NSLocalizedString("リンクをコピーしました。", comment: "") }.buttonStyle(.bordered)
                         }
                         Text(NSLocalizedString("共有メニューのAirDropから名刺リンクを送れます。相手にも名刺を送り返してもらうと交換できます。", comment: ""))
