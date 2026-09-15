@@ -33,7 +33,7 @@
          (write-source stream (section models "struct PostPoll:" "struct FollowEvent:")))
         ((string= name "task-participation")
          (write-source stream (section models "struct GitHubIssue:" "struct AuthUser:"))
-         (write-source stream (section (app-source "SupabaseService.swift") "enum GitHubTaskLoader {" "struct BusinessCardDesign:")))
+         (write-source stream (section (app-source "SupabaseService.swift") "enum GitHubTaskLoader {" "struct BusinessCardLayer:")))
         ((string= name "localization")
          (write-source stream (section (app-source "AppDelegate.swift") "enum AppLanguageDefaults {" "@main"))
          ;; Expose the original private static method as a standalone function.

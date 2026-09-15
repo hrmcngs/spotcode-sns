@@ -3,6 +3,12 @@
 スポット（位置情報）に紐付くアイデアと、それを実装した GitHub リポを残せる開発者 SNS。
 **Web + Electron** デュアルターゲット。
 
+## Supabase の設定・更新
+
+Supabase SQL Editorで **[docs/supabase-schema.sql](docs/supabase-schema.sql) の全文を1回実行**してください。新規設定・既存DBの更新ともに同じファイルを使います。名刺・レイヤー編集・インターネット交換・6文字コードまで含み、既存データを保持して再実行できます。
+
+`docs/migrations/` と `docs/repairs/` は履歴・個別修復用に残しています。通常は順番に実行する必要はありません。SQLは1トランザクションで適用され、最後にAPIのスキーマキャッシュを更新します。任意のQAアカウントは自動作成せず、設定画面から作成します。OAuth・Storageの設定、Edge Functionのデプロイ、アプリの更新は別途必要です。
+
 ## 機能（実装中）
 
 -  **ファイルサイズで色が変化** — 一目で編集量
@@ -83,7 +89,7 @@ docs/       ← 設計メモ
 
 ### セットアップ手順
 
-1. **公式アカウント** — `docs/supabase-schema.sql` の **Stage 25** ブロックを Supabase SQL Editor で実行するだけ。末尾の `do $$ … end $$` ブロックが
+1. **公式アカウント** — `docs/supabase-schema.sql` の全文を Supabase SQL Editor で実行します。Stage 25 の `do $$ … end $$` ブロックが
    - `auth.users` にランダムパスワード（不可逆ハッシュ）の sentinel ユーザー (`official@spotcode-sns.local`) を作成
    - `profiles` に handle `spotcode_official` / 表示名 `spotcode` / `is_official = true` の行を upsert
      を冪等に行います。サインアップ画面で何もする必要はありません。誰もこの auth.users にログインできません（パスワードは生成時にしか存在せず、保存もされない）。

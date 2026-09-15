@@ -2,11 +2,29 @@ import { t, getLocale } from '../i18n.js';
 import { fileToAvatarDataUrl } from '../avatar.js';
 import { currentUser } from '../auth.js';
 import { url } from '../router.js';
-import { themes, baseColors, paletteFromBase, defaultDesign, normalizeCard, cardLink, loadCard, saveCard, collectCard, loadCollection, removeCard, unpublishCard } from '../business-cards.js';
+import { themes, defaultCardLayers, normalizeCardLayers, baseColors, paletteFromBase, defaultDesign, normalizeCard, cardLink, loadCard, saveCard, collectCard, loadCollection, removeCard, unpublishCard } from '../business-cards.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const layerLabels = () => ({frontLabel:t("表の見出し"),name:t("名前"),title:t("肩書き"),image:t("画像"),bio:t("自己紹介"),contact:t("連絡先"),links:t("リンク"),backLabel:t("裏の見出し")});
+function cardLayerMarkup(c, side, editing = false, selected = '') {
+  return `<div class="business-card__layers">${(c.design.layers || []).map((l,index) => {
+    if (l.side !== side || (l.hidden && !editing)) return '';
+    let content = esc(c[l.kind] ?? c.design[l.kind] ?? '');
+    if (l.kind === 'image') {
+      content = c.image_url ? `<img src="${esc(c.image_url)}" alt="${esc(c.name)}" draggable="false" referrerpolicy="no-referrer">` : (editing ? '▧' : '');
+      if (!editing && c.image_link) content = `<a href="${esc(c.image_link)}" target="_blank" rel="noopener noreferrer">${content}</a>`;
+    }
+    if (l.kind === 'links') content = c.links.map(link => editing ? esc(link.label || link.url) : `<a href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">${esc(link.label || link.url)}</a>`).join('<br>');
+    const base = c.design.orientation === 'portrait' ? 208 : 344;
+    return `<div class="business-card__layer ${selected===l.kind?'is-selected':''}" data-card-layer="${l.kind}" ${editing ? 'tabindex="0" role="button"' : ''} aria-label="${esc(layerLabels()[l.kind])}" style="left:${l.x}%;top:${l.y}%;${l.kind !== 'image' ? `width:max-content;min-width:12px;max-width:${l.width}%;height:auto;min-height:1.2em;max-height:${l.height}%;` : `width:${l.width}%;height:${l.height}%;`}transform:rotate(${l.rotation}deg);z-index:${index};font-size:${l.fontSize/base*100}cqw;font-weight:${l.kind==='name'?700:400};color:${l.kind.endsWith('Label')?'var(--card-accent)':'var(--card-text)'};opacity:${l.hidden?0.25:1}">${content}</div>`;
+  }).join('')}</div>`;
+}
 export function cardMarkup(value, handle) {
   const c = normalizeCard(value), d = c.design;
   const style = `--card-front:${d.frontColor};--card-back:${d.backColor};--card-text:${d.textColor};--card-accent:${d.accentColor};--card-name-size:${d.nameSize}px;--card-radius:${d.radius}px`;
+  if (d.layers) {
+    const face = side => `<div class="business-card__face ${side==='back'?'business-card__back':''}" ${side==='back'?'aria-hidden="true" inert':''}>${cardLayerMarkup(c,side)}<button type="button" class="business-card__flip-accessible" data-card-flip aria-pressed="false" aria-label="${t("名刺を裏返す")}" ${side==='back'?'tabindex="-1"':''}></button></div>`;
+    return `<div style="${style}" class="business-card business-card--${c.theme} business-card--${c.layout} business-card--font-${d.font} business-card--pattern-${d.pattern} business-card--${d.orientation} business-card--corners-${d.cornerStyle}" role="group" aria-label="${esc(t("{name} の名刺", {name:c.name}))}"><div class="business-card__body">${face('front')}${face('back')}</div></div>`;
+  }
   const artwork = side => d.imagePlacement === 'artwork' && c.image_side === side && c.image_url;
   const artworkHtml = side => artwork(side) ? '<img class="business-card__artwork" src="' + esc(c.image_url) + '" alt="' + esc(c.name) + (t(" の名刺") + "\" referrerpolicy=\"no-referrer\">") : '';
   const picture = side => {
@@ -104,14 +122,17 @@ export async function hydrateBusinessCard(handle, collection = false, canRefresh
     if (form) {
       content.querySelector('[data-edit-card]').onclick = event => {
         const panel = content.querySelector('[data-card-editor]'); panel.hidden = !panel.hidden;
+        content.querySelector('.card-showcase-wrap').hidden = !panel.hidden;
         event.currentTarget.setAttribute('aria-expanded', String(!panel.hidden));
         event.currentTarget.textContent = panel.hidden ? t("名刺を編集") : t("編集を閉じる");
         if (!panel.hidden) panel.scrollIntoView({behavior:'smooth',block:'start'});
       };
       let stagedImage = initial.image_url;
+      let stagedLayers = initial.design.layers;
       let selectedTheme = initial.theme;
       const value = () => ({
         ...Object.fromEntries(new FormData(form)), image_url: stagedImage,
+        design: {...initial.design, layers: stagedLayers},
         theme: form.elements.theme.value === 'solid' ? selectedTheme : form.elements.theme.value
       });
       let savedValue = JSON.stringify(value());
@@ -121,6 +142,7 @@ export async function hydrateBusinessCard(handle, collection = false, canRefresh
           && !form.querySelector(':disabled') && JSON.stringify(value()) === savedValue;
         if (ready()) return hydrateBusinessCard(handle, false, ready);
       };
+      let refreshLayerEditor = () => {};
       let previewBack = false;
       const preview = content.querySelector('[data-card-preview]');
       function paintPreview() {
@@ -130,7 +152,9 @@ export async function hydrateBusinessCard(handle, collection = false, canRefresh
         const base = form.elements.design_frontColor.value;
         form.querySelector('[data-base-color]').value = base;
         form.querySelectorAll('[data-base-chip]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.baseChip === base.toLowerCase())));
+        refreshLayerEditor();
       }
+      refreshLayerEditor = bindLayerEditor(form.querySelector('[data-layer-editor]'), value, next => { stagedLayers = next; paintPreview(); });
       form.querySelector('[data-open-palette]').onclick = () => {
         const picker = form.querySelector('[data-base-color]');
         if (typeof picker.showPicker === 'function') picker.showPicker(); else picker.click();
@@ -224,7 +248,7 @@ export async function hydrateBusinessCard(handle, collection = false, canRefresh
   }
 }
 function editor(c, published) {
-  return `<form class="card-editor"><h2>${t("自分の名刺をデザイン")}</h2><p>${t("保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。")}</p>${[['name',t("名前（表）"),60],['title',t("肩書き・組織（表）"),100],['bio',t("自己紹介（裏）"),280],['contact',t("連絡先・リンク（裏）"),160]].map(([key,label,max]) => `<label>${label}${key === 'bio' ? `<textarea name="${key}" maxlength="${max}" rows="3">${esc(c[key])}</textarea>` : `<input name="${key}" maxlength="${max}" value="${esc(c[key])}" ${key === 'name' ? 'required' : ''}>`}</label>`).join('')}${baseColorEditor(c.design)}<label>${t("テーマ")}<select name="theme">${Object.entries({...themes, solid: t("単色")}).map(([key,label]) => `<option value="${key}" ${(c.design.pattern === 'solid' ? 'solid' : c.theme) === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>${t("レイアウト")}<select name="layout"><option value="classic">${t("左揃え")}</option><option value="centered" ${c.layout === 'centered' ? 'selected' : ''}>${t("中央揃え")}</option></select></label>${mediaEditor(c)}${designEditor(c.design)}<div class="card-actions"><button class="btn btn--primary" type="submit">${t("保存して公開")}</button><button class="btn btn--ghost" type="button" data-unpublish-card ${published ? '' : 'hidden'}>${t("公開を停止")}</button></div></form>`;
+  return `<form class="card-editor"><h2>${t("自分の名刺をデザイン")}</h2><div data-layer-editor></div><p>${t("保存するとリンクを知っている人が閲覧できます。掲載する情報だけを入力してください。")}</p>${[['name',t("名前（表）"),60],['title',t("肩書き・組織（表）"),100],['bio',t("自己紹介（裏）"),280],['contact',t("連絡先・リンク（裏）"),160]].map(([key,label,max]) => `<label>${label}${key === 'bio' ? `<textarea name="${key}" maxlength="${max}" rows="3">${esc(c[key])}</textarea>` : `<input name="${key}" maxlength="${max}" value="${esc(c[key])}" ${key === 'name' ? 'required' : ''}>`}</label>`).join('')}${baseColorEditor(c.design)}<label>${t("テーマ")}<select name="theme">${Object.entries({...themes, solid: t("単色")}).map(([key,label]) => `<option value="${key}" ${(c.design.pattern === 'solid' ? 'solid' : c.theme) === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>${t("レイアウト")}<select name="layout"><option value="classic">${t("左揃え")}</option><option value="centered" ${c.layout === 'centered' ? 'selected' : ''}>${t("中央揃え")}</option></select></label>${mediaEditor(c)}${designEditor(c.design)}<div class="card-actions"><button class="btn btn--primary" type="submit">${t("保存して公開")}</button><button class="btn btn--ghost" type="button" data-unpublish-card ${published ? '' : 'hidden'}>${t("公開を停止")}</button></div></form>`;
 }
 function baseColorEditor(d) {
   return `<fieldset class="card-design"><legend>${t("ベースカラー")}</legend><button type="button" class="btn btn--primary" data-open-palette>${t("カラーパレットを開く")}</button><div class="card-color-chips" role="group" aria-label="${t("ベースカラーを選択")}">${baseColors.map(([hex,label]) => `<button type="button" class="card-color-chip" data-base-chip="${hex}" style="--chip-color:${hex}" aria-label="${label}" title="${label}" aria-pressed="${hex === d.frontColor.toLowerCase()}"><span aria-hidden="true">✓</span></button>`).join('')}</div><label class="card-base-custom">${t("好きな色を選ぶ")}<input type="color" data-base-color value="${d.frontColor}"></label><p>${t("選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。")}</p></fieldset>`;
@@ -358,3 +382,96 @@ document.addEventListener('wheel', event => {
   if (!state.turned && Math.abs(state.total)>60) {flipCard(card);state.turned=true;}
   cardSwipeState.set(card,state);
 }, {passive:false});
+
+function bindLayerEditor(root, value, change) {
+  let side = 'front', selected = 'name', undo = [], redo = [];
+  const copy = layers => layers?.map(layer => ({...layer}));
+  const current = () => normalizeCard(value());
+  const save = next => {
+    undo.push(copy(current().design.layers)); if (undo.length > 40) undo.shift(); redo = [];
+    change(next === undefined ? undefined : normalizeCardLayers(next)); paint();
+  };
+  const update = modify => {
+    const c = current();
+    const layers = copy(c.design.layers ?? defaultCardLayers(c));
+    const layer = layers?.find(l => l.kind === selected);
+    if (!layer) return;
+    modify(layer, layers); save(layers);
+  };
+  const paint = () => {
+    const original = current();
+    const layers = original.design.layers ?? defaultCardLayers(original);
+    const c = {...original, design: {...original.design, layers}};
+    if (!layers.some(l => l.kind === selected && l.side === side)) selected = layers.find(l => l.side === side)?.kind;
+    const layer = layers.find(l => l.kind === selected);
+    const portrait = c.design.orientation === 'portrait', w = portrait ? 55 : 91, h = portrait ? 91 : 55;
+    const number = (key,label,axis=100) => `<label>${label}<input type="number" step="0.1" data-layer-number="${key}" data-axis="${axis}" value="${Math.round(layer[key]*axis)/100}" ${layer.locked?'disabled':''}></label>`;
+    root.innerHTML = `<fieldset class="card-design card-layer-editor"><legend>${t("レイヤーで自由に配置")}</legend>
+      <select data-layer-side aria-label="${t("編集する面")}"><option value="front" ${side==='front'?'selected':''}>${t("表")}</option><option value="back" ${side==='back'?'selected':''}>${t("裏")}</option></select>
+      <div data-layer-stage>${cardMarkup(c,'')}</div><p>${t("レイヤーを選んでドラッグ。数値は名刺上のmmです。変更後は保存してください。")}</p>
+      <div class="card-actions"><button type="button" data-layer-undo ${undo.length?'':'disabled'}>${t("元に戻す")}</button><button type="button" data-layer-redo ${redo.length?'':'disabled'}>${t("やり直す")}</button></div>
+      <label>${t("レイヤー")}<select data-layer-select>${layers.filter(l=>l.side===side).reverse().map(l=>`<option value="${l.kind}" ${l.kind===selected?'selected':''}>${layerLabels()[l.kind]}</option>`).join('')}</select></label>
+      ${layer ? `<div class="card-layer-inspector">${number('x','X (mm)',w)}${number('y','Y (mm)',h)}${number('width',t("幅 (mm)"),w)}${number('height',t("高さ (mm)"),h)}${number('rotation',t("回転 (°)"))}${number('fontSize',t("文字サイズ"))}</div>
+      <label><input type="checkbox" data-layer-locked ${layer.locked?'checked':''}>${t("ロック")}</label><label><input type="checkbox" data-layer-hidden ${layer.hidden?'checked':''}>${t("非表示")}</label>
+      <div class="card-actions"><button type="button" data-layer-front ${layer.locked?'disabled':''}>${t("前面へ")}</button><button type="button" data-layer-back ${layer.locked?'disabled':''}>${t("背面へ")}</button><button type="button" data-layer-center ${layer.locked?'disabled':''}>${t("中央に配置")}</button></div>` : ''}
+      <button type="button" data-layer-auto>${t("自動配置に戻す")}</button></fieldset>`;
+    const stage = root.querySelector('[data-layer-stage]');
+    const card = stage.querySelector('.business-card');
+    card.querySelector('.business-card__body').innerHTML = `<div class="business-card__face ${side==='back'?'card-layer-rear':''}">${cardLayerMarkup(c,side,true,selected)}</div>`;
+    stage.onclick = event => event.stopPropagation();
+    const select = (selector, handler) => { const el = root.querySelector(selector); if (el) el.onchange = handler; };
+    const click = (selector, handler) => { const el = root.querySelector(selector); if (el) el.onclick = handler; };
+    select('[data-layer-side]', event => { side = event.target.value; paint(); });
+    select('[data-layer-select]', event => { selected = event.target.value; paint(); });
+    select('[data-layer-locked]', event => update(l => { l.locked = event.target.checked; }));
+    select('[data-layer-hidden]', event => update(l => { l.hidden = event.target.checked; }));
+    root.querySelectorAll('[data-layer-number]').forEach(input => input.onchange = () => {
+      if (!Number.isFinite(input.valueAsNumber)) return;
+      update(l => { l[input.dataset.layerNumber] = input.valueAsNumber / Number(input.dataset.axis) * 100; });
+    });
+    click('[data-layer-auto]', () => save(undefined));
+    click('[data-layer-center]', () => update(l => { l.x = (100-l.width)/2; l.y = (100-l.height)/2; }));
+    for (const front of [true,false]) click(front?'[data-layer-front]':'[data-layer-back]', () => {
+      const next = copy(layers), index = next.findIndex(l=>l.kind===selected), [item] = next.splice(index,1);
+      if (front) next.push(item); else next.unshift(item); save(next);
+    });
+    click('[data-layer-undo]', () => { redo.push(copy(current().design.layers)); change(undo.pop()); paint(); });
+    click('[data-layer-redo]', () => { undo.push(copy(current().design.layers)); change(redo.pop()); paint(); });
+    stage.onpointerdown = event => {
+      const target = event.target.closest('[data-card-layer]'); if (!target || !event.isPrimary || event.button !== 0) return;
+      event.preventDefault(); event.stopPropagation();
+      const item = layers.find(l => l.kind === target.dataset.cardLayer); selected = item.kind;
+      if (item.locked) { paint(); return; }
+      stage.querySelectorAll('.is-selected').forEach(el=>el.classList.remove('is-selected')); target.classList.add('is-selected');
+      const bounds = target.parentElement.getBoundingClientRect(), startX = event.clientX, startY = event.clientY;
+      let x = item.x, y = item.y;
+      stage.setPointerCapture(event.pointerId);
+      stage.onpointermove = e => {
+        if (e.pointerId !== event.pointerId) return;
+        x = Math.max(0,Math.min(100-item.width,item.x+(e.clientX-startX)/bounds.width*100));
+        y = Math.max(0,Math.min(100-item.height,item.y+(e.clientY-startY)/bounds.height*100));
+        target.style.left = x+'%'; target.style.top = y+'%';
+      };
+      const end = commit => {
+        stage.onpointermove = null; stage.onpointerup = null; stage.onpointercancel = null;
+        if (stage.hasPointerCapture(event.pointerId)) stage.releasePointerCapture(event.pointerId);
+        if (commit && (x!==item.x || y!==item.y)) update(l=>{l.x=x;l.y=y;}); else paint();
+      };
+      stage.onpointerup = () => end(true); stage.onpointercancel = () => end(false);
+    };
+    stage.onkeydown = event => {
+      const target = event.target.closest('[data-card-layer]');
+      if (!target || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+      event.preventDefault(); event.stopPropagation(); selected = target.dataset.cardLayer;
+      if (layers.find(l=>l.kind===selected)?.locked) return;
+      const step = event.shiftKey ? 1 : 0.1;
+      update(l => { if (event.key==='ArrowLeft') l.x-=step/w*100; if (event.key==='ArrowRight') l.x+=step/w*100;
+        if (event.key==='ArrowUp') l.y-=step/h*100; if (event.key==='ArrowDown') l.y+=step/h*100; });
+      root.querySelector(`[data-card-layer="${selected}"]`)?.focus();
+    };
+  };
+  root.addEventListener('input', event => event.stopPropagation());
+  root.closest('form')?.addEventListener('input', event => { if (!root.contains(event.target)) paint(); });
+  paint();
+  return paint;
+}

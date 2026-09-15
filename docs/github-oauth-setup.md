@@ -86,7 +86,7 @@ Redirect URLs に spotcode-sns のホストが登録されているか確認。�
 
 反映は次の順で行います。
 
-1. `docs/migrations/038-github-organizations.sql` を Supabase SQL Editor で全文実行します。
+1. [supabase-schema.sql](supabase-schema.sql) を Supabase SQL Editor で全文実行します。
 2. Edge Function をデプロイします。
 
    ```sh
@@ -114,14 +114,14 @@ GitHubのOrganizationポリシーやSSOにより、別途Organization管理者�
 
 ### Stage 39: メンバーによる組織リポジトリの投稿
 
-Stage 38 の後に `docs/migrations/039-organization-post-attribution.sql` 全文を SQL Editor で実行し、Web / iOS を更新します。
+Stage 38 の後に [supabase-schema.sql](supabase-schema.sql) 全文を SQL Editor で実行し、Web / iOS を更新します。
 GitHub のメンバー確認が有効なユーザーが、連携先 Organization の `owner/repository` または `https://github.com/owner/repository` を付けて新規投稿すると、組織アカウントの名前・アイコンで表示され、組織プロフィールにも掲載されます。リンク先リポジトリの実在確認はせず、Organization の所有者名と確認済みメンバー情報で判定します。
 実際の投稿者は `author_id`、表示先の組織は `organization_author_id` に記録します。編集・削除権限と公開範囲は実際の投稿者を基準に維持し、「自分のみ」は組織の他のメンバーには公開しません。メンバーも対象リポジトリを指定して「GitHub Organizationのみ」を選べます。
 同じ Organization に複数の組織アカウントが連携している場合は、誤ったアカウントに掲載しないよう投稿を止めます。設定で連携先を一つにしてください。既存投稿の一括変更は行わず、本文だけの編集や脱退・連携解除では過去の表示名義を変更しません。
 
 #### 投稿一覧に relationship / schema cache エラーが出る場合
 
-Stage 38 の実行後、更新版 `docs/migrations/039-organization-post-attribution.sql` の全文を再実行してください。既存列の外部キーが欠けている場合も補完し、最後に `NOTIFY pgrst, 'reload schema';` で API のスキーマキャッシュを更新します。その後ページを再読み込みします。キャッシュのみ更新する場合はこの NOTIFY 文だけを SQL Editor で実行できます（列や外部キーが未作成の場合には Stage 39 が必要です）。
+Stage 38 の実行後、更新版 [supabase-schema.sql](supabase-schema.sql) の全文を再実行してください。既存列の外部キーが欠けている場合も補完し、最後に `NOTIFY pgrst, 'reload schema';` で API のスキーマキャッシュを更新します。その後ページを再読み込みします。キャッシュのみ更新する場合はこの NOTIFY 文だけを SQL Editor で実行できます（列や外部キーが未作成の場合には Stage 39 が必要です）。
 Web / iOS の更新版は、新しい組織関連付けが未認識の場合に従来の投稿者情報で取得を再試行します。公開範囲と写真の取得は維持します。組織名義の表示を有効にするには SQL の反映が必要です。
 参考: https://postgrest.org/en/stable/references/schema_cache.html
 
@@ -138,12 +138,12 @@ Stage 38 のDB更新も必要です。Function内でSupabaseのJWTとGitHubの�
 
 ### Stage 40: リポジトリを自分で選択して表示
 
-`docs/migrations/040-explicit-repository-selection.sql` 全文をSQL Editorで実行してから、Web / iOSを更新します。
+[supabase-schema.sql](supabase-schema.sql) 全文をSQL Editorで実行してから、Web / iOSを更新します。
 初期状態と新しく取得したリポジトリは未選択になります。選択したリポジトリだけをプロフィールのOpen issuesに表示し、`selected_repos` に保存します。旧設定は非表示の一覧しか記録しておらず、手動選択と自動選択を区別できないため、初回は表示するリポジトリを選び直してください。検索候補を押して選ぶ操作は維持します。
 
 ### Stage 41: 組織アカウントにGitHub Organizationを連携
 
-`docs/migrations/041-organization-account-github-grant.sql` をSQL Editorで実行し、更新した `github-organizations` Functionをデプロイしてください（Stage 38・39適用済みが前提）。
+[supabase-schema.sql](supabase-schema.sql) をSQL Editorで実行し、更新した `github-organizations` Functionをデプロイしてください（Stage 38・39適用済みが前提）。
 
 ```sh
 npx supabase functions deploy github-organizations --project-ref vkwdthjiyxrhskdlgexq --no-verify-jwt
@@ -157,11 +157,11 @@ npx supabase functions deploy github-organizations --project-ref vkwdthjiyxrhskd
 
 #### `github_org_memberships does not exist` と表示された場合
 
-Stage 38が未適用です。`docs/repairs/github-organization-setup.sql` の中身全体をSupabase SQL Editorへ貼り付けて実行してください。Stage 38・39・41を依存順に一つのトランザクションで適用します。既存のプロフィールと投稿は保持し、適用済みでも再実行できます。ファイル名やMarkdown見出しではなく、SQLの中身を実行します。その後、上記のEdge Functionのデプロイも必要です。
+Stage 38が未適用です。[supabase-schema.sql](supabase-schema.sql) の中身全体をSupabase SQL Editorへ貼り付けて実行してください。最新スキーマを依存順に一つのトランザクションで適用します。既存のプロフィールと投稿は保持し、適用済みでも再実行できます。ファイル名やMarkdown見出しではなく、SQLの中身を実行します。その後、上記のEdge Functionのデプロイも必要です。
 
 ### Stage 42: Organizationを確認ファイルで承認
 
-現在の組織アカウントの連携はファイル方式です。`docs/repairs/github-organization-file-setup.sql` の中身全体をSQL Editorで実行してください（Stage 38・39・41・42を含みます）。その後 `github-organizations` FunctionとWeb/iOSを更新します。既にStage 41まで適用済みなら `docs/migrations/042-organization-file-verification.sql` のみでも構いません。
+現在の組織アカウントの連携はファイル方式です。[supabase-schema.sql](supabase-schema.sql) の中身全体をSQL Editorで実行してください（すべてのStageを含みます）。その後 `github-organizations` FunctionとWeb/iOSを更新します。既に一部を適用済みでも同じ統合SQLを実行できます。
 
 確認ファイルの画面で「先にプロフィールからGitHubを連携してください」と表示される場合は、Functionが旧OAuth方式のままになっていないか確認してください。2026-09-10には、DBのStage 42は適用済みでも、稼働中のFunction（version 1）には `confirm_file` の処理が含まれていませんでした。SQLやWebの更新だけではFunctionは更新されません。リポジトリのルートで次を実行してください。
 

@@ -5,6 +5,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
 import CoreImage
+import ImageIO
 import AuthenticationServices
 import UserNotifications
 
@@ -1406,7 +1407,7 @@ private struct PhotoLibraryPicker: UIViewControllerRepresentable {
     }
 }
 
-private struct DataURLImage: View {
+struct DataURLImage: View {
     let value: String
     var fit = false
     var body: some View {
@@ -1432,11 +1433,32 @@ private struct DataURLImage: View {
     }
 }
 
-private func decodedDataURLImage(_ value: String?) -> UIImage? {
-    guard let value, value.lowercased().hasPrefix("data:image/"),
+// Reuse decoded pixels across SwiftUI redraws, with a modest memory budget.
+private let inlineImageCache: NSCache<NSString, UIImage> = {
+    let cache = NSCache<NSString, UIImage>()
+    cache.totalCostLimit = 12 * 1024 * 1024
+    cache.countLimit = 64
+    return cache
+}()
+
+private func decodedDataURLImage(_ value: String?, maxPixelSize: Int = 1080) -> UIImage? {
+    guard let value, value.prefix(11).lowercased() == "data:image/" else { return nil }
+    let key = "\(maxPixelSize):\(value)" as NSString
+    if let cached = inlineImageCache.object(forKey: key) { return cached }
+    guard
           let comma = value.firstIndex(of: ","),
-          let data = Data(base64Encoded: String(value[value.index(after: comma)...])) else { return nil }
-    return UIImage(data: data)
+          let data = Data(base64Encoded: String(value[value.index(after: comma)...])),
+          let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+          let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceShouldCacheImmediately: true
+          ] as CFDictionary) else { return nil }
+    let image = UIImage(cgImage: thumbnail)
+    inlineImageCache.setObject(image, forKey: key,
+        cost: thumbnail.bytesPerRow * thumbnail.height + key.length * 2)
+    return image
 }
 
 private struct ProfileImagePicker: UIViewControllerRepresentable {
@@ -2248,7 +2270,7 @@ struct AvatarView: View {
     var size: CGFloat = 42
     var body: some View {
         Group {
-            if let image = decodedDataURLImage(profile?.avatarURL) {
+            if let image = decodedDataURLImage(profile?.avatarURL, maxPixelSize: max(1, Int(ceil(size * 3)))) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else if let url = profile?.avatarURL.flatMap(URL.init(string:)), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
                 AsyncImage(url: url) { phase in
@@ -5615,7 +5637,7 @@ private func businessCardColor(_ hex: String?) -> Color {
     return Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
 }
 
-private struct BusinessCardOutline: Shape {
+struct BusinessCardOutline: Shape {
     let radius: CGFloat
     let style: String
     func path(in rect: CGRect) -> Path {
@@ -5692,7 +5714,15 @@ private struct BusinessCardPreview: View {
         .accessibilityElement(children: .contain)
     }
     private func flip() { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.55)) { flipped.toggle() } }
-    private func face(back: Bool) -> some View {
+    @ViewBuilder private func face(back: Bool) -> some View {
+        if d.layers != nil {
+            BusinessCardLayerCanvas(card: card, side: back ? "back" : "front")
+                .background(background(back: back))
+                .clipShape(BusinessCardOutline(radius: CGFloat(d.radius ?? 18), style: d.cornerStyle ?? "rounded"))
+                .overlay(BusinessCardOutline(radius: CGFloat(d.radius ?? 18), style: d.cornerStyle ?? "rounded").stroke(.white.opacity(0.25)))
+        } else { automaticFace(back: back) }
+    }
+    private func automaticFace(back: Bool) -> some View {
         let align = (back ? d.backAlign : d.frontAlign) ?? "classic"
         let horizontal: HorizontalAlignment = align == "right" ? .trailing : align == "centered" ? .center : .leading
         let alignment: Alignment = align == "right" ? .trailing : align == "centered" ? .center : .leading
@@ -5754,33 +5784,9 @@ private struct BusinessCardPreview: View {
             .accessibilityLabel(String(format: NSLocalizedString("%@ の名刺画像", comment: ""), card.name))
     }
     private func background(back: Bool) -> some View {
-        let front = businessCardColor(d.frontColor), rear = businessCardColor(d.backColor)
-        return ZStack {
-            if d.pattern == "gradient" {
-                LinearGradient(colors: back ? [rear, front] : [front, rear], startPoint: .topLeading, endPoint: .bottomTrailing)
-                if card.effectiveTheme == "aurora" {
-                    RadialGradient(colors: [rear, .clear], center: .topTrailing, startRadius: 0, endRadius: 360)
-                }
-            } else { back ? rear : front }
-            if card.effectiveTheme == "ghost" && d.pattern != "solid" {
-                RadialGradient(colors: [.white.opacity(0.65), .clear], center: .topLeading, startRadius: 0, endRadius: 300)
-            }
-            if d.pattern != "solid", let symbol = ["spring":"leaf", "summer":"sun.max", "autumn":"leaf.fill", "winter":"snowflake"][card.effectiveTheme] {
-                VStack { HStack { Spacer(); Image(systemName: symbol).font(.system(size: 72)).opacity(0.12) }; Spacer() }.padding(22)
-                    .foregroundColor(businessCardColor(d.accentColor)).allowsHitTesting(false).accessibilityHidden(true)
-            }
-            if d.pattern == "stripe" {
-                GeometryReader { geometry in
-                    Path { path in
-                        for x in stride(from: -geometry.size.height, to: geometry.size.width, by: 24) {
-                            path.move(to: CGPoint(x: x, y: geometry.size.height))
-                            path.addLine(to: CGPoint(x: x + geometry.size.height, y: 0))
-                        }
-                    }.stroke(Color.white.opacity(0.06), lineWidth: 2)
-                }
-            }
-        }
+        BusinessCardLayerBackground(card: card, back: back)
     }
+
 }
 
 private struct BusinessCardTemplateDocument: FileDocument {
@@ -5938,6 +5944,10 @@ private struct BusinessCardView: View {
                     }
                 }
                 else if published || own {
+                    if editingCard && own {
+                        BusinessCardLayerEditor(card: $draft)
+                            .padding(24).frame(maxWidth: 600).disabled(busy)
+                    } else {
                     BusinessCardPreview(card: draft)
                         .frame(width: viewport.size.width, height: ((draft.design?.orientation == "portrait" ? 91.0 : 55.0) * 96 / 25.4 * 0.85) + 160)
                         .overlay(alignment: .topTrailing) {
@@ -5951,6 +5961,7 @@ private struct BusinessCardView: View {
                                 NearbyBusinessCardExchangeView(ownerID: id, handle: profile.handle, enabled: !editingCard)
                             }
                         }
+                    }
                     VStack(alignment: .leading, spacing: 20) {
                     if published {
                         HStack {

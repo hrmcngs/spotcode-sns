@@ -15,7 +15,7 @@ Web / SwiftUI iOS 共通:
 
 ## 反映・検証
 
-`docs/migrations/044-social-controls.sql` を適用し、Webをデプロイ、iOSを再ビルドします。Stage 43（ブロック）と既存のprofiles / follows / postsが前提です。DB更新は再実行できます。
+[supabase-schema.sql](supabase-schema.sql) の全文を適用し、Webをデプロイ、iOSを再ビルドします。依存するテーブルとブロック機能も統合SQLに含まれています。DB更新は再実行できます。
 
 - `node scripts/test-social-controls-client.mjs`
 - `PGLITE_MODULE=<PGlite module path> node scripts/test-social-controls.mjs`

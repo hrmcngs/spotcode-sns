@@ -8,7 +8,7 @@ Web / Electron / iOS / Mac Catalyst のプロフィールから「名刺を共�
 
 ## 導入
 
-1. Supabase SQL Editorで `docs/migrations/045-business-cards.sql`、`046-business-card-design.sql`、`047-business-card-media.sql` の順に適用する。
+1. Supabase SQL Editorで [supabase-schema.sql](supabase-schema.sql) の全文を1回適用する（最新の名刺機能をすべて含む）。
 2. Webをデプロイし、iOS / Mac Catalystアプリをビルド・配布する。
 3. アカウントAで名刺を公開し、アカウントBで共有リンクを開いて保存する。
 4. Bのコレクションに1枚追加されたこと、再保存で増えないことを確認する。
@@ -70,7 +70,7 @@ Web Share非対応時はリンクコピーへ案内する。キャンセルを�
 
 ## Collection-only access
 
-Apply `docs/migrations/048-business-card-collection-read.sql` before releasing
+Apply the complete [supabase-schema.sql](supabase-schema.sql) before releasing
 this client version. It replaces public SELECT access with owner-or-collector
 row-level security and removes anonymous SELECT access. The existing collection
 INSERT policy still requires the authenticated collector's own ID; saving an
@@ -87,7 +87,7 @@ against the target database before deployment.
 
 ## Internet exchange (Wi-Fi ↔ cellular)
 
-Apply `docs/migrations/049-internet-card-exchange.sql` after 048, then install the
+Apply the complete [supabase-schema.sql](supabase-schema.sql), then install the
 updated iOS/Mac clients. The migration creates the private exchange table and
 `exchange_business_cards` RPC. It must be applied to the production database;
 building the app alone does not install this backend.
@@ -95,7 +95,7 @@ building the app alone does not install this backend.
 In the card exchange sheet, use **Exchange over the internet**:
 
 1. Both users publish their own card and remain signed in.
-2. One creates a 12-character code (valid for 10 minutes).
+2. One creates a 6-character code (valid for 10 minutes).
 3. The other enters it and requests the exchange.
 4. The creator verifies the displayed handle and confirms. The server saves
    both cards in one transaction. Neither card is disclosed by joining alone.
@@ -109,3 +109,25 @@ participants, and existing user blocks are respected.
 Test the SQL with `node scripts/test-internet-card-exchange.mjs` and PGlite
 installed, or set `PGLITE_MODULE` to its module path. Tests execute migrations in
 an isolated database; they do not modify the production service.
+
+## Layer editing
+
+Open **Edit business card**, then drag the text or image directly on the card at
+the top of the editor. No separate start button is needed. Front and
+back have independent layers for the name, title, image, headings, bio, contact,
+and links. Select a layer on the canvas or in the layer menu, then drag it.
+The inspector edits X/Y and width/height in card millimetres, rotation in degrees,
+and font size. Bring to front/send to back changes stacking order; lock prevents
+accidental moves, hide keeps the layer in the design without displaying it.
+Undo/redo covers geometry, stacking, visibility, and switching to automatic layout.
+On Web, arrow keys move the focused layer 0.1 mm (Shift: 1 mm).
+
+The layout uses normalized geometry in `business_cards.design.layers`, shared by
+Web, iOS, and Mac. Existing cards without layers keep automatic layout. Save the
+card after editing. Apply [supabase-schema.sql](supabase-schema.sql) to raise the existing
+JSON size limit to 16 KB; it retains the object-type constraint.
+
+Tests:
+- `node scripts/test-card-layer-data.mjs` (PGlite; native/Web JSON compatibility).
+- `node scripts/test-card-layers-browser.mjs` (Playwright Chromium; pointer
+  gestures, undo/redo, inspector, hidden/locked layers and both sides).

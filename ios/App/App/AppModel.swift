@@ -2,6 +2,27 @@ import Foundation
 import SwiftUI
 import UserNotifications
 
+// Offline previews are disposable: keep one page within a fixed disk budget.
+// Encode each row once, retaining a contiguous prefix for pagination.
+enum TimelinePreviewCache {
+    static let maxPosts = 24
+    static let maxBytes = 2 * 1024 * 1024
+
+    static func encode<T: Encodable>(_ posts: [T]) -> Data {
+        var result = Data([0x5B]) // [
+        let encoder = JSONEncoder()
+        for post in posts.prefix(maxPosts) {
+            guard let row = try? encoder.encode(post) else { break }
+            let separatorBytes = result.count > 1 ? 1 : 0
+            guard result.count + separatorBytes + row.count + 1 <= maxBytes else { break }
+            if separatorBytes > 0 { result.append(0x2C) }
+            result.append(row)
+        }
+        result.append(0x5D) // ]
+        return result
+    }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var session: AuthSession?
@@ -315,7 +336,14 @@ final class AppModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: cachedProfileKey) { me = try? JSONDecoder().decode(Profile.self, from: data) }
         restoreSavedSession()
         if let data = UserDefaults.standard.data(forKey: cachedPostsKey) {
-            let cached = (try? JSONDecoder().decode([Post].self, from: data)) ?? []
+            // Drop oversized caches from older versions before decoding images/posts.
+            let decoded = data.count <= TimelinePreviewCache.maxBytes
+                ? ((try? JSONDecoder().decode([Post].self, from: data)) ?? [])
+                : []
+            let cached = Array(decoded.prefix(TimelinePreviewCache.maxPosts))
+            if data.count > TimelinePreviewCache.maxBytes || decoded.count > TimelinePreviewCache.maxPosts {
+                UserDefaults.standard.set(TimelinePreviewCache.encode(cached), forKey: cachedPostsKey)
+            }
             let canInspect = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && me?.isAdmin == true && me?.id == session?.user.id
             posts = cached.filter { !["only_me", "github_org"].contains($0.visibility ?? "public") || $0.authorID == session?.user.id || canInspect }
         }
@@ -758,7 +786,7 @@ final class AppModel: ObservableObject {
             posts = page
             timelineCursor = page.last
             hasMoreTimelinePosts = page.count == limit
-            if let data = try? JSONEncoder().encode(posts) { UserDefaults.standard.set(data, forKey: cachedPostsKey) }
+            UserDefaults.standard.set(TimelinePreviewCache.encode(posts), forKey: cachedPostsKey)
         }
         catch is CancellationError { return }
         catch let error as URLError where error.code == .cancelled { return }

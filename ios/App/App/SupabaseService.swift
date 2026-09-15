@@ -954,6 +954,40 @@ enum GitHubTaskLoader {
     }
 }
 
+struct BusinessCardLayer: Codable, Equatable, Identifiable {
+    var kind: String
+    var side: String = "front"
+    var x: Double = 10
+    var y: Double = 10
+    var width: Double = 80
+    var height: Double = 16
+    var rotation: Double = 0
+    var fontSize: Double = 14
+    var hidden: Bool = false
+    var locked: Bool = false
+    var id: String { kind }
+    static let kinds = ["frontLabel", "name", "title", "image", "bio", "contact", "links", "backLabel"]
+    var normalized: Self {
+        var value = self
+        func bound(_ n: Double, _ low: Double, _ high: Double) -> Double { n.isFinite ? min(high, max(low, n)) : low }
+        value.side = side == "back" ? "back" : "front"
+        value.width = bound(width, 5, 100); value.height = bound(height, 5, 100)
+        value.x = bound(x, 0, 100 - value.width); value.y = bound(y, 0, 100 - value.height)
+        value.rotation = bound(rotation, -180, 180); value.fontSize = bound(fontSize, 6, 72)
+        return value
+    }
+    static func defaults(card: BusinessCard) -> [Self] {
+        [Self(kind: "frontLabel", x: 8, y: 8, width: 84, height: 10, fontSize: 9),
+         Self(kind: "name", x: 8, y: 28, width: 62, height: 20, fontSize: Double(card.design?.nameSize ?? 26)),
+         Self(kind: "title", x: 8, y: 51, width: 62, height: 18),
+         Self(kind: "image", side: card.image_side ?? "front", x: 74, y: 28, width: 18, height: 30),
+         Self(kind: "links", side: card.links_side ?? "front", x: 8, y: 76, width: 84, height: 18, fontSize: 10),
+         Self(kind: "backLabel", side: "back", x: 8, y: 8, width: 84, height: 10, fontSize: 9),
+         Self(kind: "bio", side: "back", x: 8, y: 28, width: 84, height: 36),
+         Self(kind: "contact", side: "back", x: 8, y: 70, width: 84, height: 20, fontSize: 12)]
+    }
+}
+
 struct BusinessCardDesign: Codable, Equatable {
     static let baseColors: [(String, String)] = [("#18181b",NSLocalizedString("チャコール", comment: "")),("#1d4ed8",NSLocalizedString("ブルー", comment: "")),("#4f46e5",NSLocalizedString("インディゴ", comment: "")),("#7c3aed",NSLocalizedString("パープル", comment: "")),("#be185d",NSLocalizedString("ピンク", comment: "")),("#b91c1c",NSLocalizedString("レッド", comment: "")),("#c2410c",NSLocalizedString("オレンジ", comment: "")),("#0f766e",NSLocalizedString("ティール", comment: "")),("#15803d",NSLocalizedString("グリーン", comment: "")),("#f4e8d0",NSLocalizedString("アイボリー", comment: "")),("#e5e7eb",NSLocalizedString("グレー", comment: "")),("#ffffff",NSLocalizedString("ホワイト", comment: ""))]
     mutating func applyBaseColor(_ hex: String, theme: String = "midnight") {
@@ -998,6 +1032,7 @@ struct BusinessCardDesign: Codable, Equatable {
     var cornerStyle: String?
     var imagePlacement: String?
     var themeVariant: String?
+    var layers: [BusinessCardLayer]?
     static let extraThemes = ["mono", "ghost", "spring", "summer", "autumn", "winter"]
     static func preset(_ theme: String, layout: String = "classic") -> Self {
         let extras = ["mono":["#18181b","#3f3f46","#fafafa","#d4d4d8"], "ghost":["#e8edf5","#b8c5dc","#172033","#566887"], "spring":["#ffe4ed","#d9efde","#482c3c","#9b4766"], "summer":["#cffafe","#38bdf8","#083344","#075985"], "autumn":["#ffedd5","#d97706","#431407","#7c2d12"], "winter":["#eff6ff","#a5c7e7","#172554","#36588a"]]
@@ -1013,7 +1048,11 @@ struct BusinessCardDesign: Codable, Equatable {
                     frontLabel: frontLabel ?? p.frontLabel, backLabel: backLabel ?? p.backLabel,
                     orientation: orientation == "portrait" ? "portrait" : "landscape",
                     cornerStyle: ["diagonal", "diagonalReverse", "square"].contains(cornerStyle ?? "") ? cornerStyle : "rounded",
-                    imagePlacement: imagePlacement == "artwork" ? "artwork" : "inline", themeVariant: themeVariant)
+                    imagePlacement: imagePlacement == "artwork" ? "artwork" : "inline", themeVariant: themeVariant,
+                    layers: layers.map { values in
+                        var seen = Set<String>()
+                        return values.prefix(16).filter { BusinessCardLayer.kinds.contains($0.kind) && seen.insert($0.kind).inserted }.map(\.normalized)
+                    })
     }
 }
 

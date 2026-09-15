@@ -1,0 +1,51 @@
+// Supabase Auth/Vault fixtures: this tests schema SQL, not the hosted services.
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const modulePath = process.env.PGLITE_MODULE || '@electric-sql/pglite';
+const { PGlite } = await import(modulePath);
+const { pgcrypto } = await import(modulePath.includes('/') ? new URL('./contrib/pgcrypto.js', 'file://' + modulePath).href : '@electric-sql/pglite/contrib/pgcrypto');
+const db = new PGlite({ extensions: { pgcrypto } });
+const fixtures = `create role anon; create role authenticated; create role service_role;
+create schema auth;
+create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+create table auth.users(id uuid primary key, instance_id uuid, email text, encrypted_password text, email_confirmed_at timestamptz, created_at timestamptz, updated_at timestamptz, aud text, role text, raw_user_meta_data jsonb, raw_app_meta_data jsonb);
+create table auth.identities(user_id uuid, provider text, identity_data jsonb);
+create schema vault;
+create table vault.secrets(id uuid primary key, decrypted_secret text);
+create view vault.decrypted_secrets as select * from vault.secrets;
+`;
+await db.exec(fixtures);
+const sql = fs.readFileSync('docs/supabase-schema.sql', 'utf8');
+assert.equal((sql.match(/^begin;/gm)||[]).length, 1);
+assert.equal((sql.match(/^commit;/gm)||[]).length, 1);
+assert.ok(!sql.includes('CHANGE_ME_BEFORE_RUNNING'));
+// PGlite lacks Supabase Vault; only its extension installation is substituted.
+const executable = sql.replace('create extension if not exists supabase_vault cascade;', '-- Vault fixture above');
+try {
+ await db.exec(executable);
+ const policies = async () => (await db.query("select tablename,policyname,roles,cmd,qual,with_check from pg_policies where schemaname='public' order by tablename,policyname")).rows;
+ const initialPolicies = await policies();
+ const user = '00000000-0000-0000-0000-000000000001';
+ await db.query(`insert into auth.users(id,raw_user_meta_data) values($1,'{"handle":"test-person"}')`, [user]);
+ await db.query('update profiles set is_operator=true where id=$1', [user]);
+ // Seed an existing organization post without calling external GitHub verification.
+ await db.exec('alter table posts disable trigger user');
+ await db.query("insert into posts(author_id,body,visibility) values($1,'retained','only_me'),($1,'org retained','github_org')", [user]);
+ await db.exec('alter table posts enable trigger user');
+ await db.query("insert into business_cards(owner_id,name,design) values($1,'Retained',jsonb_build_object('text',repeat('x',3000)))", [user]);
+ await db.exec(executable);
+ assert.deepEqual(await policies(), initialPolicies, 'Reapplying must retain the same access policies');
+ assert.equal((await db.query('select is_operator from profiles where id=$1',[user])).rows[0].is_operator,true);
+ assert.equal((await db.query('select count(*)::int as n from posts where author_id=$1',[user])).rows[0].n,2);
+ assert.equal((await db.query('select name from business_cards where owner_id=$1',[user])).rows[0].name,'Retained');
+ assert.equal((await db.query("select has_table_privilege('anon','business_cards','select') as allowed")).rows[0].allowed,false);
+ assert.match((await db.query('select new_business_card_exchange_code() as code')).rows[0].code,/^[0-9A-F]{6}$/);
+ const upgrade = new PGlite({ extensions: { pgcrypto } });
+ await upgrade.exec(fixtures);
+ await upgrade.exec(executable.slice(0, executable.indexOf('-- Stage 45 —')) + '\ncommit;');
+ await upgrade.exec(executable);
+ assert.equal((await upgrade.query("select to_regclass('business_card_exchanges') as name")).rows[0].name,'business_card_exchanges');
+ await upgrade.close();
+ console.log('PASS single SQL: fresh setup, Stage 44 upgrade, identical access policies, repeat with current visibility and large card design, role/data preservation, private cards, short codes');
+} catch (error) { console.error(error.message, error.where || '', error.position ? executable.slice(Number(error.position)-120,Number(error.position)+120):''); process.exitCode=1; }
+await db.close();

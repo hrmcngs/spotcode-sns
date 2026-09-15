@@ -41,7 +41,7 @@ precondition(AppLanguageDefaults.preferredLanguages(saved: ["en"]) == ["en", "ja
 precondition(AppLanguageDefaults.preferredLanguages(saved: ["ja"]) == ["ja"])
 precondition(AppLanguageDefaults.preferredLanguages(saved: ["ja", "en"]) == ["ja", "en"])
 print("Matching catalogue keys/order and English default with explicit Japanese preference passed.")
-for filename in ["AppModel.swift", "SupabaseService.swift", "NativeViews.swift", "NativeModels.swift", "NearbyBusinessCardExchange.swift"] {
+for filename in ["AppModel.swift", "SupabaseService.swift", "NativeViews.swift", "NativeModels.swift", "NearbyBusinessCardExchange.swift", "NativeCardLayers.swift"] {
     let source = try String(contentsOfFile: app + "/" + filename, encoding: .utf8)
     for line in source.components(separatedBy: .newlines) {
         if line.trimmingCharacters(in: .whitespaces).hasPrefix("//") { continue }
@@ -82,7 +82,7 @@ print("Native localization: English/Japanese authentication, notifications, and 
 
 // Every explicit localization lookup, including English source keys, must be
 // available in both languages. Include nearby exchange and UIKit placeholders.
-for filename in ["AppModel.swift", "SupabaseService.swift", "NativeViews.swift", "NearbyBusinessCardExchange.swift"] {
+for filename in ["AppModel.swift", "SupabaseService.swift", "NativeViews.swift", "NearbyBusinessCardExchange.swift", "NativeCardLayers.swift"] {
     let source = try String(contentsOfFile: app + "/" + filename, encoding: .utf8)
     for call in try matches(#"NSLocalizedString\("# + stringPattern, source) {
         let token = try matches(stringPattern, call)[0]

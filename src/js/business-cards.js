@@ -29,6 +29,24 @@ export function defaultDesign(theme = 'midnight', layout = 'classic') {
     font: theme === 'mono' ? 'mono' : 'sans', nameSize: 26, radius: 18, pattern: 'gradient', frontAlign: layout, backAlign: layout,
     frontLabel: 'SPOTCODE / BUSINESS CARD', backLabel: 'LET’S CONNECT', orientation: 'landscape', cornerStyle: 'rounded', imagePlacement: 'inline' };
 }
+export const cardLayerKinds = ['frontLabel','name','title','image','bio','contact','links','backLabel'];
+export function normalizeCardLayers(layers) {
+  if (!Array.isArray(layers)) return undefined;
+  const seen = new Set();
+  const bound = (n, low, high, fallback) => Number.isFinite(Number(n)) ? Math.min(high, Math.max(low, Number(n))) : fallback;
+  return layers.slice(0,16).filter(l => l && cardLayerKinds.includes(l.kind) && !seen.has(l.kind) && seen.add(l.kind)).map(l => {
+    const width = bound(l.width,5,100,80), height = bound(l.height,5,100,16);
+    return {kind:l.kind,side:l.side==='back'?'back':'front',x:bound(l.x,0,100-width,0),y:bound(l.y,0,100-height,0),
+      width,height,rotation:bound(l.rotation,-180,180,0),fontSize:bound(l.fontSize,6,72,14),hidden:l.hidden===true,locked:l.locked===true};
+  });
+}
+export function defaultCardLayers(card) {
+  const layer = (kind,side,x,y,width,height,fontSize=14) => ({kind,side,x,y,width,height,fontSize,rotation:0,hidden:false,locked:false});
+  return [layer('frontLabel','front',8,8,84,10,9),layer('name','front',8,28,62,20,card.design?.nameSize ?? 26),
+    layer('title','front',8,51,62,18),layer('image',card.image_side ?? 'front',74,28,18,30),
+    layer('links',card.links_side ?? 'front',8,76,84,18,10),layer('backLabel','back',8,8,84,10,9),
+    layer('bio','back',8,28,84,36),layer('contact','back',8,70,84,20,12)];
+}
 export function normalizeDesign(value, theme, layout) {
   const defaults = defaultDesign(theme, layout);
   const d = value && typeof value === 'object' ? value : {};
@@ -44,6 +62,7 @@ export function normalizeDesign(value, theme, layout) {
     if (d[key] !== '' && d[key] != null && Number.isFinite(Number(d[key]))) result[key] = Math.round(Math.min(max,Math.max(min,Number(d[key]))));
   }
   for (const key of ['frontLabel','backLabel']) if (typeof d[key] === 'string') result[key] = d[key].slice(0,40);
+  if (Array.isArray(d.layers)) result.layers = normalizeCardLayers(d.layers);
   return result;
 }
 export function cardWebURL(value) {

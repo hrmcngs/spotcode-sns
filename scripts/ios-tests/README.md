@@ -1,5 +1,17 @@
 # iOS regression tests
 
+Native image and offline preview cache limits:
+
+```sh
+node scripts/test-native-performance.mjs
+```
+
+Runs the production ImageIO decoder and preview encoder on macOS. Covers image
+downsampling, repeated-image reuse, reload after eviction, malformed images, and
+the 24-post / 2 MiB preview limit. Only disposable offline previews are bounded;
+online pagination and server posts remain available. Image cache eviction uses
+NSCache's 12 MiB cost target (including cache keys), not a process memory limit.
+
 Common Lisp (SBCL) runs the tests using ASDF/UIOP, which ships with SBCL.
 Swift assertions exercise the app's actual models and authentication error mapper.
 Python and Quicklisp are not required. Run on macOS with SBCL and the Xcode Swift toolchain available.

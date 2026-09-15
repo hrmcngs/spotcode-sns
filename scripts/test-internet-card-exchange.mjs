@@ -10,7 +10,7 @@ grant usage on schema auth to authenticated;
 create table profiles(id uuid primary key, handle text);
 create table user_blocks(blocker_id uuid, blocked_id uuid);
 `);
-for (const migration of ['045-business-cards.sql','048-business-card-collection-read.sql','049-internet-card-exchange.sql']) {
+for (const migration of ['045-business-cards.sql','048-business-card-collection-read.sql','049-internet-card-exchange.sql','050-short-card-exchange-code.sql']) {
  await db.exec(fs.readFileSync('docs/migrations/' + migration, 'utf8'));
 }
 for (const [index, actor] of [host, guest, outsider].entries()) {
@@ -26,7 +26,7 @@ async function action(name, exchange = null, code = null) {
  return (await db.query('select exchange_business_cards($1,$2,$3) as result', [name, exchange, code])).rows[0].result;
 }
 await as(host);
-const created = await action('create'); assert.equal(created.state, 'waiting'); assert.equal(created.code.length, 12);
+const created = await action('create'); assert.equal(created.state, 'waiting'); assert.match(created.code, /^[0-9A-F]{6}$/);
 await assert.rejects(action('join', null, created.code), /Invalid/);
 await as(outsider);
 await assert.rejects(action('status', created.id), /unavailable/);

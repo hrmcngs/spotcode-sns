@@ -1,7 +1,12 @@
--- spotcode-sns Supabase schema (cumulative, applied incrementally per stage).
--- Each block is re-runnable: tables use `if not exists`, and every policy
--- is preceded by `drop policy if exists` because Postgres has no
--- `create policy if not exists` syntax.
+-- spotcode-sns: single entry point for Supabase SQL Editor (Stages 2–51).
+-- Paste this entire file and run once, for either setup or upgrade.
+-- Existing data is retained. Historical migrations remain in docs/migrations.
+-- Requires a Supabase project (Auth and Vault); run as the SQL Editor owner.
+-- Optional QA account provisioning is available in Settings, not automatic.
+begin;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+set local search_path = public, extensions;
 
 -- ===================================================================
 -- Stage 2 / 3 — profiles
@@ -27,10 +32,13 @@ drop policy if exists "profiles are public"           on public.profiles;
 drop policy if exists "owner can insert own profile"  on public.profiles;
 drop policy if exists "owner can update own profile"  on public.profiles;
 
+drop policy if exists "profiles are public" on public.profiles;
 create policy "profiles are public"
   on public.profiles for select using (true);
+drop policy if exists "owner can insert own profile" on public.profiles;
 create policy "owner can insert own profile"
   on public.profiles for insert with check (auth.uid() = id);
+drop policy if exists "owner can update own profile" on public.profiles;
 create policy "owner can update own profile"
   on public.profiles for update using (auth.uid() = id);
 
@@ -73,12 +81,16 @@ drop policy if exists "authors can insert their posts"  on public.posts;
 drop policy if exists "authors can update their posts"  on public.posts;
 drop policy if exists "authors can delete their posts"  on public.posts;
 
+drop policy if exists "posts are public" on public.posts;
 create policy "posts are public"
   on public.posts for select using (true);
+drop policy if exists "authors can insert their posts" on public.posts;
 create policy "authors can insert their posts"
   on public.posts for insert with check (auth.uid() = author_id);
+drop policy if exists "authors can update their posts" on public.posts;
 create policy "authors can update their posts"
   on public.posts for update using (auth.uid() = author_id);
+drop policy if exists "authors can delete their posts" on public.posts;
 create policy "authors can delete their posts"
   on public.posts for delete using (auth.uid() = author_id);
 
@@ -96,10 +108,13 @@ alter table public.likes enable row level security;
 drop policy if exists "likes are public"             on public.likes;
 drop policy if exists "users manage their own likes" on public.likes;
 drop policy if exists "users delete their own likes" on public.likes;
+drop policy if exists "likes are public" on public.likes;
 create policy "likes are public"
   on public.likes for select using (true);
+drop policy if exists "users manage their own likes" on public.likes;
 create policy "users manage their own likes"
   on public.likes for insert with check (auth.uid() = user_id);
+drop policy if exists "users delete their own likes" on public.likes;
 create policy "users delete their own likes"
   on public.likes for delete using (auth.uid() = user_id);
 
@@ -113,10 +128,13 @@ alter table public.follows enable row level security;
 drop policy if exists "follows are public"               on public.follows;
 drop policy if exists "users insert their own follows"   on public.follows;
 drop policy if exists "users delete their own follows"   on public.follows;
+drop policy if exists "follows are public" on public.follows;
 create policy "follows are public"
   on public.follows for select using (true);
+drop policy if exists "users insert their own follows" on public.follows;
 create policy "users insert their own follows"
   on public.follows for insert with check (auth.uid() = follower_id);
+drop policy if exists "users delete their own follows" on public.follows;
 create policy "users delete their own follows"
   on public.follows for delete using (auth.uid() = follower_id);
 
@@ -133,8 +151,10 @@ create table if not exists public.reports (
 alter table public.reports enable row level security;
 drop policy if exists "reporters see their own reports" on public.reports;
 drop policy if exists "anyone can file a report"        on public.reports;
+drop policy if exists "reporters see their own reports" on public.reports;
 create policy "reporters see their own reports"
   on public.reports for select using (auth.uid() = reporter_id);
+drop policy if exists "anyone can file a report" on public.reports;
 create policy "anyone can file a report"
   on public.reports for insert with check (auth.uid() = reporter_id);
 
@@ -325,10 +345,13 @@ alter table public.reposts enable row level security;
 drop policy if exists "reposts are public"            on public.reposts;
 drop policy if exists "users insert their own reposts" on public.reposts;
 drop policy if exists "users delete their own reposts" on public.reposts;
+drop policy if exists "reposts are public" on public.reposts;
 create policy "reposts are public"
   on public.reposts for select using (true);
+drop policy if exists "users insert their own reposts" on public.reposts;
 create policy "users insert their own reposts"
   on public.reposts for insert with check (auth.uid() = user_id);
+drop policy if exists "users delete their own reposts" on public.reposts;
 create policy "users delete their own reposts"
   on public.reposts for delete using (auth.uid() = user_id);
 
@@ -342,6 +365,7 @@ alter table public.bookmarks enable row level security;
 drop policy if exists "bookmarks visible to owner or post author" on public.bookmarks;
 drop policy if exists "users insert their own bookmarks"          on public.bookmarks;
 drop policy if exists "users delete their own bookmarks"          on public.bookmarks;
+drop policy if exists "bookmarks visible to owner or post author" on public.bookmarks;
 create policy "bookmarks visible to owner or post author"
   on public.bookmarks for select using (
     auth.uid() = user_id
@@ -349,8 +373,10 @@ create policy "bookmarks visible to owner or post author"
       select 1 from public.posts p where p.id = post_id and p.author_id = auth.uid()
     )
   );
+drop policy if exists "users insert their own bookmarks" on public.bookmarks;
 create policy "users insert their own bookmarks"
   on public.bookmarks for insert with check (auth.uid() = user_id);
+drop policy if exists "users delete their own bookmarks" on public.bookmarks;
 create policy "users delete their own bookmarks"
   on public.bookmarks for delete using (auth.uid() = user_id);
 
@@ -464,12 +490,16 @@ drop policy if exists "poll votes are public"            on public.poll_votes;
 drop policy if exists "voters can insert their own vote" on public.poll_votes;
 drop policy if exists "voters can change their own vote" on public.poll_votes;
 drop policy if exists "voters can drop their own vote"   on public.poll_votes;
+drop policy if exists "poll votes are public" on public.poll_votes;
 create policy "poll votes are public"
   on public.poll_votes for select using (true);
+drop policy if exists "voters can insert their own vote" on public.poll_votes;
 create policy "voters can insert their own vote"
   on public.poll_votes for insert with check (auth.uid() = user_id);
+drop policy if exists "voters can change their own vote" on public.poll_votes;
 create policy "voters can change their own vote"
   on public.poll_votes for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "voters can drop their own vote" on public.poll_votes;
 create policy "voters can drop their own vote"
   on public.poll_votes for delete using (auth.uid() = user_id);
 
@@ -537,7 +567,7 @@ alter table public.profiles
 
 alter table public.posts
   add column if not exists visibility text default 'public'
-    check (visibility in ('public', 'restricted'));
+    check (visibility in ('public','restricted','mutuals','following','friends','org','only_me','github_org'));
 
 -- ----------------------------------------------------------------------
 -- Stage 17 — Server-side enforcement of visibility / privacy
@@ -629,6 +659,7 @@ create policy "posts visible to allowed viewers"
 -- existence/content.
 
 drop policy if exists "likes are public" on public.likes;
+drop policy if exists "likes visible only on viewable posts" on public.likes;
 create policy "likes visible only on viewable posts"
   on public.likes for select
   using (
@@ -652,6 +683,7 @@ drop policy if exists "bookmarks visible only on viewable posts" on public.bookm
 -- Bookmarks were already author-scoped in Stage 11; we still want to
 -- prevent OTHER users from probing whether someone bookmarked a given
 -- restricted post.
+drop policy if exists "bookmarks visible only on viewable posts" on public.bookmarks;
 create policy "bookmarks visible only on viewable posts"
   on public.bookmarks for select
   using (
@@ -693,7 +725,7 @@ create policy "poll votes visible only on viewable posts"
 
 alter table public.posts drop constraint if exists posts_visibility_check;
 alter table public.posts add constraint posts_visibility_check
-  check (visibility in ('public', 'restricted', 'mutuals', 'following', 'friends', 'org'));
+  check (visibility in ('public','restricted','mutuals','following','friends','org','only_me','github_org'));
 
 drop policy if exists "posts visible to allowed viewers" on public.posts;
 create policy "posts visible to allowed viewers"
@@ -936,131 +968,8 @@ alter table public.profiles
   add column if not exists skills text[] default '{}';
 
 -- ===================================================================
--- Stage 23 — official account + operator role
--- ===================================================================
--- Goal:
---   • A shared "official" profile (@spotcode_official) that the admin
---     and operators can post AS — like a brand account on Twitter,
---     where multiple staffers post under the same identity without
---     sharing the underlying credentials.
---   • Server-side knowledge of who's an operator so RLS can decide
---     whether a "post as official" request is allowed.
---
--- The auth.users row for @spotcode_official is created via the normal
--- /signup UI flow (with a dev+official@... email) — Supabase doesn't
--- expose user-creation to the anon key, so it has to come through
--- signup. After signup, run the `update … set is_official = true`
--- statement below to mark that profile as THE official account.
--- (Same one-time bootstrap pattern as is_admin in Stage 15.)
---
--- @spotcode_dev is just a regular test profile — no schema flag.
+-- Stages 23–24 were superseded by Stage 25; do not drop live role columns.
 
--- 1. Operator flag, mirroring the client-side OPERATOR_HANDLES list
---    in src/js/dev-mode.js. Admins are implicitly operators (the
---    RLS policies below check either flag).
-alter table public.profiles
-  add column if not exists is_operator boolean default false;
-update public.profiles
-  set is_operator = true
-  where handle in ('hrmcngs', 'aya526dev');
-
--- 2. Official-account flag. Partial unique index enforces "at most
---    one official account at a time" — flipping the flag on a second
---    profile fails loudly instead of silently producing two officials.
-alter table public.profiles
-  add column if not exists is_official boolean default false;
-drop index if exists profiles_one_official_uniq;
-create unique index profiles_one_official_uniq
-  on public.profiles ((true)) where is_official = true;
-
--- 3. Posts INSERT: allow author_id = auth.uid() (the existing rule)
---    OR author_id = (the official account's id) when the requester
---    is admin or operator. This is what lets the Composer's
---    "Post as @spotcode_official" toggle work.
-drop policy if exists "authors can insert their posts" on public.posts;
-drop policy if exists "authors or staff-as-official can insert posts" on public.posts;
-create policy "authors or staff-as-official can insert posts"
-  on public.posts for insert with check (
-    auth.uid() = author_id
-    or (
-      exists (select 1 from public.profiles where id = author_id   and is_official = true)
-      and
-      exists (select 1 from public.profiles where id = auth.uid()  and (is_admin = true or is_operator = true))
-    )
-  );
-
--- 4. Posts UPDATE / DELETE on official posts: same staff-only rule.
---    Admin already had a global delete via Stage 15; we add the
---    operator-side coverage here so an operator can take down (or
---    edit a typo on) an official post without escalating to admin.
-drop policy if exists "authors can update their posts" on public.posts;
-drop policy if exists "authors or staff can update posts" on public.posts;
-create policy "authors or staff can update posts"
-  on public.posts for update using (
-    auth.uid() = author_id
-    or (
-      exists (select 1 from public.profiles where id = author_id  and is_official = true)
-      and
-      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
-    )
-  );
-
-drop policy if exists "authors can delete their posts" on public.posts;
-drop policy if exists "authors or staff can delete posts" on public.posts;
-create policy "authors or staff can delete posts"
-  on public.posts for delete using (
-    auth.uid() = author_id
-    or (
-      exists (select 1 from public.profiles where id = author_id  and is_official = true)
-      and
-      exists (select 1 from public.profiles where id = auth.uid() and (is_admin = true or is_operator = true))
-    )
-  );
-
--- 5. One-shot bootstrap — uncomment and run AFTER signing up
---    @spotcode_official via the /signup UI (with the dev+official@…
---    email). Marks that profile as the unique official account.
---
--- update public.profiles set is_official = true where handle = 'spotcode_official';
-
--- ===================================================================
--- Stage 24 — revert Stage 23 (official-account flag + post-as plumbing)
--- ===================================================================
--- Stage 23 added an `is_official` flag + a Composer "Post as
--- @spotcode_official" toggle so admins/operators could publish under
--- the brand account without sharing credentials. We've dropped the
--- toggle UI: the brand account is now just a normal Supabase user
--- (with shared password) that staff log into via the existing
--- account-switcher. None of the schema plumbing is needed any more.
---
--- This stage restores the simple "author = auth.uid()" posts policies
--- and drops the columns + partial unique index added by Stage 23.
--- Safe to run on a DB where Stage 23 was never applied (the DROP …
--- IF EXISTS calls are idempotent).
-
-drop policy if exists "authors or staff-as-official can insert posts" on public.posts;
-drop policy if exists "authors or staff can insert posts"             on public.posts;
-drop policy if exists "authors can insert their posts"                on public.posts;
-create policy "authors can insert their posts"
-  on public.posts for insert with check (auth.uid() = author_id);
-
-drop policy if exists "authors or staff can update posts" on public.posts;
-drop policy if exists "authors can update their posts"   on public.posts;
-create policy "authors can update their posts"
-  on public.posts for update using (auth.uid() = author_id);
-
-drop policy if exists "authors or staff can delete posts" on public.posts;
-drop policy if exists "authors can delete their posts"   on public.posts;
-create policy "authors can delete their posts"
-  on public.posts for delete using (auth.uid() = author_id);
--- (Stage 15's "admins can delete any post" stays — moderators still
--- need the global delete hammer for spam / harassment cleanup.)
-
-drop index if exists profiles_one_official_uniq;
-alter table public.profiles drop column if exists is_official;
-alter table public.profiles drop column if exists is_operator;
-
--- ===================================================================
 -- Stage 25 — bring back the "post as official via privilege" plumbing
 -- ===================================================================
 -- We tried two flavours:
@@ -1109,6 +1018,7 @@ create unique index profiles_one_official_uniq
 drop policy if exists "authors or staff-as-official can insert posts" on public.posts;
 drop policy if exists "authors or staff can insert posts"             on public.posts;
 drop policy if exists "authors can insert their posts"                on public.posts;
+drop policy if exists "authors or staff-as-official can insert posts" on public.posts;
 create policy "authors or staff-as-official can insert posts"
   on public.posts for insert with check (
     auth.uid() = author_id
@@ -1124,6 +1034,7 @@ create policy "authors or staff-as-official can insert posts"
 --    typo or take it down without escalating to another role.
 drop policy if exists "authors or staff can update posts" on public.posts;
 drop policy if exists "authors can update their posts"   on public.posts;
+drop policy if exists "authors or staff can update posts" on public.posts;
 create policy "authors or staff can update posts"
   on public.posts for update using (
     auth.uid() = author_id
@@ -1136,6 +1047,7 @@ create policy "authors or staff can update posts"
 
 drop policy if exists "authors or staff can delete posts" on public.posts;
 drop policy if exists "authors can delete their posts"   on public.posts;
+drop policy if exists "authors or staff can delete posts" on public.posts;
 create policy "authors or staff can delete posts"
   on public.posts for delete using (
     auth.uid() = author_id
@@ -1248,77 +1160,13 @@ create policy "users or staff-as-official delete follows"
 -- (SELECT stays public — `follows are public` from Stage 5.)
 
 -- ===================================================================
--- Stage 27 — bootstrap the @spotcode_dev QA test account
--- ===================================================================
--- Same shape as Stage 25's official-account bootstrap, just for the
--- QA test login. Unlike the brand account this one IS meant to be
--- logged into directly (admin uses it to QA the regular-user
--- surface), so pick a real password before running the block — the
--- placeholder `CHANGE_ME_BEFORE_RUNNING` is rejected on purpose so
--- you can't accidentally provision a weak account.
---
--- Idempotent: re-running on a DB that already has the row only
--- repairs handle / name / role fields, never touches the password.
+-- Stage 27 (optional QA account) is not run automatically.
+-- Staff can provision it through Settings using ensure_dev_account (Stage 29).
 
-do $$
-declare
-  v_id      uuid;
-  v_pass    text := 'CHANGE_ME_BEFORE_RUNNING';
-  v_email   text := 'dev.test.account@spotcode-sns.local';
-  v_handle  text := 'spotcode_dev';
-  v_name    text := 'spotcode dev';
-begin
-  if v_pass = 'CHANGE_ME_BEFORE_RUNNING' then
-    raise exception 'Set v_pass to your chosen QA password before running Stage 27 (then save it in your password manager).';
-  end if;
-
-  select id into v_id from auth.users where email = v_email;
-  if v_id is null then
-    -- auth.users.id has no DEFAULT in some Supabase project versions,
-    -- so generate it explicitly. Same pattern as Stage 25.
-    insert into auth.users (
-      id, instance_id, email, encrypted_password,
-      email_confirmed_at, created_at, updated_at,
-      aud, role,
-      raw_user_meta_data, raw_app_meta_data
-    )
-    values (
-      gen_random_uuid(),
-      '00000000-0000-0000-0000-000000000000',
-      v_email,
-      crypt(v_pass, gen_salt('bf')),
-      now(), now(), now(),
-      'authenticated', 'authenticated',
-      jsonb_build_object('handle', v_handle, 'name', v_name),
-      '{"provider":"email","providers":["email"]}'::jsonb
-    )
-    returning id into v_id;
-    -- The handle_new_user trigger (Stage 2/3) already created the
-    -- profiles row using the metadata above.
-  end if;
-
-  -- Heal the profile row in case the trigger ran with empty metadata
-  -- on older DBs, or someone manually edited it.
-  insert into public.profiles (id, handle, name, role)
-  values (v_id, v_handle, v_name, 'general')
-  on conflict (id) do update set
-    handle = excluded.handle,
-    name   = excluded.name,
-    role   = excluded.role;
-end $$;
--- (No is_official / is_admin / is_operator flags — @spotcode_dev is
--- explicitly a plain user; the admin uses it to QA what a regular
--- viewer sees.)
-
--- ===================================================================
 -- Stage 28 — one-line dev-password helper for the SQL Editor
 -- ===================================================================
--- Stage 27 requires editing a `v_pass :=` line inside its DO block
--- before pasting — easy to mess up, can't be aliased in a snippet.
--- This SECURITY DEFINER function takes the password as an argument
--- so the SQL Editor call is a single line you can keep in your
--- password manager's "Notes" field:
---
+-- Optional password rotation for a QA account already provisioned via Settings
+-- (ensure_dev_account in Stage 29). SQL Editor only:
 --   select public.set_dev_password('your-strong-pass');
 --
 -- @spotcode_official is intentionally NOT covered — by design the
@@ -1347,7 +1195,7 @@ begin
   end if;
   select id into v_id from auth.users where email = 'dev.test.account@spotcode-sns.local';
   if v_id is null then
-    raise exception 'Run Stage 27 first — it provisions the @spotcode_dev auth.users row.';
+    raise exception 'Create the QA account in Settings first (ensure_dev_account).';
   end if;
   update auth.users
   set encrypted_password = crypt(new_pass, gen_salt('bf')),
@@ -1510,6 +1358,7 @@ $$;
 revoke execute on function public.can_manage_official_profile() from public, anon;
 grant execute on function public.can_manage_official_profile() to authenticated;
 
+drop policy if exists "staff can update official profile" on public.profiles;
 create policy "staff can update official profile"
   on public.profiles for update
   using (
@@ -1532,10 +1381,13 @@ alter table public.issue_display_preferences enable row level security;
 drop policy if exists "users read own issue preferences" on public.issue_display_preferences;
 drop policy if exists "users insert own issue preferences" on public.issue_display_preferences;
 drop policy if exists "users update own issue preferences" on public.issue_display_preferences;
+drop policy if exists "users read own issue preferences" on public.issue_display_preferences;
 create policy "users read own issue preferences" on public.issue_display_preferences
   for select using (auth.uid() = user_id);
+drop policy if exists "users insert own issue preferences" on public.issue_display_preferences;
 create policy "users insert own issue preferences" on public.issue_display_preferences
   for insert with check (auth.uid() = user_id);
+drop policy if exists "users update own issue preferences" on public.issue_display_preferences;
 create policy "users update own issue preferences" on public.issue_display_preferences
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
@@ -1616,11 +1468,10 @@ grant execute on function public.delete_github_private_issue_token() to authenti
 -- Stage 35 — Only-me posts (apply before deploying the clients).
 -- Restrictive policy also blocks the existing staff moderation exceptions.
 -- Existing audience policies still decide access to all other posts.
-begin;
 
 alter table public.posts drop constraint if exists posts_visibility_check;
 alter table public.posts add constraint posts_visibility_check
-  check (visibility in ('public', 'restricted', 'mutuals', 'following', 'friends', 'org', 'only_me'));
+  check (visibility in ('public','restricted','mutuals','following','friends','org','only_me','github_org'));
 
 drop policy if exists "only-me posts belong to their author" on public.posts;
 create policy "only-me posts belong to their author"
@@ -1628,10 +1479,8 @@ create policy "only-me posts belong to their author"
   using (visibility is distinct from 'only_me' or auth.uid() = author_id)
   with check (visibility is distinct from 'only_me' or auth.uid() = author_id);
 
-commit;
 
 -- Stage 36 — Admin read access to only-me posts in developer mode.
-begin;
 
 drop policy if exists "only-me posts belong to their author" on public.posts;
 
@@ -1660,10 +1509,8 @@ drop policy if exists "only-me delete access" on public.posts;
 create policy "only-me delete access" on public.posts as restrictive for delete
 using (visibility is distinct from 'only_me' or auth.uid() = author_id);
 
-commit;
 
 -- Verified GitHub Organization membership and post audiences.
-begin;
 
 create table if not exists public.github_org_memberships (
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -1757,11 +1604,10 @@ using (
     and exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin = true)
   )
 );
-commit;
 
 -- Stage 39: Display member contributions under the linked organization account.
 -- Requires Stage 38. author_id remains the actual author for ownership/audiences.
-begin;
+
 alter table public.posts add column if not exists organization_author_id uuid
   references public.profiles(id) on delete set null;
 -- Also repair installations where the column existed without its foreign key.
@@ -1842,18 +1688,16 @@ begin
   return new;
 end $$;
 notify pgrst, 'reload schema';
-commit;
 
 -- Explicit opt-in: existing implicit 'all repositories' is not a selection.
-begin;
+
 alter table public.issue_display_preferences
   add column if not exists selected_repos text[] not null default '{}';
 notify pgrst, 'reload schema';
-commit;
 
 -- Organization accounts authorize through a GitHub organization owner.
 -- Personal identity linking remains required for personal memberships.
-begin;
+
 create or replace function public.is_verified_github_org_member(p_org bigint)
 returns boolean language sql stable security definer set search_path = public, auth as $$
   select exists (
@@ -1872,10 +1716,9 @@ $$;
 revoke all on function public.is_verified_github_org_member(bigint) from public, anon;
 grant execute on function public.is_verified_github_org_member(bigint) to anon, authenticated;
 notify pgrst, 'reload schema';
-commit;
 
 -- Requires the Organization setup repair (Stages 38, 39, 41).
-begin;
+
 alter table public.github_org_accounts add column if not exists verification_method text;
 alter table public.github_org_accounts add column if not exists verification_token text;
 create table if not exists public.github_org_file_challenges (
@@ -1923,9 +1766,8 @@ $$;
 revoke all on function public.is_verified_github_org_member(bigint) from public,anon;
 grant execute on function public.is_verified_github_org_member(bigint) to anon,authenticated;
 notify pgrst, 'reload schema';
-commit;
 
-begin;
+
 create table if not exists public.user_blocks (
  blocker_id uuid not null references public.profiles(id) on delete cascade,
  blocked_id uuid not null references public.profiles(id) on delete cascade,
@@ -1991,10 +1833,9 @@ create policy "hide blocked posts" on public.posts as restrictive for select
 drop policy if exists "hide blocked comments" on public.comments;
 create policy "hide blocked comments" on public.comments as restrictive for select using(not public.has_blocked(author_id));
 notify pgrst,'reload schema';
-commit;
 
 -- Stage 44: social controls and followed-post district notifications
-begin;
+
 create table if not exists public.user_mutes (
  user_id uuid not null references public.profiles(id) on delete cascade,
  muted_id uuid not null references public.profiles(id) on delete cascade,
@@ -2058,4 +1899,217 @@ $$;
 revoke all on function public.followed_post_notifications(text,integer) from public,anon;
 grant execute on function public.followed_post_notifications(text,integer) to authenticated;
 notify pgrst,'reload schema';
+
+-- ===================================================================
+-- Stage 45 — business-cards
+-- ===================================================================
+-- Run before deploying the business-card UI. Only explicitly saved cards are public.
+
+create table if not exists public.business_cards (
+  owner_id uuid primary key references public.profiles(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 60),
+  title text not null default '' check (char_length(title) <= 100),
+  bio text not null default '' check (char_length(bio) <= 280),
+  contact text not null default '' check (char_length(contact) <= 160),
+  theme text not null default 'midnight' check (theme in ('midnight', 'paper', 'aurora')),
+  layout text not null default 'classic' check (layout in ('classic', 'centered'))
+);
+create table if not exists public.business_card_collection (
+  collector_id uuid not null references public.profiles(id) on delete cascade,
+  card_owner_id uuid not null references public.business_cards(owner_id) on delete cascade,
+  collected_at timestamptz not null default now(),
+  primary key (collector_id, card_owner_id),
+  check (collector_id <> card_owner_id)
+);
+alter table public.business_cards enable row level security;
+alter table public.business_card_collection enable row level security;
+drop policy if exists "published cards are readable" on public.business_cards;
+create policy "published cards are readable" on public.business_cards for select to anon, authenticated using (true);
+drop policy if exists "owners create cards" on public.business_cards;
+create policy "owners create cards" on public.business_cards for insert to authenticated with check (owner_id = auth.uid());
+drop policy if exists "owners edit cards" on public.business_cards;
+create policy "owners edit cards" on public.business_cards for update to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+drop policy if exists "owners unpublish cards" on public.business_cards;
+create policy "owners unpublish cards" on public.business_cards for delete to authenticated using (owner_id = auth.uid());
+drop policy if exists "collectors read their collection" on public.business_card_collection;
+create policy "collectors read their collection" on public.business_card_collection for select to authenticated using (collector_id = auth.uid());
+drop policy if exists "collectors save cards" on public.business_card_collection;
+create policy "collectors save cards" on public.business_card_collection for insert to authenticated with check (collector_id = auth.uid());
+drop policy if exists "collectors remove cards" on public.business_card_collection;
+create policy "collectors remove cards" on public.business_card_collection for delete to authenticated using (collector_id = auth.uid());
+grant select on public.business_cards to anon;
+grant select, insert, update, delete on public.business_cards to authenticated;
+grant select, insert, delete on public.business_card_collection to authenticated;
+
+-- ===================================================================
+-- Stage 46 — business-card-design
+-- ===================================================================
+-- Apply after 045. Existing cards keep their original preset appearance.
+
+alter table public.business_cards add column if not exists design jsonb not null default '{}'::jsonb
+  check (jsonb_typeof(design) = 'object' and octet_length(design::text) <= 2048);
+
+-- ===================================================================
+-- Stage 47 — business-card-media
+-- ===================================================================
+
+alter table public.business_cards
+  add column if not exists image_url text not null default '' check (octet_length(image_url) <= 1000000),
+  add column if not exists image_side text not null default 'front' check (image_side in ('front','back')),
+  add column if not exists image_shape text not null default 'square' check (image_shape in ('square','round')),
+  add column if not exists image_size integer not null default 64 check (image_size between 48 and 100),
+  add column if not exists image_link text not null default '' check (char_length(image_link) <= 2048),
+  add column if not exists links_side text not null default 'front' check (links_side in ('front','back')),
+  add column if not exists links jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(links) = 'array' and jsonb_array_length(links) <= 3 and octet_length(links::text) <= 10000);
+
+-- ===================================================================
+-- Stage 48 — business-card-collection-read
+-- ===================================================================
+-- Apply before releasing clients. Only owners and collectors can read card data.
+
+drop policy if exists "published cards are readable" on public.business_cards;
+drop policy if exists "owners and collectors read cards" on public.business_cards;
+create policy "owners and collectors read cards"
+on public.business_cards for select to authenticated
+using (
+  owner_id = (select auth.uid())
+  or exists (
+    select 1 from public.business_card_collection c
+    where c.card_owner_id = business_cards.owner_id
+      and c.collector_id = (select auth.uid())
+  )
+);
+revoke select on public.business_cards from anon;
+-- Collection INSERT remains scoped to auth.uid(); its foreign key checks that
+-- the card exists without requiring SELECT access before it is collected.
+
+-- ===================================================================
+-- Stage 49 — internet-card-exchange
+-- ===================================================================
+-- Internet transport for card exchange. Apply after 048.
+
+create table if not exists public.business_card_exchanges (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique default upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12)),
+  host_id uuid not null references public.business_cards(owner_id) on delete cascade,
+  guest_id uuid references public.business_cards(owner_id) on delete cascade,
+  state text not null default 'waiting' check (state in ('waiting','pending','completed','cancelled','expired')),
+  expires_at timestamptz not null default now() + interval '10 minutes',
+  check (guest_id is null or guest_id <> host_id)
+);
+alter table public.business_card_exchanges enable row level security;
+-- Clients use the RPC only; no public code directory or direct mutations.
+revoke all on public.business_card_exchanges from anon, authenticated;
+
+create or replace function public.exchange_business_cards(
+  p_action text, p_id uuid default null, p_code text default null
+) returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  actor uuid := auth.uid();
+  exchange public.business_card_exchanges%rowtype;
+begin
+  if actor is null then raise exception 'Sign in required'; end if;
+  if p_action = 'create' then
+    if not exists(select 1 from public.business_cards where owner_id = actor) then
+      raise exception 'Publish your business card first';
+    end if;
+    -- At most one active code per host. Old/completed exchanges retain receipts.
+    perform 1 from public.business_cards where owner_id = actor for update;
+    update public.business_card_exchanges set state = 'cancelled'
+      where host_id = actor and state in ('waiting','pending');
+    insert into public.business_card_exchanges(host_id) values(actor) returning * into exchange;
+  elsif p_action = 'join' then
+    select * into exchange from public.business_card_exchanges
+      where code = upper(regexp_replace(coalesce(p_code,''), '[^a-zA-Z0-9]', '', 'g')) for update;
+    if not found or exchange.expires_at <= now() or exchange.host_id = actor
+       or exchange.state not in ('waiting','pending')
+       or (exchange.guest_id is not null and exchange.guest_id <> actor) then
+      raise exception 'Invalid or expired exchange code';
+    end if;
+    if not exists(select 1 from public.business_cards where owner_id = actor) then
+      raise exception 'Publish your business card first';
+    end if;
+    if exists(select 1 from public.user_blocks where
+        (blocker_id = actor and blocked_id = exchange.host_id) or
+        (blocked_id = actor and blocker_id = exchange.host_id)) then
+      raise exception 'Exchange unavailable';
+    end if;
+    update public.business_card_exchanges set guest_id = actor, state = 'pending'
+      where id = exchange.id returning * into exchange;
+  else
+    select * into exchange from public.business_card_exchanges where id = p_id for update;
+    if not found or (actor <> exchange.host_id and actor is distinct from exchange.guest_id) then
+      raise exception 'Exchange unavailable';
+    end if;
+    if exchange.state in ('waiting','pending') and exchange.expires_at <= now() then
+      update public.business_card_exchanges set state = 'expired' where id = exchange.id returning * into exchange;
+    end if;
+    if p_action = 'accept' then
+      if actor <> exchange.host_id then raise exception 'Only the host may confirm'; end if;
+      if exchange.state = 'pending' then
+        if exists(select 1 from public.user_blocks where
+            (blocker_id = exchange.host_id and blocked_id = exchange.guest_id) or
+            (blocked_id = exchange.host_id and blocker_id = exchange.guest_id)) then
+          raise exception 'Exchange unavailable';
+        end if;
+        -- Join is guest consent; accept is host consent. Save both or neither.
+        insert into public.business_card_collection(collector_id, card_owner_id)
+          values(exchange.host_id, exchange.guest_id), (exchange.guest_id, exchange.host_id)
+          on conflict do nothing;
+        update public.business_card_exchanges set state = 'completed' where id = exchange.id returning * into exchange;
+      elsif exchange.state <> 'completed' then raise exception 'Exchange is not pending';
+      end if;
+    elsif p_action = 'cancel' then
+      if exchange.state in ('waiting','pending') then
+        update public.business_card_exchanges set state = 'cancelled' where id = exchange.id returning * into exchange;
+      end if;
+    elsif p_action <> 'status' then raise exception 'Unknown action';
+    end if;
+  end if;
+  return jsonb_build_object('id',exchange.id,'code',exchange.code,'hostID',exchange.host_id,
+    'guestID',exchange.guest_id,'state',exchange.state,'expiresAt',exchange.expires_at,
+    'hostHandle',(select handle from public.profiles where id = exchange.host_id),
+    'guestHandle',(select handle from public.profiles where id = exchange.guest_id));
+end;
+$$;
+revoke all on function public.exchange_business_cards(text,uuid,text) from public, anon;
+grant execute on function public.exchange_business_cards(text,uuid,text) to authenticated;
+
+-- ===================================================================
+-- Stage 50 — short-card-exchange-code
+-- ===================================================================
+-- Shorten newly created codes; existing codes remain usable until expiry.
+
+create or replace function public.new_business_card_exchange_code()
+returns text language plpgsql set search_path = public, pg_temp as $$
+declare
+  candidate text;
+begin
+  for attempt in 1..100 loop
+    candidate := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
+    -- Serialize equal candidates until their inserts commit, so concurrent
+    -- creations cannot collide with this code or an existing receipt.
+    perform pg_advisory_xact_lock(hashtext('card-exchange:' || candidate));
+    if not exists(select 1 from public.business_card_exchanges where code = candidate) then
+      return candidate;
+    end if;
+  end loop;
+  raise exception 'Could not allocate exchange code';
+end;
+$$;
+revoke all on function public.new_business_card_exchange_code() from public, anon, authenticated;
+alter table public.business_card_exchanges alter column code
+  set default public.new_business_card_exchange_code();
+
+-- ===================================================================
+-- Stage 51 — business-card-layers
+-- ===================================================================
+-- Preserve existing preset cards while allowing bounded per-layer geometry.
+
+alter table public.business_cards drop constraint if exists business_cards_design_check;
+alter table public.business_cards add constraint business_cards_design_check
+  check (jsonb_typeof(design) = 'object' and octet_length(design::text) <= 16384);
+
+notify pgrst, 'reload schema';
 commit;
