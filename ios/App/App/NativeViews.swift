@@ -5889,6 +5889,7 @@ private struct BusinessCardView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var fullscreenCard = false
+    @State private var restricted = false
     @State private var loadedCard: BusinessCard?
     @State private var syncing = false
     let profile: Profile
@@ -5913,6 +5914,14 @@ private struct BusinessCardView: View {
             VStack(spacing: 0) {
                 if loading { ProgressView() }
                 else if failed { Button(NSLocalizedString("再読み込み", comment: "")) { Task { await load() } } }
+                else if restricted {
+                    Text(NSLocalizedString("コレクションに保存した相手の名刺だけ閲覧できます。", comment: "")).padding()
+                    if model.session != nil {
+                        Button(NSLocalizedString("コレクションに保存", comment: "")) { collect() }.disabled(busy)
+                    } else {
+                        Text(NSLocalizedString("保存するにはログインしてください。", comment: "")).padding()
+                    }
+                }
                 else if published || own {
                     BusinessCardPreview(card: draft)
                         .frame(width: viewport.size.width, height: ((draft.design?.orientation == "portrait" ? 91.0 : 55.0) * 96 / 25.4 * 0.85) + 160)
@@ -5953,7 +5962,7 @@ private struct BusinessCardView: View {
                 if own { NavigationLink(NSLocalizedString("名刺コレクション", comment: ""), destination: BusinessCardCollectionView()) }
             }.frame(maxWidth: .infinity)
         }.navigationTitle("")
-            .task(id: profile.id) { await load() }
+            .task(id: model.session?.user.id) { await load() }
             .onChange(of: scenePhase) { phase in
                 if phase == .active { Task { await syncCard() } }
             }
@@ -6093,15 +6102,28 @@ private struct BusinessCardView: View {
         })
     }
     private func load() async {
-        loading = true; failed = false; message = ""
+        loading = true; failed = false; restricted = false; published = false; fullscreenCard = false; message = ""
         defer { loading = false }
         guard let id = profile.id else { failed = true; message = NSLocalizedString("プロフィールが見つかりません。", comment: ""); return }
         do {
-            let card = try await SupabaseService.shared.businessCard(ownerID: id, token: model.session?.accessToken)
+            let viewer = model.session?.user.id
+            let card: BusinessCard?
+            if viewer != nil {
+                card = try await model.withRefreshedSession { token in
+                    try await SupabaseService.shared.businessCard(ownerID: id, viewerID: viewer, token: token)
+                }
+            } else { throw BusinessCardAccessError.notCollected }
+            guard !Task.isCancelled, model.session?.user.id == viewer else { return }
             draft = card ?? BusinessCard(owner_id: id, name: profile.name)
             loadedCard = draft
             cardImageURL = draft.image_url?.hasPrefix("data:") == false ? draft.image_url! : ""
+            restricted = false
             published = card != nil
+        } catch is CancellationError { return
+        } catch BusinessCardAccessError.notCollected {
+            guard !Task.isCancelled else { return }
+            restricted = true; published = false; fullscreenCard = false
+            draft = BusinessCard(owner_id: id, name: profile.name); loadedCard = draft
         } catch { failed = true; message = NSLocalizedString("名刺を読み込めませんでした。接続を確認して再試行してください。", comment: "") }
     }
     private func syncCard() async {
@@ -6109,12 +6131,25 @@ private struct BusinessCardView: View {
         syncing = true
         defer { syncing = false }
         do {
-            let card = try await SupabaseService.shared.businessCard(ownerID: id, token: model.session?.accessToken)
+            let viewer = model.session?.user.id
+            let card: BusinessCard?
+            if viewer != nil {
+                card = try await model.withRefreshedSession { token in
+                    try await SupabaseService.shared.businessCard(ownerID: id, viewerID: viewer, token: token)
+                }
+            } else { throw BusinessCardAccessError.notCollected }
+            guard !Task.isCancelled, model.session?.user.id == viewer else { return }
             guard !Task.isCancelled, !busy, !editingCard, draft == loadedCard else { return }
             draft = card ?? BusinessCard(owner_id: id, name: profile.name)
             loadedCard = draft
             cardImageURL = draft.image_url?.hasPrefix("data:") == false ? draft.image_url! : ""
+            restricted = false
             published = card != nil
+        } catch is CancellationError { return
+        } catch BusinessCardAccessError.notCollected {
+            guard !Task.isCancelled else { return }
+            restricted = true; published = false; fullscreenCard = false
+            draft = BusinessCard(owner_id: id, name: profile.name); loadedCard = draft
         } catch { message = NSLocalizedString("最新の名刺を取得できませんでした。接続を確認してください。", comment: "") }
     }
     private func save() {
@@ -6152,7 +6187,9 @@ private struct BusinessCardView: View {
         busy = true
         Task {
             defer { busy = false }
-            do { try await SupabaseService.shared.collectBusinessCard(ownerID: id, collectorID: session.user.id, token: session.accessToken); message = NSLocalizedString("コレクションに保存しました。自分の名刺も共有しましょう。", comment: "") }
+            do { try await model.withRefreshedSession { token in
+                try await SupabaseService.shared.collectBusinessCard(ownerID: id, collectorID: session.user.id, token: token)
+            }; await load(); message = NSLocalizedString("コレクションに保存しました。自分の名刺も共有しましょう。", comment: "") }
             catch { message = NSLocalizedString("保存できませんでした。再試行してください。", comment: "") }
         }
     }

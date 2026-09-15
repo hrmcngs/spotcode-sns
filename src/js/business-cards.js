@@ -92,6 +92,13 @@ export async function loadCard(handle) {
   const db = await getClient();
   const profile = check(await db.from('profiles').select('id,handle,name').eq('handle', handle).maybeSingle());
   if (!profile) throw new Error(t("ユーザーが見つかりません。"));
+  const viewer = currentUser()?.id;
+  if (viewer !== profile.id) {
+    if (!viewer) return { profile, card: null, restricted: true };
+    const saved = check(await db.from('business_card_collection').select('card_owner_id')
+      .eq('collector_id', viewer).eq('card_owner_id', profile.id).maybeSingle());
+    if (!saved) return { profile, card: null, restricted: true };
+  }
   const card = check(await db.from('business_cards').select('*').eq('owner_id', profile.id).maybeSingle());
   return { profile, card };
 }

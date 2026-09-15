@@ -225,9 +225,6 @@ struct NearbyBusinessCardExchangeView: View {
         do {
             let session = try await model.validSession()
             guard session.user.id == ownerID else { return }
-            guard try await SupabaseService.shared.businessCard(ownerID: received, token: session.accessToken) != nil else {
-                saveError = NSLocalizedString("相手の名刺が公開されていません。", comment: ""); return
-            }
             try Task.checkCancellation()
             guard model.session?.user.id == ownerID, exchange.receivedOwnerID == received else { return }
             try await SupabaseService.shared.collectBusinessCard(ownerID: received, collectorID: ownerID, token: session.accessToken)

@@ -1057,8 +1057,16 @@ struct CollectedBusinessCard: Decodable, Identifiable {
     var id: UUID { card_owner_id }
 }
 
+enum BusinessCardAccessError: Error { case notCollected }
+
 extension SupabaseService {
-    func businessCard(ownerID: UUID, token: String?) async throws -> BusinessCard? {
+    func businessCard(ownerID: UUID, viewerID: UUID?, token: String?) async throws -> BusinessCard? {
+        guard let viewerID, token != nil else { throw BusinessCardAccessError.notCollected }
+        if viewerID != ownerID {
+            struct SavedCard: Decodable { let card_owner_id: UUID }
+            let saved: [SavedCard] = try await request("rest/v1/business_card_collection?collector_id=eq.\(viewerID.uuidString)&card_owner_id=eq.\(ownerID.uuidString)&select=card_owner_id", token: token)
+            guard !saved.isEmpty else { throw BusinessCardAccessError.notCollected }
+        }
         let cards: [BusinessCard] = try await request("rest/v1/business_cards?owner_id=eq.\(ownerID.uuidString)&select=*", token: token)
         return cards.first
     }

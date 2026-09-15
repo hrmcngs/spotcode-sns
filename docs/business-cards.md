@@ -67,3 +67,20 @@ Web Share非対応時はリンクコピーへ案内する。キャンセルを�
 ### 実寸を基準にした表示
 
 名刺は通常表示・全画面・コレクションで共通の91×55mm基準（縦向きは55×91mm）に固定し、画面に合わせた拡大はしません。全画面下の「実寸調整」で定規に合わせて補正できます。補正は名刺デザインと分けて、そのアプリ／ブラウザ内に保存します。画面の物理密度や表示倍率は自動確定できないため、モニターや表示倍率を変えた場合は再調整が必要です。
+
+## Collection-only access
+
+Apply `docs/migrations/048-business-card-collection-read.sql` before releasing
+this client version. It replaces public SELECT access with owner-or-collector
+row-level security and removes anonymous SELECT access. The existing collection
+INSERT policy still requires the authenticated collector's own ID; saving an
+existing card grants that collector read access, and removing it revokes access.
+
+Web and native direct links show a collection prompt without fetching card data
+until the viewer has saved the card. Owners can always read/edit their own card.
+Nearby exchange saves the received owner ID first; the foreign key rejects cards
+that no longer exist. No public card read is needed for exchange.
+
+Run `node scripts/test-business-card-access.mjs` for client access regression
+checks. The SQL policy checks in that script are static; verify the migration
+against the target database before deployment.

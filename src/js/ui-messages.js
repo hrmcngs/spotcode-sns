@@ -1,6 +1,7 @@
 // Source-language keys for shared controls, status messages, and accessibility labels.
 // User-authored content is never passed through this dictionary.
 export const UI_EN = {
+  "コレクションに保存した相手の名刺だけ閲覧できます。": "You can only view business cards you have saved to your collection.",
   "ハンドルは半角英数 _ - の 2〜20 文字（先頭は - 不可）": "Handle must be 2-20 chars: A-Z a-z 0-9 _ - (cannot start with -)",
   "ログインしてください": "Please sign in",
   "GitHub Organizationを連携してください": "Connect your GitHub organization.",
