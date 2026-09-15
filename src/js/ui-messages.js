@@ -1,6 +1,10 @@
 // Source-language keys for shared controls, status messages, and accessibility labels.
 // User-authored content is never passed through this dictionary.
 export const UI_EN = {
+  "アンバー": "Amber",
+  "ローズ": "Rose",
+  "スレート": "Slate",
+
   "標準": "Default",
   "テーマカラー": "Color theme",
   "どのテーマでもライト・ダークを選べます。システム設定にも自動で合わせられます。": "Every theme supports Light, Dark, and System appearance.",

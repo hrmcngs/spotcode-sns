@@ -1,4 +1,4 @@
-import { applyTheme, themePreference, applyColorTheme, colorThemePreference, COLOR_THEMES } from '../theme.js';
+import { applyTheme, themePreference, applyColorTheme, colorThemePreference, COLOR_THEMES, COLOR_THEME_LABELS } from '../theme.js';
 import { followedPostScope, setFollowedPostScope } from '../push-notify.js';
 import { githubRepositories } from '../github-repositories.js';
 import { publicTaskRepositories } from '../task-repositories.js';
@@ -476,10 +476,9 @@ function displaySection() {
       '</select><div class="settings-color-theme">' +
       '<label for="settings-color-theme">' + t('テーマカラー') + '</label>' +
       '<select id="settings-color-theme"><option value="standard">' + t('標準') + '</option>' +
-      Object.keys(COLOR_THEMES).sort().map(name => '<option value="' + name + '"' + (colorThemePreference() === name ? ' selected' : '') + '>' + name + '</option>').join('') +
+      Object.keys(COLOR_THEMES).sort().map(name => '<option value="' + name + '"' + (colorThemePreference() === name ? ' selected' : '') + '>' + t(COLOR_THEME_LABELS[name]) + '</option>').join('') +
       '</select></div><div class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></div>' +
-      '<p class="settings__hint">' + t('どのテーマでもライト・ダークを選べます。システム設定にも自動で合わせられます。') + '</p>' +
-      '<p><a href="https://github.com/anuraghazra/github-readme-stats/blob/master/themes/README.md" target="_blank" rel="noopener">GitHub Readme Stats</a> · <a href="' + (window.__BASE__ || './') + 'data/readme-themes-LICENSE.txt" target="_blank" rel="noopener">MIT License</a></p></section>' +
+      '</section>' +
     '<section class="settings-card">' +
       '<h2>' + t('settings.lang.title') + '</h2>' +
       '<p class="settings__hint">' + t('settings.lang.hint') + '</p>' +

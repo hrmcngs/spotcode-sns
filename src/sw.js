@@ -30,7 +30,6 @@ const SHELL = [
   './css/style.css',
   './css/color-themes.css',
   './js/color-themes.js',
-  './data/readme-themes-LICENSE.txt',
   './js/main.js',
   './js/business-cards.js',
   './js/views/business-card.js',

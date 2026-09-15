@@ -1,22 +1,31 @@
 # テーマカラー
 
-Web・iOS・Macの「設定 → 画面表示 → 外観 → テーマカラー」から、標準配色と75種類のプリセットを選べます。選択は端末ごとに保存されます。
+Web・iOS・Macの「設定 → 画面表示 → 外観 → テーマカラー」で、標準配色・独自の8色・GitHub Readme Statsの全75テーマを選べます。
 
-各テーマにライト／ダーク両方の配色があり、外観設定（システムに合わせる・ライト・ダーク）と組み合わせて使えます。上部の外観切り替えボタンでもテーマの選択は保持します。テーマ変更でデフォルトアイコンの単色グレーは変わりません。
+- ブルー
+- ティール
+- グリーン
+- アンバー
+- オレンジ
+- ローズ
+- パープル
+- スレート
 
-## 配色の出典と調整
+各色にライト／ダーク両方の配色があり、「システムに合わせる」とも組み合わせられます。色と外観の選択は端末に保存されます。廃止されたプリセットが保存されている場合は標準配色へ戻します。デフォルトアイコンは単色グレーのままです。
 
-出典: [GitHub Readme Stats themes](https://github.com/anuraghazra/github-readme-stats/blob/master/themes/index.js)
+## 配色の管理
 
-2026-09-16に取得した配色定義を `src/data/readme-themes.json` に同梱しています。実行時の外部API呼び出しはありません。MITライセンスと著作権表記は `docs/licenses/github-readme-stats.txt`、Web配布ファイル、ネイティブ設定内のLicense欄に含めています。
+独自の背景・本文・アクセント色を `src/data/color-palettes.json` に定義しています。追加の75テーマは `src/data/readme-themes.json` に保存しています。実行時の外部API呼び出しはありません。
 
-カード用の配色をアプリに適用するため、次の調整をしています。
+[GitHub Readme Statsのテーマ](https://github.com/anuraghazra/github-readme-stats/blob/master/themes/index.js)の背景・本文・タイトル色をもとに、対応する外観では元の背景色を保持し、反対の外観の背景は同じ色を混ぜて生成します。透明色は不透明にし、グラデーションは最初の色を使います。
 
-- 背景・本文・タイトル色を背景・本文・アクセントに対応。元テーマの明暗側は元の背景色を保ち、反対側はその色味を残した明るい／暗い背景を生成。
-- 本文・補助文字・アクセントのコントラストが不足する場合は補正。
+MITの著作権・許諾文は `docs/licenses/github-readme-stats.txt` と生成したJS・CSS・Swift内に保持します。ネイティブアプリには `Theme-LICENSE.txt` をリソースとして同梱します。テーマ設定画面への説明や出典表示の追加はありません。
+
+- ライト／ダークの背景色をそれぞれ定義。
+- 文字のコントラストが不足する場合は補正。
 - ボタンの文字は背景に応じて黒か白を選択。
 - 境界線とホバー色は背景・本文から生成。
-- 透明背景は白と合成、グラデーションは最初の色を使用。陰影は付けません。
+- 背景は単色。グラデーションや陰影は付けません。
 
 生成と検証:
 
@@ -25,4 +34,4 @@ node scripts/generate-color-themes.mjs
 node scripts/test-color-themes.mjs
 ```
 
-生成物はWeb用JavaScript/CSSと `ios/App/App/NativeColorThemes.swift` です。共通の定義から作ることで、プラットフォーム間の色ずれを防ぎます。
+同じ定義からWeb用JavaScript/CSSと `ios/App/App/NativeColorThemes.swift` を生成し、プラットフォーム間の色ずれを防ぎます。

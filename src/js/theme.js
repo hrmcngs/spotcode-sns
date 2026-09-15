@@ -1,5 +1,5 @@
-import { COLOR_THEMES } from './color-themes.js';
-export { COLOR_THEMES };
+import { COLOR_THEMES, COLOR_THEME_LABELS } from './color-themes.js';
+export { COLOR_THEMES, COLOR_THEME_LABELS };
 const KEY = 'spotcode-theme';
 const COLOR_KEY = 'spotcode-color-theme';
 let colorTheme = 'standard';
@@ -35,6 +35,9 @@ export function applyTheme(theme) {
 export function initThemeToggle(buttonEl) {
   const savedColor = (() => { try { return localStorage.getItem(COLOR_KEY); } catch { return null; } })();
   colorTheme = Object.hasOwn(COLOR_THEMES, savedColor) ? savedColor : 'standard';
+  if (savedColor && savedColor !== colorTheme) {
+    try { localStorage.setItem(COLOR_KEY, colorTheme); } catch {}
+  }
   const saved = (() => { try { return localStorage.getItem(KEY); } catch { return null; } })();
   selectedTheme = ['light', 'dark'].includes(saved) ? saved : null;
   if (!systemTheme) {

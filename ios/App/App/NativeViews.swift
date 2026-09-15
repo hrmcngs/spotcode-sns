@@ -159,6 +159,7 @@ private struct AppAppearancePreference: ViewModifier {
     }
     func body(content: Content) -> some View {
         content.environment(\.appColorTheme, colorTheme).preferredColorScheme(scheme)
+            .onAppear { colorTheme = AppColorThemes.normalizedName(colorTheme) }
     }
 }
 
@@ -4862,17 +4863,13 @@ private struct DisplaySettings: View {
             .accessibilityIdentifier("settings.appearance")
             Picker(NSLocalizedString("テーマカラー", comment: ""), selection: $colorTheme) {
                 Text(NSLocalizedString("標準", comment: "")).tag("standard")
-                ForEach(AppColorThemes.names, id: \.self) { name in Text(verbatim: name).tag(name) }
+                ForEach(AppColorThemes.names, id: \.self) { name in Text(LocalizedStringKey(AppColorThemes.labels[name] ?? name)).tag(name) }
             }.pickerStyle(.menu).accessibilityIdentifier("settings.colorTheme")
             HStack(spacing: 8) {
                 Circle().fill(SpotcodeTheme.surface).overlay(Circle().stroke(SpotcodeTheme.border)).frame(width: 24, height: 24)
                 Circle().fill(SpotcodeTheme.text).frame(width: 24, height: 24)
                 Circle().fill(SpotcodeTheme.accent).frame(width: 24, height: 24)
             }.accessibilityHidden(true)
-            Text(NSLocalizedString("どのテーマでもライト・ダークを選べます。システム設定にも自動で合わせられます。", comment: ""))
-                .foregroundColor(SpotcodeTheme.muted)
-            Link("GitHub Readme Stats", destination: URL(string: "https://github.com/anuraghazra/github-readme-stats/blob/master/themes/README.md")!)
-            DisclosureGroup("License (MIT)") { Text(verbatim: AppColorThemes.license).font(.caption) }
         }
 
         #if targetEnvironment(macCatalyst)

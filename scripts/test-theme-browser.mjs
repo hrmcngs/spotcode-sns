@@ -41,31 +41,51 @@ try {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   assert.equal(await page.evaluate(() => themePreference()), 'system');
-  await page.evaluate(() => applyColorTheme('dracula'));
-  assert.equal(await page.getAttribute('html', 'data-color-theme'), 'dracula');
+  await page.evaluate(() => applyColorTheme('blue'));
+  assert.equal(await page.getAttribute('html', 'data-color-theme'), 'blue');
   assert.equal(await page.getAttribute('html', 'data-theme'), 'light');
-  const draculaLight = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const blueLight = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   await page.click('#toggle');
-  assert.equal(await page.evaluate(() => colorThemePreference()), 'dracula');
+  assert.equal(await page.evaluate(() => colorThemePreference()), 'blue');
   assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
-  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(40, 42, 54)');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(20, 30, 43)');
   await page.evaluate(() => initThemeToggle(null));
-  assert.equal(await page.evaluate(() => colorThemePreference()), 'dracula');
+  assert.equal(await page.evaluate(() => colorThemePreference()), 'blue');
   assert.equal(await page.evaluate(() => themePreference()), 'dark');
   await page.evaluate(() => applyTheme('light'));
-  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), draculaLight);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), blueLight);
   await page.evaluate(() => applyTheme('system'));
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
-  assert.equal(await page.evaluate(() => colorThemePreference()), 'dracula');
-  await page.evaluate(() => applyColorTheme('nord'));
-  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(46, 52, 64)');
+  assert.equal(await page.evaluate(() => colorThemePreference()), 'blue');
+  await page.evaluate(() => applyColorTheme('teal'));
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(19, 37, 34)');
   await page.evaluate(() => applyColorTheme('missing'));
-  assert.equal(await page.evaluate(() => colorThemePreference()), 'nord');
+  assert.equal(await page.evaluate(() => colorThemePreference()), 'teal');
   await page.emulateMedia({ colorScheme: 'light' });
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
-  assert.notEqual(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(46, 52, 64)');
+  assert.notEqual(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(19, 37, 34)');
   await page.evaluate(() => applyColorTheme('standard'));
   assert.equal(await page.getAttribute('html', 'data-theme'), 'light');
+  await page.evaluate(() => { localStorage.setItem('spotcode-color-theme', 'retired-preset'); initThemeToggle(null); });
+  assert.equal(await page.evaluate(() => colorThemePreference()), 'standard');
+  assert.equal(await page.evaluate(() => localStorage.getItem('spotcode-color-theme')), 'standard');
+  const checked = await page.evaluate(() => {
+    let count = 0;
+    for (const [name, variants] of Object.entries(COLOR_THEMES)) {
+      applyColorTheme(name);
+      for (const mode of ['light', 'dark']) {
+        applyTheme(mode);
+        const color = variants[mode].bg;
+        const expected = 'rgb(' + [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16)).join(', ') + ')';
+        if (getComputedStyle(document.body).backgroundColor !== expected) throw Error(name + ': ' + mode);
+        if (localStorage.getItem('spotcode-color-theme') !== name) throw Error('Persistence: ' + name);
+        count++;
+      }
+    }
+    return count;
+  });
+  assert.equal(checked, 166);
+  console.log('PASS all 83 themes in both appearances');
   console.log('PASS preset application, persistence, switching, reset, returning to system, system appearance, live switching, saved override, browser chrome, light/dark button and input colors');
 } finally { await browser.close(); }

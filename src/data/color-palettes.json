@@ -1,0 +1,10 @@
+{
+  "blue": {"label":"ブルー", "light":{"bg":"f4f7fc","text":"24364c","accent":"2865b7"}, "dark":{"bg":"141e2b","text":"dde8f7","accent":"81b2f4"}},
+  "teal": {"label":"ティール", "light":{"bg":"f2f8f7","text":"24403d","accent":"14776e"}, "dark":{"bg":"132522","text":"d9eee8","accent":"70cbb9"}},
+  "green": {"label":"グリーン", "light":{"bg":"f5f8f1","text":"35432c","accent":"497b31"}, "dark":{"bg":"1b2518","text":"e3edda","accent":"9fc975"}},
+  "amber": {"label":"アンバー", "light":{"bg":"fcf8ee","text":"493b25","accent":"956408"}, "dark":{"bg":"292114","text":"f2e5c9","accent":"dfb658"}},
+  "orange": {"label":"オレンジ", "light":{"bg":"fcf5ef","text":"4c3427","accent":"b35d25"}, "dark":{"bg":"2b1e17","text":"f2dfd1","accent":"eda571"}},
+  "rose": {"label":"ローズ", "light":{"bg":"fcf3f5","text":"4a2e38","accent":"b44468"}, "dark":{"bg":"2a1922","text":"f1dce5","accent":"e995b5"}},
+  "purple": {"label":"パープル", "light":{"bg":"f7f4fc","text":"3c3053","accent":"7754b1"}, "dark":{"bg":"201b2d","text":"e8dff5","accent":"b5a0e4"}},
+  "slate": {"label":"スレート", "light":{"bg":"f4f6f8","text":"303b48","accent":"526c86"}, "dark":{"bg":"1b2128","text":"e0e7ef","accent":"9bafc7"}}
+}

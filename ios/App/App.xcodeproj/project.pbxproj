@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AF0000030000000000000001 /* Theme-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = AF0000040000000000000001 /* Theme-LICENSE.txt */; };
 		AF0000010000000000000001 /* NativeColorThemes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000020000000000000001 /* NativeColorThemes.swift */; };
 		AE0000010000000000000001 /* NativeCardLayers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0000020000000000000001 /* NativeCardLayers.swift */; };
 		AC0000010000000000000001 /* NearbyBusinessCardExchange.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000020000000000000001 /* NearbyBusinessCardExchange.swift */; };
@@ -23,6 +24,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AF0000040000000000000001 /* Theme-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Theme-LICENSE.txt"; sourceTree = "<group>"; };
 		AF0000020000000000000001 /* NativeColorThemes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeColorThemes.swift; sourceTree = "<group>"; };
 		AE0000020000000000000001 /* NativeCardLayers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCardLayers.swift; sourceTree = "<group>"; };
 		AC0000020000000000000001 /* NearbyBusinessCardExchange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyBusinessCardExchange.swift; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 				AA0000150000000000000001 /* NativeViews.swift */,
 				AE0000020000000000000001 /* NativeCardLayers.swift */,
 				AF0000020000000000000001 /* NativeColorThemes.swift */,
+				AF0000040000000000000001 /* Theme-LICENSE.txt */,
 				AC0000020000000000000001 /* NearbyBusinessCardExchange.swift */,
 				AA0000160000000000000001 /* Localizable.strings */,
 				AB0000020000000000000001 /* InfoPlist.strings */,
@@ -153,6 +156,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
+				AF0000030000000000000001 /* Theme-LICENSE.txt in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
 				AA0000060000000000000001 /* Localizable.strings in Resources */,
 				AB0000010000000000000001 /* InfoPlist.strings in Resources */,
