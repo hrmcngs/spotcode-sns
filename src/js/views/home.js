@@ -1,6 +1,6 @@
 import { watchTimelineEnd } from '../timeline-scroll.js';
 import { renderIdeaForm } from '../idea-post.js';
-import { allPosts, forYouPage, followingPosts, hydrateQuotedPosts, cachedPosts } from '../data.js';
+import { forYouPage, followingPosts, hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
 import { displayUser }    from '../posting-identity.js';
@@ -63,7 +63,8 @@ function loadingTimeline(tab) {
   // way, hydrateHome will refresh with live data.
   const cached = cachedPosts(SCOPE[tab] || 'home');
   if (cached && cached.length) {
-    return '<div id="timeline-list-cached">' + cached.map(renderPost).join('') + '</div>';
+    const markup = cached.map(renderPost).join('');
+    if (markup) return '<div id="timeline-list-cached">' + markup + '</div>';
   }
   return renderTimelineSkeleton(4);
 }
@@ -74,9 +75,17 @@ function errorTimeline(msg) {
     '<div class="stub">' +
       '<h2 class="stub__title">' + t('home.error.title') + '</h2>' +
       '<p class="stub__sub">' + safe + '</p>' +
-      '<button type="button" class="btn btn--ghost" onclick="location.reload()">' + t('home.error.reload') + '</button>' +
+      '<button type="button" class="btn btn--ghost" data-timeline-retry>' + t("再試行") + '</button>' +
     '</div>'
   );
+}
+
+function showTimelineError(list, error, retry) {
+  list.innerHTML = errorTimeline(error.message || t("通信エラー"));
+  list.querySelector('[data-timeline-retry]')?.addEventListener('click', () => {
+    list.innerHTML = renderTimelineSkeleton(4);
+    void retry();
+  }, { once: true });
 }
 
 // `tab` ∈ { 'foryou', 'following' }. Default 'foryou' for backwards-
@@ -112,64 +121,32 @@ export async function hydrateHome(tab = 'foryou') {
     return;
   }
 
-  // Fresh-cache fast path: when this tab's timeline was fetched less
-  // than a minute ago (typically: the user bounced to another page
-  // and came right back), reuse it instead of re-downloading ~100
-  // rows on every single visit. The likes/reposts/quotes hydration
-  // below still runs, so counts and toggle state stay accurate.
-  const FRESH_MS = 60 * 1000;
-  let posts = cachedPosts(SCOPE[tab] || 'home', FRESH_MS);
-  // A cache restored from localStorage has its photos stripped
-  // (photosStripped) — never fetch-skip on that, or photo posts would
-  // stay imageless after a quick reload.
-  const usedFreshCache = !!(posts && posts.length && !posts.some(p => p && p.photosStripped));
-  if (!usedFreshCache) {
-    // Post rows can carry base64 photos (80–180KB each). The old desktop
-    // limit of 100 made the web build download and parse a multi-MB response,
-    // while mobile (40 rows) loaded correctly. Keep the initial page bounded
-    // on every viewport; newest posts, including the keep-alive post, remain
-    // visible without making desktop wait for 2.5x more data.
-    const limit = 40;
-    try {
-      const request = tab === 'following'
-        ? followingPosts({ limit })
-        : allPosts({ limit });
-      posts = await withTimeout(request, TIMELINE_TIMEOUT_MS, t("タイムライン取得"));
-    } catch (err) {
-      if (myVersion !== renderVersion) return;
-      console.error('hydrateHome: fetch failed', err);
-      list.innerHTML = errorTimeline(err.message || t("通信エラー"));
-      return;
-    }
-  }
-  if (myVersion !== renderVersion) return;
-
-  if (!posts.length) {
-    list.innerHTML = emptyTimeline(tab, !!me);
-    return;
-  }
-  // Skip the pre-hydration paint when the fresh-cache path was taken
-  // AND renderHome already painted the exact same cached posts — the
-  // post-hydration re-render below still lands the accurate counts.
-  if (!(usedFreshCache && document.getElementById('timeline-list-cached'))) {
-    list.innerHTML = posts.map(renderPost).join('');
-  }
-
-  const ids = posts.map(p => p.id);
+  const active = () => myVersion === renderVersion && list.isConnected && currentUser()?.id === me?.id;
+  const paint = posts => {
+    const markup = posts.map(renderPost).join('');
+    list.innerHTML = markup || emptyTimeline(tab, !!me);
+  };
   try {
-    await Promise.all([
-      hydratePostLikes(ids),
-      hydrateRepostsMine(ids),
-      hydrateBookmarksMine(ids),
-      hydrateQuotedPosts(posts),
-    ]);
+    // Always refresh Following after navigation: the follow list and audience
+    // can change while the previous snapshot is still inside its cache TTL.
+    const posts = await withTimeout(followingPosts({ limit: 40 }), TIMELINE_TIMEOUT_MS, t("タイムライン取得"));
+    if (!active()) return;
+    paint(posts);
+    const ids = posts.map(p => p.id);
+    // Supplementary requests must never prevent the timeline from displaying.
+    Promise.allSettled([
+      hydratePostLikes(ids), hydrateRepostsMine(ids),
+      hydrateBookmarksMine(ids), hydrateQuotedPosts(posts),
+    ]).then(() => {
+      if (!active()) return;
+      paint(posts);
+      hydratePolls(posts).catch(() => {});
+    }).catch(err => {
+      if (active()) showTimelineError(list, err, () => hydrateHome(tab));
+    });
   } catch (err) {
-    console.warn('hydrate batch failed', err);
-    return;
+    if (active()) showTimelineError(list, err, () => hydrateHome(tab));
   }
-  if (myVersion !== renderVersion) return;
-  list.innerHTML = posts.map(renderPost).join('');
-  hydratePolls(posts).catch(() => {});
 }
 
 async function hydrateForYou(list, version, owner) {
@@ -200,7 +177,7 @@ async function hydrateForYou(list, version, owner) {
       const batch = document.createElement('div');
       batch.innerHTML = added.map(renderPost).join('');
       feed.append(batch);
-      if (!seen.size && !hasMore) feed.innerHTML = emptyTimeline('foryou', !!owner);
+      if (!feed.textContent.trim() && !hasMore) feed.innerHTML = emptyTimeline('foryou', !!owner);
       autoPaused = false;
       status.textContent = '';
       sentinel.hidden = !hasMore;
@@ -211,18 +188,21 @@ async function hydrateForYou(list, version, owner) {
         .catch(() => {});
     } catch (error) {
       if (!active()) return;
-      if (first) { list.innerHTML = errorTimeline(error.message || t("通信エラー")); return; }
+      if (first) { showTimelineError(list, error, load); return; }
       autoPaused = true;
       status.textContent = t("続きを取得できませんでした。再試行してください。");
     } finally {
       loading = false;
       if (active() && button) { button.disabled = false; button.hidden = !autoPaused; }
-      if (active() && hasMore && !autoPaused) watcher?.check();
+      if (active() && sentinel && hasMore && !autoPaused) {
+        if (!watcher) {
+          watcher = watchTimelineEnd(sentinel, { active, load: () => { if (!autoPaused) void load(); } });
+          timelineObserver = watcher;
+        }
+        watcher.check();
+      }
     }
   };
   await load();
-  if (active() && sentinel && hasMore) {
-    watcher = watchTimelineEnd(sentinel, { active, load: () => { if (!autoPaused) void load(); } });
-    timelineObserver = watcher;
-  }
+
 }
