@@ -16,6 +16,7 @@ struct NearbyCardMessage: Codable {
 }
 
 final class NearbyCardExchange: NSObject, ObservableObject {
+    @Published private(set) var discoveryFailed = false
     @Published private(set) var peers: [MCPeerID] = []
     @Published private(set) var invitationName: String?
     @Published private(set) var receivedOwnerID: UUID?
@@ -34,6 +35,7 @@ final class NearbyCardExchange: NSObject, ObservableObject {
 
     func start(ownerID: UUID, handle: String) {
         guard session == nil else { return }
+        discoveryFailed = false
         self.ownerID = ownerID
         let peer = MCPeerID(displayName: String(handle.prefix(40)))
         let session = MCSession(peer: peer, securityIdentity: nil, encryptionPreference: .required)
@@ -107,14 +109,18 @@ extension NearbyCardExchange: MCNearbyServiceBrowserDelegate, MCNearbyServiceAdv
     }
     func browser(_ browser: MCNearbyServiceBrowser, didNotStartBrowsingForPeers error: Error) {
         DispatchQueue.main.async { [weak self] in
-            guard self?.browser === browser else { return }
-            self?.status = NSLocalizedString("相手を検索できません。ローカルネットワークの許可とWi-Fiを確認してください。", comment: "")
+            guard let self, self.browser === browser else { return }
+            self.stop()
+            self.discoveryFailed = true
+            self.status = NSLocalizedString("相手を検索できません。ローカルネットワークの許可とWi-Fiを確認してください。", comment: "")
         }
     }
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: Error) {
         DispatchQueue.main.async { [weak self] in
-            guard self?.advertiser === advertiser else { return }
-            self?.status = NSLocalizedString("交換待機を開始できません。ローカルネットワークの許可を確認してください。", comment: "")
+            guard let self, self.advertiser === advertiser else { return }
+            self.stop()
+            self.discoveryFailed = true
+            self.status = NSLocalizedString("交換待機を開始できません。ローカルネットワークの許可を確認してください。", comment: "")
         }
     }
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID,
@@ -171,19 +177,20 @@ struct NearbyBusinessCardExchangeView: View {
     @State private var saveError: String?
     @State private var retry = 0
     var body: some View {
-        Button { showingPeers = true } label: {
+        Button { showingPeers = true; restartDiscovery() } label: {
             Label(exchange.peers.isEmpty ? NSLocalizedString("近くの相手と交換", comment: "") : String(format: NSLocalizedString("近くの相手と交換（%d）", comment: ""), exchange.peers.count), systemImage: "iphone.radiowaves.left.and.right")
                 .font(.callout).padding(10)
         }
         .background(.regularMaterial).clipShape(Capsule()).padding(12)
         .task(id: enabled) { updateDiscovery() }
         .onChange(of: scenePhase) { _ in updateDiscovery() }
-        .onDisappear { exchange.stop() }
+        .onDisappear { if !showingPeers { exchange.stop() } }
         .onChange(of: exchange.invitationName) { name in if name != nil { showingPeers = true } }
         .task(id: "\(exchange.receivedOwnerID?.uuidString ?? "none"):\(retry)") { await saveReceivedCard() }
         .sheet(isPresented: $showingPeers) {
             NavigationView {
                 List {
+                    InternetCardExchangeView(ownerID: ownerID)
                     Text(NSLocalizedString("両方の端末で自分の公開済み名刺を開き、相手を選んでください。交換に同意すると、互いの名刺をコレクションに保存します。近づけた距離は判定しません。保存にはインターネット接続が必要です。", comment: ""))
                         .font(.callout)
                     if let name = exchange.invitationName {
@@ -197,8 +204,13 @@ struct NearbyBusinessCardExchangeView: View {
                             ForEach(exchange.peers, id: \.self) { peer in
                                 Button(peer.displayName) { exchange.invite(peer) }
                             }
-                            if exchange.peers.isEmpty { Text(NSLocalizedString("相手を探しています…", comment: "")) }
+                            if exchange.peers.isEmpty && !exchange.discoveryFailed { Text(NSLocalizedString("相手を探しています…", comment: "")) }
                         }
+                    }
+                    if !exchange.busy {
+                        Button(NSLocalizedString("再検索", comment: "")) { restartDiscovery() }
+                        Text(NSLocalizedString("両方の端末でWi-FiとBluetoothをオンにし、ローカルネットワークへのアクセスを許可してください。見つからない場合は同じWi-Fiに接続して再検索してください。", comment: ""))
+                            .font(.caption)
                     }
                     Text(exchange.status).font(.caption)
                     if let received = exchange.receivedOwnerID, received == savedOwnerID {
@@ -211,7 +223,13 @@ struct NearbyBusinessCardExchangeView: View {
                     Button(NSLocalizedString("閉じる", comment: "")) { showingPeers = false; exchange.stop(); savedOwnerID = nil; saveError = nil; updateDiscovery() }
                 } }
             }.navigationViewStyle(.stack)
+                .onAppear { updateDiscovery() }
         }
+    }
+    private func restartDiscovery() {
+        guard !exchange.busy else { return }
+        exchange.stop(); savedOwnerID = nil; saveError = nil
+        updateDiscovery()
     }
     private func updateDiscovery() {
         if enabled && scenePhase == .active && model.session?.user.id == ownerID {
@@ -233,5 +251,90 @@ struct NearbyBusinessCardExchangeView: View {
             savedOwnerID = received; exchange.saved(received)
         } catch is CancellationError { }
         catch { saveError = NSLocalizedString("名刺を保存できませんでした。接続を確認して再試行してください。", comment: "") }
+    }
+}
+
+// Internet exchange is independent of local-network discovery and its permissions.
+private struct InternetCardExchangeView: View {
+    @EnvironmentObject private var model: AppModel
+    let ownerID: UUID
+    @State private var exchange: InternetCardExchange?
+    @State private var code = ""
+    @State private var busy = false
+    @State private var error = ""
+    @State private var pollRevision = 0
+
+    var body: some View {
+        Section(NSLocalizedString("モバイル通信で交換", comment: "")) {
+            Text(NSLocalizedString("Wi-Fiが違っても交換できます。一方がコードを作成し、もう一方が入力してください。コードは10分間有効です。双方が同意すると互いのコレクションに保存します。", comment: ""))
+                .font(.caption)
+            if let exchange {
+                if exchange.state == "waiting" {
+                    Text(exchange.code).font(.title2.monospaced()).textSelection(.enabled)
+                    Button(NSLocalizedString("コードをコピー", comment: "")) { UIPasteboard.general.string = exchange.code }
+                    Text(NSLocalizedString("相手がコードを入力するまで、この画面でお待ちください。", comment: ""))
+                } else if exchange.state == "pending" {
+                    let other = exchange.hostID == ownerID ? exchange.guestHandle : exchange.hostHandle
+                    Text("@" + (other ?? ""))
+                    if exchange.hostID == ownerID {
+                        Button(NSLocalizedString("この相手と名刺を交換する", comment: "")) { Task { await send("accept") } }
+                            .disabled(busy)
+                    } else {
+                        Text(NSLocalizedString("相手の確認を待っています。", comment: ""))
+                    }
+                } else if exchange.state == "completed" {
+                    Text(NSLocalizedString("互いの名刺の保存を確認しました。", comment: ""))
+                } else {
+                    Text(NSLocalizedString("交換が終了したか、コードの有効期限が切れました。新しいコードでやり直してください。", comment: ""))
+                }
+                if exchange.isActive {
+                    Button(NSLocalizedString("キャンセル", comment: ""), role: .cancel) { Task { await send("cancel") } }.disabled(busy)
+                } else {
+                    Button(NSLocalizedString("別の相手と交換", comment: "")) { self.exchange = nil; code = ""; error = "" }.disabled(busy)
+                }
+            } else {
+                Button(NSLocalizedString("交換コードを作成", comment: "")) { Task { await send("create") } }.disabled(busy)
+                TextField(NSLocalizedString("相手の交換コード", comment: ""), text: $code)
+                    .textInputAutocapitalization(.characters).disableAutocorrection(true)
+                Button(NSLocalizedString("コードで交換を申し込む", comment: "")) { Task { await send("join") } }
+                    .disabled(busy || code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            if busy { ProgressView() }
+            if !error.isEmpty {
+                Text(error).font(.caption)
+                if exchange?.isActive == true {
+                    Button(NSLocalizedString("再試行", comment: "")) { error = ""; pollRevision += 1 }.disabled(busy)
+                }
+            }
+        }
+        .task(id: "\(exchange?.id.uuidString ?? "none"):\(pollRevision)") {
+            while !Task.isCancelled, exchange?.isActive == true, model.session?.user.id == ownerID {
+                do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }
+                guard !Task.isCancelled else { return }
+                await send("status")
+                if !error.isEmpty { return }
+            }
+        }
+    }
+
+    @MainActor private func send(_ action: String) async {
+        guard !busy, model.session?.user.id == ownerID else { return }
+        busy = true; error = ""
+        defer { busy = false }
+        let id = exchange?.id
+        let submittedCode = code
+        do {
+            let result = try await model.withRefreshedSession { token in
+                try await SupabaseService.shared.exchangeBusinessCards(action: action, id: id, code: submittedCode, token: token)
+            }
+            guard !Task.isCancelled, model.session?.user.id == ownerID else { return }
+            exchange = result
+        } catch is CancellationError { return }
+        catch {
+            guard !Task.isCancelled, model.session?.user.id == ownerID else { return }
+            self.error = action == "join"
+                ? NSLocalizedString("交換を開始できませんでした。コード・有効期限と、自分の名刺が公開済みかを確認してください。", comment: "")
+                : NSLocalizedString("交換情報を更新できませんでした。通信状態を確認して再試行してください。", comment: "")
+        }
     }
 }

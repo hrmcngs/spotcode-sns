@@ -84,3 +84,28 @@ that no longer exist. No public card read is needed for exchange.
 Run `node scripts/test-business-card-access.mjs` for client access regression
 checks. The SQL policy checks in that script are static; verify the migration
 against the target database before deployment.
+
+## Internet exchange (Wi-Fi ↔ cellular)
+
+Apply `docs/migrations/049-internet-card-exchange.sql` after 048, then install the
+updated iOS/Mac clients. The migration creates the private exchange table and
+`exchange_business_cards` RPC. It must be applied to the production database;
+building the app alone does not install this backend.
+
+In the card exchange sheet, use **Exchange over the internet**:
+
+1. Both users publish their own card and remain signed in.
+2. One creates a 12-character code (valid for 10 minutes).
+3. The other enters it and requests the exchange.
+4. The creator verifies the displayed handle and confirms. The server saves
+   both cards in one transaction. Neither card is disclosed by joining alone.
+
+This path uses HTTPS, requires no shared Wi-Fi or local discovery, and supports
+one or both devices using cellular data. Keep the exchange sheet open until
+confirmation. Cancel rejects a pending exchange; generating a new code
+invalidates the creator's previous active code. Code state is private to the two
+participants, and existing user blocks are respected.
+
+Test the SQL with `node scripts/test-internet-card-exchange.mjs` and PGlite
+installed, or set `PGLITE_MODULE` to its module path. Tests execute migrations in
+an isolated database; they do not modify the production service.

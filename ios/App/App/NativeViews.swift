@@ -192,7 +192,7 @@ struct RootView: View {
     @State private var cityDestination: CityMapDestination?
     @State private var recommendedProfileHandle: String?
     @AppStorage("spotcode.terms.acceptedVersion") private var acceptedTerms = ""
-    private var appLanguage: String { Bundle.main.preferredLocalizations.first ?? "en" }
+    @AppStorage("spotcode.language") private var appLanguage = AppLocalization.language
 
     private var screenshotMode: Bool {
         ProcessInfo.processInfo.arguments.contains("-SpotcodeScreenshotMode")
@@ -290,6 +290,7 @@ struct RootView: View {
         .buttonStyle(SpotcodePlainButtonStyle())
         .macTextSizePreference()
         .environment(\.locale, Locale(identifier: appLanguage))
+        .id(appLanguage)
         .tint(SpotcodeTheme.accent)
         .task {
             if let screenshotSection { section = screenshotSection }
@@ -4546,7 +4547,7 @@ private struct DisplaySettings: View {
     @AppStorage("spotcode.notifications.mentions") private var notifyMentions = true
     @AppStorage("spotcode.notifications.follows") private var notifyFollows = true
     @AppStorage("spotcode.notifications.followedPosts") private var followedPostScope = "off"
-    private var appLanguage: String { Bundle.main.preferredLocalizations.first ?? "en" }
+    @AppStorage("spotcode.language") private var appLanguage = AppLocalization.language
     var body: some View { VStack(spacing: SpotcodeLayout.value(12, 18)) {
         #if targetEnvironment(macCatalyst)
         SettingsCard(NSLocalizedString("文字サイズ", comment: "")) {
@@ -4565,13 +4566,15 @@ private struct DisplaySettings: View {
         }
         #endif
         SettingsCard(NSLocalizedString("Language", comment: "")) {
-            #if targetEnvironment(macCatalyst)
-            Text(NSLocalizedString("Macのシステム設定の「一般」→「言語と地域」で、アプリの言語を変更できます。", comment: ""))
-            #else
-            Button(NSLocalizedString("iOS設定でアプリの言語を変更", comment: "")) { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
-            #endif
-            Text(NSLocalizedString("権限確認もアプリと同じ言語で表示されます。", comment: ""))
-                .foregroundColor(SpotcodeTheme.muted)
+            Picker(NSLocalizedString("Language", comment: ""), selection: Binding(
+                get: { appLanguage },
+                set: { AppLocalization.select($0); appLanguage = $0 }
+            )) {
+                Text(verbatim: "English").tag("en")
+                Text(NSLocalizedString("日本語", comment: "")).tag("ja")
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("settings.language")
         }
         SettingsCard(NSLocalizedString("装飾バッジの表示", comment: "")) {
             SettingsStatusTag(text: hideBadges ? NSLocalizedString("非表示", comment: "") : NSLocalizedString("表示", comment: ""), enabled: !hideBadges)
@@ -5856,17 +5859,21 @@ private struct BusinessCardFullscreenPresenter: UIViewControllerRepresentable {
         DispatchQueue.main.async {
             guard coordinator.active else { return }
             if !coordinator.wantsPresentation {
-                coordinator.host?.dismiss(animated: false)
-                coordinator.host = nil
+                coordinator.dismiss()
                 return
             }
             guard coordinator.host == nil, var presenter = controller.view.window?.rootViewController else { return }
             while let presented = presenter.presentedViewController { presenter = presented }
             guard !presenter.isBeingDismissed else { return }
-            let host = UIHostingController(rootView: FullscreenBusinessCardView(card: card) {
+            let host = UIHostingController(rootView: FullscreenBusinessCardView(card: card) { [weak coordinator] in
+                // Full-screen UIKit presentation can suspend updates to the
+                // covered SwiftUI presenter. Close UIKit immediately instead
+                // of waiting for updateUIViewController to observe the binding.
+                coordinator?.dismiss()
                 isPresented = false
             })
-            host.modalPresentationStyle = .fullScreen
+            // Keep the underlying card alive so nearby discovery continues.
+            host.modalPresentationStyle = .overFullScreen
             host.view.backgroundColor = .black
             host.isModalInPresentation = true
             coordinator.host = host
@@ -5875,13 +5882,21 @@ private struct BusinessCardFullscreenPresenter: UIViewControllerRepresentable {
     }
     static func dismantleUIViewController(_ controller: UIViewController, coordinator: Coordinator) {
         coordinator.active = false
-        coordinator.host?.dismiss(animated: false)
-        coordinator.host = nil
+        coordinator.dismiss()
     }
     final class Coordinator {
         var active = true
         var wantsPresentation = false
         var host: UIViewController?
+
+        func dismiss() {
+            // Clear intent before UIKit dismissal: a queued presentation must
+            // not reopen the card after Close, including repeated taps.
+            wantsPresentation = false
+            let presented = host
+            host = nil
+            presented?.dismiss(animated: false)
+        }
     }
 }
 
@@ -5933,7 +5948,7 @@ private struct BusinessCardView: View {
                         }
                         .overlay(alignment: .bottom) {
                             if own && published, let id = profile.id {
-                                NearbyBusinessCardExchangeView(ownerID: id, handle: profile.handle, enabled: !editingCard && !fullscreenCard)
+                                NearbyBusinessCardExchangeView(ownerID: id, handle: profile.handle, enabled: !editingCard)
                             }
                         }
                     VStack(alignment: .leading, spacing: 20) {

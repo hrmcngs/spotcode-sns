@@ -50,6 +50,24 @@
         exchange.invite(peer)
         precondition(nextBrowser.invited == peer)
         exchange.stop()
+        // A failed start must release the stale session so retry starts both services.
+        for advertising in [false, true] {
+            exchange.start(ownerID: local, handle: "Local")
+            let failedBrowser = MCNearbyServiceBrowser.latest!
+            let failedAdvertiser = MCNearbyServiceAdvertiser.latest!
+            let error = NSError(domain: "test", code: 1)
+            if advertising { exchange.advertiser(failedAdvertiser, didNotStartAdvertisingPeer: error) }
+            else { exchange.browser(failedBrowser, didNotStartBrowsingForPeers: error) }
+            await drain()
+            precondition(exchange.discoveryFailed && !failedBrowser.active && !failedAdvertiser.active)
+            exchange.start(ownerID: local, handle: "Local")
+            precondition(!exchange.discoveryFailed && MCNearbyServiceBrowser.latest !== failedBrowser)
+            precondition(MCNearbyServiceBrowser.latest.active && MCNearbyServiceAdvertiser.latest.active)
+            exchange.browser(failedBrowser, foundPeer: stranger, withDiscoveryInfo: ["version":"1"])
+            await drain()
+            precondition(exchange.peers.isEmpty)
+            exchange.stop()
+        }
         print("PASS nearby exchange: consent before send, expected peer only, card/receipt validation, size/version bounds, stop and stale-session isolation")
     }
 }

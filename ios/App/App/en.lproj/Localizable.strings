@@ -745,3 +745,17 @@
 "フォロー中のユーザーの投稿はまだありません。" = "No posts from people you follow yet.";
 "名刺を見る" = "View business card";
 "コレクションに保存した相手の名刺だけ閲覧できます。" = "You can only view business cards you have saved to your collection.";
+"再検索" = "Search again";
+"両方の端末でWi-FiとBluetoothをオンにし、ローカルネットワークへのアクセスを許可してください。見つからない場合は同じWi-Fiに接続して再検索してください。" = "Turn on Wi-Fi and Bluetooth on both devices and allow Local Network access. If no one appears, connect to the same Wi-Fi network and search again.";
+"モバイル通信で交換" = "Exchange over the internet";
+"Wi-Fiが違っても交換できます。一方がコードを作成し、もう一方が入力してください。コードは10分間有効です。双方が同意すると互いのコレクションに保存します。" = "Works on different Wi-Fi networks or cellular data. One person creates a code and the other enters it. Codes expire after 10 minutes. Both people must agree before the cards are saved to each collection.";
+"コードをコピー" = "Copy code";
+"相手がコードを入力するまで、この画面でお待ちください。" = "Keep this screen open while the other person enters your code.";
+"この相手と名刺を交換する" = "Exchange cards with this person";
+"交換が終了したか、コードの有効期限が切れました。新しいコードでやり直してください。" = "This exchange has ended or the code has expired. Try again with a new code.";
+"別の相手と交換" = "Exchange with someone else";
+"交換コードを作成" = "Create exchange code";
+"相手の交換コード" = "Other person’s exchange code";
+"コードで交換を申し込む" = "Request card exchange with code";
+"交換を開始できませんでした。コード・有効期限と、自分の名刺が公開済みかを確認してください。" = "Could not start the exchange. Check the code and its expiry, and make sure your own card is published.";
+"交換情報を更新できませんでした。通信状態を確認して再試行してください。" = "Could not update the exchange. Check your connection and try again.";

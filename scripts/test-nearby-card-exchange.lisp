@@ -13,6 +13,6 @@
            (write-string (uiop:read-file-string (merge-pathnames "scripts/ios-tests/nearby-card-stubs.swift" root)) out)
            (write-string (subseq source start end) out)
            (write-string (uiop:read-file-string (merge-pathnames "scripts/ios-tests/nearby-card-checks.swift" root)) out))
-         (uiop:run-program (list "xcrun" "swiftc" "-parse-as-library" (namestring swift) "-o" (namestring binary)) :output *standard-output* :error-output *error-output*)
+         (uiop:run-program (list "xcrun" "swiftc" "-module-cache-path" (namestring (merge-pathnames "cache/" directory)) "-parse-as-library" (namestring swift) "-o" (namestring binary)) :output *standard-output* :error-output *error-output*)
          (uiop:run-program (list (namestring binary)) :output *standard-output* :error-output *error-output*))
     (uiop:delete-directory-tree directory :validate t :if-does-not-exist :ignore)))

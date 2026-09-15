@@ -32,6 +32,38 @@ enum SpotcodeApplication {
     }
 }
 
+// Both explicit NSLocalizedString calls and SwiftUI's locale use this choice.
+enum AppLocalization {
+    static let preferenceKey = "spotcode.language"
+    static var language: String {
+        let defaults = UserDefaults.standard
+        if let saved = defaults.string(forKey: preferenceKey), ["en", "ja"].contains(saved) { return saved }
+        return Bundle.main.preferredLocalizations.first == "ja" ? "ja" : "en"
+    }
+    static func select(_ language: String) {
+        guard ["en", "ja"].contains(language) else { return }
+        let defaults = UserDefaults.standard
+        defaults.set(language == "ja" ? ["ja", "en"] : ["en", "ja"], forKey: "AppleLanguages")
+        defaults.set(language, forKey: preferenceKey)
+    }
+    static let bundles: [String: Bundle] = {
+        var result: [String: Bundle] = [:]
+        for language in ["en", "ja"] {
+            if let path = Bundle.main.path(forResource: language, ofType: "lproj"), let bundle = Bundle(path: path) {
+                result[language] = bundle
+            }
+        }
+        return result
+    }()
+}
+
+// Module-local lookup keeps existing keys/call sites while allowing a language
+// change without waiting for Bundle.main's startup localization cache to reset.
+func NSLocalizedString(_ key: String, tableName: String? = nil, bundle: Bundle = .main, value: String = "", comment: String) -> String {
+    let selected = bundle == .main ? (AppLocalization.bundles[AppLocalization.language] ?? bundle) : bundle
+    return selected.localizedString(forKey: key, value: value, table: tableName)
+}
+
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var window: UIWindow?
 

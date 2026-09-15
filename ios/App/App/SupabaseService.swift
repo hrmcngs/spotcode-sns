@@ -1089,3 +1089,25 @@ extension SupabaseService {
         let _: EmptyResponse = try await request("rest/v1/business_cards?owner_id=eq.\(ownerID.uuidString)", method: "DELETE", token: token)
     }
 }
+
+struct InternetCardExchange: Decodable, Identifiable {
+    let id: UUID
+    let code: String
+    let hostID: UUID
+    let guestID: UUID?
+    let hostHandle: String?
+    let guestHandle: String?
+    let state: String
+    let expiresAt: String
+    var isActive: Bool { state == "waiting" || state == "pending" }
+}
+
+extension SupabaseService {
+    func exchangeBusinessCards(action: String, id: UUID?, code: String?, token: String) async throws -> InternetCardExchange {
+        var payload: [String: String] = ["p_action": action]
+        if let id { payload["p_id"] = id.uuidString }
+        if let code { payload["p_code"] = code }
+        return try await request("rest/v1/rpc/exchange_business_cards", method: "POST", token: token,
+                                 body: JSONSerialization.data(withJSONObject: payload))
+    }
+}

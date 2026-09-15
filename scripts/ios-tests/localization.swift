@@ -52,7 +52,8 @@ for filename in ["AppModel.swift", "SupabaseService.swift", "NativeViews.swift",
             precondition(!token.contains(#"\("#), "Use a stable format key: \(token)")
             let key = try JSONDecoder().decode(String.self, from: Data(token.utf8))
             guard let english = en[key], ja[key] != nil else { fatalError("Missing translation: \(key)") }
-            precondition(english.range(of: "[ぁ-んァ-ヶ一-龠]", options: .regularExpression) == nil, "Japanese in English: \(key)")
+            // Language choices retain their native names so users can find their language.
+            precondition(key == "日本語" || english.range(of: "[ぁ-んァ-ヶ一-龠]", options: .regularExpression) == nil, "Japanese in English: \(key)")
             let format = #"%(?:\d+\$)?(?:lld|ld|d|@)"#
             let original = try matches(format, key), translated = try matches(format, english)
             precondition(original == translated, "Format mismatch: \(key)")
