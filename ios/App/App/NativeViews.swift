@@ -534,12 +534,7 @@ private struct DesktopNavigation: View {
                         .accessibilityAddTraits(section == item ? .isSelected : [])
                         .accessibilityIdentifier("desktop.nav.\(item.rawValue)")
                 }
-                Button {
-                    if model.session == nil { showLogin = true } else { composing = true }
-                } label: {
-                    Text(NSLocalizedString("投稿を書く", comment: "")).font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 18).frame(minHeight: 48)
-                }.buttonStyle(DesktopMenuRowStyle()).keyboardShortcut("n", modifiers: .command)
+
             }
         }
         .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
@@ -879,40 +874,6 @@ private struct AccountSwitcher: View {
     }
 }
 
-private struct JournalHeader: View {
-    let compose: () -> Void
-    let explore: () -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(NSLocalizedString("開発・アイデア・場所", comment: ""))
-                .font(.caption.weight(.semibold)).tracking(2).foregroundColor(SpotcodeTheme.muted)
-            Text("spotcode").font(.system(size: SpotcodeLayout.value(64, 46), weight: .bold))
-                .tracking(-2).padding(.top, 16).padding(.bottom, 20)
-            Text(NSLocalizedString("つくる人の活動記録。", comment: ""))
-                .font(.title3.weight(.medium)).padding(.bottom, 10)
-            Text(NSLocalizedString("アイデア、開発の進捗、気になる場所を残す。", comment: ""))
-                .font(.subheadline).foregroundColor(SpotcodeTheme.muted).padding(.bottom, 36)
-            Rectangle().fill(SpotcodeTheme.text).frame(height: 1)
-            journalLink("投稿を書く", detail: "アイデアや進捗を残す", action: compose)
-            journalLink("場所から探す", detail: "地図で近くの投稿を見る", action: explore)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, SpotcodeLayout.value(48, 28)).padding(.bottom, 32)
-    }
-    private func journalLink(_ title: String, detail: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: 20) {
-                Text(NSLocalizedString(title, comment: "")).font(.subheadline.weight(.semibold))
-                    .frame(minWidth: 100, alignment: .leading)
-                Text(NSLocalizedString(detail, comment: "")).font(.caption).foregroundColor(SpotcodeTheme.muted)
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.up.right").font(.caption)
-            }.padding(.horizontal, 8).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }.buttonStyle(DesktopMenuRowStyle())
-    }
-}
-
 struct TimelineView: View {
     @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
@@ -926,7 +887,23 @@ struct TimelineView: View {
         let _ = appColorTheme
 
         VStack(spacing: 0) {
-            if selectedTab != 0 { TimelineTabs(selected: $selectedTab) }
+            HStack(alignment: .center, spacing: 12) {
+                Text(NSLocalizedString("みんなの活動", comment: ""))
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Button { composing = true } label: {
+                    Label(NSLocalizedString("投稿を書く", comment: ""), systemImage: "square.and.pencil")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .background(SpotcodeTheme.surface2)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                }
+                .buttonStyle(SpotcodePlainButtonStyle())
+                .accessibilityIdentifier("timeline.compose")
+            }
+            .foregroundColor(SpotcodeTheme.text)
+            .padding(.vertical, 12)
+            TimelineTabs(selected: $selectedTab)
             if selectedTab == 2 {
                 NativeMapView(cityDestination: cityDestination).id(cityDestination?.id)
             } else if selectedTab == 1 {
@@ -936,11 +913,6 @@ struct TimelineView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        JournalHeader(compose: { composing = true }, explore: { selectedTab = 2 })
-                        Text(NSLocalizedString("みんなの活動", comment: ""))
-                            .font(.title2.weight(.bold)).frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, 16)
-                        TimelineTabs(selected: $selectedTab)
-
                         ForEach(model.posts) { post in
                             PostRow(post: post).onAppear {
                                 if post.id == model.posts.last?.id && model.timelinePageError == nil && !ProcessInfo.processInfo.arguments.contains("-SpotcodeCaptureFullPage") {
@@ -3790,11 +3762,9 @@ private struct ProfileHero: View {
         let _ = appColorTheme
 
         VStack(alignment: .leading, spacing: 0) {
-            LinearGradient(colors: [Color(red: 8/255, green: 70/255, blue: 111/255), Color(red: 30/255, green: 116/255, blue: 77/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                .frame(height: 176)
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
-                    AvatarView(profile: profile, size: 104).padding(5).background(SpotcodeTheme.surface).clipShape(Circle()).offset(y: -63)
+                    AvatarView(profile: profile, size: 56)
                     Spacer()
                     if isOwn {
                         Button(NSLocalizedString("Edit profile", comment: "")) { editing = true }.spotcodeFont(14, weight: .bold, fallback: SpotcodeLayout.bodyFont.weight(.bold)).foregroundColor(SpotcodeTheme.background)
@@ -3819,7 +3789,7 @@ private struct ProfileHero: View {
                             }
                         }.padding(.top, 14)
                     }
-                }.frame(height: 63)
+                }.padding(.top, 28).padding(.bottom, 16)
                 HStack(spacing: 14) {
                     NavigationLink(destination: BusinessCardView(profile: profile)) {
                         Label(isOwn ? NSLocalizedString("名刺を共有", comment: "") : NSLocalizedString("名刺を見る", comment: ""), systemImage: "rectangle.on.rectangle")

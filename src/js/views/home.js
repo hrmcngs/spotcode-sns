@@ -4,7 +4,6 @@ import { forYouPage, followingPosts, hydrateQuotedPosts, cachedPosts } from '../
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
 import { displayUser }    from '../posting-identity.js';
-import { url }            from '../router.js';
 import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls } from '../interactions.js';
 import { t }              from '../i18n.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
@@ -96,20 +95,15 @@ export function renderHome(tab = 'foryou') {
   timelineObserver = null;
   return [
     '<header class="journal-hero">',
-      '<p class="journal-eyebrow">' + t('開発・アイデア・場所') + '</p>',
       '<h1>spotcode</h1>',
-      '<p class="journal-lead">' + t('つくる人の活動記録。') + '</p>',
-      '<p>' + t('アイデア、開発の進捗、気になる場所を残す。') + '</p>',
+      '<p>' + t('みんなの活動') + '</p>',
     '</header>',
     '<section class="journal-directory" aria-label="' + t('活動を見る') + '">',
       '<details class="journal-compose">',
         '<summary><strong>' + t('投稿を書く') + '</strong><span>' + t('アイデアや進捗を残す') + '</span><span aria-hidden="true">↗</span></summary>',
         renderIdeaForm({ user: displayUser(currentUser()) }),
       '</details>',
-      '<a class="journal-directory__row" href="' + url('/repos') + '"><strong>' + t('Repos') + '</strong><span>' + t('制作中のプロジェクトを見る') + '</span><span aria-hidden="true">↗</span></a>',
-      '<a class="journal-directory__row" href="' + url('/spots') + '"><strong>' + t('場所から探す') + '</strong><span>' + t('地図で近くの投稿を見る') + '</span><span aria-hidden="true">↗</span></a>',
     '</section>',
-    '<h2 class="journal-section-title">' + t('みんなの活動') + '</h2>',
     timelineTabs(tab),
     '<div id="timeline-list">',
       loadingTimeline(tab),

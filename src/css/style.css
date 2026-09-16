@@ -160,24 +160,14 @@ input, textarea, select { font-family: inherit; }
 .dev-chip:hover { background: color-mix(in srgb, var(--warn) 28%, transparent); }
 html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
 
-/* ---------- app 3-column grid (Twitter) ----------
-   All widths in %, not px, so the grid scales smoothly with the
-   viewport instead of locking the side rails at fixed sizes and
-   squishing the middle. The minmax() floor on the centre column
-   prevents flex children (posts, code blocks) from blowing it out. */
+/* Centered reading column shared by every page. */
 .app-grid {
   display: grid;
-  grid-template-columns: 21% minmax(0, 1fr) 25%;
-  /* Without explicit start alignment, CSS Grid defaults cells to
-     `stretch` — on iOS Safari that interacts badly with sticky topbar
-     + viewport-fit=cover and the timeline cell ends up stretched to
-     the dynamic viewport height, pushing all the rendered content
-     (tabs, composer, posts) to the bottom of a huge empty column. */
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 1.25rem;
-  max-width: 1280px;
+  max-width: 928px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 0 24px 64px;
 }
 /* Hamburger default: hidden. The mobile @media below flips it to
    inline-flex. Declaring the default BEFORE the @media is essential —
@@ -191,20 +181,6 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
    on mobile the rail stays sticky, occupies a grid row above the
    timeline, and creates a huge empty gap below the topbar. */
 .left-rail { position: sticky; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px)); align-self: start; }
-/* Tablet-ish: right rail gets cramped under ~1100px (the "Your
-   activity" / "Trending spots" cards start wrapping their headings
-   vertically), so drop it before that happens. Left rail keeps its
-   full labels until 1024px. */
-@media (max-width: 1100px) {
-  .app-grid { grid-template-columns: 22% minmax(0, 1fr); }
-  .right-rail { display: none; }
-}
-@media (max-width: 1024px) {
-  /* Tablet: collapse the left rail to icon-only. */
-  .app-grid { grid-template-columns: 72px minmax(0, 1fr); }
-  .side-nav__item span:last-child, .side-foot, .compose-cta { display: none; }
-  .side-nav__item { justify-content: center; }
-}
 @media (max-width: 640px) {
   .app-grid {
     grid-template-columns: 1fr;
@@ -304,7 +280,7 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   .left-rail .side-nav__item { justify-content: flex-start; }
 }
 
-/* ---------- left rail (Twitter side-nav) ----------
+/* ---------- navigation ----------
    Base `.left-rail { position: sticky }` lives near the .app-grid
    block, BEFORE the @media (max-width: 640px) drawer override —
    see comment up there. */
@@ -3719,20 +3695,30 @@ dialog.card-fullscreen, dialog.card-fullscreen:fullscreen {
 .theme-swatches i:nth-child(3) { background: var(--accent); }
 
 /* A single-column journal, with text navigation and ruled directory rows. */
-.app-grid { display: grid; grid-template-columns: minmax(0, 1fr); max-width: 928px; padding: 0 24px 64px; gap: 0; }
+
 .timeline { border: 0; border-radius: 0; background: var(--bg); overflow: visible; min-height: 0; }
-.topbar { background: var(--bg); box-shadow: none; backdrop-filter: none; }
+.topbar {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  max-width: 928px; margin-inline: auto;
+  padding-inline: 24px; gap: 28px;
+  background: var(--bg); box-shadow: none; backdrop-filter: none;
+}
+.topbar__search { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+.topbar__actions .icon-btn, .topbar__actions .theme-toggle { border: 0; border-radius: 0; min-width: 40px; min-height: 40px; }
+.topbar__search:focus-within { border-bottom-color: var(--text); }
+.topbar__actions .btn { border-radius: 4px; }
+.journal-directory-title { margin: 16px 0 24px; font-size: 1.55rem; letter-spacing: -.025em; }
 .brand-mark, .brand-slash, .brand-repo { display: none; }
-.journal-hero { padding: clamp(36px, 7vw, 80px) 0 32px; }
+.journal-hero { padding: 24px 0 16px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 20px; }
 .journal-eyebrow { color: var(--muted); font-size: .78rem; letter-spacing: .13em; font-weight: 600; }
-.journal-hero h1 { margin: 18px 0 24px; font-size: clamp(2.8rem, 7vw, 4.5rem); line-height: 1.05; letter-spacing: -.055em; font-weight: 700; }
-.journal-hero p { margin: 0 0 12px; line-height: 1.8; }
+.journal-hero h1 { margin: 0; font-size: 1.6rem; line-height: 1.3; letter-spacing: -.035em; font-weight: 700; }
+.journal-hero p { margin: 0; line-height: 1.6; }
 .journal-hero .journal-lead { font-size: clamp(1.05rem, 2vw, 1.3rem); font-weight: 500; }
 .journal-hero p:last-child { color: var(--muted); font-size: .95rem; }
-.journal-directory { border-top: 1px solid var(--text); margin-bottom: 40px; }
+.journal-directory { border-top: 1px solid var(--border); margin-bottom: 12px; }
 .journal-directory__row, .journal-compose > summary {
   display: grid; grid-template-columns: minmax(100px, .45fr) 1fr auto; gap: 20px; align-items: baseline;
-  padding: 20px 8px; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; cursor: pointer;
+  padding: 14px 8px; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; cursor: pointer;
 }
 .journal-compose > summary { list-style: none; }
 .journal-compose > summary::-webkit-details-marker { display: none; }
@@ -3745,23 +3731,23 @@ dialog.card-fullscreen, dialog.card-fullscreen:fullscreen {
 .timeline__head { position: static; display: flex; justify-content: flex-start; gap: 24px; background: transparent; border-bottom: 1px solid var(--border); }
 .timeline__head .tab { flex: 0 0 auto; border-radius: 0; padding: 12px 0; font-size: .86rem; }
 .timeline__head .tab::after { border-radius: 0; height: 1px; left: 0; right: 0; }
-.post { display: block; padding: 28px 4px; background: transparent; border-bottom: 1px solid var(--border); border-radius: 0; }
+.post { display: block; padding: 22px 4px; background: transparent; border-bottom: 1px solid var(--border); border-radius: 0; }
 .post:hover { background: var(--surface-2); }
-.post__head { font-size: .8rem; margin-bottom: 14px; gap: 8px; }
+.post__head { font-size: .9rem; margin-bottom: 10px; gap: 8px; }
 .post__head .post__name { font-weight: 600; }
-.post__handle, .post__time, .post__sep { font-size: .78rem; }
+.post__handle, .post__time, .post__sep { font-size: .84rem; }
 .post__body { font-size: 1rem; line-height: 1.85; }
 .post__actions { justify-content: flex-start; gap: 14px; flex-wrap: wrap; margin-top: 16px; }
 .post__actions .act { flex: 0 0 auto; font-size: .75rem; min-height: 40px; }
 .right-rail { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; margin-top: 48px; border-top: 1px solid var(--text); padding-top: 32px; }
 @media (min-width: 641px) {
   .left-rail { position: static; display: flex; align-items: center; min-width: 0; overflow-x: auto; border-bottom: 1px solid var(--border); }
-  .side-nav { display: flex; flex: 1; gap: 0; border: 0; }
+  .left-rail .side-nav { display: flex; flex-direction: row; flex: 1; gap: 0; border: 0; }
   .side-nav__item { padding: 16px 14px; white-space: nowrap; border: 0; border-radius: 0; font-size: .86rem; min-height: 48px; }
   .side-nav__item .side-nav__icon, .side-nav__item > svg { display: none; }
   .side-nav__item span:last-child { display: inline; }
   .side-nav__item.is-active { box-shadow: inset 0 -1px var(--text); background: transparent; }
-  .left-rail .compose-cta { display: block; width: auto; margin: 0; padding: 12px 14px; white-space: nowrap; border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: .86rem; }
+  .left-rail .compose-cta { display: none; width: auto; margin: 0; padding: 12px 14px; white-space: nowrap; border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: .86rem; }
   .compose-cta__ico, .left-rail .side-foot { display: none; }
 }
 @media (max-width: 640px) {
@@ -3771,4 +3757,53 @@ dialog.card-fullscreen, dialog.card-fullscreen:fullscreen {
   .post__actions { gap: 10px; }
   .journal-compose .composer { display: block; }
   .journal-compose .composer > .avatar { display: none; }
+}
+
+.timeline__head .tab::after { width: 100%; transform: none; left: 0; right: 0; }
+.profile-cover { display: none; }
+.profile-top { margin-top: 0; padding: 32px 4px 16px; align-items: center; gap: 20px; }
+.profile-top .avatar--xl { width: 56px; height: 56px; font-size: 1.5rem; border: 0; box-shadow: none; }
+.profile-top__actions { flex-wrap: wrap; justify-content: flex-end; }
+.profile-top__actions .btn { border-radius: 4px; font-weight: 500; }
+.profile-id { padding: 8px 4px 24px; }
+.profile-name { font-size: 2rem; letter-spacing: -.03em; }
+
+/* Carry the same typography and ruled lists through the secondary pages. */
+.settings { padding: 40px 0; }
+.settings__title, .repos-head__title, .notif-head h2 { font-size: clamp(1.8rem, 4vw, 2.5rem); letter-spacing: -.035em; }
+.settings-card { background: transparent; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; padding: 24px 0; margin-bottom: 12px; }
+.settings-nav { border-radius: 0; background: transparent; flex-wrap: wrap; }
+.settings-nav__tab { border-radius: 0; min-height: 44px; }
+.settings-card .btn, .repo-card__compose { border-radius: 4px; }
+.repos-head { text-align: left; padding: 40px 0 28px; }
+.repos-head__icon { display: none; }
+.repos-head__sub { margin: 12px 0 0; line-height: 1.8; }
+.repos-list { padding: 0 0 32px; gap: 0; }
+.repo-card { border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; padding: 24px 4px; }
+.repo-card:last-child { border-bottom: 1px solid var(--border); }
+.repo-card__head { flex-wrap: wrap; }
+.repo-card__title { min-width: 0; overflow-wrap: anywhere; }
+.notif-head { position: static; padding: 40px 0 24px; background: transparent; }
+.notif { padding: 24px 4px; }
+.right-rail .card { border: 0; border-radius: 0; padding: 0; background: transparent; }
+.side-nav__item:focus-visible, .compose-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 640px) {
+  .topbar { grid-template-columns: auto 1fr auto; padding-inline: 20px; gap: 8px; }
+  .topbar__search { grid-row: 2; grid-column: 1 / -1; min-height: 40px; }
+  .topbar__actions .icon-btn { min-width: 40px; min-height: 40px; }
+  .left-rail { background: var(--bg); box-shadow: none; }
+  .side-nav { gap: 0; border-top: 1px solid var(--text); }
+  .side-nav__item { border-radius: 0; border-bottom: 1px solid var(--border); min-height: 56px; padding: 16px 8px; }
+  .side-nav__item.is-active { box-shadow: inset 2px 0 var(--text); background: var(--surface-2); }
+  .left-rail .compose-cta { background: transparent; color: var(--text); border-radius: 0; text-align: left; border-bottom: 1px solid var(--border); margin: 0; min-height: 56px; }
+  .left-rail .compose-cta:hover { background: var(--surface-2); }
+  .settings { padding-top: 28px; }
+}
+
+/* Keep reading text neutral; the selected theme still colors accents and surfaces. */
+html[data-theme="light"] body { --text: #202124; --muted: #555b64; }
+html[data-theme="dark"] body { --text: #edf0f3; --muted: #b2bac5; }
+@media (min-width: 641px) {
+  .left-rail .side-nav__item { flex: 0 0 auto; }
+  .left-rail .compose-cta { margin-left: auto; }
 }
