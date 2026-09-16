@@ -115,6 +115,18 @@
       <span class="brand-slash">/</span>
       <span class="brand-repo">sns</span>
     </a>
+    <aside class="left-rail">
+      <nav class="side-nav">
+        <a class="side-nav__item" data-route="/"              href="/"              data-ico="home"><span class="side-nav__label" data-i18n>Home</span></a>
+        <a class="side-nav__item" data-route="/repos"         href="/repos"         data-ico="repo"><span class="side-nav__label" data-i18n>Repos</span></a>
+        <a class="side-nav__item" data-route="/notifications" href="/notifications" data-ico="bell"><span class="side-nav__label" data-i18n>Notifications</span></a>
+        <a class="side-nav__item" data-nav="profile"          href="/"              data-ico="user"><span class="side-nav__label" data-i18n>Profile</span></a>
+        <a class="side-nav__item" data-route="/settings"      href="/settings"      data-ico="gear"><span class="side-nav__label" data-i18n>Settings</span></a>
+      </nav>
+      <button class="compose-cta" id="open-compose"><span class="compose-cta__ico"></span><span data-i18n>投稿を書く</span></button>
+      <div class="side-foot" id="side-me"></div>
+    </aside>
+    <div class="topbar__utilities">
     <div class="topbar__search">
       <span class="search-icon" id="ic-search"></span>
       <input type="text" placeholder="Search users, spots, ideas, repos…">
@@ -127,22 +139,17 @@
       <a class="icon-btn" href="/settings" title="Settings" data-i18n-title id="ic-gear"></a>
       <div id="auth-area" class="auth-area"></div>
     </div>
+    </div>
   </nav>
 
+  <button type="button" class="floating-compose" data-open-compose>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20h4L20 8l-4-4L4 16v4zM14 6l4 4"/></svg>
+    <span data-i18n>投稿を書く</span>
+  </button>
   <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
 
   <div class="app-grid">
-    <aside class="left-rail">
-      <nav class="side-nav">
-        <a class="side-nav__item" data-route="/"              href="/"              data-ico="home"><span class="side-nav__label" data-i18n>Home</span></a>
-        <a class="side-nav__item" data-route="/repos"         href="/repos"         data-ico="repo"><span class="side-nav__label" data-i18n>Repos</span></a>
-        <a class="side-nav__item" data-route="/notifications" href="/notifications" data-ico="bell"><span class="side-nav__label" data-i18n>Notifications</span></a>
-        <a class="side-nav__item" data-nav="profile"          href="/"              data-ico="user"><span class="side-nav__label" data-i18n>Profile</span></a>
-        <a class="side-nav__item" data-route="/settings"      href="/settings"      data-ico="gear"><span class="side-nav__label" data-i18n>Settings</span></a>
-      </nav>
-      <button class="compose-cta" id="open-compose"><span class="compose-cta__ico"></span><span data-i18n>投稿を書く</span></button>
-      <div class="side-foot" id="side-me"></div>
-    </aside>
+
 
     <main class="timeline" id="app"></main>
 

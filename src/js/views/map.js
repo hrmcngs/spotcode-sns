@@ -15,6 +15,7 @@ import { getMyLocation, isNearSpotSync, getRadius, permissionDenied,
 import { currentUser } from '../auth.js';
 import { isDevMode } from '../dev-mode.js';
 import { timelineTabs } from './timeline-tabs.js';
+import { timelineToolbar } from './timeline-chrome.js';
 import { withTimeout } from '../net-utils.js';
 
 let renderVersion = 0;
@@ -35,7 +36,7 @@ export function renderMap(city) {
   return (
     // Same For you / Following / Spots tab bar as Home so the user
     // can jump back without a sidebar / hamburger detour.
-    timelineTabs('spots') +
+    timelineToolbar() + timelineTabs('spots') +
     '<div class="map-head">' +
       '<div class="map-head__icon">' + icon('pin', { size: 24 }) + '</div>' +
       '<div>' +

@@ -259,10 +259,11 @@ export function renderPost(p) {
           '<span class="post__sep">·</span>' +
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">' + escape(t('post.edited')) + '</span>' : '') +
-          (p.spot ? '<span class="post__sep">·</span>' + spotChip(p.spot, p.id) : '') +
-          renderKindBadge(p.kind) +
-          renderVisibilityBadge(p.visibility) +
+        '</div>' +
+        '<div class="post__metadata">' +
           (p.status ? ' ' + statusBadge(p.status) : '') +
+          (p.spot ? spotChip(p.spot, p.id) : '') +
+          renderKindBadge(p.kind) + renderVisibilityBadge(p.visibility) +
         '</div>' +
         (locked
           ? lockedBanner() + spotAddress(p.spot, p.id)

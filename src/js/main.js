@@ -575,6 +575,15 @@ const VIS_ICONS = {
   restricted:'lock',
 };
 
+const headerSizeObserver = new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const key = entry.target.classList.contains('topbar') ? '--topbar-h' : '--timeline-toolbar-h';
+    document.documentElement.style.setProperty(key, `${entry.target.getBoundingClientRect().height}px`);
+  }
+});
+headerSizeObserver.observe(document.querySelector('.topbar'));
+let observedTimelineToolbar = null;
+
 function dispatch(path) {
   // If a modal closed without unlocking (uncaught error path, navigation
   // mid-animation, …) the body would still be position:fixed and the
@@ -637,6 +646,8 @@ function dispatch(path) {
     };
     document.title = t('Spot') + ' / spotcode-sns';
     app.innerHTML = renderMap();
+    restoreComposerDraft();
+    if (pendingSpot) syncSpotChip(pendingSpot);
     hydrateMap(null, focus);
   } else if (mapCityMatch) {
     // City-scoped map view — reached from the right-rail "Trending spots"
@@ -646,10 +657,14 @@ function dispatch(path) {
     const city = romajiToJp(raw) || raw;
     document.title = city + ' / spotcode-sns';
     app.innerHTML = renderMap(city);
+    restoreComposerDraft();
+    if (pendingSpot) syncSpotChip(pendingSpot);
     hydrateMap(city);
   } else if (mapMatch) {
     document.title = t('Map') + ' / spotcode-sns';
     app.innerHTML = renderMap();
+    restoreComposerDraft();
+    if (pendingSpot) syncSpotChip(pendingSpot);
     hydrateMap();
   } else if (analyticsMatch) {
     const pid = analyticsMatch[1];
@@ -711,8 +726,9 @@ function dispatch(path) {
       '</div>' +
       quickNavLinks();
   }
-  repaintRail();
-  refreshRailData();
+  if (observedTimelineToolbar) headerSizeObserver.unobserve(observedTimelineToolbar);
+  observedTimelineToolbar = document.querySelector('.timeline-toolbar');
+  if (observedTimelineToolbar) headerSizeObserver.observe(observedTimelineToolbar);
   setActiveNav(path);
 }
 
@@ -1300,20 +1316,37 @@ onPostingIdentityChange((on) => {
 // ask for. The "New idea" CTA below still scrolls the composer into
 // view explicitly — that's the one place auto-scroll is intended.)
 
-document.getElementById('open-compose')?.addEventListener('click', () => {
-  if (!currentUser()) return openAuth('register');
-  navigate('/');
-  setTimeout(() => {
-    const ta = document.querySelector('.composer textarea');
-    if (!ta) return;
-    // Only scroll when the textarea is actually offscreen — `New idea`
-    // tapped from a scrolled-down position should jump up, but tapping
-    // it while the composer is already visible shouldn't budge.
-    const r = ta.getBoundingClientRect();
-    const offscreen = r.top < 0 || r.top > window.innerHeight - 80;
-    if (offscreen) ta.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    ta.focus();
-  }, 30);
+let composeOpener = null;
+function openCompose() {
+  composeOpener = document.activeElement;
+  if (!document.querySelector('.native-compose-modal')) navigate('/');
+  const modal = document.querySelector('.native-compose-modal');
+  if (!modal) return;
+  modal.hidden = false;
+  (modal.querySelector('textarea') || modal.querySelector('.composer button') || modal.querySelector('.modal__card')).focus({ preventScroll: true });
+}
+function closeCompose() {
+  const modal = document.querySelector('.native-compose-modal');
+  if (!modal) return;
+  modal.hidden = true;
+  if (composeOpener?.isConnected) composeOpener.focus({ preventScroll: true });
+}
+document.addEventListener('click', event => {
+  if (event.target.closest('#open-compose, [data-open-compose]')) openCompose();
+  else if (event.target.closest('[data-close-compose]')) closeCompose();
+});
+document.addEventListener('keydown', event => {
+  const modal = document.querySelector('.native-compose-modal:not([hidden])');
+  if (!modal) return;
+  // Attachment/auth dialogs have their own keyboard handling.
+  if ([...document.querySelectorAll('.modal:not([hidden])')].some(other => other !== modal && getComputedStyle(other).display !== 'none')) return;
+  if (event.key === 'Escape') { event.preventDefault(); closeCompose(); }
+  if (event.key !== 'Tab') return;
+  const controls = [...modal.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex="0"]')].filter(el => el.getClientRects().length);
+  const first = controls[0], last = controls.at(-1);
+  if (!first) return;
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === modal.querySelector('.modal__card'))) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 });
 
 // Delegated handler for "Post about this repo" buttons on /repos
@@ -1329,6 +1362,7 @@ document.addEventListener('click', (e) => {
   if (!currentUser()) return openAuth('register');
   const url = btn.getAttribute('data-compose-repo') || '';
   navigate('/');
+  openCompose();
   setTimeout(() => {
     const form = document.querySelector('.idea-form');
     if (!form) return;

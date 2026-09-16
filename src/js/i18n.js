@@ -85,6 +85,7 @@ const DICT = {
     'profile.empty.likes':     'まだいいねした投稿はありません。',
     'profile.not_found.title': 'は登録されていません',
     'profile.not_found.sub':   'このアカウントは存在しないか、まだ何も投稿していません。',
+    'profile.previous':        '← 戻る',
     'profile.back':            '← ホームに戻る',
     'profile.joined':          '登録日: ',
 
@@ -477,6 +478,7 @@ const DICT = {
     'profile.empty.likes':     'No liked posts yet.',
     'profile.not_found.title': "doesn't exist",
     'profile.not_found.sub':   "This account doesn't exist, or hasn't posted anything.",
+    'profile.previous':        '← Back',
     'profile.back':            '← Back to home',
     'profile.joined':          'Joined ',
 

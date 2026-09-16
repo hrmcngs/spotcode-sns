@@ -1,9 +1,8 @@
 import { watchTimelineEnd } from '../timeline-scroll.js';
-import { renderIdeaForm } from '../idea-post.js';
+import { timelineToolbar } from './timeline-chrome.js';
 import { forYouPage, followingPosts, hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderPost }     from '../post.js';
 import { currentUser }    from '../auth.js';
-import { displayUser }    from '../posting-identity.js';
 import { hydratePostLikes, hydrateRepostsMine, hydrateBookmarksMine, hydratePolls } from '../interactions.js';
 import { t }              from '../i18n.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
@@ -94,16 +93,7 @@ export function renderHome(tab = 'foryou') {
   timelineObserver?.disconnect();
   timelineObserver = null;
   return [
-    '<header class="journal-hero">',
-      '<h1>spotcode</h1>',
-      '<p>' + t('みんなの活動') + '</p>',
-    '</header>',
-    '<section class="journal-directory" aria-label="' + t('活動を見る') + '">',
-      '<details class="journal-compose">',
-        '<summary><strong>' + t('投稿を書く') + '</strong><span>' + t('アイデアや進捗を残す') + '</span><span aria-hidden="true">↗</span></summary>',
-        renderIdeaForm({ user: displayUser(currentUser()) }),
-      '</details>',
-    '</section>',
+    timelineToolbar(),
     timelineTabs(tab),
     '<div id="timeline-list">',
       loadingTimeline(tab),

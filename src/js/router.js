@@ -62,21 +62,27 @@ export function refresh() { handlers.forEach(fn => fn(currentPath())); rewriteLi
 
 function dispatch() { handlers.forEach(fn => fn(currentPath())); rewriteLinks(); }
 
+// Mark app-owned entries so Back never sends a direct visitor to another site.
+const historyIndexKey = 'spotcode.navigationIndex';
+if (!Number.isInteger(history.state?.[historyIndexKey])) {
+  history.replaceState({ ...history.state, [historyIndexKey]: 0 }, '', location.href);
+}
+
 export function navigate(path, replace = false) {
   const target = url(path);
-  if (HASH_MODE) {
-    // hashchange will fire dispatch; if it's the same hash, force.
-    if (location.hash === target.replace(/^[^#]*/, '')) dispatch();
-    else if (replace) location.replace(target);
-    else location.hash = target;
-    window.scrollTo({ top: 0 });
-    return;
-  }
-  if (replace) history.replaceState({}, '', target);
-  else history.pushState({}, '', target);
+  if (new URL(target, location.href).href === location.href) { dispatch(); return; }
+  const index = history.state?.[historyIndexKey] || 0;
+  if (replace) history.replaceState({ ...history.state, [historyIndexKey]: index }, '', target);
+  else history.pushState({ [historyIndexKey]: index + 1 }, '', target);
   window.scrollTo({ top: 0 });
   dispatch();
 }
+
+export function goBack() {
+  if (history.state?.[historyIndexKey] > 0) history.back();
+  else navigate('/', true);
+}
+
 
 if (HASH_MODE) window.addEventListener('hashchange', dispatch);
 else           window.addEventListener('popstate',   dispatch);
@@ -97,6 +103,7 @@ export function rewriteLinks(root = document) {
 // Intercept clicks on same-origin links to keep navigation in-app.
 document.addEventListener('click', (e) => {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  if (e.target.closest('[data-profile-back]')) { e.preventDefault(); goBack(); return; }
   const a = e.target.closest('a');
   if (!a) return;
   const raw = a.getAttribute('href');

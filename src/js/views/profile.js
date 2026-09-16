@@ -456,7 +456,15 @@ function loading(handle) {
   );
 }
 
+function profileBackButton() {
+  return '<button type="button" class="profile-back" data-profile-back>' + escapeHtml(t('profile.previous')) + '</button>';
+}
+
 export function renderProfile(handle) {
+  return profileBackButton() + renderProfileContent(handle);
+}
+
+function renderProfileContent(handle) {
   const u = getUser(handle);
   // No local cache yet — show a loading skeleton; hydrateProfile() will
   // fetch from Supabase and re-render this card.
@@ -680,7 +688,7 @@ async function doHydrateProfile(handle) {
     catch (err) {
       if (!stillHere()) return;
       const app = document.getElementById('app');
-      if (app) app.innerHTML =
+      if (app) app.innerHTML = profileBackButton() +
         '<div class="stub">' +
           ("<h2 class=\"stub__title\">" + t("読み込みに失敗しました") + "</h2>") +
           '<p class="stub__sub">' + (err.message || '') + '</p>' +
@@ -691,7 +699,7 @@ async function doHydrateProfile(handle) {
     if (!stillHere()) return;
     if (!fetched) {
       const app = document.getElementById('app');
-      if (app) app.innerHTML = notFound(handle);
+      if (app) app.innerHTML = profileBackButton() + notFound(handle);
       return;
     }
   }
