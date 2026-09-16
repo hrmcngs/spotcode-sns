@@ -450,3 +450,98 @@ struct SignupInput: Encodable {
         NSError(domain: "Signup", code: 0, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(key, comment: "")])
     }
 }
+
+// A saved draft is separate from each editor's working copy, so opening or
+// dismissing an empty sheet cannot overwrite another editor's saved content.
+struct NativeComposerDraft: Codable, Equatable {
+    var body = ""
+    var githubLink = ""
+    var repoFullName = ""
+    var eventURL = ""
+    var kind: String?
+    var visibility = "public"
+    var photos: [String] = []
+    var poll: PostPoll?
+    var spot: Spot?
+    var hasContent: Bool {
+        !body.isEmpty || !githubLink.isEmpty || !eventURL.isEmpty || !repoFullName.isEmpty || !photos.isEmpty || poll != nil || spot != nil
+    }
+}
+
+enum NativeDraftStore {
+    static func generation(account: String, slot: String, defaults: UserDefaults = .standard) -> Int {
+        defaults.integer(forKey: key(account: account, slot: slot) + ".generation")
+    }
+    static func completePublishing(_ draft: NativeComposerDraft, account: String, slot: String, defaults: UserDefaults = .standard) {
+        clearSaved(matching: draft, account: account, defaults: defaults)
+        save(NativeComposerDraft(), account: account, slot: slot, defaults: defaults)
+        defaults.set(generation(account: account, slot: slot, defaults: defaults) + 1, forKey: key(account: account, slot: slot) + ".generation")
+    }
+
+    static func migrateLegacy(account: String, defaults: UserDefaults = .standard) {
+        guard account != "guest", load(account: account, slot: "saved", defaults: defaults) == nil,
+              let body = defaults.string(forKey: "spotcode.native.draft"), !body.isEmpty else { return }
+        save(NativeComposerDraft(body: body), account: account, slot: "saved", defaults: defaults)
+        defaults.removeObject(forKey: "spotcode.native.draft")
+    }
+    static func key(account: String, slot: String) -> String { "spotcode.native.composer.\(account).\(slot)" }
+    static func load(account: String, slot: String, defaults: UserDefaults = .standard) -> NativeComposerDraft? {
+        guard let data = defaults.data(forKey: key(account: account, slot: slot)) else { return nil }
+        return try? JSONDecoder().decode(NativeComposerDraft.self, from: data)
+    }
+    static func save(_ draft: NativeComposerDraft, account: String, slot: String, defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(draft) else { return }
+        defaults.set(data, forKey: key(account: account, slot: slot))
+        if slot == "saved" { defaults.set(defaults.integer(forKey: "spotcode.native.draft.revision") + 1, forKey: "spotcode.native.draft.revision") }
+    }
+    static func clearSaved(matching draft: NativeComposerDraft, account: String, defaults: UserDefaults = .standard) {
+        if load(account: account, slot: "saved", defaults: defaults) == draft {
+            defaults.removeObject(forKey: key(account: account, slot: "saved"))
+            defaults.set(defaults.integer(forKey: "spotcode.native.draft.revision") + 1, forKey: "spotcode.native.draft.revision")
+        }
+    }
+}
+
+struct NativePostActivity: Decodable, Identifiable {
+    let createdAt: String?
+    let user: Profile?
+    var id: String { (user?.id?.uuidString ?? user?.handle ?? "unknown") + (createdAt ?? "") }
+    enum CodingKeys: String, CodingKey { case createdAt = "created_at", user }
+}
+
+// Presentation-only anonymity: raw identities remain intact for navigation,
+// API requests and storage. Match the Web privacy mode's stable FNV-1a aliases.
+enum NativePrivacy {
+    static var currentProfile: Profile?
+    static let preferenceKey = "spotcode.native.privacy-mode"
+    static var canUse: Bool {
+        currentProfile?.isAdmin == true || currentProfile?.isOperator == true || currentProfile?.handle == "spotcode_dev"
+    }
+    static var enabled: Bool { canUse && UserDefaults.standard.bool(forKey: preferenceKey) }
+    static func masks(_ handle: String) -> Bool {
+        enabled && !handle.isEmpty && handle != currentProfile?.handle
+    }
+    static func alias(_ handle: String) -> String {
+        var hash: UInt32 = 0x811c9dc5
+        for value in handle.lowercased().utf16 { hash = (hash ^ UInt32(value)) &* 16777619 }
+        return String(format: "%04x", hash & 0xffff)
+    }
+    static func text(_ text: String) -> String {
+        guard enabled else { return text }
+        let pattern = "(^|[^A-Za-z0-9_@-])@([A-Za-z0-9_][A-Za-z0-9_-]*)"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let result = NSMutableString(string: text)
+        for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+            let handle = (text as NSString).substring(with: match.range(at: 2))
+            if masks(handle) { result.replaceCharacters(in: match.range(at: 2), with: "user_" + alias(handle)) }
+        }
+        return result as String
+    }
+}
+
+extension Profile {
+    var visibleName: String { NativePrivacy.masks(handle) ? "User " + NativePrivacy.alias(handle) : name }
+    var visibleHandle: String { NativePrivacy.masks(handle) ? "user_" + NativePrivacy.alias(handle) : handle }
+    var visibleAvatarURL: String? { NativePrivacy.masks(handle) ? nil : avatarURL }
+    var visibleInitial: String { NativePrivacy.masks(handle) ? "U" : String(name.first ?? "?") }
+}

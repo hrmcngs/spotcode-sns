@@ -797,3 +797,50 @@
 "ローズ" = "Rose";
 
 "スレート" = "Slate";
+
+"プライバシーモード (匿名化表示)" = "Privacy mode (anonymise other users)";
+"他ユーザーの名前・ID・アイコンを匿名化" = "Anonymise other users’ names, handles and avatars";
+
+"下書きを保存しました" = "Draft saved";
+
+"下書きを復元" = "Restore draft";
+
+"入力中の内容を下書きで置き換えますか？" = "Replace the current content with the saved draft?";
+
+"アクティビティ" = "Activity";
+
+"この画面は投稿主だけが見られます。" = "Only the post author can view this screen.";
+
+"まだアクティビティはありません" = "No activity yet";
+
+"画像を読み込めませんでした" = "Could not load the image";
+
+"画像を拡大" = "Open image";
+
+"縮小" = "Zoom out";
+
+"拡大" = "Zoom in";
+
+"リポスト" = "Reposts";
+
+"開発・アイデア・場所" = "Development · Ideas · Places";
+
+"つくる人の活動記録。" = "A journal for people who build.";
+
+"アイデア、開発の進捗、気になる場所を残す。" = "Share ideas, work in progress, and places worth remembering.";
+
+"投稿を書く" = "Write a post";
+
+"アイデアや進捗を残す" = "Share an idea or an update";
+
+"場所から探す" = "Explore places";
+
+"地図で近くの投稿を見る" = "Find nearby posts on the map";
+
+"みんなの活動" = "Community journal";
+
+"制作中のプロジェクトを見る" = "Explore projects in progress";
+
+"活動を見る" = "Explore";
+
+"すべて" = "All";

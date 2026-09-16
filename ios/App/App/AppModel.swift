@@ -26,7 +26,7 @@ enum TimelinePreviewCache {
 @MainActor
 final class AppModel: ObservableObject {
     @Published var session: AuthSession?
-    @Published var me: Profile?
+    @Published var me: Profile? { didSet { NativePrivacy.currentProfile = me } }
     @Published var posts: [Post] = []
     @Published var lastUpdatedPost: Post?
     @Published private(set) var savedAccounts: [SavedAccount] = []
@@ -334,6 +334,7 @@ final class AppModel: ObservableObject {
             savedAccounts = (try? JSONDecoder().decode([SavedAccount].self, from: data)) ?? []
         }
         if let data = UserDefaults.standard.data(forKey: cachedProfileKey) { me = try? JSONDecoder().decode(Profile.self, from: data) }
+        NativePrivacy.currentProfile = me
         restoreSavedSession()
         if let data = UserDefaults.standard.data(forKey: cachedPostsKey) {
             // Drop oversized caches from older versions before decoding images/posts.

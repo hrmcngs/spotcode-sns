@@ -289,6 +289,15 @@ actor SupabaseService {
         }
     }
 
+    func postActivity(table: String, postID: UUID, token: String) async throws -> [NativePostActivity] {
+        guard ["likes", "reposts", "bookmarks", "comments"].contains(table) else { throw URLError(.badURL) }
+        let foreignKey = table == "comments" ? "comments_author_id_fkey" : "\(table)_user_id_fkey"
+        return try await request(
+            "rest/v1/\(table)?post_id=eq.\(postID.uuidString)&select=created_at,user:profiles!\(foreignKey)(id,handle,name,avatar_url,bio,avatar_shape)&order=created_at.desc",
+            token: token
+        )
+    }
+
     func postInteractionState(table: String, postID: UUID, userID: UUID, token: String) async throws -> (mine: Bool, count: Int) {
         guard ["likes", "reposts", "bookmarks"].contains(table) else { throw URLError(.badURL) }
         let rows: [PostInteractionRow] = try await request(

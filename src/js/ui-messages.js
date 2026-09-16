@@ -1,6 +1,18 @@
 // Source-language keys for shared controls, status messages, and accessibility labels.
 // User-authored content is never passed through this dictionary.
 export const UI_EN = {
+  "開発・アイデア・場所": "Development \u00b7 Ideas \u00b7 Places",
+  "つくる人の活動記録。": "A journal for people who build.",
+  "アイデア、開発の進捗、気になる場所を残す。": "Share ideas, work in progress, and places worth remembering.",
+  "投稿を書く": "Write a post",
+  "アイデアや進捗を残す": "Share an idea or an update",
+  "場所から探す": "Explore places",
+  "地図で近くの投稿を見る": "Find nearby posts on the map",
+  "みんなの活動": "Community journal",
+  "制作中のプロジェクトを見る": "Explore projects in progress",
+  "活動を見る": "Explore",
+  "すべて": "All",
+
   "アンバー": "Amber",
   "ローズ": "Rose",
   "スレート": "Slate",

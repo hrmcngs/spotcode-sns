@@ -64,7 +64,7 @@ for (const language of ['ja', 'en']) {
   assert.ok(composer.includes('data-compose-tool="poll"') && composer.includes('data-compose-tool="code"'));
   assert.ok(composer.includes(language === 'ja' ? '投票を作成' : 'Create poll'));
   vm.runInContext(strip('views/timeline-tabs.js'), ctx);
-  assert.ok(ctx.timelineTabs('foryou').includes(language === 'ja' ? 'おすすめ' : 'For you'));
+  assert.ok(ctx.timelineTabs('foryou').includes(language === 'ja' ? 'すべて' : 'All'));
   vm.runInContext(source('notif-poller.js').slice(source('notif-poller.js').indexOf('function formatNotif('), source('notif-poller.js').indexOf('\nasync function', source('notif-poller.js').indexOf('function formatNotif('))), ctx);
   ctx.routeUrl = path => path;
   const notification = ctx.formatNotif({type:'followed_post',actor:{name:'Alice'},district:'Tokyo',post:{id:'1',body:'Original post'}});

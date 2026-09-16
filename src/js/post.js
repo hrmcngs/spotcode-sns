@@ -252,7 +252,6 @@ export function renderPost(p) {
   const displayHandle = maskHandle(u.handle);
   return (
     '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '" data-visibility="' + escape(p.visibility || 'public') + '" data-repo-full-name="' + escape(p.repoFullName || '') + '">' +
-      renderAvatar(u, { tag: 'a', href: profileUrl }) +
       '<div class="post__main">' +
         '<div class="post__head">' +
           '<a class="post__name" href="' + profileUrl + '">' + escape(displayName) + '</a>' +

@@ -83,9 +83,20 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
             registerNotificationPermissionIfNeeded(application)
         }
 
+        return true
+    }
+
+    func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: "Main", sessionRole: session.role)
+        configuration.delegateClass = SpotcodeSceneDelegate.self
+        return configuration
+    }
+
+    func makeWindow(for scene: UIWindowScene) -> UIWindow {
         let model = AppModel()
         let root = RootView().environmentObject(model)
-        let window = UIWindow(frame: UIScreen.main.bounds)
+        let window = UIWindow(windowScene: scene)
         #if DEBUG && targetEnvironment(macCatalyst)
         // Verify both appearances without changing the user's macOS settings.
         let arguments = ProcessInfo.processInfo.arguments
@@ -165,7 +176,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
             }
         }
         #endif
-        return true
+        return window
     }
 
     private func registerNotificationPermissionIfNeeded(_ application: UIApplication) {
@@ -204,5 +215,17 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
         withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .badge, .sound])
+    }
+}
+
+// Associate the programmatic root with its scene on iOS and Mac Catalyst.
+final class SpotcodeSceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        guard let scene = scene as? UIWindowScene,
+              let delegate = UIApplication.shared.delegate as? AppDelegate else { return }
+        window = delegate.makeWindow(for: scene)
     }
 }

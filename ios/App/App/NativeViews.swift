@@ -148,6 +148,7 @@ private extension EnvironmentValues {
 }
 
 private struct AppAppearancePreference: ViewModifier {
+    @AppStorage("spotcode.native.privacy-mode") private var privacyMode = false
     @AppStorage("spotcode.colorTheme") private var colorTheme = "standard"
     @AppStorage("spotcode.appearance") private var appearance = "system"
     private var scheme: ColorScheme? {
@@ -158,7 +159,7 @@ private struct AppAppearancePreference: ViewModifier {
         }
     }
     func body(content: Content) -> some View {
-        content.environment(\.appColorTheme, colorTheme).preferredColorScheme(scheme)
+        content.environment(\.appColorTheme, colorTheme + (privacyMode ? ":private" : "")).preferredColorScheme(scheme)
             .onAppear { colorTheme = AppColorThemes.normalizedName(colorTheme) }
     }
 }
@@ -276,46 +277,13 @@ struct RootView: View {
             VStack(spacing: 0) {
                 TopBar(drawerOpen: $drawerOpen, section: $section, showAccounts: $showAccounts, showLogin: $showLogin, navigationReset: $navigationReset)
                 #if targetEnvironment(macCatalyst)
-                GeometryReader { geometry in
-                    HStack(alignment: .top, spacing: 20) {
-                        DesktopNavigation(section: $section, composing: $composing, showAccounts: $showAccounts, showLogin: $showLogin, navigationReset: $navigationReset, compact: geometry.size.width < 1000)
-                            .frame(width: geometry.size.width < 1000 ? 76 : 340)
-                        NavigationView {
-                            sectionView.background {
-                                NavigationLink(isActive: Binding(
-                                    get: { recommendedProfileHandle != nil },
-                                    set: { if !$0 { recommendedProfileHandle = nil } }
-                                )) {
-                                    VStack(spacing: 0) {
-                                        HStack {
-                                            Button { recommendedProfileHandle = nil } label: {
-                                                Image(systemName: "arrow.left").frame(width: 44, height: 44)
-                                            }.accessibilityLabel(NSLocalizedString("戻る", comment: ""))
-                                            Spacer()
-                                        }.padding(.horizontal, 12)
-                                        ProfileLookupView(handle: recommendedProfileHandle ?? "")
-                                            .id(recommendedProfileHandle)
-                                    }.background(SpotcodeTheme.surface).navigationBarHidden(true)
-                                } label: { EmptyView() }
-                                    .hidden().accessibilityHidden(true)
-                            }
-                        }
-                            .id(navigationReset).navigationViewStyle(.stack)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .overlay(alignment: .leading) { Rectangle().fill(SpotcodeTheme.border).frame(width: 1) }
-                        if geometry.size.width >= 1450 {
-                            DesktopCommunity(openProfile: { profile in
-                                recommendedProfileHandle = profile.handle
-                            }, openCity: { destination in
-                                cityDestination = destination
-                                section = .home
-                                navigationReset = UUID()
-                            }).frame(width: 400)
-                        }
-                    }
-                    .padding(20).frame(maxWidth: 1662, maxHeight: .infinity, alignment: .top)
+                DesktopNavigation(section: $section, composing: $composing, showAccounts: $showAccounts, showLogin: $showLogin, navigationReset: $navigationReset, compact: false)
+                    .frame(maxWidth: 960).padding(.horizontal, 24)
+                NavigationView { sectionView }
+                    .id(navigationReset).navigationViewStyle(.stack)
+                    .frame(maxWidth: 960, maxHeight: .infinity)
+                    .padding(.horizontal, 24)
                     .frame(maxWidth: .infinity)
-                }
                 #else
                 HStack(spacing: 0) {
                     Spacer(minLength: horizontalSizeClass == .regular ? 24 : 0)
@@ -323,9 +291,7 @@ struct RootView: View {
                         .id(navigationReset)
                         .navigationViewStyle(.stack)
                         .frame(maxWidth: horizontalSizeClass == .regular ? SpotcodeLayout.value(800, 720) : .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(SpotcodeTheme.border))
-                        .padding(8)
+                        .padding(.horizontal, horizontalSizeClass == .regular ? 24 : 20)
                     Spacer(minLength: horizontalSizeClass == .regular ? 24 : 0)
                 }
                 #endif
@@ -366,6 +332,15 @@ struct RootView: View {
             }
             #endif
             await model.bootstrap()
+            #if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if screenshotMode,
+               let index = arguments.firstIndex(of: "-SpotcodeScreenshotAccount"),
+               arguments.indices.contains(index + 1),
+               let account = model.savedAccounts.first(where: { $0.profile.handle == arguments[index + 1] }) {
+                _ = await model.switchAccount(to: account.id)
+            }
+            #endif
             if model.session != nil && !model.requiresReauthentication && !screenshotMode { showLogin = false }
         }
         .onChange(of: scenePhase) { phase in
@@ -465,10 +440,7 @@ private struct TopBar: View {
                 HStack(spacing: 7) {
                     SpotcodePinMark().stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)).frame(width: SpotcodeLayout.value(24, 25), height: SpotcodeLayout.value(24, 25))
                     Text("spotcode").fontWeight(.bold).lineLimit(1)
-                    #if targetEnvironment(macCatalyst)
-                    Text("/").foregroundColor(SpotcodeTheme.muted)
-                    Text("sns").foregroundColor(SpotcodeTheme.accent)
-                    #endif
+
                 }.foregroundColor(SpotcodeTheme.text)
             }
             #if targetEnvironment(macCatalyst)
@@ -507,76 +479,6 @@ private struct TopBar: View {
     }
 }
 
-#if targetEnvironment(macCatalyst)
-private struct DesktopNavigation: View {
-    @Environment(\.appColorTheme) private var appColorTheme
-    @EnvironmentObject private var model: AppModel
-    @Binding var section: AppSection
-    @Binding var composing: Bool
-    @Binding var showAccounts: Bool
-    @Binding var showLogin: Bool
-    @Binding var navigationReset: UUID
-    let compact: Bool
-
-    var body: some View {
-        let _ = appColorTheme
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                Rectangle().fill(SpotcodeTheme.text).frame(height: 1)
-                ForEach(AppSection.allCases, id: \.self) { item in
-                    Button {
-                        section = item; navigationReset = UUID()
-                    } label: {
-                        HStack(spacing: 18) {
-                            Image(systemName: item.icon).frame(width: 30)
-                            if !compact { Text(LocalizedStringKey(item.rawValue)).fontWeight(section == item ? .bold : .medium) }
-                        }
-                        .padding(.horizontal, compact ? 16 : 24)
-                        .padding(.vertical, 16)
-                        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .foregroundColor(SpotcodeTheme.text)
-                    }
-                    .buttonStyle(DesktopMenuRowStyle(selected: section == item))
-                    .accessibilityLabel(Text(LocalizedStringKey(item.rawValue)))
-                    .accessibilityAddTraits(section == item ? .isSelected : [])
-                    .accessibilityIdentifier("desktop.nav.\(item.rawValue)")
-                }
-                Button {
-                    if model.session == nil { showLogin = true } else { composing = true }
-                } label: {
-                    HStack(spacing: 18) {
-                        Image(systemName: "plus").frame(width: 30)
-                        if !compact { Text(NSLocalizedString("New idea", comment: "")).fontWeight(.bold) }
-                    }
-                    .padding(.horizontal, compact ? 16 : 24)
-                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                    .foregroundColor(SpotcodeTheme.text)
-                    .contentShape(Rectangle())
-                }.buttonStyle(DesktopMenuRowStyle()).keyboardShortcut("n", modifiers: .command)
-                    .accessibilityLabel(NSLocalizedString("New idea", comment: ""))
-                Button {
-                    if model.session == nil { showLogin = true } else { showAccounts = true }
-                } label: {
-                    HStack(spacing: 12) {
-                        AvatarView(profile: model.displayProfile, size: 48)
-                        if !compact, let profile = model.displayProfile {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(profile.name).fontWeight(.bold).lineLimit(1)
-                                Text("@\(profile.handle)").spotcodeFont(12, fallback: .caption).foregroundColor(SpotcodeTheme.muted).lineLimit(1)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, compact ? 14 : 24).padding(.vertical, 20)
-                    .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
-                    .contentShape(Rectangle()).foregroundColor(SpotcodeTheme.text)
-                }.buttonStyle(DesktopMenuRowStyle()).accessibilityLabel(NSLocalizedString("アカウント", comment: ""))
-            }
-        }
-    }
-}
-
 // Hover stays local to each row, avoiding redraws of the entire navigation.
 private struct DesktopMenuRowStyle: ButtonStyle {
     var selected = false
@@ -603,6 +505,44 @@ private struct DesktopMenuRowStyle: ButtonStyle {
                 .contentShape(Rectangle())
                 .onHover { hovering = $0 }
         }
+    }
+}
+
+#if targetEnvironment(macCatalyst)
+private struct DesktopNavigation: View {
+    @Environment(\.appColorTheme) private var appColorTheme
+    @EnvironmentObject private var model: AppModel
+    @Binding var section: AppSection
+    @Binding var composing: Bool
+    @Binding var showAccounts: Bool
+    @Binding var showLogin: Bool
+    @Binding var navigationReset: UUID
+    let compact: Bool
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                ForEach(AppSection.allCases, id: \.self) { item in
+                    Button {
+                        section = item; navigationReset = UUID()
+                    } label: {
+                        Text(LocalizedStringKey(item.rawValue))
+                            .font(.subheadline.weight(section == item ? .bold : .regular))
+                            .padding(.horizontal, 18).frame(minHeight: 48)
+                            .foregroundColor(SpotcodeTheme.text).contentShape(Rectangle())
+                    }.buttonStyle(DesktopMenuRowStyle(selected: section == item))
+                        .accessibilityAddTraits(section == item ? .isSelected : [])
+                        .accessibilityIdentifier("desktop.nav.\(item.rawValue)")
+                }
+                Button {
+                    if model.session == nil { showLogin = true } else { composing = true }
+                } label: {
+                    Text(NSLocalizedString("投稿を書く", comment: "")).font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 18).frame(minHeight: 48)
+                }.buttonStyle(DesktopMenuRowStyle()).keyboardShortcut("n", modifiers: .command)
+            }
+        }
+        .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
     }
 }
 
@@ -681,8 +621,8 @@ private struct DesktopCommunity: View {
                                 HStack(spacing: 10) {
                                     AvatarView(profile: profile, size: 42)
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(profile.name).fontWeight(.bold).lineLimit(1)
-                                        Text("@\(profile.handle)").spotcodeFont(11, fallback: .caption2).foregroundColor(SpotcodeTheme.muted).lineLimit(1)
+                                        Text(profile.visibleName).fontWeight(.bold).lineLimit(1)
+                                        Text("@\(profile.visibleHandle)").spotcodeFont(11, fallback: .caption2).foregroundColor(SpotcodeTheme.muted).lineLimit(1)
                                     }
                                 }.frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                                     .contentShape(Rectangle())
@@ -833,8 +773,8 @@ private struct SideDrawer: View {
                 HStack(spacing: 10) {
                     AvatarView(profile: me, size: 36)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(me.name).fontWeight(.bold)
-                        Text("@\(me.handle)").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+                        Text(me.visibleName).fontWeight(.bold)
+                        Text("@\(me.visibleHandle)").spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
                     }
                 }
             }
@@ -877,10 +817,10 @@ private struct AccountSwitcher: View {
                         AvatarView(profile: account.profile, size: SpotcodeLayout.value(40, 44))
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
-                                Text(account.profile.name).fontWeight(.bold)
+                                Text(account.profile.visibleName).fontWeight(.bold)
                                 if active { Text(NSLocalizedString("現在", comment: "")).spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent).padding(4).background(SpotcodeTheme.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 5)) }
                             }
-                            Text("@\(account.profile.handle)").foregroundColor(SpotcodeTheme.muted)
+                            Text("@\(account.profile.visibleHandle)").foregroundColor(SpotcodeTheme.muted)
                         }
                         Spacer()
                         if switchingID == account.id { ProgressView() }
@@ -939,6 +879,40 @@ private struct AccountSwitcher: View {
     }
 }
 
+private struct JournalHeader: View {
+    let compose: () -> Void
+    let explore: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(NSLocalizedString("開発・アイデア・場所", comment: ""))
+                .font(.caption.weight(.semibold)).tracking(2).foregroundColor(SpotcodeTheme.muted)
+            Text("spotcode").font(.system(size: SpotcodeLayout.value(64, 46), weight: .bold))
+                .tracking(-2).padding(.top, 16).padding(.bottom, 20)
+            Text(NSLocalizedString("つくる人の活動記録。", comment: ""))
+                .font(.title3.weight(.medium)).padding(.bottom, 10)
+            Text(NSLocalizedString("アイデア、開発の進捗、気になる場所を残す。", comment: ""))
+                .font(.subheadline).foregroundColor(SpotcodeTheme.muted).padding(.bottom, 36)
+            Rectangle().fill(SpotcodeTheme.text).frame(height: 1)
+            journalLink("投稿を書く", detail: "アイデアや進捗を残す", action: compose)
+            journalLink("場所から探す", detail: "地図で近くの投稿を見る", action: explore)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, SpotcodeLayout.value(48, 28)).padding(.bottom, 32)
+    }
+    private func journalLink(_ title: String, detail: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 20) {
+                Text(NSLocalizedString(title, comment: "")).font(.subheadline.weight(.semibold))
+                    .frame(minWidth: 100, alignment: .leading)
+                Text(NSLocalizedString(detail, comment: "")).font(.caption).foregroundColor(SpotcodeTheme.muted)
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right").font(.caption)
+            }.padding(.horizontal, 8).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }.buttonStyle(DesktopMenuRowStyle())
+    }
+}
+
 struct TimelineView: View {
     @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
@@ -952,7 +926,7 @@ struct TimelineView: View {
         let _ = appColorTheme
 
         VStack(spacing: 0) {
-            TimelineTabs(selected: $selectedTab)
+            if selectedTab != 0 { TimelineTabs(selected: $selectedTab) }
             if selectedTab == 2 {
                 NativeMapView(cityDestination: cityDestination).id(cityDestination?.id)
             } else if selectedTab == 1 {
@@ -962,7 +936,11 @@ struct TimelineView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        InlineComposer(repositoryComposeURL: $repositoryComposeURL)
+                        JournalHeader(compose: { composing = true }, explore: { selectedTab = 2 })
+                        Text(NSLocalizedString("みんなの活動", comment: ""))
+                            .font(.title2.weight(.bold)).frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, 16)
+                        TimelineTabs(selected: $selectedTab)
+
                         ForEach(model.posts) { post in
                             PostRow(post: post).onAppear {
                                 if post.id == model.posts.last?.id && model.timelinePageError == nil && !ProcessInfo.processInfo.arguments.contains("-SpotcodeCaptureFullPage") {
@@ -1005,10 +983,14 @@ struct TimelineView: View {
                     withAnimation(.easeOut(duration: 0.2)) { drawerOpen = true }
                 }
         )
-        .background(SpotcodeTheme.surface).navigationBarHidden(true)
+        .background(SpotcodeTheme.background).navigationBarHidden(true)
         .onAppear { if cityDestination != nil { selectedTab = 2 } }
         .onChange(of: cityDestination?.id) { value in if value != nil { selectedTab = 2 } }
-        .sheet(isPresented: $composing) { ComposeView(isPresented: $composing).environmentObject(model) }
+        .onChange(of: repositoryComposeURL) { value in if value != nil { composing = true } }
+        .onAppear { if repositoryComposeURL != nil { composing = true } }
+        .sheet(isPresented: $composing, onDismiss: { repositoryComposeURL = nil }) {
+            ComposeView(isPresented: $composing, initialGitHubLink: repositoryComposeURL ?? "").environmentObject(model)
+        }
     }
 }
 
@@ -1074,20 +1056,20 @@ private struct FollowingTimelineView: View {
 private struct TimelineTabs: View {
     @Environment(\.appColorTheme) private var appColorTheme
     @Binding var selected: Int
-    private let labels = [NSLocalizedString("For you", comment: ""), NSLocalizedString("Following", comment: ""), NSLocalizedString("Spots", comment: "")]
+    private let labels = [NSLocalizedString("すべて", comment: ""), NSLocalizedString("Following", comment: ""), NSLocalizedString("Spots", comment: "")]
     var body: some View {
         let _ = appColorTheme
 
-        HStack(spacing: 0) {
+        HStack(spacing: 24) {
             ForEach(labels.indices, id: \.self) { index in
                 Button { selected = index } label: {
                     VStack(spacing: SpotcodeLayout.value(9, 11)) {
                         Text(labels[index]).fontWeight(.semibold)
-                        Capsule().fill(selected == index ? SpotcodeTheme.accent : .clear).frame(width: 56, height: SpotcodeLayout.value(2, 4))
-                    }.frame(maxWidth: .infinity).padding(.top, SpotcodeLayout.value(10, 13)).contentShape(Rectangle())
+                        Rectangle().fill(selected == index ? SpotcodeTheme.text : .clear).frame(height: 1)
+                    }.fixedSize(horizontal: true, vertical: false).padding(.top, 8).contentShape(Rectangle())
                 }.foregroundColor(selected == index ? SpotcodeTheme.text : SpotcodeTheme.muted)
             }
-        }.background(SpotcodeTheme.surface)
+        }.frame(maxWidth: .infinity, alignment: .leading).background(SpotcodeTheme.background)
          .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
     }
 }
@@ -1102,8 +1084,7 @@ private struct InlineComposer: View {
     // synchronous UserDefaults write for every keystroke and made typing
     // visibly stall on real devices. Keep editing in memory and persist
     // only after the user pauses.
-    @State private var draft = UserDefaults.standard.string(forKey: "spotcode.native.draft") ?? ""
-    @State private var draftSaveTask: Task<Void, Never>?
+    @State private var draft = ""
     @State private var githubLink = ""
     @State private var repoFullName = ""
     @State private var eventURL = ""
@@ -1118,7 +1099,6 @@ private struct InlineComposer: View {
     @State private var showPollEditor = false
     @State private var selectedSpot: Spot?
     @State private var showLocationPicker = false
-    @State private var showDraftNotice = true
     @State private var editorFocused = false
     var body: some View {
         let _ = appColorTheme
@@ -1128,7 +1108,7 @@ private struct InlineComposer: View {
             VStack(alignment: .leading, spacing: 12) {
                 ZStack(alignment: .topLeading) {
                     ComposerTextView(text: $draft, isFocused: $editorFocused)
-                        .frame(minHeight: SpotcodeLayout.value(88, 108))
+                        .frame(height: editorHeight(draft, expanded: editorFocused))
                     if draft.isEmpty {
                         Text(NSLocalizedString("いまどうしてる？", comment: ""))
                             .spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont).foregroundColor(SpotcodeTheme.muted)
@@ -1164,21 +1144,11 @@ private struct InlineComposer: View {
                     composerTools
                     HStack { Spacer(); composerActions; Spacer() }
                 }
-                if !draft.isEmpty && showDraftNotice {
-                    HStack {
-                        Text(NSLocalizedString("下書きを復元しました", comment: ""))
-                        Spacer()
-                        Button(NSLocalizedString("破棄", comment: "")) { draft = ""; showDraftNotice = false }.foregroundColor(SpotcodeTheme.muted)
-                    }.padding(.horizontal, 12).padding(.vertical, SpotcodeLayout.value(9, 11))
-                     .background(SpotcodeTheme.selection)
-                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(SpotcodeTheme.accent.opacity(0.45)))
-                }
+
             }
         }.padding(SpotcodeLayout.value(16, 16))
          .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
          .onAppear { applyRepositoryRequest(repositoryComposeURL) }
-         .onDisappear { persistDraftImmediately() }
-         .onChange(of: draft) { scheduleDraftSave($0) }
          .onChange(of: repositoryComposeURL) { applyRepositoryRequest($0) }
          .sheet(isPresented: $showLocationPicker) {
              LocationPickerSheet(spot: $selectedSpot, isPresented: $showLocationPicker)
@@ -1220,9 +1190,7 @@ private struct InlineComposer: View {
 
     private var composerActions: some View {
         HStack(spacing: 10) {
-            Button(NSLocalizedString("下書き保存", comment: "")) { showDraftNotice = true }
-                .spotcodeFont(14, weight: .semibold, fallback: SpotcodeLayout.bodyFont.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, SpotcodeLayout.value(8, 10))
-                .overlay(Capsule().stroke(SpotcodeTheme.border))
+            NativeDraftControls(account: draftAccount, slot: "inline", draft: draftSnapshot, restore: restoreDraft)
             Button(sending ? NSLocalizedString("送信中…", comment: "") : NSLocalizedString("Push", comment: "")) { publish() }
                 .spotcodeFont(14, weight: .bold, fallback: SpotcodeLayout.bodyFont.weight(.bold)).padding(.horizontal, SpotcodeLayout.value(18, 28)).padding(.vertical, SpotcodeLayout.value(9, 11))
                 .background(SpotcodeTheme.accent).foregroundColor(SpotcodeTheme.onAccent).clipShape(Capsule())
@@ -1234,6 +1202,7 @@ private struct InlineComposer: View {
         sending = true
         Task {
             if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, repoFullName: repoFullName.isEmpty ? nil : repoFullName, eventURL: eventURL.isEmpty ? nil : eventURL, spot: selectedSpot, kind: postKind, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
+                NativeDraftStore.completePublishing(draftSnapshot, account: draftAccount, slot: "inline")
                 draft = ""; githubLink = ""; repoFullName = ""; eventURL = ""; showLink = false; showEvent = false
                 postKind = nil; visibility = "public"; selectedSpot = nil
                 photos = []; poll = nil
@@ -1257,18 +1226,98 @@ private struct InlineComposer: View {
         repositoryComposeURL = nil
     }
 
-    private func scheduleDraftSave(_ value: String) {
-        draftSaveTask?.cancel()
-        draftSaveTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            guard !Task.isCancelled else { return }
-            UserDefaults.standard.set(value, forKey: "spotcode.native.draft")
+    private var draftAccount: String { model.displayProfile?.id?.uuidString ?? model.session?.user.id.uuidString ?? "guest" }
+    private var draftSnapshot: NativeComposerDraft {
+        NativeComposerDraft(body: draft, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: selectedSpot)
+    }
+    private func restoreDraft(_ value: NativeComposerDraft) {
+        draft = value.body; githubLink = value.githubLink; repoFullName = value.repoFullName
+        eventURL = value.eventURL; postKind = value.kind; visibility = value.visibility
+        photos = value.photos; poll = value.poll; selectedSpot = value.spot
+        showLink = !githubLink.isEmpty || !repoFullName.isEmpty; showEvent = !eventURL.isEmpty
+    }
+}
+
+private struct NativeDraftControls: View {
+    let account: String
+    let slot: String
+    let draft: NativeComposerDraft
+    let restore: (NativeComposerDraft) -> Void
+    @State private var generation = 0
+    @State private var loadedAccount: String?
+    @AppStorage("spotcode.native.draft.revision") private var revision = 0
+    @State private var hasSaved = false
+    @State private var notice = ""
+    @State private var confirmingRestore = false
+    @State private var pendingSave: Task<Void, Never>?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Button(NSLocalizedString("下書き保存", comment: "")) {
+                    pendingSave?.cancel()
+                    NativeDraftStore.save(draft, account: account, slot: slot)
+                    NativeDraftStore.save(draft, account: account, slot: "saved")
+                    hasSaved = true
+                    notice = NSLocalizedString("下書きを保存しました", comment: "")
+                }.disabled(!draft.hasContent)
+                if hasSaved {
+                    Button(NSLocalizedString("下書きを復元", comment: "")) {
+                        if draft.hasContent { confirmingRestore = true } else { restoreSaved() }
+                    }
+                }
+            }
+            if !notice.isEmpty { Text(notice).font(.caption).foregroundColor(SpotcodeTheme.muted) }
+        }
+        .font(.subheadline)
+        .onAppear { loadWorkingCopy() }
+        .onChange(of: account) { _ in
+            pendingSave?.cancel()
+            if let loadedAccount { NativeDraftStore.save(draft, account: loadedAccount, slot: slot) }
+            loadWorkingCopy()
+        }
+        .onChange(of: revision) { _ in hasSaved = NativeDraftStore.load(account: account, slot: "saved")?.hasContent == true }
+        .onChange(of: draft) { value in
+            guard loadedAccount == account else { return }
+            pendingSave?.cancel()
+            let owner = account
+            let version = NativeDraftStore.generation(account: owner, slot: slot)
+            generation = version
+            pendingSave = Task { @MainActor in
+                do { try await Task.sleep(nanoseconds: 500_000_000) } catch { return }
+                guard NativeDraftStore.generation(account: owner, slot: slot) == version else { return }
+                NativeDraftStore.save(value, account: owner, slot: slot)
+            }
+        }
+        .onDisappear {
+            pendingSave?.cancel()
+            if loadedAccount == account, generation == NativeDraftStore.generation(account: account, slot: slot) { NativeDraftStore.save(draft, account: account, slot: slot) }
+        }
+        .confirmationDialog(NSLocalizedString("入力中の内容を下書きで置き換えますか？", comment: ""), isPresented: $confirmingRestore, titleVisibility: .visible) {
+            Button(NSLocalizedString("下書きを復元", comment: "")) { restoreSaved() }
+            Button(NSLocalizedString("キャンセル", comment: ""), role: .cancel) {}
         }
     }
 
-    private func persistDraftImmediately() {
-        draftSaveTask?.cancel()
-        UserDefaults.standard.set(draft, forKey: "spotcode.native.draft")
+    private func loadWorkingCopy() {
+        NativeDraftStore.migrateLegacy(account: account)
+        hasSaved = NativeDraftStore.load(account: account, slot: "saved")?.hasContent == true
+        guard loadedAccount != account else { return }
+        let changedAccount = loadedAccount != nil
+        loadedAccount = account
+        generation = NativeDraftStore.generation(account: account, slot: slot)
+        notice = ""
+        if let working = NativeDraftStore.load(account: account, slot: slot) ?? (slot == "sheet" ? NativeDraftStore.load(account: account, slot: "inline") : nil), working.hasContent {
+            restore(working)
+            notice = NSLocalizedString("下書きを復元しました", comment: "")
+        } else if changedAccount {
+            restore(NativeComposerDraft())
+        }
+    }
+    private func restoreSaved() {
+        guard let saved = NativeDraftStore.load(account: account, slot: "saved") else { hasSaved = false; return }
+        restore(saved)
+        notice = NSLocalizedString("下書きを復元しました", comment: "")
     }
 }
 
@@ -1857,6 +1906,11 @@ private struct CurrentLocationMap: UIViewRepresentable {
 // TextEditor keeps an opaque system background on some iOS 15 builds even
 // when SwiftUI's outer background is set. A native UITextView lets us apply
 // the exact web composer surface (#21262d) to the actual editable layer.
+private func editorHeight(_ text: String, expanded: Bool) -> CGFloat {
+    let lines = text.split(separator: "\n", omittingEmptySubsequences: false).count
+    return min(220, max(expanded || !text.isEmpty ? 112 : 72, CGFloat(lines) * 24 + 24))
+}
+
 private struct ComposerTextView: UIViewRepresentable {
     @Environment(\.appColorTheme) private var appColorTheme
     @Binding var text: String
@@ -1968,6 +2022,7 @@ struct PostRow: View {
     let post: Post
     var opensDetail = true
     var onSpotTap: ((Post) -> Void)?
+    @State private var selectedPhoto: PostPhotoSelection?
     @State private var editing = false
     @State private var confirmingDelete = false
     @State private var showingDetail = false
@@ -2027,15 +2082,14 @@ Menu {
     }
 
     private var postContent: some View {
-        HStack(alignment: .top, spacing: 12) {
-            NavigationLink(destination: ProfileLookupView(handle: post.displayAuthor?.handle ?? "")) {
-                AvatarView(profile: post.displayAuthor, size: SpotcodeLayout.value(40, 42))
-            }.buttonStyle(SpotcodePlainButtonStyle()).disabled(post.displayAuthor?.handle == nil)
-            VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 5) {
-                    Text(post.displayAuthor?.name ?? NSLocalizedString("User", comment: "")).fontWeight(.bold).foregroundColor(SpotcodeTheme.text)
-                        .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-                    Text("@\(post.displayAuthor?.handle ?? "unknown")").foregroundColor(SpotcodeTheme.muted)
+                    NavigationLink(destination: ProfileLookupView(handle: post.displayAuthor?.handle ?? "")) {
+                        Text(post.displayAuthor?.visibleName ?? NSLocalizedString("User", comment: "")).fontWeight(.semibold)
+                            .lineLimit(1).truncationMode(.tail)
+                    }.buttonStyle(SpotcodePlainButtonStyle()).disabled(post.displayAuthor?.handle == nil).layoutPriority(1)
+                    Text("@\(post.displayAuthor?.visibleHandle ?? "unknown")").foregroundColor(SpotcodeTheme.muted)
                         .lineLimit(1).truncationMode(.tail)
                     Text("· \(relativeTime(post.createdAt))").foregroundColor(SpotcodeTheme.muted)
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
@@ -2048,8 +2102,7 @@ Menu {
                             .background(status == "active" ? Color.cyan : SpotcodeTheme.warning).clipShape(Capsule())
                     }
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { if opensDetail { showingDetail = true } }
+                .font(.caption).foregroundColor(SpotcodeTheme.muted)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         if let spot = post.spot {
@@ -2080,13 +2133,21 @@ Menu {
                         .padding(SpotcodeLayout.value(10, 12)).frame(maxWidth: .infinity, alignment: .leading)
                         .background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 9))
                 } else {
-                    SelectablePostBody(text: post.body)
+                    SelectablePostBody(text: NativePrivacy.text(post.body))
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if canReadContent, let photos = post.photos, !photos.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) { ForEach(photos, id: \.self) { DataURLImage(value: $0).frame(width: 180, height: 140).clipShape(RoundedRectangle(cornerRadius: 10)) } }
+                        HStack(spacing: 8) {
+                            ForEach(Array(photos.enumerated()), id: \.offset) { index, value in
+                                Button { selectedPhoto = PostPhotoSelection(photos: photos, index: index) } label: {
+                                    DataURLImage(value: value, fit: true).frame(width: 180, height: 140)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }.buttonStyle(SpotcodePlainButtonStyle())
+                                    .accessibilityLabel(NSLocalizedString("画像を拡大", comment: ""))
+                            }
+                        }
                     }
                 }
                 if canReadContent, let poll = post.poll {
@@ -2113,46 +2174,44 @@ Menu {
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
                 if canReadContent {
-                    HStack(spacing: 0) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
                         NavigationLink(destination: PostDetailView(post: post)) {
                             PostAction(icon: "bubble.left", count: post.commentsCount ?? 0)
-                        }.buttonStyle(SpotcodePlainButtonStyle()); Spacer()
+                        }.buttonStyle(SpotcodePlainButtonStyle())
                         Button { toggleInteraction("reposts") } label: {
                             PostAction(icon: reposted ? "arrow.2.squarepath" : "arrow.2.squarepath", count: repostCount)
-                        }.buttonStyle(SpotcodePlainButtonStyle()).disabled(interactionInProgress.contains("reposts")); Spacer()
+                        }.buttonStyle(SpotcodePlainButtonStyle()).disabled(interactionInProgress.contains("reposts"))
                         Button { toggleInteraction("bookmarks") } label: {
                             PostAction(icon: bookmarked ? "star.fill" : "star", count: bookmarkCount)
                         }.buttonStyle(SpotcodePlainButtonStyle()).foregroundColor(bookmarked ? SpotcodeTheme.warning : SpotcodeTheme.muted)
-                            .disabled(interactionInProgress.contains("bookmarks")); Spacer()
+                            .disabled(interactionInProgress.contains("bookmarks"))
                         Button { toggleInteraction("likes") } label: {
                             PostAction(icon: liked ? "heart.fill" : "heart", count: likeCount)
                         }.buttonStyle(SpotcodePlainButtonStyle()).foregroundColor(liked ? .pink : SpotcodeTheme.muted)
-                            .disabled(interactionInProgress.contains("likes")); Spacer()
+                            .disabled(interactionInProgress.contains("likes"))
                         Button { sharing = true } label: {
                             Image(systemName: "square.and.arrow.up")
                         }.buttonStyle(SpotcodePlainButtonStyle())
                         if post.authorID != model.me?.id {
-                            Spacer()
                             moderationMenu
                         }
                         if canManagePost {
-                            Spacer()
-                            NavigationLink(destination: PostDetailView(post: post)) {
+                            NavigationLink(destination: NativePostActivityView(post: post)) {
                                 Image(systemName: "chart.bar")
                             }.buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel(NSLocalizedString("投稿の分析", comment: ""))
-                            Spacer()
                             Button { editing = true } label: { Image(systemName: "pencil") }
                                 .buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel(NSLocalizedString("投稿を編集", comment: ""))
-                            Spacer()
                             Button { confirmingDelete = true } label: { Image(systemName: "trash") }
                                 .buttonStyle(SpotcodePlainButtonStyle()).accessibilityLabel(NSLocalizedString("投稿を削除", comment: ""))
                         }
+                    }
                     }
                     .spotcodeFont(15, fallback: .system(size: 15)).foregroundColor(SpotcodeTheme.muted).padding(.top, 7)
                 }
             }
         }
-        .padding(SpotcodeLayout.value(16, 16)).background(SpotcodeTheme.surface)
+        .padding(.vertical, 28).padding(.horizontal, 4).background(SpotcodeTheme.background)
         .overlay(alignment: .bottom) { Rectangle().fill(SpotcodeTheme.border).frame(height: 1) }
         .contentShape(Rectangle())
         .background {
@@ -2161,6 +2220,10 @@ Menu {
                     .hidden().accessibilityHidden(true)
             }
         }
+        .sheet(item: $selectedPhoto) { selection in
+            PostPhotoViewer(photos: selection.photos, index: selection.index)
+        }
+        .onChange(of: canReadContent) { allowed in if !allowed { selectedPhoto = nil } }
         .sheet(isPresented: $editing) { EditPostView(post: post, isPresented: $editing).environmentObject(model) }
         .sheet(isPresented: $showSpotMap) {
             NavigationView {
@@ -2425,15 +2488,18 @@ private struct PostMetadataBadge: View {
 
 struct AvatarView: View {
     @Environment(\.appColorTheme) private var appColorTheme
+    @EnvironmentObject private var model: AppModel
     let profile: Profile?
     var size: CGFloat = 42
     var body: some View {
         let _ = appColorTheme
+        // Existing rows must re-evaluate masking when the active account changes.
+        let _ = model.me
 
         Group {
-            if let image = decodedDataURLImage(profile?.avatarURL, maxPixelSize: max(1, Int(ceil(size * 3)))) {
+            if let image = decodedDataURLImage(profile?.visibleAvatarURL, maxPixelSize: max(1, Int(ceil(size * 3)))) {
                 Image(uiImage: image).resizable().scaledToFill()
-            } else if let url = profile?.avatarURL.flatMap(URL.init(string:)), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            } else if let url = profile?.visibleAvatarURL.flatMap(URL.init(string:)), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
                 AsyncImage(url: url) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { avatarFallback }
@@ -2447,12 +2513,199 @@ struct AvatarView: View {
     private var avatarFallback: some View {
         ZStack {
             Color(red: 102/255, green: 102/255, blue: 102/255)
-            Text(String(profile?.name.first ?? "?"))
+            Text(profile?.visibleInitial ?? "?")
                 .font(.system(size: max(13, size * 0.4), weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
         }
+    }
+}
+
+private struct NativePostActivityView: View {
+    @EnvironmentObject private var model: AppModel
+    let post: Post
+    @AppStorage("spotcode.native.dev-mode") private var developerMode = false
+    private var allowed: Bool {
+        if post.visibility == "only_me" { return post.authorID == model.session?.user.id }
+        return post.authorID == model.displayProfile?.id ||
+            (developerMode && (model.me?.isAdmin == true || model.me?.isOperator == true))
+    }
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if allowed, let token = model.session?.accessToken {
+                    Text(NativePrivacy.text(post.body)).lineLimit(3).foregroundColor(SpotcodeTheme.muted)
+                    NativeActivitySection(postID: post.id, table: "likes", title: "いいね", token: token)
+                    NativeActivitySection(postID: post.id, table: "comments", title: "コメント", token: token)
+                    NativeActivitySection(postID: post.id, table: "reposts", title: "リポスト", token: token)
+                    NativeActivitySection(postID: post.id, table: "bookmarks", title: "保存", token: token)
+                } else {
+                    Text(NSLocalizedString("この画面は投稿主だけが見られます。", comment: ""))
+                }
+            }.padding().frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
+        }
+        .background(SpotcodeTheme.background).foregroundColor(SpotcodeTheme.text)
+        .navigationTitle(NSLocalizedString("アクティビティ", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+        .id(model.session?.user.id)
+    }
+}
+
+private struct NativeActivitySection: View {
+    let postID: UUID
+    let table: String
+    let title: String
+    let token: String
+    @State private var rows: [NativePostActivity] = []
+    @State private var loading = true
+    @State private var error: String?
+    @State private var retry = 0
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(NSLocalizedString(title, comment: "") + (loading || error != nil ? "" : " (\(rows.count))")).font(.headline)
+            if loading { ProgressView() }
+            else if let error {
+                Text(error).font(.caption).foregroundColor(SpotcodeTheme.muted)
+                Button(NSLocalizedString("再試行", comment: "")) { retry += 1 }
+            } else if rows.isEmpty {
+                Text(NSLocalizedString("まだアクティビティはありません", comment: "")).foregroundColor(SpotcodeTheme.muted)
+            } else {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    if let profile = row.user {
+                        NavigationLink(destination: ProfileLookupView(handle: profile.handle)) {
+                            HStack {
+                                AvatarView(profile: profile, size: 32)
+                                VStack(alignment: .leading) {
+                                    Text(profile.visibleName)
+                                    Text("@" + profile.visibleHandle).font(.caption).foregroundColor(SpotcodeTheme.muted)
+                                }
+                                Spacer()
+                            }.padding(.vertical, 4)
+                        }.buttonStyle(SpotcodePlainButtonStyle())
+                    }
+                }
+            }
+            Divider()
+        }
+        .task(id: "\(postID):\(retry)") {
+            loading = true; error = nil
+            do {
+                let result = try await SupabaseService.shared.postActivity(table: table, postID: postID, token: token)
+                try Task.checkCancellation()
+                rows = result; loading = false
+            } catch {
+                guard !Task.isCancelled, (error as? URLError)?.code != .cancelled else { return }
+                self.error = error.localizedDescription; loading = false
+            }
+        }
+    }
+}
+
+private struct PostPhotoSelection: Identifiable {
+    let id = UUID()
+    let photos: [String]
+    let index: Int
+}
+
+private struct PostPhotoViewer: View {
+    @Environment(\.dismiss) private var dismiss
+    let photos: [String]
+    @State var index: Int
+    @State private var image: UIImage?
+    @State private var failed = false
+    @State private var zoom: CGFloat = 1
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                ZStack {
+                    Color.black
+                    if let image { NativeZoomableImage(image: image, zoom: $zoom) }
+                    else if failed { Text(NSLocalizedString("画像を読み込めませんでした", comment: "")).foregroundColor(.white) }
+                    else { ProgressView().tint(.white) }
+                }
+                HStack(spacing: 24) {
+                    Button { index -= 1 } label: { Image(systemName: "chevron.left") }.disabled(index == 0)
+                    Text("\(index + 1) / \(photos.count)")
+                    Button { index += 1 } label: { Image(systemName: "chevron.right") }.disabled(index + 1 == photos.count)
+                    Spacer()
+                    Button { zoom = max(1, zoom / 1.5) } label: { Image(systemName: "minus.magnifyingglass") }
+                        .accessibilityLabel(NSLocalizedString("縮小", comment: ""))
+                    Button { zoom = min(6, zoom * 1.5) } label: { Image(systemName: "plus.magnifyingglass") }
+                        .accessibilityLabel(NSLocalizedString("拡大", comment: ""))
+                }.padding().foregroundColor(SpotcodeTheme.text).background(SpotcodeTheme.surface)
+            }
+            .navigationTitle(NSLocalizedString("画像", comment: ""))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { MapSheetCloseButton { dismiss() } } }
+        }
+        .navigationViewStyle(.stack)
+        .task(id: index) {
+            image = nil; failed = false; zoom = 1
+            let value = photos[index]
+            if let decoded = decodedDataURLImage(value, maxPixelSize: 4096) { image = decoded; return }
+            do {
+                guard let url = URL(string: value), ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { throw URLError(.badURL) }
+                let (data, response) = try await URLSession.shared.data(from: url)
+                try Task.checkCancellation()
+                guard (response as? HTTPURLResponse)?.statusCode == 200, let decoded = UIImage(data: data) else { throw URLError(.cannotDecodeContentData) }
+                image = decoded
+            } catch { if !Task.isCancelled { failed = true } }
+        }
+    }
+}
+
+private final class NativeImageScrollView: UIScrollView {
+    let picture = UIImageView()
+    private var viewport = CGSize.zero
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .black; minimumZoomScale = 1; maximumZoomScale = 6
+        picture.contentMode = .scaleAspectFit
+        addSubview(picture)
+        let tap = UITapGestureRecognizer(target: self, action: #selector(doubleTap(_:)))
+        tap.numberOfTapsRequired = 2; addGestureRecognizer(tap)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if viewport != bounds.size {
+            viewport = bounds.size
+            setZoomScale(1, animated: false)
+            picture.frame = CGRect(origin: .zero, size: viewport)
+            contentSize = viewport
+        }
+    }
+    @objc private func doubleTap(_ tap: UITapGestureRecognizer) {
+        if zoomScale > 1 { setZoomScale(1, animated: true) }
+        else {
+            let point = tap.location(in: picture)
+            let size = CGSize(width: bounds.width / 3, height: bounds.height / 3)
+            zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height), animated: true)
+        }
+    }
+}
+
+private struct NativeZoomableImage: UIViewRepresentable {
+    let image: UIImage
+    @Binding var zoom: CGFloat
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> NativeImageScrollView {
+        let view = NativeImageScrollView()
+        view.delegate = context.coordinator
+        return view
+    }
+    func updateUIView(_ view: NativeImageScrollView, context: Context) {
+        context.coordinator.parent = self
+        if view.picture.image !== image { view.picture.image = image; view.setZoomScale(1, animated: false) }
+        if abs(view.zoomScale - zoom) > 0.01 && !view.isZooming { view.setZoomScale(zoom, animated: true) }
+    }
+    final class Coordinator: NSObject, UIScrollViewDelegate {
+        var parent: NativeZoomableImage
+        init(_ parent: NativeZoomableImage) { self.parent = parent }
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? { (scrollView as? NativeImageScrollView)?.picture }
+        func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) { parent.zoom = scale }
+        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { parent.zoom = scrollView.zoomScale }
     }
 }
 
@@ -2525,7 +2778,7 @@ struct ComposeView: View {
                     HStack(alignment: .top, spacing: 12) {
                         AvatarView(profile: model.displayProfile, size: SpotcodeLayout.value(40, 42))
                         ZStack(alignment: .topLeading) {
-                            ComposerTextView(text: $bodyText, isFocused: $editorFocused).frame(minHeight: 160)
+                            ComposerTextView(text: $bodyText, isFocused: $editorFocused).frame(height: editorHeight(bodyText, expanded: editorFocused))
                             if bodyText.isEmpty {
                                 Text(NSLocalizedString("いまどうしてる？", comment: "")).spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont).foregroundColor(SpotcodeTheme.muted)
                                     .padding(.horizontal, 14).padding(.vertical, SpotcodeLayout.value(11, 17)).allowsHitTesting(false)
@@ -2588,6 +2841,9 @@ struct ComposeView: View {
                     }.spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont).foregroundColor(SpotcodeTheme.accent).padding(.leading, 54)
                 }
                 .padding()
+                NativeDraftControls(account: draftAccount, slot: "sheet", draft: draftSnapshot, restore: restoreDraft)
+                    .padding(.horizontal).padding(.bottom)
+
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
              .navigationTitle(NSLocalizedString("New idea", comment: "")).navigationBarTitleDisplayMode(.inline)
              .toolbar {
@@ -2607,6 +2863,10 @@ struct ComposeView: View {
                  }
              }
         }
+        .navigationViewStyle(.stack)
+        #if targetEnvironment(macCatalyst)
+        .frame(idealWidth: 640, idealHeight: 520)
+        #endif
         .modifier(AppAppearancePreference())
         .spotcodeFont(14, weight: .regular, fallback: SpotcodeLayout.bodyFont)
         .controlSize(SpotcodeLayout.controlSize)
@@ -2615,6 +2875,18 @@ struct ComposeView: View {
         .sheet(isPresented: $showLocationPicker) { LocationPickerSheet(spot: $selectedSpot, isPresented: $showLocationPicker) }
         .sheet(isPresented: $showPhotoPicker) { PhotoLibraryPicker(images: $photos) }
         .sheet(isPresented: $showPollEditor) { PollEditorSheet(poll: $poll, isPresented: $showPollEditor) }
+    }
+
+    private var draftAccount: String { model.displayProfile?.id?.uuidString ?? model.session?.user.id.uuidString ?? "guest" }
+    private var draftSnapshot: NativeComposerDraft {
+        NativeComposerDraft(body: bodyText, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: selectedSpot)
+    }
+    private func restoreDraft(_ value: NativeComposerDraft) {
+        bodyText = value.body
+        githubLink = value.githubLink; repoFullName = value.repoFullName
+        eventURL = value.eventURL; postKind = value.kind; visibility = value.visibility
+        photos = value.photos; poll = value.poll; selectedSpot = value.spot
+        showLink = !githubLink.isEmpty || !repoFullName.isEmpty; showEvent = !eventURL.isEmpty
     }
 
     private var audienceMenu: some View { PostAudiencePicker(visibility: $visibility) }
@@ -2641,7 +2913,13 @@ struct ComposeView: View {
                 visibility: visibility,
                 photos: photos.isEmpty ? nil : photos,
                 poll: poll
-            ) { isPresented = false }
+            ) {
+                NativeDraftStore.completePublishing(draftSnapshot, account: draftAccount, slot: "sheet")
+                bodyText = ""; githubLink = ""; repoFullName = ""; eventURL = ""
+                photos = []; poll = nil; selectedSpot = nil; postKind = nil; visibility = "public"
+                NativeDraftStore.save(draftSnapshot, account: draftAccount, slot: "sheet")
+                isPresented = false
+            }
             sending = false
         }
     }
@@ -2730,7 +3008,7 @@ struct NativeMapView: View {
                             // Only public pin metadata here; the detail view
                             // checks the location gate before showing the body.
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(post.displayAuthor?.name ?? NSLocalizedString("Spot", comment: ""))
+                                Text(post.displayAuthor?.visibleName ?? NSLocalizedString("Spot", comment: ""))
                                 Text(post.spot?.label ?? NSLocalizedString("この場所の投稿", comment: ""))
                                     .font(.caption).foregroundColor(.secondary)
                                 Text(relativeTime(post.createdAt))
@@ -2970,7 +3248,7 @@ struct RepositoriesView: View {
                     NavigationLink(destination: PostDetailView(post: post)) {
                         HStack(spacing: 8) {
                             AvatarView(profile: post.displayAuthor, size: 24)
-                            Text(post.body).spotcodeFont(12, weight: .regular, fallback: .caption).lineLimit(1).foregroundColor(SpotcodeTheme.text)
+                            Text(NativePrivacy.text(post.body)).spotcodeFont(12, weight: .regular, fallback: .caption).lineLimit(1).foregroundColor(SpotcodeTheme.text)
                             Spacer()
                             Image(systemName: "chevron.right").spotcodeFont(11, weight: .regular, fallback: .caption2).foregroundColor(SpotcodeTheme.muted)
                         }
@@ -3148,8 +3426,8 @@ private struct NotificationRow: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 #if targetEnvironment(macCatalyst)
-                (Text(notification.actor.name).bold()
-                 + Text(" @\(notification.actor.handle)").foregroundColor(SpotcodeTheme.muted)
+                (Text(notification.actor.visibleName).bold()
+                 + Text(" @\(notification.actor.visibleHandle)").foregroundColor(SpotcodeTheme.muted)
                  + Text(" " + label)
                  + Text(notification.createdAt.map { " · " + relativeTime($0) } ?? "").foregroundColor(SpotcodeTheme.muted))
                     .spotcodeFont(15, fallback: .subheadline)
@@ -3158,8 +3436,8 @@ private struct NotificationRow: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     NavigationLink(destination: ProfileLookupView(handle: notification.actor.handle)) {
                         HStack(spacing: 4) {
-                            Text(notification.actor.name).fontWeight(.bold)
-                            Text("@\(notification.actor.handle)").foregroundColor(SpotcodeTheme.muted)
+                            Text(notification.actor.visibleName).fontWeight(.bold)
+                            Text("@\(notification.actor.visibleHandle)").foregroundColor(SpotcodeTheme.muted)
                         }
                     }.buttonStyle(SpotcodePlainButtonStyle())
                     Spacer(minLength: 4)
@@ -3168,7 +3446,7 @@ private struct NotificationRow: View {
                 Text(LocalizedStringKey(label)).spotcodeFont(15, weight: .regular, fallback: .subheadline).foregroundColor(SpotcodeTheme.muted)
                 #endif
                 if let context = (notification.kind == .followedPost ? notification.post?.body : notification.context ?? notification.post?.body), !context.isEmpty {
-                    Text(context).spotcodeFont(14, weight: .regular, fallback: .subheadline).foregroundColor(SpotcodeTheme.muted).lineLimit(3).padding(SpotcodeLayout.value(12, 9))
+                    Text(NativePrivacy.text(context)).spotcodeFont(14, weight: .regular, fallback: .subheadline).foregroundColor(SpotcodeTheme.muted).lineLimit(3).padding(SpotcodeLayout.value(12, 9))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(SpotcodeTheme.surface2).clipShape(RoundedRectangle(cornerRadius: 8))
                 }
@@ -3472,7 +3750,7 @@ private struct ProfileSearchView: View {
                 if loading { ProgressView().padding() }
                 List(results) { profile in
                     NavigationLink(destination: ProfileView(profile: profile)) {
-                        HStack(spacing: 12) { AvatarView(profile: profile, size: SpotcodeLayout.value(40, 42)); VStack(alignment: .leading) { Text(profile.name).fontWeight(.bold); Text("@\(profile.handle)").foregroundColor(SpotcodeTheme.muted) } }
+                        HStack(spacing: 12) { AvatarView(profile: profile, size: SpotcodeLayout.value(40, 42)); VStack(alignment: .leading) { Text(profile.visibleName).fontWeight(.bold); Text("@\(profile.visibleHandle)").foregroundColor(SpotcodeTheme.muted) } }
                     }.listRowBackground(SpotcodeTheme.surface)
                 }.listStyle(.plain)
             }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
@@ -3550,7 +3828,7 @@ private struct ProfileHero: View {
                 }.font(.subheadline).padding(.vertical, 8)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 9) {
-                        Text(profile.name).spotcodeFont(28, weight: .bold, fallback: .title.weight(.bold))
+                        Text(profile.visibleName).spotcodeFont(28, weight: .bold, fallback: .title.weight(.bold))
                         if !hideBadges {
                             Text("{ }").spotcodeFont(12, weight: .bold, fallback: .caption.weight(.bold)).foregroundColor(SpotcodeTheme.accent)
                                 .padding(.horizontal, 8).padding(.vertical, 3).overlay(Capsule().stroke(SpotcodeTheme.accent))
@@ -3560,7 +3838,7 @@ private struct ProfileHero: View {
                         }
                     }.padding(.vertical, 5)
                 }
-                Text("@\(profile.handle)").spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont).foregroundColor(SpotcodeTheme.muted)
+                Text("@\(profile.visibleHandle)").spotcodeFont(16, weight: .semibold, fallback: SpotcodeLayout.titleFont).foregroundColor(SpotcodeTheme.muted)
                 if let bio = profile.bio, !bio.isEmpty { Text(bio) }
                 HStack(spacing: 14) {
                     if let location = profile.location, !location.isEmpty { Label(location, systemImage: "mappin") }
@@ -3755,7 +4033,7 @@ private struct FollowListView: View {
         List(profiles) { profile in
             HStack {
                 NavigationLink(destination: ProfileView(profile: profile)) {
-                    HStack(spacing: 12) { AvatarView(profile: profile, size: SpotcodeLayout.value(40, 42)); VStack(alignment: .leading) { Text(profile.name).fontWeight(.bold); Text("@\(profile.handle)").foregroundColor(SpotcodeTheme.muted) } }
+                    HStack(spacing: 12) { AvatarView(profile: profile, size: SpotcodeLayout.value(40, 42)); VStack(alignment: .leading) { Text(profile.visibleName).fontWeight(.bold); Text("@\(profile.visibleHandle)").foregroundColor(SpotcodeTheme.muted) } }
                 }
                 if kind == .following && userID == model.session?.user.id && !model.isPostingAsOfficial {
                     FollowAudienceMenu(profile: profile)
@@ -4473,9 +4751,9 @@ private struct AccountSettings: View {
                         HStack {
                             AvatarView(profile: account.profile, size: SpotcodeLayout.value(40, 42))
                             VStack(alignment: .leading) {
-                                Text(account.profile.name).fontWeight(.bold)
+                                Text(account.profile.visibleName).fontWeight(.bold)
                                 HStack(spacing: 4) {
-                                    Text("@\(account.profile.handle)")
+                                    Text("@\(account.profile.visibleHandle)")
                                     if active {
                                         Text("·")
                                         Text(NSLocalizedString("現在", comment: ""))
@@ -4825,6 +5103,7 @@ private struct PrivacySettings: View {
 }
 
 private struct DisplaySettings: View {
+    @AppStorage("spotcode.native.privacy-mode") private var privacyMode = false
     @Environment(\.appColorTheme) private var appColorTheme
     @AppStorage("spotcode.colorTheme") private var colorTheme = "standard"
     @AppStorage("spotcode.appearance") private var appearance = "system"
@@ -4853,6 +5132,12 @@ private struct DisplaySettings: View {
     var body: some View {
         let _ = appColorTheme
          VStack(spacing: SpotcodeLayout.value(12, 18)) {
+        if NativePrivacy.canUse {
+            SettingsCard(NSLocalizedString("プライバシーモード (匿名化表示)", comment: "")) {
+                Toggle(NSLocalizedString("他ユーザーの名前・ID・アイコンを匿名化", comment: ""), isOn: $privacyMode)
+                    .accessibilityIdentifier("settings.privacyMode")
+            }
+        }
         SettingsCard(NSLocalizedString("外観", comment: "")) {
             Picker(NSLocalizedString("外観", comment: ""), selection: $appearance) {
                 Text(NSLocalizedString("システムに合わせる", comment: "")).tag("system")
