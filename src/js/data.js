@@ -141,6 +141,7 @@ function persistSchemaCache() {
 
 let hasOrganizationAttribution = true; // Retry after a page reload; never persist deployment gaps.
 let hasGithubOrgId = true;
+let hasEventDays = true;
 
 function postCols() {
   const extras = [];
@@ -157,6 +158,7 @@ function postCols() {
   if (hasOrganizationAttribution) extras.push('organization_author_id');
   if (hasRepoFullName)   extras.push('repo_full_name');
   if (hasEventUrl)       extras.push('event_url');
+  if (hasEventDays) extras.push('event_days');
   const head =
     'id, author_id, body, github_link, spot, status, created_at' +
     (extras.length ? ', ' + extras.join(', ') : '');
@@ -184,6 +186,7 @@ const OPTIONAL = [
   { needle: 'close_friends',    off: () => { if (hasCloseFriends)   { console.warn('profiles.close_friends missing — run Stage 16 SQL.'); hasCloseFriends = false; return true; } return false; } },
   { needle: 'organization',     off: () => { if (hasOrganization)   { console.warn('profiles.organization missing — run Stage 16 SQL.'); hasOrganization = false; return true; } return false; } },
   { needle: 'repo_full_name',   off: () => { if (hasRepoFullName)   { console.warn('posts.repo_full_name missing — run Stage 30 SQL.'); hasRepoFullName = false; return true; } return false; } },
+  { needle: 'event_days', off: () => { if (!hasEventDays) return false; hasEventDays = false; return true; } },
   { needle: 'event_url',        off: () => { if (hasEventUrl)       { console.warn('posts.event_url missing — run Stage 31 SQL.');     hasEventUrl     = false; return true; } return false; } },
 ];
 function isMissingOptionalColumn(error) {
@@ -301,6 +304,7 @@ function shapePost(row) {
     // canonical form (https://connpass.com/event/<id>/), so a click
     // from any card goes to a consistent /event/<id> route.
     eventUrl:      row.event_url || null,
+    eventDays: Array.isArray(row.event_days) ? row.event_days : [],
     actions: {
       replies:   row.comments_count   || 0,
       forks:     row.reposts_count    || 0,  // fork icon repurposed as リポスト

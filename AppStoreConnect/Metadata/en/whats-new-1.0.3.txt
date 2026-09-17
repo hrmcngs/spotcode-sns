@@ -1,0 +1,9 @@
+What's new in version 1.0.3 (since 1.0.2)
+
+• Added nearby spot alerts. With location and notification permissions enabled, receive alerts within 100 meters of up to 20 nearby public spot posts fetched by the app.
+• Added nearby spot alerts on macOS. Alerts work while Spotcode is running on your Mac; they are unavailable when the app is quit or your Mac is asleep.
+• Add multiple Days to an event post, each with its own date and link. Add, remove, or edit Days and save them in drafts.
+• Improved author icon display and fixed an issue that prevented tapping a post from opening its details.
+• Changed the selected navigation indicator to an underline and fixed text size and layout shifts when switching tabs.
+• Removed the unnecessary “New idea” item from the iOS menu.
+• Improved Settings tabs so labels such as “Developer” stay on one line.

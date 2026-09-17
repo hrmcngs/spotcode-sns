@@ -316,6 +316,14 @@ export function renderPost(p) {
                 '</a>' +
               '</div>';
             })()) +
+            (p.eventDays || []).map((day, index) => {
+              let link;
+              try { link = new URL(day.url); } catch { return ''; }
+              if (!['https:', 'http:'].includes(link.protocol)) return '';
+              return '<div class="post__meta"><a class="post__link" href="' + escape(link.href) + '" target="_blank" rel="noopener noreferrer">' +
+                icon('calendar', { size: 14, className: 'icon--inline' }) +
+                escape('Day ' + (index + 1) + ' · ' + day.date) + '</a></div>';
+            }).join('') +
             renderPostPhotos(p.photos) +
             poll(p.poll) +
             files(p.files) +

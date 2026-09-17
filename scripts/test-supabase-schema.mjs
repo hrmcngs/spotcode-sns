@@ -33,7 +33,14 @@ try {
  await db.query("insert into posts(author_id,body,visibility) values($1,'retained','only_me'),($1,'org retained','github_org')", [user]);
  await db.exec('alter table posts enable trigger user');
  await db.query("insert into business_cards(owner_id,name,design) values($1,'Retained',jsonb_build_object('text',repeat('x',3000)))", [user]);
+ const days = [{ id: '00000000-0000-0000-0000-000000000010', date: '2026-09-17', url: 'https://example.com/day1' }, { id: '00000000-0000-0000-0000-000000000011', date: '2026-09-18', url: 'https://example.com/day2' }];
+ await db.query("update posts set event_days=$1::jsonb where body='retained'", [JSON.stringify(days)]);
  await db.exec(executable);
+ const migration = fs.readFileSync('docs/migrations/052-event-days.sql', 'utf8');
+ await db.exec(migration);
+ await db.exec(migration);
+ assert.deepEqual((await db.query("select event_days from posts where body='retained'")).rows[0].event_days, days);
+ await assert.rejects(db.query("update posts set event_days='{}'::jsonb where body='retained'"), /posts_event_days_array/);
  assert.deepEqual(await policies(), initialPolicies, 'Reapplying must retain the same access policies');
  assert.equal((await db.query('select is_operator from profiles where id=$1',[user])).rows[0].is_operator,true);
  assert.equal((await db.query('select count(*)::int as n from posts where author_id=$1',[user])).rows[0].n,2);
@@ -43,9 +50,12 @@ try {
  const upgrade = new PGlite({ extensions: { pgcrypto } });
  await upgrade.exec(fixtures);
  await upgrade.exec(executable.slice(0, executable.indexOf('-- Stage 45 —')) + '\ncommit;');
+ await upgrade.exec(executable.slice(0, executable.indexOf('-- Stage 52 —')) + '\ncommit;');
+ await upgrade.exec(migration);
+ assert.equal((await upgrade.query("select column_name from information_schema.columns where table_name='posts' and column_name='event_days'")).rows.length, 1);
  await upgrade.exec(executable);
  assert.equal((await upgrade.query("select to_regclass('business_card_exchanges') as name")).rows[0].name,'business_card_exchanges');
  await upgrade.close();
- console.log('PASS single SQL: fresh setup, Stage 44 upgrade, identical access policies, repeat with current visibility and large card design, role/data preservation, private cards, short codes');
+ console.log('PASS event days: standalone upgrade, repeated migration, day preservation, array constraint; single SQL: fresh setup, Stage 44 upgrade, identical access policies, repeat with current visibility and large card design, role/data preservation, private cards, short codes');
 } catch (error) { console.error(error.message, error.where || '', error.position ? executable.slice(Number(error.position)-120,Number(error.position)+120):''); process.exitCode=1; }
 await db.close();

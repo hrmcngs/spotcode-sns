@@ -242,7 +242,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("spotcode.notifications.followedPosts") private var followedPostScope = "off"
     @State private var drawerOpen = false
-    #if !targetEnvironment(macCatalyst)
+
     @ObservedObject private var nearbyNotifications = NearbySpotNotifications.shared
     @AppStorage("spotcode.notifications.nearbySpots") private var notifyNearbySpots = true
     @State private var showingNearbySpots = false
@@ -255,7 +255,7 @@ struct RootView: View {
                 model.mutedAccountIDs.map(\.uuidString).sorted().joined(),
                 String(Int((coordinate?.latitude ?? 0) * 1000)), String(Int((coordinate?.longitude ?? 0) * 1000))].joined(separator: ":")
     }
-    #endif
+
     @State private var showLogin = false
     @State private var composing = false
     @State private var showAccounts = false
@@ -388,10 +388,12 @@ struct RootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("spotcode.openNotifications"))) { _ in section = .notifications }
-        #if !targetEnvironment(macCatalyst)
+
         .task(id: nearbyNotificationContext) {
             guard !screenshotMode else { return }
+            #if !targetEnvironment(macCatalyst)
             guard scenePhase == .active else { nearbyNotifications.pause(); return }
+            #endif
             if UserDefaults.standard.bool(forKey: "spotcode.openNearbySpot") {
                 UserDefaults.standard.removeObject(forKey: "spotcode.openNearbySpot")
                 showingNearbySpots = true
@@ -411,7 +413,7 @@ struct RootView: View {
                     .toolbar { ToolbarItem(placement: .cancellationAction) { MapSheetCloseButton { showingNearbySpots = false } } }
             }
         }
-        #endif
+
         .onChange(of: navigationReset) { _ in recommendedProfileHandle = nil }
         .fullScreenCover(isPresented: Binding(get: { model.session != nil && acceptedTerms != "2026-09-08" && !showLogin }, set: { _ in })) {
             TermsAgreementGate().environmentObject(model)
@@ -1125,6 +1127,7 @@ private struct InlineComposer: View {
     @State private var githubLink = ""
     @State private var repoFullName = ""
     @State private var eventURL = ""
+    @State private var eventDays: [PostEventDay] = []
     @State private var sending = false
     @State private var showLink = false
     @State private var showEvent = false
@@ -1163,6 +1166,7 @@ private struct InlineComposer: View {
                 }
                 if showEvent {
                     TextField("https://connpass.com/event/…", text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL).spotcodeURLField()
+                    EventDaysEditor(days: $eventDays)
                 }
                 if !photos.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -1238,9 +1242,9 @@ private struct InlineComposer: View {
     private func publish() {
         sending = true
         Task {
-            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, repoFullName: repoFullName.isEmpty ? nil : repoFullName, eventURL: eventURL.isEmpty ? nil : eventURL, spot: selectedSpot, kind: postKind, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
+            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, repoFullName: repoFullName.isEmpty ? nil : repoFullName, eventURL: eventURL.isEmpty ? nil : eventURL, eventDays: eventDays, spot: selectedSpot, kind: postKind, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
                 NativeDraftStore.completePublishing(draftSnapshot, account: draftAccount, slot: "inline")
-                draft = ""; githubLink = ""; repoFullName = ""; eventURL = ""; showLink = false; showEvent = false
+                draft = ""; githubLink = ""; repoFullName = ""; eventURL = ""; eventDays = []; showLink = false; showEvent = false
                 postKind = nil; visibility = "public"; selectedSpot = nil
                 photos = []; poll = nil
             }
@@ -1265,13 +1269,13 @@ private struct InlineComposer: View {
 
     private var draftAccount: String { model.displayProfile?.id?.uuidString ?? model.session?.user.id.uuidString ?? "guest" }
     private var draftSnapshot: NativeComposerDraft {
-        NativeComposerDraft(body: draft, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: selectedSpot)
+        NativeComposerDraft(body: draft, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, eventDays: eventDays.isEmpty ? nil : eventDays, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: selectedSpot)
     }
     private func restoreDraft(_ value: NativeComposerDraft) {
         draft = value.body; githubLink = value.githubLink; repoFullName = value.repoFullName
-        eventURL = value.eventURL; postKind = value.kind; visibility = value.visibility
+        eventURL = value.eventURL; eventDays = value.eventDays ?? []; postKind = value.kind; visibility = value.visibility
         photos = value.photos; poll = value.poll; selectedSpot = value.spot
-        showLink = !githubLink.isEmpty || !repoFullName.isEmpty; showEvent = !eventURL.isEmpty
+        showLink = !githubLink.isEmpty || !repoFullName.isEmpty; showEvent = !eventURL.isEmpty || !eventDays.isEmpty
     }
 }
 
@@ -2213,6 +2217,17 @@ Menu {
                         }.spotcodeFont(12, weight: .regular, fallback: .caption).frame(maxWidth: .infinity, alignment: .leading)
                     }.foregroundColor(SpotcodeTheme.accent)
                 }
+                if canReadContent {
+                    ForEach(Array((post.eventDays ?? []).enumerated()), id: \.element.id) { index, day in
+                        if let url = day.link {
+                            Link(destination: url) {
+                                Label("Day \(index + 1) · \(day.date)", systemImage: "calendar")
+                                    .spotcodeFont(12, weight: .regular, fallback: .caption)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }.foregroundColor(SpotcodeTheme.accent)
+                        }
+                    }
+                }
                 if canReadContent, let link = post.eventURL, let url = URL(string: link) {
                     Link(destination: url) {
                         Label(NSLocalizedString("イベントを開く", comment: ""), systemImage: "calendar")
@@ -2443,6 +2458,7 @@ private struct EditPostView: View {
     @State private var githubLink: String
     @State private var repoFullName: String
     @State private var eventURL: String
+    @State private var eventDays: [PostEventDay]
     @State private var postKind: String?
     @State private var visibility: String
     @State private var saving = false
@@ -2455,6 +2471,7 @@ private struct EditPostView: View {
         _githubLink = State(initialValue: post.githubLink ?? "")
         _repoFullName = State(initialValue: post.repoFullName ?? "")
         _eventURL = State(initialValue: post.eventURL ?? "")
+        _eventDays = State(initialValue: post.eventDays ?? [])
         _postKind = State(initialValue: post.kind)
         _visibility = State(initialValue: post.visibility ?? "public")
     }
@@ -2463,6 +2480,7 @@ private struct EditPostView: View {
         let _ = appColorTheme
 
         NavigationView {
+            ScrollView {
             VStack(spacing: SpotcodeLayout.value(16, 16)) {
                 ComposerTextView(text: $bodyText, isFocused: $editorFocused)
                     .frame(minHeight: 180)
@@ -2487,9 +2505,11 @@ private struct EditPostView: View {
                     TextField(NSLocalizedString("イベントURL（任意）", comment: ""), text: $eventURL)
                         .textInputAutocapitalization(.never).keyboardType(.URL)
                 }.spotcodeURLField()
+                EventDaysEditor(days: $eventDays)
                 Spacer()
             }
             .padding().background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text)
+            }
             .navigationTitle(NSLocalizedString("投稿を編集", comment: "")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("Cancel", comment: "")) { isPresented = false } }
@@ -2504,7 +2524,7 @@ private struct EditPostView: View {
                             if await model.editPost(
                                 post, body: text, githubLink: link.isEmpty ? nil : link,
                                 repoFullName: repository.isEmpty ? nil : repository,
-                                eventURL: event.isEmpty ? nil : event,
+                                eventURL: event.isEmpty ? nil : event, eventDays: eventDays,
                                 kind: postKind, visibility: visibility
                             ) != nil {
                                 isPresented = false
@@ -2800,6 +2820,7 @@ struct ComposeView: View {
     @State private var githubLink = ""
     @State private var repoFullName = ""
     @State private var eventURL = ""
+    @State private var eventDays: [PostEventDay] = []
     @State private var sending = false
     @State private var editorFocused = false
     @State private var showLink = false
@@ -2869,6 +2890,7 @@ struct ComposeView: View {
                             Image(systemName: "calendar")
                             TextField(NSLocalizedString("イベントURL（任意）", comment: ""), text: $eventURL).textInputAutocapitalization(.never).keyboardType(.URL)
                         }.spotcodeURLField()
+                        EventDaysEditor(days: $eventDays)
                     }
                     if !photos.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -2930,14 +2952,14 @@ struct ComposeView: View {
 
     private var draftAccount: String { model.displayProfile?.id?.uuidString ?? model.session?.user.id.uuidString ?? "guest" }
     private var draftSnapshot: NativeComposerDraft {
-        NativeComposerDraft(body: bodyText, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: selectedSpot)
+        NativeComposerDraft(body: bodyText, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, eventDays: eventDays.isEmpty ? nil : eventDays, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: selectedSpot)
     }
     private func restoreDraft(_ value: NativeComposerDraft) {
         bodyText = value.body
         githubLink = value.githubLink; repoFullName = value.repoFullName
-        eventURL = value.eventURL; postKind = value.kind; visibility = value.visibility
+        eventURL = value.eventURL; eventDays = value.eventDays ?? []; postKind = value.kind; visibility = value.visibility
         photos = value.photos; poll = value.poll; selectedSpot = value.spot
-        showLink = !githubLink.isEmpty || !repoFullName.isEmpty; showEvent = !eventURL.isEmpty
+        showLink = !githubLink.isEmpty || !repoFullName.isEmpty; showEvent = !eventURL.isEmpty || !eventDays.isEmpty
     }
 
     private var audienceMenu: some View { PostAudiencePicker(visibility: $visibility) }
@@ -2958,7 +2980,7 @@ struct ComposeView: View {
                 body: bodyText.trimmingCharacters(in: .whitespacesAndNewlines),
                 githubLink: link.isEmpty ? nil : link,
                 repoFullName: repository.isEmpty ? nil : repository,
-                eventURL: event.isEmpty ? nil : event,
+                eventURL: event.isEmpty ? nil : event, eventDays: eventDays,
                 spot: selectedSpot,
                 kind: postKind,
                 visibility: visibility,
@@ -2966,7 +2988,7 @@ struct ComposeView: View {
                 poll: poll
             ) {
                 NativeDraftStore.completePublishing(draftSnapshot, account: draftAccount, slot: "sheet")
-                bodyText = ""; githubLink = ""; repoFullName = ""; eventURL = ""
+                bodyText = ""; githubLink = ""; repoFullName = ""; eventURL = ""; eventDays = []
                 photos = []; poll = nil; selectedSpot = nil; postKind = nil; visibility = "public"
                 NativeDraftStore.save(draftSnapshot, account: draftAccount, slot: "sheet")
                 isPresented = false
@@ -5191,10 +5213,8 @@ private struct DisplaySettings: View {
     @State private var privateIssueMessage = ""
     @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
     @State private var requestingNotifications = false
-    #if !targetEnvironment(macCatalyst)
     @ObservedObject private var nearbyNotifications = NearbySpotNotifications.shared
     @AppStorage("spotcode.notifications.nearbySpots") private var notifyNearbySpots = true
-    #endif
     @AppStorage("spotcode.notifications.likes") private var notifyLikes = true
     @AppStorage("spotcode.notifications.comments") private var notifyComments = true
     @AppStorage("spotcode.notifications.mentions") private var notifyMentions = true
@@ -5283,13 +5303,18 @@ private struct DisplaySettings: View {
                 Button(NSLocalizedString("端末の通知設定を開く", comment: "")) { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
             }
             Divider().overlay(SpotcodeTheme.border)
-            #if !targetEnvironment(macCatalyst)
+
             Toggle(NSLocalizedString("スポットに近づいたときに通知", comment: ""), isOn: $notifyNearbySpots)
                 .onChange(of: notifyNearbySpots) { enabled in
                     if enabled { nearbyNotifications.requestPermission(); requestNotificationPermission() }
                 }
+            #if targetEnvironment(macCatalyst)
+            Text(NSLocalizedString("MacでSpotcodeが動作している間、取得した公開スポット投稿のうち近い最大20件について、半径100mへの接近を通知します。アプリの終了中やMacのスリープ中は通知できません。", comment: ""))
+                .font(.caption).foregroundColor(SpotcodeTheme.muted)
+            #else
             Text(NSLocalizedString("アプリで取得した公開スポット投稿のうち、現在地に近い最大20件を対象に、半径100mへの接近を通知します。アプリを閉じている間も登録済みのスポットが対象です。", comment: ""))
                 .font(.caption).foregroundColor(SpotcodeTheme.muted)
+            #endif
             if notifyNearbySpots {
                 Text(nearbyNotifications.status).font(.caption).foregroundColor(SpotcodeTheme.muted)
                 if nearbyNotifications.authorization == .notDetermined {
@@ -5300,7 +5325,7 @@ private struct DisplaySettings: View {
                         .buttonStyle(OutlineButtonStyle())
                 }
             }
-            #endif
+
             Text(NSLocalizedString("通知する内容", comment: "")).spotcodeFont(15, weight: .bold, fallback: .subheadline.weight(.bold))
             Toggle(NSLocalizedString("いいね", comment: ""), isOn: $notifyLikes)
             Toggle(NSLocalizedString("コメント", comment: ""), isOn: $notifyComments)
@@ -7190,5 +7215,37 @@ private struct BusinessCardBaseColorPicker: View {
             Text(NSLocalizedString("選んだ色をもとに表・裏・文字色をまとめて設定します。細かい色は後から調整できます。", comment: ""))
                 .font(.caption).foregroundColor(.secondary)
         }.padding(.vertical, 8)
+    }
+}
+
+private struct EventDaysEditor: View {
+    @Binding var days: [PostEventDay]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Day \(index + 1)").font(.headline)
+                        Spacer()
+                        Button(role: .destructive) { days.removeAll { $0.id == day.id } } label: {
+                            Image(systemName: "trash")
+                        }.accessibilityLabel(String(format: NSLocalizedString("Day %dを削除", comment: ""), index + 1))
+                    }
+                    DatePicker(NSLocalizedString("日付", comment: ""), selection: Binding(
+                        get: { days.first(where: { $0.id == day.id })?.calendarDate ?? day.calendarDate },
+                        set: { value in if let i = days.firstIndex(where: { $0.id == day.id }) { days[i].calendarDate = value } }
+                    ), displayedComponents: .date)
+                    TextField("https://…", text: Binding(
+                        get: { days.first(where: { $0.id == day.id })?.url ?? "" },
+                        set: { value in if let i = days.firstIndex(where: { $0.id == day.id }) { days[i].url = value } }
+                    )).textInputAutocapitalization(.never).autocorrectionDisabled(true).keyboardType(.URL).spotcodeURLField()
+                    .accessibilityLabel(String(format: NSLocalizedString("Day %dのリンク", comment: ""), index + 1))
+                }
+                .padding(12).background(SpotcodeTheme.inputSurface).cornerRadius(10)
+            }
+            Button { days.append(PostEventDay(date: PostEventDay.dateFormatter.string(from: Date()), url: "")) } label: {
+                Label(NSLocalizedString("Dayを追加", comment: ""), systemImage: "plus")
+            }
+        }
     }
 }

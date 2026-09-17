@@ -12,7 +12,7 @@ actor SupabaseService {
     private var anonKey: String {
         UserDefaults.standard.string(forKey: Self.publishableKeyKey) ?? Self.defaultPublishableKey
     }
-    private var supportedPostMetadata = ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "poll"]
+    private var supportedPostMetadata = ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "event_days", "poll"]
     private let decoder: JSONDecoder = {
         let value = JSONDecoder()
         return value
@@ -328,15 +328,26 @@ actor SupabaseService {
     }
 
     func spottedPosts(token: String?) async throws -> [Post] {
-        try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos,visibility,github_org_id,author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=60", token: token)
+        while true {
+            let extras = supportedPostMetadata.isEmpty ? "" : "," + supportedPostMetadata.joined(separator: ",")
+            do {
+                return try await request("rest/v1/posts?spot=not.is.null&select=id,author_id,body,github_link,spot,status,created_at,comments_count,reposts_count,bookmarks_count,photos\(extras),author:profiles!posts_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape),organization_author_id,organization_author:profiles!posts_organization_author_id_fkey(id,handle,name,avatar_url,bio,location,github_handle,created_at,avatar_shape)&order=created_at.desc&limit=60", token: token)
+            } catch {
+                guard removeMissingPostMetadata(from: error) else { throw error }
+            }
+        }
     }
 
     func createPost(_ draft: PostDraft, token: String) async throws -> Post {
+        try PostEventDay.validate(draft.eventDays ?? [])
+        if !(draft.eventDays ?? []).isEmpty && !supportedPostMetadata.contains("event_days") {
+            throw eventDaysSchemaError
+        }
         let encoded = try JSONEncoder().encode(draft)
         let original = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] ?? [:]
         while true {
             var payload = original
-            for column in ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
+            for column in ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "event_days", "poll"] where !supportedPostMetadata.contains(column) {
                 payload.removeValue(forKey: column)
             }
             let body = try JSONSerialization.data(withJSONObject: payload)
@@ -349,13 +360,18 @@ actor SupabaseService {
                 guard let post = rows.first else { throw NSError(domain: "Supabase", code: -2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("投稿結果が空です", comment: "")]) }
                 return post
             } catch {
+                if error.localizedDescription.lowercased().contains("event_days"),
+                   let days = original["event_days"] as? [Any], !days.isEmpty { throw eventDaysSchemaError }
                 guard removeMissingPostMetadata(from: error) else { throw error }
             }
         }
     }
 
-    func updatePost(id: UUID, body text: String, githubLink: String?, repoFullName: String?, eventURL: String?, kind: String?, visibility: String, token: String) async throws -> Post {
+    func updatePost(id: UUID, body text: String, githubLink: String?, repoFullName: String?, eventURL: String?, eventDays: [PostEventDay] = [], kind: String?, visibility: String, token: String) async throws -> Post {
+        try PostEventDay.validate(eventDays)
+        if !eventDays.isEmpty && !supportedPostMetadata.contains("event_days") { throw eventDaysSchemaError }
         let original: [String: Any] = [
+            "event_days": try JSONSerialization.jsonObject(with: JSONEncoder().encode(eventDays)),
             "body": text,
             "github_link": (githubLink as Any?) ?? NSNull(),
             "repo_full_name": (repoFullName as Any?) ?? NSNull(),
@@ -365,7 +381,7 @@ actor SupabaseService {
         ]
         while true {
             var payload = original
-            for column in ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "poll"] where !supportedPostMetadata.contains(column) {
+            for column in ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "event_days", "poll"] where !supportedPostMetadata.contains(column) {
                 payload.removeValue(forKey: column)
             }
             let body = try JSONSerialization.data(withJSONObject: payload)
@@ -378,9 +394,15 @@ actor SupabaseService {
                 guard let post = rows.first else { throw NSError(domain: "Supabase", code: 403, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("この投稿を編集できません", comment: "")]) }
                 return post
             } catch {
+                if error.localizedDescription.lowercased().contains("event_days"),
+                   let days = original["event_days"] as? [Any], !days.isEmpty { throw eventDaysSchemaError }
                 guard removeMissingPostMetadata(from: error) else { throw error }
             }
         }
+    }
+
+    private var eventDaysSchemaError: Error {
+        NSError(domain: "EventDays", code: 2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("イベント日程を保存するには、サーバーの日程機能の更新が必要です。入力内容は保持されています。", comment: "")])
     }
 
     private func removeMissingPostMetadata(from error: Error) -> Bool {

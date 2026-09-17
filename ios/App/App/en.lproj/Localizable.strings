@@ -858,3 +858,17 @@
 "アプリで取得した公開スポット投稿のうち、現在地に近い最大20件を対象に、半径100mへの接近を通知します。アプリを閉じている間も登録済みのスポットが対象です。" = "Get alerts within 100 meters of up to 20 nearby public spot posts loaded by the app. Registered spots can notify you while the app is closed.";
 "接近通知の位置情報を許可" = "Allow location access for nearby alerts";
 "位置情報の設定を開く" = "Open location settings";
+
+"MacでSpotcodeが動作している間、取得した公開スポット投稿のうち近い最大20件について、半径100mへの接近を通知します。アプリの終了中やMacのスリープ中は通知できません。" = "While Spotcode is running on your Mac, alerts notify you within 100m of up to 20 nearby public spot posts fetched by the app. Alerts are unavailable when the app is quit or your Mac is asleep.";
+
+"各Dayの日付と有効なリンク（https://…）を入力してください。" = "Enter a date and a valid link (https://…) for each Day.";
+
+"イベント日程を保存するには、サーバーの日程機能の更新が必要です。入力内容は保持されています。" = "The server needs an event schedule update before these days can be saved. Your input has been kept.";
+
+"Dayを追加" = "Add Day";
+
+"Day %dを削除" = "Remove Day %d";
+
+"Day %dのリンク" = "Day %d link";
+
+"日付" = "Date";

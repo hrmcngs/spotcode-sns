@@ -812,7 +812,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func publish(body: String, githubLink: String?, repoFullName: String? = nil, eventURL: String? = nil, spot: Spot? = nil, kind: String? = nil, visibility: String = "public", photos: [String]? = nil, poll: PostPoll? = nil) async -> Bool {
+    func publish(body: String, githubLink: String?, repoFullName: String? = nil, eventURL: String? = nil, eventDays: [PostEventDay] = [], spot: Spot? = nil, kind: String? = nil, visibility: String = "public", photos: [String]? = nil, poll: PostPoll? = nil) async -> Bool {
         guard let session, let authorID = displayProfile?.id else { return false }
         do {
             if me?.githubHandle != nil && (githubLink != nil || repoFullName != nil) {
@@ -820,7 +820,7 @@ final class AppModel: ObservableObject {
             }
             guard self.session?.user.id == session.user.id else { return false }
             let post = try await SupabaseService.shared.createPost(
-                .init(authorID: authorID, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, spot: spot, kind: kind, visibility: visibility, photos: photos, poll: poll, status: "wip"),
+                .init(authorID: authorID, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, eventDays: eventDays.isEmpty ? nil : eventDays, spot: spot, kind: kind, visibility: visibility, photos: photos, poll: poll, status: "wip"),
                 token: session.accessToken
             )
             posts.insert(post, at: 0)
@@ -831,7 +831,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func editPost(_ post: Post, body: String, githubLink: String?, repoFullName: String?, eventURL: String?, kind: String?, visibility: String) async -> Post? {
+    func editPost(_ post: Post, body: String, githubLink: String?, repoFullName: String?, eventURL: String?, eventDays: [PostEventDay] = [], kind: String?, visibility: String) async -> Post? {
         let mayModerate = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && (me?.isAdmin == true || me?.isOperator == true)
         guard let session, post.authorID == displayProfile?.id || mayModerate else { return nil }
         do {
@@ -840,7 +840,7 @@ final class AppModel: ObservableObject {
             }
             guard self.session?.user.id == session.user.id else { return nil }
             let updated = try await SupabaseService.shared.updatePost(
-                id: post.id, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL,
+                id: post.id, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, eventDays: eventDays,
                 kind: kind, visibility: visibility, token: session.accessToken
             )
             if let index = posts.firstIndex(where: { $0.id == post.id }) { posts[index] = updated }

@@ -84,6 +84,7 @@ struct Post: Codable, Identifiable, Hashable {
     let githubLink: String?
     let repoFullName: String?
     let eventURL: String?
+    var eventDays: [PostEventDay]? = nil
     let kind: String?
     let visibility: String?
     var githubOrgID: Int64? = nil
@@ -109,6 +110,7 @@ struct Post: Codable, Identifiable, Hashable {
         case githubLink = "github_link"
         case repoFullName = "repo_full_name"
         case eventURL = "event_url"
+        case eventDays = "event_days"
         case createdAt = "created_at"
         case commentsCount = "comments_count"
         case repostsCount = "reposts_count"
@@ -299,6 +301,7 @@ struct PostDraft: Encodable {
     let githubLink: String?
     let repoFullName: String?
     let eventURL: String?
+    var eventDays: [PostEventDay]? = nil
     let spot: Spot?
     let kind: String?
     let visibility: String
@@ -312,6 +315,7 @@ struct PostDraft: Encodable {
         case githubLink = "github_link"
         case repoFullName = "repo_full_name"
         case eventURL = "event_url"
+        case eventDays = "event_days"
     }
 }
 
@@ -458,13 +462,14 @@ struct NativeComposerDraft: Codable, Equatable {
     var githubLink = ""
     var repoFullName = ""
     var eventURL = ""
+    var eventDays: [PostEventDay]? = nil
     var kind: String?
     var visibility = "public"
     var photos: [String] = []
     var poll: PostPoll?
     var spot: Spot?
     var hasContent: Bool {
-        !body.isEmpty || !githubLink.isEmpty || !eventURL.isEmpty || !repoFullName.isEmpty || !photos.isEmpty || poll != nil || spot != nil
+        !(eventDays ?? []).isEmpty || !body.isEmpty || !githubLink.isEmpty || !eventURL.isEmpty || !repoFullName.isEmpty || !photos.isEmpty || poll != nil || spot != nil
     }
 }
 
@@ -544,4 +549,35 @@ extension Profile {
     var visibleHandle: String { NativePrivacy.masks(handle) ? "user_" + NativePrivacy.alias(handle) : handle }
     var visibleAvatarURL: String? { NativePrivacy.masks(handle) ? nil : avatarURL }
     var visibleInitial: String { NativePrivacy.masks(handle) ? "U" : String(name.first ?? "?") }
+}
+
+/// Calendar dates are stored without a timezone so travel cannot move an event day.
+struct PostEventDay: Codable, Hashable, Identifiable {
+    var id = UUID()
+    var date: String
+    var url: String
+
+    static var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
+        return formatter
+    }
+    var calendarDate: Date {
+        get { Self.dateFormatter.date(from: date) ?? Date() }
+        set { date = Self.dateFormatter.string(from: newValue) }
+    }
+    var link: URL? {
+        guard let value = URL(string: url.trimmingCharacters(in: .whitespacesAndNewlines)),
+              ["https", "http"].contains(value.scheme?.lowercased() ?? ""),
+              let host = value.host, !host.isEmpty else { return nil }
+        return value
+    }
+    static func validate(_ days: [PostEventDay]) throws {
+        guard days.allSatisfy({ day in day.link != nil && dateFormatter.date(from: day.date).map { dateFormatter.string(from: $0) == day.date } == true }) else {
+            throw NSError(domain: "EventDays", code: 1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("各Dayの日付と有効なリンク（https://…）を入力してください。", comment: "")])
+        }
+    }
 }

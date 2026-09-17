@@ -3,8 +3,7 @@ import CoreLocation
 import UserNotifications
 import Combine
 
-#if !targetEnvironment(macCatalyst)
-/// Location notifications are monitored by iOS, including while the app is closed.
+/// iOS uses system region notifications; Catalyst checks locations while running.
 @MainActor
 final class NearbySpotNotifications: NSObject, ObservableObject, @preconcurrency CLLocationManagerDelegate {
     static let shared = NearbySpotNotifications()
@@ -135,11 +134,16 @@ final class NearbySpotNotifications: NSObject, ObservableObject, @preconcurrency
             let inside = origin.map { abs($0.timestamp.timeIntervalSinceNow) < 120 && $0.horizontalAccuracy <= 100 && $0.distance(from: CLLocation(latitude: spot.lat, longitude: spot.lng)) <= 100 } ?? false
             // Convert an untriggered region notification when a fresh fix says
             // we are already inside. Do not re-notify posts that already fired.
+            #if targetEnvironment(macCatalyst)
+            guard inside, registered[id] != fingerprint else { continue }
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            #else
             let awaitingEntry = existing.contains { $0.identifier == id && $0.trigger is UNLocationNotificationTrigger }
             if registered[id] == fingerprint && !(inside && awaitingEntry) { continue }
             let trigger: UNNotificationTrigger = inside
                 ? UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
                 : UNLocationNotificationTrigger(region: region, repeats: false)
+            #endif
             do {
                 try await center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
                 registered[id] = fingerprint
@@ -153,4 +157,3 @@ final class NearbySpotNotifications: NSObject, ObservableObject, @preconcurrency
         }
     }
 }
-#endif
