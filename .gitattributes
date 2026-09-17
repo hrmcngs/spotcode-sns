@@ -2,4 +2,3 @@
 *.yml linguist-detectable=true
 *.yaml linguist-language=yml
 *.sql linguist-detectable=true
-*.sql linguist-language=sql
