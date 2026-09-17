@@ -3973,3 +3973,9 @@ body { font-size: 18px; }
     overflow-y: auto;
   }
 }
+
+/* Keep the author avatar beside names, including when long handles wrap. */
+.post__head { align-items: center; flex-wrap: nowrap; }
+.post__head > .post__avatar { width: 40px; height: 40px; flex: 0 0 40px; }
+.post__author { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.post__author > a { overflow-wrap: anywhere; }

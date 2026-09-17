@@ -254,11 +254,14 @@ export function renderPost(p) {
     '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '" data-visibility="' + escape(p.visibility || 'public') + '" data-repo-full-name="' + escape(p.repoFullName || '') + '">' +
       '<div class="post__main">' +
         '<div class="post__head">' +
+          renderAvatar(u, { tag: 'a', href: profileUrl, title: displayName, extra: 'post__avatar' }) +
+          '<div class="post__author">' +
           '<a class="post__name" href="' + profileUrl + '">' + escape(displayName) + '</a>' +
           '<a class="post__handle" href="' + profileUrl + '">@' + escape(displayHandle) + '</a>' +
           '<span class="post__sep">·</span>' +
           '<span class="post__time">' + escape(timeText(p)) + '</span>' +
           (wasEdited ? '<span class="post__edited" title="' + escape(new Date(p.editedAt).toLocaleString()) + '">' + escape(t('post.edited')) + '</span>' : '') +
+          '</div>' +
         '</div>' +
         '<div class="post__metadata">' +
           (p.status ? ' ' + statusBadge(p.status) : '') +
