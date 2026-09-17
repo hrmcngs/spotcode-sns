@@ -1,6 +1,19 @@
 // Source-language keys for shared controls, status messages, and accessibility labels.
 // User-authored content is never passed through this dictionary.
 export const UI_EN = {
+  "写真を添付": "Attach photos",
+  "写真を撮影": "Take a photo",
+  "写真ライブラリから選択": "Choose from photo library",
+  "撮影": "Take photo",
+  "撮り直す": "Retake",
+  "この写真を添付": "Attach this photo",
+  "カメラを準備しています…": "Preparing camera\u2026",
+  "カメラが切断されました。再試行してください。": "Camera disconnected. Please try again.",
+  "ブラウザの設定でカメラを許可してください。": "Please allow camera access in your browser settings.",
+  "カメラを利用できません。HTTPSで開くか、写真ライブラリから選択してください。": "Camera unavailable. Open this site over HTTPS or choose a photo from your library.",
+  "カメラを開始できません。接続や他のアプリでの使用状況を確認してください。": "Unable to start the camera. Check the connection and whether another app is using it.",
+  "撮影できませんでした。再試行してください。": "Unable to take a photo. Please try again.",
+  "写真を添付できませんでした。": "Unable to attach this photo.",
   "開発・アイデア・場所": "Development \u00b7 Ideas \u00b7 Places",
   "つくる人の活動記録。": "A journal for people who build.",
   "アイデア、開発の進捗、気になる場所を残す。": "Share ideas, work in progress, and places worth remembering.",

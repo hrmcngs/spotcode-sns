@@ -37,6 +37,7 @@ import { toggleLike, isLiked, likeCount,
          hydrateMyFollows, myFollowingHandles, clearInteractionsCache,
          hydrateOfficialFollows, isOfficialFollowing } from './interactions.js';
 import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
+import { openPostCamera } from './post-camera.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
 import { applyDisplayPrefs, hydrateIssueDisplayPrefs } from './display-prefs.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
@@ -967,7 +968,7 @@ document.addEventListener('change', async (e) => {
   const toProcess = files.slice(0, room);
   try {
     const urls = await Promise.all(toProcess.map(f => fileToPhotoDataUrl(f)));
-    pendingPhotos.push(...urls);
+    pendingPhotos.push(...urls.slice(0, Math.max(0, PHOTO_CAP - pendingPhotos.length)));
     renderPhotoPreviews();
     autosaveComposerDraft();
   } catch (err) {
@@ -2055,13 +2056,24 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  // Photo button — trigger the hidden file input. Mobile browsers
-  // honour `capture="environment"` so the rear camera opens by default
-  // (the picker still lets you switch to the library).
+  // Keep the library picker and live capture available on desktop and mobile.
   if (e.target.closest('#compose-photo-btn')) {
     e.preventDefault();
+    if (pendingPhotos.length >= PHOTO_CAP) { alert(t("写真は最大 {n} 枚までです", { n: PHOTO_CAP })); return; }
     const input = document.getElementById('compose-photo-input');
-    if (input) input.click();
+    const form = input?.closest('form');
+    const owner = currentUser()?.id;
+    openPostCamera({
+      onLibrary: () => input?.click(),
+      onPhoto: async (file, isActive) => {
+        const data = await fileToPhotoDataUrl(file);
+        if (!isActive() || !form?.isConnected || currentUser()?.id !== owner || pendingPhotos.length >= PHOTO_CAP) return false;
+        pendingPhotos.push(data);
+        renderPhotoPreviews();
+        autosaveComposerDraft();
+        return true;
+      },
+    });
     return;
   }
   // Remove a single queued photo from the preview row.

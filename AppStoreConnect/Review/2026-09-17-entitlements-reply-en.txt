@@ -1,0 +1,29 @@
+Hello App Review Team,
+
+Thank you for your feedback regarding submission ce153052-039c-4816-9cde-2bcb688ad923.
+
+com.apple.security.network.server
+This entitlement is used by the nearby business card exchange feature. Spotcode uses Apple's Multipeer Connectivity framework to advertise and discover nearby Spotcode users and accept incoming peer connections. The peer session requires encryption and is used to exchange public business card owner identifiers and save confirmations after an exchange request is accepted. The card content is then retrieved from our backend.
+
+To find and test this feature:
+1. Sign in and open Profile > Share business card.
+2. If the card has not yet been published, select Edit business card, enter the card details, and select Save and publish. Close the editor to return to the card preview.
+3. Select Exchange with someone nearby on the card preview.
+4. On a second supported device running Spotcode, sign in with another account and open that account's published business card. Allow local network access on both devices and connect them to the same Wi-Fi network.
+5. Select the other user in the nearby list and accept the exchange request on the receiving device.
+
+The incoming connection entitlement is needed for this peer exchange; ordinary requests to our backend use outgoing network connections.
+
+com.apple.security.device.camera
+We confirmed that build 18 only provided photo-library selection and did not expose camera capture. We have now implemented taking a photo directly in the macOS app and attaching it to a post, using AVFoundation. We will submit an updated binary with this functionality.
+
+In the updated build, the camera entitlement is used as follows:
+1. Sign in and open the post composer using Write a post.
+2. Select the photo icon, then Take a photo.
+3. Allow camera access. The camera preview opens.
+4. Select Take photo, then Attach this photo. Retake is available before attaching.
+5. The captured image appears among the post attachments. It is uploaded only when the user submits the post.
+
+The camera is used for still photos only; no microphone access is requested. The user can cancel without attaching an image, or continue to choose existing images from the photo library.
+
+Thank you for reviewing Spotcode.

@@ -31,6 +31,7 @@ const SHELL = [
   './css/color-themes.css',
   './js/color-themes.js',
   './js/main.js',
+  './js/post-camera.js',
   './js/business-cards.js',
   './js/views/business-card.js',
   './js/router.js',

@@ -1136,6 +1136,7 @@ private struct InlineComposer: View {
     @State private var photos: [String] = []
     @State private var poll: PostPoll?
     @State private var showPhotoPicker = false
+    @State private var showCamera = false
     @State private var showPollEditor = false
     @State private var selectedSpot: Spot?
     @State private var showLocationPicker = false
@@ -1195,6 +1196,13 @@ private struct InlineComposer: View {
              LocationPickerSheet(spot: $selectedSpot, isPresented: $showLocationPicker)
          }
          .sheet(isPresented: $showPhotoPicker) { PhotoLibraryPicker(images: $photos) }
+         .sheet(isPresented: $showCamera) {
+             PostCameraSheet { image in
+                 guard photos.count < 4, let data = image.resizedForPost().jpegData(compressionQuality: 0.72) else { return false }
+                 photos.append("data:image/jpeg;base64," + data.base64EncodedString())
+                 return true
+             }
+         }
          .sheet(isPresented: $showPollEditor) { PollEditorSheet(poll: $poll, isPresented: $showPollEditor) }
     }
 
@@ -1222,7 +1230,12 @@ private struct InlineComposer: View {
 
     private var composerTools: some View {
         HStack(spacing: SpotcodeLayout.value(16, 24)) {
-            Button { showPhotoPicker = true } label: { Image(systemName: "photo") }
+            Menu {
+                Button(NSLocalizedString("写真を撮影", comment: "")) { showCamera = true }
+                Button(NSLocalizedString("写真ライブラリから選択", comment: "")) { showPhotoPicker = true }
+            } label: { Image(systemName: "photo") }
+            .accessibilityLabel(NSLocalizedString("写真を添付", comment: ""))
+            .disabled(photos.count >= 4)
             Button { insertCodeBlock() } label: { Image(systemName: "chevron.left.forwardslash.chevron.right") }
             Button { showLocationPicker = true } label: { Image(systemName: "mappin.circle") }
             Button { showPollEditor = true } label: { Image(systemName: "chart.bar") }
@@ -2832,6 +2845,7 @@ struct ComposeView: View {
     @State private var poll: PostPoll?
     @State private var showLocationPicker = false
     @State private var showPhotoPicker = false
+    @State private var showCamera = false
     @State private var showPollEditor = false
 
     init(isPresented: Binding<Bool>, initialGitHubLink: String = "") {
@@ -2907,7 +2921,12 @@ struct ComposeView: View {
                     if let poll { Label(String(format: NSLocalizedString("投票: %@", comment: ""), poll.question), systemImage: "chart.bar").foregroundColor(SpotcodeTheme.accent) }
 
                     HStack(spacing: 28) {
-                        Button { showPhotoPicker = true } label: { Image(systemName: "photo") }
+                        Menu {
+                Button(NSLocalizedString("写真を撮影", comment: "")) { showCamera = true }
+                Button(NSLocalizedString("写真ライブラリから選択", comment: "")) { showPhotoPicker = true }
+            } label: { Image(systemName: "photo") }
+            .accessibilityLabel(NSLocalizedString("写真を添付", comment: ""))
+            .disabled(photos.count >= 4)
                         Button { insertCodeBlock() } label: { Image(systemName: "chevron.left.forwardslash.chevron.right") }
                         Button { showLocationPicker = true } label: { Image(systemName: "mappin.circle") }
                         Button { showPollEditor = true } label: { Image(systemName: "chart.bar") }
@@ -2947,6 +2966,13 @@ struct ComposeView: View {
         .macTextSizePreference()
         .sheet(isPresented: $showLocationPicker) { LocationPickerSheet(spot: $selectedSpot, isPresented: $showLocationPicker) }
         .sheet(isPresented: $showPhotoPicker) { PhotoLibraryPicker(images: $photos) }
+         .sheet(isPresented: $showCamera) {
+             PostCameraSheet { image in
+                 guard photos.count < 4, let data = image.resizedForPost().jpegData(compressionQuality: 0.72) else { return false }
+                 photos.append("data:image/jpeg;base64," + data.base64EncodedString())
+                 return true
+             }
+         }
         .sheet(isPresented: $showPollEditor) { PollEditorSheet(poll: $poll, isPresented: $showPollEditor) }
     }
 

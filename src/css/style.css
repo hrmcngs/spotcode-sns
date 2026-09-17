@@ -3979,3 +3979,9 @@ body { font-size: 18px; }
 .post__head > .post__avatar { width: 40px; height: 40px; flex: 0 0 40px; }
 .post__author { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .post__author > a { overflow-wrap: anywhere; }
+
+.post-camera { width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); }
+.post-camera::backdrop { background: rgb(0 0 0 / 65%); }
+.post-camera video, .post-camera canvas { width: 100%; max-height: 55dvh; object-fit: contain; background: #000; }
+.post-camera__controls { display: flex; flex-wrap: wrap; gap: 12px; }
+.post-camera [hidden] { display: none; }

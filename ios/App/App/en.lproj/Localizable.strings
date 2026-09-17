@@ -872,3 +872,31 @@
 "Day %dのリンク" = "Day %d link";
 
 "日付" = "Date";
+
+"写真を撮影" = "Take a photo";
+
+"写真ライブラリから選択" = "Choose from photo library";
+
+"写真を添付" = "Attach photos";
+
+"撮り直す" = "Retake";
+
+"この写真を添付" = "Attach this photo";
+
+"カメラのプレビュー" = "Camera preview";
+
+"撮影" = "Take photo";
+
+"カメラの設定を開く" = "Open camera settings";
+
+"カメラの使用を許可してください。システム設定から変更できます。" = "Please allow camera access in system settings.";
+
+"カメラが見つかりません。カメラを接続するか、写真ライブラリから選択してください。" = "No camera is available. Connect a camera or choose a photo from your library.";
+
+"カメラを開始できません。他のアプリでの使用を終了して再試行してください。" = "Unable to start the camera. Stop using it in other apps and try again.";
+
+"撮影できませんでした。もう一度お試しください。" = "Unable to take a photo. Please try again.";
+
+"カメラの接続が中断されました。再接続して再試行してください。" = "The camera was interrupted. Reconnect it and try again.";
+
+"写真を添付できませんでした。添付は4枚までです。" = "Unable to attach this photo. You can attach up to four photos.";

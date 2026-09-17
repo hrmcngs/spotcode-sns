@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B20000010000000000000001 /* PostCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000020000000000000001 /* PostCamera.swift */; };
 		B10000010000000000000001 /* NearbySpotNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000020000000000000001 /* NearbySpotNotifications.swift */; };
 		AF0000030000000000000001 /* Theme-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = AF0000040000000000000001 /* Theme-LICENSE.txt */; };
 		AF0000010000000000000001 /* NativeColorThemes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000020000000000000001 /* NativeColorThemes.swift */; };
@@ -25,6 +26,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B20000020000000000000001 /* PostCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCamera.swift; sourceTree = "<group>"; };
 		B10000020000000000000001 /* NearbySpotNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySpotNotifications.swift; sourceTree = "<group>"; };
 		AF0000040000000000000001 /* Theme-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Theme-LICENSE.txt"; sourceTree = "<group>"; };
 		AF0000020000000000000001 /* NativeColorThemes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeColorThemes.swift; sourceTree = "<group>"; };
@@ -83,6 +85,7 @@
 				AA0000140000000000000001 /* AppModel.swift */,
 				AA0000150000000000000001 /* NativeViews.swift */,
 				B10000020000000000000001 /* NearbySpotNotifications.swift */,
+				B20000020000000000000001 /* PostCamera.swift */,
 				AE0000020000000000000001 /* NativeCardLayers.swift */,
 				AF0000020000000000000001 /* NativeColorThemes.swift */,
 				AF0000040000000000000001 /* Theme-LICENSE.txt */,
@@ -180,6 +183,7 @@
 				AA0000040000000000000001 /* AppModel.swift in Sources */,
 				AA0000050000000000000001 /* NativeViews.swift in Sources */,
 				B10000010000000000000001 /* NearbySpotNotifications.swift in Sources */,
+				B20000010000000000000001 /* PostCamera.swift in Sources */,
 				AE0000010000000000000001 /* NativeCardLayers.swift in Sources */,
 				AF0000010000000000000001 /* NativeColorThemes.swift in Sources */,
 				AC0000010000000000000001 /* NearbyBusinessCardExchange.swift in Sources */,
@@ -348,7 +352,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 3Y8APYUG2G;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -374,7 +378,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 3Y8APYUG2G;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
