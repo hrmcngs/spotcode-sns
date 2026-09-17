@@ -844,3 +844,17 @@
 "活動を見る" = "Explore";
 
 "すべて" = "All";
+
+// Nearby spot notifications
+"接近通知の位置情報を取得できません。位置情報の設定を確認してください。" = "Could not get your location for nearby alerts. Check Location Services settings.";
+"接近通知には、端末の通知を許可してください。" = "Allow notifications on this device to receive nearby alerts.";
+"接近通知には、位置情報の利用を許可してください。" = "Allow location access to receive nearby alerts.";
+"接近通知のスポットを更新できません。通信状態を確認してください。" = "Could not update spots for nearby alerts. Check your connection.";
+"近くにスポット投稿があります" = "There is a spot post nearby";
+"アプリを開いて、近くのスポット投稿を確認しましょう。" = "Open the app to explore nearby spot posts.";
+"接近通知を登録できません。端末の通知と位置情報の設定を確認してください。" = "Could not schedule nearby alerts. Check notification and location settings.";
+"接近通知の対象: %d件" = "Spots registered for nearby alerts: %d";
+"スポットに近づいたときに通知" = "Notify me when I approach a spot";
+"アプリで取得した公開スポット投稿のうち、現在地に近い最大20件を対象に、半径100mへの接近を通知します。アプリを閉じている間も登録済みのスポットが対象です。" = "Get alerts within 100 meters of up to 20 nearby public spot posts loaded by the app. Registered spots can notify you while the app is closed.";
+"接近通知の位置情報を許可" = "Allow location access for nearby alerts";
+"位置情報の設定を開く" = "Open location settings";

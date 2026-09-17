@@ -54,9 +54,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Use the camera to take photos to attach to your posts.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Use your location to show the map and read posts at spots within 100 meters.</string>
+	<string>Use your location to show maps, read posts within 100 meters, and notify you when you approach a spot.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Use your location to show the map and read posts at spots within 100 meters.</string>
+	<string>Use your location to show maps, read posts within 100 meters, and notify you when you approach a spot.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save photos from posts to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

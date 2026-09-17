@@ -242,6 +242,20 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("spotcode.notifications.followedPosts") private var followedPostScope = "off"
     @State private var drawerOpen = false
+    #if !targetEnvironment(macCatalyst)
+    @ObservedObject private var nearbyNotifications = NearbySpotNotifications.shared
+    @AppStorage("spotcode.notifications.nearbySpots") private var notifyNearbySpots = true
+    @State private var showingNearbySpots = false
+    private var nearbyNotificationContext: String {
+        let coordinate = nearbyNotifications.location?.coordinate
+        return [model.session?.user.id.uuidString ?? "guest", String(describing: scenePhase),
+                String(notifyNearbySpots), String(nearbyNotifications.authorization.rawValue),
+                String(model.requiresReauthentication), appLanguage,
+                model.blockedAccountIDs.map(\.uuidString).sorted().joined(),
+                model.mutedAccountIDs.map(\.uuidString).sorted().joined(),
+                String(Int((coordinate?.latitude ?? 0) * 1000)), String(Int((coordinate?.longitude ?? 0) * 1000))].joined(separator: ":")
+    }
+    #endif
     @State private var showLogin = false
     @State private var composing = false
     @State private var showAccounts = false
@@ -374,6 +388,30 @@ struct RootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("spotcode.openNotifications"))) { _ in section = .notifications }
+        #if !targetEnvironment(macCatalyst)
+        .task(id: nearbyNotificationContext) {
+            guard !screenshotMode else { return }
+            guard scenePhase == .active else { nearbyNotifications.pause(); return }
+            if UserDefaults.standard.bool(forKey: "spotcode.openNearbySpot") {
+                UserDefaults.standard.removeObject(forKey: "spotcode.openNearbySpot")
+                showingNearbySpots = true
+            }
+            while !Task.isCancelled {
+                await nearbyNotifications.refresh(model: model, enabled: notifyNearbySpots)
+                do { try await Task.sleep(nanoseconds: 60_000_000_000) } catch { return }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("spotcode.openNearbySpot"))) { _ in
+            UserDefaults.standard.removeObject(forKey: "spotcode.openNearbySpot")
+            showingNearbySpots = true
+        }
+        .sheet(isPresented: $showingNearbySpots) {
+            NavigationView {
+                NativeMapView()
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { MapSheetCloseButton { showingNearbySpots = false } } }
+            }
+        }
+        #endif
         .onChange(of: navigationReset) { _ in recommendedProfileHandle = nil }
         .fullScreenCover(isPresented: Binding(get: { model.session != nil && acceptedTerms != "2026-09-08" && !showLogin }, set: { _ in })) {
             TermsAgreementGate().environmentObject(model)
@@ -5153,6 +5191,10 @@ private struct DisplaySettings: View {
     @State private var privateIssueMessage = ""
     @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
     @State private var requestingNotifications = false
+    #if !targetEnvironment(macCatalyst)
+    @ObservedObject private var nearbyNotifications = NearbySpotNotifications.shared
+    @AppStorage("spotcode.notifications.nearbySpots") private var notifyNearbySpots = true
+    #endif
     @AppStorage("spotcode.notifications.likes") private var notifyLikes = true
     @AppStorage("spotcode.notifications.comments") private var notifyComments = true
     @AppStorage("spotcode.notifications.mentions") private var notifyMentions = true
@@ -5241,6 +5283,24 @@ private struct DisplaySettings: View {
                 Button(NSLocalizedString("端末の通知設定を開く", comment: "")) { openSystemSettings() }.buttonStyle(OutlineButtonStyle())
             }
             Divider().overlay(SpotcodeTheme.border)
+            #if !targetEnvironment(macCatalyst)
+            Toggle(NSLocalizedString("スポットに近づいたときに通知", comment: ""), isOn: $notifyNearbySpots)
+                .onChange(of: notifyNearbySpots) { enabled in
+                    if enabled { nearbyNotifications.requestPermission(); requestNotificationPermission() }
+                }
+            Text(NSLocalizedString("アプリで取得した公開スポット投稿のうち、現在地に近い最大20件を対象に、半径100mへの接近を通知します。アプリを閉じている間も登録済みのスポットが対象です。", comment: ""))
+                .font(.caption).foregroundColor(SpotcodeTheme.muted)
+            if notifyNearbySpots {
+                Text(nearbyNotifications.status).font(.caption).foregroundColor(SpotcodeTheme.muted)
+                if nearbyNotifications.authorization == .notDetermined {
+                    Button(NSLocalizedString("接近通知の位置情報を許可", comment: "")) { nearbyNotifications.requestPermission() }
+                        .buttonStyle(OutlineButtonStyle())
+                } else if nearbyNotifications.authorization == .denied || nearbyNotifications.authorization == .restricted {
+                    Button(NSLocalizedString("位置情報の設定を開く", comment: "")) { openSystemSettings() }
+                        .buttonStyle(OutlineButtonStyle())
+                }
+            }
+            #endif
             Text(NSLocalizedString("通知する内容", comment: "")).spotcodeFont(15, weight: .bold, fallback: .subheadline.weight(.bold))
             Toggle(NSLocalizedString("いいね", comment: ""), isOn: $notifyLikes)
             Toggle(NSLocalizedString("コメント", comment: ""), isOn: $notifyComments)

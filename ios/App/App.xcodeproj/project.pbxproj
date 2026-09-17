@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B10000010000000000000001 /* NearbySpotNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000020000000000000001 /* NearbySpotNotifications.swift */; };
 		AF0000030000000000000001 /* Theme-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = AF0000040000000000000001 /* Theme-LICENSE.txt */; };
 		AF0000010000000000000001 /* NativeColorThemes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000020000000000000001 /* NativeColorThemes.swift */; };
 		AE0000010000000000000001 /* NativeCardLayers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0000020000000000000001 /* NativeCardLayers.swift */; };
@@ -24,6 +25,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B10000020000000000000001 /* NearbySpotNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySpotNotifications.swift; sourceTree = "<group>"; };
 		AF0000040000000000000001 /* Theme-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Theme-LICENSE.txt"; sourceTree = "<group>"; };
 		AF0000020000000000000001 /* NativeColorThemes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeColorThemes.swift; sourceTree = "<group>"; };
 		AE0000020000000000000001 /* NativeCardLayers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCardLayers.swift; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 				AA0000130000000000000001 /* SupabaseService.swift */,
 				AA0000140000000000000001 /* AppModel.swift */,
 				AA0000150000000000000001 /* NativeViews.swift */,
+				B10000020000000000000001 /* NearbySpotNotifications.swift */,
 				AE0000020000000000000001 /* NativeCardLayers.swift */,
 				AF0000020000000000000001 /* NativeColorThemes.swift */,
 				AF0000040000000000000001 /* Theme-LICENSE.txt */,
@@ -176,6 +179,7 @@
 				AA0000030000000000000001 /* SupabaseService.swift in Sources */,
 				AA0000040000000000000001 /* AppModel.swift in Sources */,
 				AA0000050000000000000001 /* NativeViews.swift in Sources */,
+				B10000010000000000000001 /* NearbySpotNotifications.swift in Sources */,
 				AE0000010000000000000001 /* NativeCardLayers.swift in Sources */,
 				AF0000010000000000000001 /* NativeColorThemes.swift in Sources */,
 				AC0000010000000000000001 /* NearbyBusinessCardExchange.swift in Sources */,
@@ -344,12 +348,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = 3Y8APYUG2G;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.0.2;
+				MARKETING_VERSION = 1.0.3;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = computer.ngs.hrmc.Spotcode;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -370,12 +374,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = 3Y8APYUG2G;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.0.2;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = computer.ngs.hrmc.Spotcode;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;

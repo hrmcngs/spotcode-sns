@@ -203,6 +203,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        if response.notification.request.content.userInfo["spotcode_nearby_spot"] != nil {
+            UserDefaults.standard.set(true, forKey: "spotcode.openNearbySpot")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: Notification.Name("spotcode.openNearbySpot"), object: nil)
+            }
+        }
         if response.notification.request.content.userInfo["spotcode_post"] != nil {
             NotificationCenter.default.post(name: Notification.Name("spotcode.openNotifications"), object: nil)
         }
