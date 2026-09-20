@@ -731,6 +731,8 @@ function dispatch(path) {
   observedTimelineToolbar = document.querySelector('.timeline-toolbar');
   if (observedTimelineToolbar) headerSizeObserver.observe(observedTimelineToolbar);
   setActiveNav(path);
+  repaintRail();
+  refreshRailData();
 }
 
 function syncSpotChip(spot) {
