@@ -24,6 +24,8 @@ struct Profile: Codable, Identifiable, Hashable {
     let avatarShape: String?
     let isAdmin: Bool?
     let isOperator: Bool?
+    var closeFriendIDs: [UUID]? = nil
+    var orgMemberIDs: [UUID]? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, handle, name, bio, location, website, twitter, instagram
@@ -35,10 +37,51 @@ struct Profile: Codable, Identifiable, Hashable {
         case isOrg = "is_org"
         case closeFriends = "close_friends"
         case orgMembers = "org_members"
+        case closeFriendIDs = "close_friend_ids"
+        case orgMemberIDs = "org_member_ids"
         case createdAt = "created_at"
         case avatarShape = "avatar_shape"
         case isAdmin = "is_admin"
         case isOperator = "is_operator"
+    }
+}
+
+// An editor keeps the identity captured for each displayed handle, including
+// after a failed save. A renamed/recycled handle never silently changes grants.
+struct AudienceIdentityBindings {
+    private var identities: [String: UUID] = [:]
+    private var existingHandles: Set<String> = []
+    private var conflictingHandles: Set<String> = []
+
+    static func normalized(_ handle: String) -> String {
+        handle.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "^@", with: "", options: .regularExpression)
+    }
+
+    mutating func capture(handles: [String], ids: [UUID]?) {
+        existingHandles.formUnion(handles.map(Self.normalized))
+        guard let ids, ids.count == handles.count else { return }
+        for (handle, id) in zip(handles, ids) {
+            let key = Self.normalized(handle)
+            if let previous = identities[key], previous != id {
+                identities.removeValue(forKey: key)
+                conflictingHandles.insert(key)
+            } else if !conflictingHandles.contains(key) { identities[key] = id }
+        }
+    }
+
+    func identity(for handle: String) throws -> UUID? {
+        let key = Self.normalized(handle)
+        if let id = identities[key] { return id }
+        guard !existingHandles.contains(key) else {
+            throw NSError(domain: "AudienceIdentity", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                NSLocalizedString("公開対象リストを再読み込みしてください。", comment: "")])
+        }
+        return nil
+    }
+
+    mutating func remember(_ id: UUID, for handle: String) {
+        identities[Self.normalized(handle)] = id
     }
 }
 

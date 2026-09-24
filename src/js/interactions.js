@@ -210,7 +210,7 @@ export async function followersOf(handle) {
   if (!id) return [];
   const { data, error } = await supa
     .from('follows')
-    .select('user:profiles!follows_follower_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+    .select('user:profiles!follows_follower_id_fkey(id, handle, name, avatar_url, avatar_shape, bio)')
     .eq('target_id', id)
     .eq('status', 'accepted')
     .order('created_at', { ascending: false });
@@ -227,7 +227,7 @@ export async function followingOf(handle) {
   if (!id) return [];
   const { data, error } = await supa
     .from('follows')
-    .select('user:profiles!follows_target_id_fkey(handle, name, avatar_url, avatar_shape, bio)')
+    .select('user:profiles!follows_target_id_fkey(id, handle, name, avatar_url, avatar_shape, bio)')
     .eq('follower_id', id)
     .eq('status', 'accepted')
     .order('created_at', { ascending: false });
@@ -247,6 +247,7 @@ export function cachedFollowList(handle, kind) {
 function shapeProfile(p) {
   const name = p.name || t("User");
   return {
+    id:          p.id,
     handle:      p.handle,
     name,
     avatar:      (name[0] || '?').toUpperCase(),

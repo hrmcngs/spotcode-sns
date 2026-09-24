@@ -204,10 +204,10 @@ actor SupabaseService {
 
     func profile(id: UUID, token: String) async throws -> Profile? {
         do {
-            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape,is_admin,is_operator", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,close_friend_ids,org_member_ids,created_at,avatar_shape,is_admin,is_operator", token: token)
             return rows.first
         } catch where error.localizedDescription.lowercased().contains("is_admin") || error.localizedDescription.lowercased().contains("is_operator") {
-            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,close_friend_ids,org_member_ids,created_at,avatar_shape", token: token)
             return rows.first
         }
     }
@@ -215,10 +215,10 @@ actor SupabaseService {
     func profile(handle: String, token: String?) async throws -> Profile? {
         let escaped = handle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? handle
         do {
-            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape,is_admin,is_operator", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,close_friend_ids,org_member_ids,created_at,avatar_shape,is_admin,is_operator", token: token)
             return rows.first
         } catch where error.localizedDescription.lowercased().contains("is_admin") || error.localizedDescription.lowercased().contains("is_operator") {
-            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape", token: token)
+            let rows: [Profile] = try await request("rest/v1/profiles?handle=eq.\(escaped)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,close_friend_ids,org_member_ids,created_at,avatar_shape", token: token)
             return rows.first
         }
     }
@@ -236,20 +236,20 @@ actor SupabaseService {
         ]
         let body = try JSONSerialization.data(withJSONObject: payload)
         let rows: [Profile] = try await request(
-            "rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,created_at,avatar_shape",
+            "rest/v1/profiles?id=eq.\(id.uuidString)&select=id,handle,name,avatar_url,bio,location,github_handle,github_verified,website,twitter,instagram,is_private,is_org,organization,close_friends,org_members,close_friend_ids,org_member_ids,created_at,avatar_shape",
             method: "PATCH", token: token, body: body, preferRepresentation: true
         )
         guard let profile = rows.first else { throw URLError(.badServerResponse) }
         return profile
     }
 
-    func updateProfilePreferences(id: UUID, isPrivate: Bool, isOrg: Bool, organization: String, closeFriends: [String], orgMembers: [String], token: String) async throws -> Profile {
+    func updateProfilePreferences(id: UUID, isPrivate: Bool, isOrg: Bool, organization: String, closeFriendIDs: [UUID], orgMemberIDs: [UUID], token: String) async throws -> Profile {
         let payload: [String: Any] = [
             "is_private": isPrivate,
             "is_org": isOrg,
             "organization": organization.isEmpty ? NSNull() : organization,
-            "close_friends": closeFriends,
-            "org_members": orgMembers
+            "close_friend_ids": closeFriendIDs.map(\.uuidString),
+            "org_member_ids": orgMemberIDs.map(\.uuidString)
         ]
         let body = try JSONSerialization.data(withJSONObject: payload)
         let rows: [Profile] = try await request(

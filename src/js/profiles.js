@@ -11,11 +11,12 @@ import { expandQuery } from './jp-romaji.js';
 import { cacheHandleId } from './data.js';
 
 // Project a profiles row into the UI-friendly user shape that the rest of
-// the app uses (same fields as auth.js#projectUser, minus id/email).
+// the app uses (same fields as auth.js#projectUser, minus email).
 function shapeProfile(row) {
   if (!row) return null;
   const name = row.name || t("User");
   return {
+    id:          row.id,
     handle:      row.handle,
     name,
     avatar:      (name[0] || '?').toUpperCase(),
@@ -37,6 +38,8 @@ function shapeProfile(row) {
     twitter:     row.twitter   || '',
     instagram:   row.instagram || '',
     closeFriends: Array.isArray(row.close_friends) ? row.close_friends : [],
+    closeFriendIds: Array.isArray(row.close_friend_ids) ? row.close_friend_ids : [],
+    orgMemberIds: Array.isArray(row.org_member_ids) ? row.org_member_ids : [],
     orgMembers:   Array.isArray(row.org_members)   ? row.org_members   : [],
     organization: row.organization || '',
     skills:       Array.isArray(row.skills) ? row.skills : [],

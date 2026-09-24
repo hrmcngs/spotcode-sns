@@ -8,13 +8,30 @@ enum TimelinePreviewCache {
     static let maxPosts = 24
     static let maxBytes = 2 * 1024 * 1024
 
-    static func encode<T: Encodable>(_ posts: [T]) -> Data {
+    static func encode<T: Encodable>(_ posts: [T], owner: UUID?) -> Data? {
+        guard let owner else { return nil }
+        var result = Data((owner.uuidString + "\n").utf8)
+        result.append(encode(posts, byteLimit: maxBytes - result.count))
+        return result
+    }
+
+    static func decode<T: Decodable>(_ type: T.Type, from data: Data, owner: UUID?) -> [T] {
+        // The owner header and rows are one value: legacy unowned previews are
+        // discarded, including following/mutuals rows that cannot be rechecked offline.
+        guard let owner, data.count <= maxBytes else { return [] }
+        let header = Data((owner.uuidString + "\n").utf8)
+        guard data.starts(with: header),
+              let posts = try? JSONDecoder().decode([T].self, from: data.dropFirst(header.count)) else { return [] }
+        return Array(posts.prefix(maxPosts))
+    }
+
+    static func encode<T: Encodable>(_ posts: [T], byteLimit: Int = maxBytes) -> Data {
         var result = Data([0x5B]) // [
         let encoder = JSONEncoder()
         for post in posts.prefix(maxPosts) {
             guard let row = try? encoder.encode(post) else { break }
             let separatorBytes = result.count > 1 ? 1 : 0
-            guard result.count + separatorBytes + row.count + 1 <= maxBytes else { break }
+            guard result.count + separatorBytes + row.count + 1 <= byteLimit else { break }
             if separatorBytes > 0 { result.append(0x2C) }
             result.append(row)
         }
@@ -29,6 +46,9 @@ final class AppModel: ObservableObject {
     @Published var me: Profile? { didSet { NativePrivacy.currentProfile = me } }
     @Published var posts: [Post] = []
     @Published var lastUpdatedPost: Post?
+    // Shared by every screen, including lists held in a view's own @State.
+    // Retain tombstones for this app lifetime so delayed reads cannot revive rows.
+    @Published private(set) var deletedPostIDs: Set<UUID> = []
     @Published private(set) var savedAccounts: [SavedAccount] = []
     @Published private(set) var officialProfile: Profile?
     @Published private(set) var isPostingAsOfficial = false
@@ -213,6 +233,7 @@ final class AppModel: ObservableObject {
     }
 
     func canReadPostAudience(_ post: Post) -> Bool {
+        guard !deletedPostIDs.contains(post.id) else { return false }
         guard post.visibility == "github_org" || post.visibility == "only_me" else { return true }
         if post.authorID == session?.user.id { return true }
         if me?.id == session?.user.id && me?.isAdmin == true && UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") { return true }
@@ -337,20 +358,15 @@ final class AppModel: ObservableObject {
         NativePrivacy.currentProfile = me
         restoreSavedSession()
         if let data = UserDefaults.standard.data(forKey: cachedPostsKey) {
-            // Drop oversized caches from older versions before decoding images/posts.
-            let decoded = data.count <= TimelinePreviewCache.maxBytes
-                ? ((try? JSONDecoder().decode([Post].self, from: data)) ?? [])
-                : []
-            let cached = Array(decoded.prefix(TimelinePreviewCache.maxPosts))
-            if data.count > TimelinePreviewCache.maxBytes || decoded.count > TimelinePreviewCache.maxPosts {
-                UserDefaults.standard.set(TimelinePreviewCache.encode(cached), forKey: cachedPostsKey)
-            }
+            let cached = TimelinePreviewCache.decode(Post.self, from: data, owner: session?.user.id)
+            if cached.isEmpty { UserDefaults.standard.removeObject(forKey: cachedPostsKey) }
             let canInspect = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && me?.isAdmin == true && me?.id == session?.user.id
             posts = cached.filter { !["only_me", "github_org"].contains($0.visibility ?? "public") || $0.authorID == session?.user.id || canInspect }
         }
     }
 
     func restoreSavedSession() {
+        guard !requiresMFA else { return }
         guard session == nil else { sessionRestorePending = false; return }
         if UserDefaults.standard.bool(forKey: signedOutKey) {
             sessionRestorePending = false; me = nil; return
@@ -386,10 +402,14 @@ final class AppModel: ObservableObject {
     }
 
     func bootstrap() async {
+        guard !requiresMFA else { return }
         if session == nil { restoreSavedSession() }
         guard session != nil else { return }
         let current: AuthSession
-        do { current = try await validSession() }
+        do {
+            current = try await validSession()
+            if try await prepareMFAIfNeeded(current) { return }
+        }
         catch {
             // validSession marks only a rejected refresh token as requiring login.
             // Offline launches retain the saved session and cached account.
@@ -399,6 +419,7 @@ final class AppModel: ObservableObject {
             return
         }
         if let profile = try? await SupabaseService.shared.profile(id: current.user.id, token: current.accessToken) {
+            guard session?.user.id == current.user.id else { return }
             me = profile
             cacheProfile(profile)
             rememberAccount(session: current, profile: profile)
@@ -501,16 +522,7 @@ final class AppModel: ObservableObject {
                     password: password
                 )
             }
-            if Self.assuranceLevel(of: value.accessToken) != "aal2" {
-                let factors = try await SupabaseService.shared.mfaFactors(token: value.accessToken)
-                if let factor = factors.first {
-                    pendingMFASession = value
-                    pendingMFAFactorID = factor.id
-                    requiresMFA = true
-                    authenticationError = nil
-                    return false
-                }
-            }
+            if try await prepareMFAIfNeeded(value) { return false }
             try await finishSignIn(value)
             return true
         } catch {
@@ -526,13 +538,7 @@ final class AppModel: ObservableObject {
         if let current = session, let profile = me { rememberAccount(session: current, profile: profile) }
         do {
             let value = try await SupabaseService.shared.refresh(refreshToken)
-            if Self.assuranceLevel(of: value.accessToken) != "aal2",
-               let factor = try await SupabaseService.shared.mfaFactors(token: value.accessToken).first {
-                pendingMFASession = value
-                pendingMFAFactorID = factor.id
-                requiresMFA = true
-                return false
-            }
+            if try await prepareMFAIfNeeded(value) { return false }
             try await finishSignIn(value)
             return true
         } catch {
@@ -553,6 +559,9 @@ final class AppModel: ObservableObject {
         }
         do {
             let verified = try await SupabaseService.shared.verifyMFA(factorID: factorID, code: value, token: pending.accessToken)
+            guard pendingMFASession?.refreshToken == pending.refreshToken,
+                  pendingMFAFactorID == factorID,
+                  Self.assuranceLevel(of: verified.accessToken) == "aal2" else { throw CancellationError() }
             try await finishSignIn(verified)
             pendingMFASession = nil
             pendingMFAFactorID = nil
@@ -624,6 +633,25 @@ final class AppModel: ObservableObject {
             Task { await loadTimeline() }
     }
 
+    private func prepareMFAIfNeeded(_ value: AuthSession) async throws -> Bool {
+        guard Self.assuranceLevel(of: value.accessToken) != "aal2" else { return false }
+        let previousOwner = session?.user.id
+        let previousToken = session?.refreshToken
+        let factors = try await SupabaseService.shared.mfaFactors(token: value.accessToken)
+        guard session?.user.id == previousOwner, session?.refreshToken == previousToken else { throw CancellationError() }
+        guard let factor = factors.first(where: { $0.status == "verified" }) else { return false }
+        sessionRefresh?.task.cancel()
+        sessionRefresh = nil
+        clearGithubOrganizations()
+        session = nil; me = nil; officialProfile = nil; isPostingAsOfficial = false
+        UserDefaults.standard.removeObject(forKey: cachedProfileKey)
+        pendingMFASession = value
+        pendingMFAFactorID = factor.id
+        authenticationError = nil
+        requiresMFA = true
+        return true
+    }
+
     private static func assuranceLevel(of jwt: String) -> String? {
         let parts = jwt.split(separator: ".")
         guard parts.count > 1 else { return nil }
@@ -690,6 +718,7 @@ final class AppModel: ObservableObject {
     }
 
     func signOut() {
+        pendingMFASession = nil; pendingMFAFactorID = nil; requiresMFA = false
         sessionRefresh?.task.cancel()
         sessionRefresh = nil
         requiresReauthentication = false
@@ -722,6 +751,7 @@ final class AppModel: ObservableObject {
             if next.expiresAt.map({ $0 < Int(Date().timeIntervalSince1970) + 60 }) ?? true {
                 next = try await SupabaseService.shared.refresh(next.refreshToken)
             }
+            if try await prepareMFAIfNeeded(next) { return false }
             guard let profile = try await SupabaseService.shared.profile(
                 id: next.user.id,
                 token: next.accessToken
@@ -767,48 +797,52 @@ final class AppModel: ObservableObject {
     }
 
     func loadTimeline() async {
-        if blockedOwner != session?.user.id { await loadBlocks() }
-        if mutedOwner != session?.user.id { await loadMutes() }
+        let owner = session?.user.id
         let generation = UUID()
         timelineGeneration = generation
         isLoadingMoreTimeline = false; timelinePageError = nil
         isLoading = true
         defer { if timelineGeneration == generation { isLoading = false } }
+        if blockedOwner != owner { await loadBlocks() }
+        guard timelineGeneration == generation, session?.user.id == owner else { return }
+        if mutedOwner != owner { await loadMutes() }
+        guard timelineGeneration == generation, session?.user.id == owner else { return }
         if me?.githubHandle != nil && (githubOrganizationOwner != session?.user.id || githubOrganizationExpiry <= Date()) {
             _ = try? await syncGithubOrganizations()
         }
         do {
-            guard timelineGeneration == generation else { return }
+            guard timelineGeneration == generation, session?.user.id == owner else { return }
             // Refresh the already loaded range instead of collapsing back to
             // the first page while someone is reading older posts.
             let limit = max(24, posts.count)
             let page = try await SupabaseService.shared.posts(limit: limit, token: session?.accessToken)
-            guard timelineGeneration == generation else { return }
-            posts = page
+            guard timelineGeneration == generation, session?.user.id == owner else { return }
+            posts = page.filter { !deletedPostIDs.contains($0.id) }
             timelineCursor = page.last
             hasMoreTimelinePosts = page.count == limit
-            UserDefaults.standard.set(TimelinePreviewCache.encode(posts), forKey: cachedPostsKey)
+            UserDefaults.standard.set(TimelinePreviewCache.encode(posts, owner: owner), forKey: cachedPostsKey)
         }
         catch is CancellationError { return }
         catch let error as URLError where error.code == .cancelled { return }
         catch let error as URLError where Self.isTransientNetworkError(error) { return }
-        catch { if timelineGeneration == generation { errorMessage = error.localizedDescription } }
+        catch { if timelineGeneration == generation, session?.user.id == owner { errorMessage = error.localizedDescription } }
     }
 
     func loadMoreTimeline() async {
         guard hasMoreTimelinePosts, !isLoading, !isLoadingMoreTimeline, let cursor = timelineCursor else { return }
+        let owner = session?.user.id
         let generation = timelineGeneration
         isLoadingMoreTimeline = true; timelinePageError = nil
         defer { if generation == timelineGeneration { isLoadingMoreTimeline = false } }
         do {
             let page = try await SupabaseService.shared.posts(token: session?.accessToken, before: cursor)
-            guard generation == timelineGeneration else { return }
+            guard generation == timelineGeneration, session?.user.id == owner else { return }
             let known = Set(posts.map(\.id))
-            posts.append(contentsOf: page.filter { !known.contains($0.id) })
+            posts.append(contentsOf: page.filter { !known.contains($0.id) && !deletedPostIDs.contains($0.id) })
             timelineCursor = page.last
             hasMoreTimelinePosts = page.count == 24 && page.last?.createdAt != nil
         } catch {
-            if generation == timelineGeneration { timelinePageError = NSLocalizedString("続きを取得できませんでした。再試行してください。", comment: "") }
+            if generation == timelineGeneration, session?.user.id == owner { timelinePageError = NSLocalizedString("続きを取得できませんでした。再試行してください。", comment: "") }
         }
     }
 
@@ -857,9 +891,14 @@ final class AppModel: ObservableObject {
         guard let session, post.authorID == displayProfile?.id || mayModerate else { return false }
         do {
             try await SupabaseService.shared.deletePost(id: post.id, token: session.accessToken)
+            guard self.session?.user.id == session.user.id else { return true }
+            deletedPostIDs.insert(post.id)
             posts.removeAll { $0.id == post.id }
+            if lastUpdatedPost?.id == post.id { lastUpdatedPost = nil }
+            UserDefaults.standard.set(TimelinePreviewCache.encode(posts, owner: session.user.id), forKey: cachedPostsKey)
             return true
         } catch {
+            guard self.session?.user.id == session.user.id else { return false }
             errorMessage = error.localizedDescription
             return false
         }
@@ -893,23 +932,43 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func updateProfilePreferences(isPrivate: Bool, isOrg: Bool, organization: String, closeFriends: [String], orgMembers: [String]) async -> Bool {
-        guard let session, let id = me?.id else { return false }
+    func resolveAudienceMember(handle: String, owner: UUID) async throws -> UUID {
+        guard session?.user.id == owner else { throw CancellationError() }
+        guard handle.range(of: "^[A-Za-z0-9_][A-Za-z0-9_-]{1,19}$", options: .regularExpression) != nil else {
+            throw URLError(.badURL)
+        }
+        let profile = try await withRefreshedSession { token in
+            guard self.session?.user.id == owner else { throw CancellationError() }
+            return try await SupabaseService.shared.profile(handle: handle, token: token)
+        }
+        guard session?.user.id == owner else { throw CancellationError() }
+        guard let id = profile?.id else { throw URLError(.resourceUnavailable) }
+        return id
+    }
+
+    func updateProfilePreferences(isPrivate: Bool, isOrg: Bool, organization: String, closeFriendIDs: [UUID], orgMemberIDs: [UUID]) async -> Bool {
+        guard let session, let id = me?.id, id == session.user.id else { return false }
         do {
             let profile = try await SupabaseService.shared.updateProfilePreferences(
                 id: id, isPrivate: isPrivate, isOrg: isOrg, organization: organization,
-                closeFriends: closeFriends, orgMembers: orgMembers, token: session.accessToken
+                closeFriendIDs: closeFriendIDs, orgMemberIDs: orgMemberIDs, token: session.accessToken
             )
+            guard self.session?.user.id == session.user.id else { return false }
             me = profile
             cacheProfile(profile)
             return true
         } catch {
+            guard self.session?.user.id == session.user.id else { return false }
             errorMessage = error.localizedDescription
             return false
         }
     }
 
     private func clearGithubOrganizations() {
+        // Called synchronously before an account change or logout. Invalidate
+        // both visible rows and pending requests before the new identity appears.
+        posts = []; lastUpdatedPost = nil
+        UserDefaults.standard.removeObject(forKey: cachedPostsKey)
         blockedAccountIDs = []; blockedOwner = nil
         mutedAccountIDs = []; mutedOwner = nil
         timelineGeneration = UUID(); timelineCursor = nil; isLoading = false

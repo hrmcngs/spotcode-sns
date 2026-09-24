@@ -9,6 +9,8 @@ Supabase SQL Editorで **[docs/supabase-schema.sql](docs/supabase-schema.sql) �
 
 `docs/migrations/` と `docs/repairs/` は履歴・個別修復用に残しています。通常は順番に実行する必要はありません。SQLは1トランザクションで適用され、最後にAPIのスキーマキャッシュを更新します。任意のQAアカウントは自動作成せず、設定画面から作成します。OAuth・Storageの設定、Edge Functionのデプロイ、アプリの更新は別途必要です。
 
+Stage 53 の権限制御・MFA・公開範囲・キャッシュ対策と、移行時の確認事項は [セキュリティ修正の適用・検証手順](docs/security-remediation.md) を参照してください。
+
 ## 機能（実装中）
 
 -  **ファイルサイズで色が変化** — 一目で編集量

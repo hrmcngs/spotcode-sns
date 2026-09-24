@@ -52,11 +52,12 @@ export async function setUserControl(handle, kind, enabled) {
   if (enabled) value[kind].push(target);
   localStorage.setItem(key(), JSON.stringify(value));
 }
-export async function setAudienceMember(handle, kind, enabled) {
+export async function setAudienceMember(handle, kind, enabled, targetId = null) {
   const owner = currentUser()?.id;
   if (!owner) throw new Error(t("ログインしてください"));
   const client = await getClient();
-  const { data, error: lookupError } = await client.from('profiles').select('id').eq('handle', handle).single();
+  // Keep the principal the viewer selected even if its handle changes before click.
+  const { data, error: lookupError } = await client.from('profiles').select('id').eq(targetId ? 'id' : 'handle', targetId || handle).single();
   if (lookupError) throw lookupError;
   if (currentUser()?.id !== owner) throw new Error(t("アカウントが変更されました"));
   const { error } = await client.rpc('set_audience_member', { p_target: data.id, p_kind: kind, p_enabled: enabled });

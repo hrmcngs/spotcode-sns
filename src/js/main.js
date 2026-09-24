@@ -24,7 +24,7 @@ import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
 import { allUsers, getUser, postsWithSpots, trendingCities, onPostsCacheChange, cachedPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
-         markPendingDelete, unmarkPendingDelete } from './data.js';
+         markPendingDelete, unmarkPendingDelete, resetTimelineCaches } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_HANDLE } from './official-account.js';
 import { isAdmin, isOperator } from './dev-mode.js';
@@ -1273,6 +1273,7 @@ import('./push-notify.js').then(({ isPushEnabled, onPushPrefChange }) => {
 onPrivacyModeChange(() => { refresh(); });
 
 onAuthChange(() => {
+  resetTimelineCaches();
   // The signed-in identity changed (login / logout / profile update) —
   void hydrateSocialControls().then(changed => { if (changed) refresh(); }).catch(() => {});
   // drop the like/follow cache so the next renders re-fetch with the

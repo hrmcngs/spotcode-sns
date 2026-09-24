@@ -29,6 +29,22 @@ import { withTimeout } from '../net-utils.js';
 // can re-render without a round trip. Initialised in renderSettings()
 // from currentUser(); each edit immediately POSTs via updateProfile.
 const audienceState = { closeFriends: [], orgMembers: [] };
+const audienceIdFields = { closeFriends: 'closeFriendIds', orgMembers: 'orgMemberIds' };
+const audienceReady = { closeFriends: false, orgMembers: false };
+let audienceOwner = null;
+let audienceVersion = 0;
+let audiencePending = false;
+// Handles label the selected IDs; they never determine retained membership.
+function audienceEntries(profile, kind) {
+  const ids = profile?.[audienceIdFields[kind]];
+  if (!Array.isArray(ids)) return null;
+  return [...new Set(ids)].map(id => ({ id, handle: profile?.[kind]?.[ids.indexOf(id)] || '' }));
+}
+function seedAudience(profile, kind) {
+  const entries = audienceEntries(profile, kind);
+  audienceReady[kind] = entries !== null;
+  audienceState[kind] = entries || [];
+}
 const hydratedTaskSettings = new Set();
 let privateIssueAuthError = '';
 let taskRepoSearch = '';
@@ -186,8 +202,10 @@ function audienceCard() {
   // Seed the in-memory editor state from the projected user. Done
   // here (not at module load) so a login switch picks up the right
   // lists when the user opens /settings.
-  audienceState.closeFriends = Array.isArray(me.closeFriends) ? me.closeFriends.slice() : [];
-  audienceState.orgMembers   = Array.isArray(me.orgMembers)   ? me.orgMembers.slice()   : [];
+  audienceOwner = me.id;
+  audienceVersion++;
+  seedAudience(me, 'closeFriends');
+  seedAudience(me, 'orgMembers');
   return (
     '<section class="settings-card">' +
       '<h2>' + t('settings.audience.title') + '</h2>' +
@@ -241,7 +259,7 @@ function audienceEditor(kind, label) {
       '<div class="audience-editor__search">' +
         '<input type="text" autocomplete="off" spellcheck="false" ' +
           'placeholder="' + attr(t('settings.audience.search_placeholder')) + '" ' +
-          'data-audience-search="' + kind + '">' +
+          'data-audience-search="' + kind + '"' + (audienceReady[kind] ? '' : ' disabled') + '>' +
         '<div class="audience-editor__results" data-audience-results="' + kind + '" hidden></div>' +
       '</div>' +
       '<p class="settings-status audience-editor__status" data-audience-status="' + kind + '"></p>' +
@@ -249,14 +267,16 @@ function audienceEditor(kind, label) {
   );
 }
 
-function audienceChip(kind, handle) {
-  const u = getUser(handle) || { handle, name: handle, avatar: (handle[0] || '?').toUpperCase() };
+function audienceChip(kind, entry) {
+  const { id, handle } = entry;
+  const cached = getUser(handle);
+  const u = cached?.id === id ? cached : { handle, name: handle, avatar: (handle[0] || '?').toUpperCase() };
   return (
     '<span class="audience-chip" data-handle="' + attr(handle) + '">' +
       renderAvatar(u, { size: 'sm' }) +
       '<span class="audience-chip__handle">@' + attr(handle) + '</span>' +
       '<button type="button" class="audience-chip__remove" ' +
-        'data-audience-remove="' + kind + '" data-handle="' + attr(handle) + '" ' +
+        'data-audience-remove="' + kind + '" data-member-id="' + attr(id) + '" ' +
         ("aria-label=\"" + t("削除") + "\">×</button>") +
     '</span>'
   );
@@ -1269,9 +1289,12 @@ export function bindSettings() {
   async function persistAudience(kind) {
     const me = currentUser();
     if (!me) return;
+    audiencePending = true;
     showAudienceStatus(kind, 'settings.audience.saving');
     try {
-      await updateProfile({ [kind]: audienceState[kind].slice() });
+      if (!audienceReady[kind] || me.id !== audienceOwner) throw new Error('Reload the audience list before editing.');
+      await updateProfile({ [audienceIdFields[kind]]: audienceState[kind].map(entry => entry.id) });
+      if (currentUser()?.id !== me.id) return;
       showAudienceStatus(kind, 'settings.audience.saved', 'ok');
     } catch (ex) {
       // Roll the in-memory state back to the DB truth so the chip
@@ -1279,11 +1302,12 @@ export function bindSettings() {
       // the persisted list is actually empty. The next render will
       // pick up the unchanged cachedUser.
       const fresh = currentUser();
-      audienceState[kind] = Array.isArray(fresh?.[kind]) ? fresh[kind].slice() : [];
+      if (fresh?.id !== me.id) return;
+      seedAudience(fresh, kind);
       rerenderChips(kind);
       showAudienceStatusText(kind, t('settings.audience.failed') + ': ' + (ex.message || String(ex)), 'bad');
       console.warn('persistAudience', ex);
-    }
+    } finally { audiencePending = false; }
   }
 
   function rerenderChips(kind) {
@@ -1291,6 +1315,8 @@ export function bindSettings() {
     const countEl = document.querySelector('[data-audience-count="' + kind + '"]');
     if (host) host.innerHTML = audienceState[kind].map(h => audienceChip(kind, h)).join('');
     if (countEl) countEl.textContent = '(' + audienceState[kind].length + ')';
+    const input = document.querySelector('[data-audience-search="' + kind + '"]');
+    if (input) input.disabled = !audienceReady[kind];
   }
 
   function rerenderResults(kind, profiles, query) {
@@ -1298,7 +1324,7 @@ export function bindSettings() {
     if (!host) return;
     const me = currentUser();
     const filtered = (profiles || []).filter(p =>
-      p && p.handle && (!me || p.handle !== me.handle)
+      p && p.id && p.handle && (!me || p.id !== me.id)
     );
     if (!filtered.length) {
       host.hidden = !query;
@@ -1308,10 +1334,10 @@ export function bindSettings() {
     }
     host.hidden = false;
     host.innerHTML = filtered.slice(0, 8).map(p => {
-      const already = audienceState[kind].includes(p.handle);
+      const already = audienceState[kind].some(entry => entry.id === p.id);
       return (
         '<button type="button" class="audience-result' + (already ? ' is-added' : '') +
-          '" data-audience-add="' + kind + '" data-handle="' + attr(p.handle) + '"' +
+          '" data-audience-add="' + kind + '" data-handle="' + attr(p.handle) + '" data-member-id="' + attr(p.id) + '"' +
           (already ? ' disabled' : '') + '>' +
           renderAvatar(p, { size: 'sm' }) +
           '<span class="audience-result__text">' +
@@ -1327,34 +1353,34 @@ export function bindSettings() {
   // Default candidate set: handles the current user already follows.
   // Picking close-friends / org members from "people you follow" is
   // the common case, so we show them without forcing a search query.
-  // Missing profile metadata (avatar / name) → use the handle as a
-  // best-effort label; fetchProfileByHandle hydrates the cache in
-  // the background and a follow-up showSuggestions paints the names.
-  function showSuggestions(kind) {
-    const taken = new Set(audienceState[kind]);
-    const me = currentUser();
-    const handles = myFollowingHandles()
-      .filter(h => !taken.has(h) && (!me || h !== me.handle));
-    const profiles = handles.map(h => getUser(h) || { handle: h, name: h });
+  // Resolve candidate profiles before offering them as selectable identities.
+  async function showSuggestions(kind) {
+    const owner = currentUser()?.id;
+    const version = audienceVersion;
+    const handles = myFollowingHandles();
+    // Fetch candidate identities from the server; handle-only cache rows cannot
+    // authorize an addition and may refer to a recycled handle.
+    const results = await Promise.allSettled(handles.slice(0, 20).map(h => fetchProfileByHandle(h)));
+    if (owner !== currentUser()?.id || version !== audienceVersion) return;
+    const taken = new Set(audienceState[kind].map(entry => entry.id));
+    const profiles = results.filter(r => r.status === 'fulfilled').map(r => r.value)
+      .filter(p => p?.id && !taken.has(p.id) && p.id !== owner);
     rerenderResults(kind, profiles, profiles.length ? '__suggestions__' : '');
-    // Background-fill missing profiles, then re-render once when any
-    // arrive. Cheap: each handle gets fetched at most once.
-    const missing = profiles.filter(p => !p.avatar && !p.name).map(p => p.handle);
-    if (missing.length) {
-      Promise.allSettled(missing.map(h => fetchProfileByHandle(h)))
-        .then((rs) => { if (rs.some(r => r.status === 'fulfilled' && r.value)) showSuggestions(kind); });
-    }
   }
 
   // Per-kind debounced search so typing fast doesn't fire one
   // round trip per keystroke.
   const debouncedSearch = {
     closeFriends: debounce(async (q) => {
+      const owner = currentUser()?.id, version = audienceVersion;
       const profiles = q ? await searchProfiles(q, 10).catch(() => []) : [];
+      if (owner !== currentUser()?.id || version !== audienceVersion) return;
       rerenderResults('closeFriends', profiles, q);
     }, 220),
     orgMembers:   debounce(async (q) => {
+      const owner = currentUser()?.id, version = audienceVersion;
       const profiles = q ? await searchProfiles(q, 10).catch(() => []) : [];
+      if (owner !== currentUser()?.id || version !== audienceVersion) return;
       rerenderResults('orgMembers', profiles, q);
     }, 220),
   };
@@ -1385,10 +1411,8 @@ export function bindSettings() {
     if (!input.value.trim()) showSuggestions(kind);
   });
 
-  // Enter on the search input adds the typed handle directly to the
-  // list — saves the user from having to click the "+" on a candidate
-  // row. If the typed text doesn't match the handle format, fall
-  // through so the user gets the search-results panel instead.
+  // Enter selects a displayed exact-match candidate with a captured ID.
+  // Otherwise search first, so a typed label alone never changes membership.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     const input = e.target;
@@ -1402,16 +1426,12 @@ export function bindSettings() {
       showAudienceStatus(kind, 'settings.audience.invalid_handle', 'bad');
       return;
     }
-    if (audienceState[kind].includes(handle)) {
-      input.value = '';
-      showSuggestions(kind);
-      return;
-    }
-    audienceState[kind].push(handle);
-    input.value = '';
-    rerenderChips(kind);
-    showSuggestions(kind);
-    persistAudience(kind);
+    const results = document.querySelector('[data-audience-results="' + kind + '"]');
+    const candidate = [...(results?.querySelectorAll('[data-audience-add]') || [])]
+      .find(button => button.getAttribute('data-handle') === handle);
+    if (candidate && !candidate.disabled) candidate.click();
+    else debouncedSearch[kind](handle);
+
   });
 
   document.addEventListener('click', (e) => {
@@ -1421,9 +1441,10 @@ export function bindSettings() {
       e.preventDefault();
       const kind = addBtn.getAttribute('data-audience-add');
       const handle = addBtn.getAttribute('data-handle');
-      if (!kind || !handle || !audienceState[kind]) return;
-      if (audienceState[kind].includes(handle)) return;
-      audienceState[kind].push(handle);
+      const id = addBtn.getAttribute('data-member-id');
+      if (!kind || !id || !handle || !audienceReady[kind] || audiencePending || audienceOwner !== currentUser()?.id) return;
+      if (audienceState[kind].some(entry => entry.id === id)) return;
+      audienceState[kind].push({ id, handle });
       rerenderChips(kind);
       // Re-mark the search result row as added.
       addBtn.classList.add('is-added');
@@ -1438,16 +1459,16 @@ export function bindSettings() {
     if (rmBtn) {
       e.preventDefault();
       const kind = rmBtn.getAttribute('data-audience-remove');
-      const handle = rmBtn.getAttribute('data-handle');
-      if (!kind || !handle || !audienceState[kind]) return;
-      const i = audienceState[kind].indexOf(handle);
+      const id = rmBtn.getAttribute('data-member-id');
+      if (!kind || !id || !audienceReady[kind] || audiencePending || audienceOwner !== currentUser()?.id) return;
+      const i = audienceState[kind].findIndex(entry => entry.id === id);
       if (i < 0) return;
       audienceState[kind].splice(i, 1);
       rerenderChips(kind);
       // If the same handle is in the visible results, un-grey it.
       const results = document.querySelector('[data-audience-results="' + kind + '"]');
       if (results) {
-        const stale = results.querySelector('[data-handle="' + handle.replace(/"/g, '\\"') + '"]');
+        const stale = [...results.querySelectorAll('[data-member-id]')].find(button => button.getAttribute('data-member-id') === id);
         if (stale) {
           stale.classList.remove('is-added');
           stale.disabled = false;
@@ -1461,6 +1482,26 @@ export function bindSettings() {
   });
 
   } // end _audienceWired guard
+
+  if (Object.values(audienceReady).some(ready => !ready)) {
+    const owner = currentUser()?.id;
+    const version = audienceVersion;
+    void (async () => {
+      try {
+        const supa = await getClient();
+        const { data, error } = await supa.from('profiles')
+          .select('close_friend_ids,org_member_ids,close_friends,org_members').eq('id', owner).single();
+        if (error) throw error;
+        if (currentUser()?.id !== owner || version !== audienceVersion) return;
+        const profile = { closeFriendIds: data.close_friend_ids, orgMemberIds: data.org_member_ids,
+          closeFriends: data.close_friends, orgMembers: data.org_members };
+        for (const kind of Object.keys(audienceState)) { seedAudience(profile, kind); rerenderChips(kind); }
+      } catch (error) {
+        if (currentUser()?.id !== owner || version !== audienceVersion) return;
+        for (const kind of Object.keys(audienceState)) showAudienceStatusText(kind, t('settings.audience.failed') + ': ' + (error.message || error), 'bad');
+      }
+    })();
+  }
 
   // Warm the follow list in the background so the suggestion panel
   // has data the moment the user focuses the search input. We do

@@ -13,6 +13,7 @@ import { hydrateQuotedPosts, cachedPosts } from '../data.js';
 import { renderTimelineSkeleton } from '../skeleton.js';
 import { quickNavLinks } from '../quick-nav.js';
 import { renderAvatar } from '../avatar.js';
+import { safeLinkUrl } from '../safe-url.js';
 import { fetchProfileByHandle } from '../profiles.js';
 import { t } from '../i18n.js';
 import { renderGrass } from '../grass.js';
@@ -93,7 +94,7 @@ function renderOrgMembers(u) {
   if (!handles.length && !isOwner) return '';
   if (!handles.length) {
     return (
-      '<section class="profile-members" id="profile-members-' + u.handle + '">' +
+      '<section class="profile-members" id="profile-members-' + escAttr(u.handle) + '">' +
         '<h3 class="profile-members__title">' + t('profile.org_members.title') +
           ' <span class="profile-members__count">0</span>' +
         '</h3>' +
@@ -106,7 +107,7 @@ function renderOrgMembers(u) {
   // variant so the avatar grid stays tight (GitHub's "People" panel
   // is just rounded-square avatars in a 7-wide grid).
   return (
-    '<section class="profile-members profile-members--gh" id="profile-members-' + u.handle + '">' +
+    '<section class="profile-members profile-members--gh" id="profile-members-' + escAttr(u.handle) + '">' +
       '<h3 class="profile-members__title">' + t('profile.org_members.title') +
         ' <span class="profile-members__count">' + handles.length + '</span>' +
       '</h3>' +
@@ -117,7 +118,7 @@ function renderOrgMembers(u) {
           const tile = Object.assign({}, m, { avatarShape: 'square' });
           const label = (m.name && m.name !== h) ? (m.name + ' (@' + h + ')') : ('@' + h);
           return (
-            '<a class="profile-members__row" href="' + url('/' + h) + '" title="' + escAttr(label) + '" aria-label="' + escAttr(label) + '">' +
+            '<a class="profile-members__row" href="' + escAttr(url('/' + encodeURIComponent(h))) + '" title="' + escAttr(label) + '" aria-label="' + escAttr(label) + '">' +
               renderAvatar(tile, { size: 'md' }) +
               '<span class="profile-members__text">' +
                 '<span class="profile-members__name">' + escAttr(m.name || h) + '</span>' +
@@ -304,7 +305,7 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = fals
   if (tasksHidden()) return '';
   if (!tasks) {
     return (
-      '<div class="profile-tasks" id="profile-tasks-' + ghHandle + '" data-gh="' + escAttr(ghHandle) + '">' +
+      '<div class="profile-tasks" id="profile-tasks-' + escAttr(ghHandle) + '" data-gh="' + escAttr(ghHandle) + '">' +
         '<div class="profile-tasks__head">' +
           icon('repo', { size: 12, className: 'icon--inline' }) +
           ' ' + t('profile.tasks.title') +
@@ -409,7 +410,7 @@ function renderTasksCard(ghHandle, tasks, activeRepo = '', includePrivate = fals
   // the very long open-issue list from dominating every profile
   // page. Toggle flips both the class AND the button label.
   return (
-    '<div class="profile-tasks is-all-collapsed" id="profile-tasks-' + ghHandle + '" ' +
+    '<div class="profile-tasks is-all-collapsed" id="profile-tasks-' + escAttr(ghHandle) + '" ' +
         'data-gh="' + escAttr(ghHandle) + '" data-private="' + (includePrivate ? '1' : '0') + '" data-active-repo="' + escAttr(activeRepo || '') + '">' +
       '<div class="profile-tasks__head">' +
         icon('repo', { size: 12, className: 'icon--inline' }) +
@@ -440,7 +441,7 @@ function tabLabel(key) { return t('profile.tab.' + key); }
 function notFound(handle) {
   return (
     '<div class="stub">' +
-      '<h2 class="stub__title">@' + handle + ' ' + t('profile.not_found.title') + '</h2>' +
+      '<h2 class="stub__title">@' + escAttr(handle) + ' ' + t('profile.not_found.title') + '</h2>' +
       '<p class="stub__sub">' + t('profile.not_found.sub') + '</p>' +
     '</div>' +
     quickNavLinks()
@@ -450,7 +451,7 @@ function notFound(handle) {
 function loading(handle) {
   return (
     '<div class="stub" id="profile-loading">' +
-      '<h2 class="stub__title">@' + handle + '</h2>' +
+      '<h2 class="stub__title">@' + escAttr(handle) + '</h2>' +
       '<p class="stub__sub">' + t('profile.loading') + '</p>' +
     '</div>'
   );
@@ -494,7 +495,7 @@ function renderProfileContent(handle) {
     ? u.handle === OFFICIAL_HANDLE
     : !!(me && me.handle === u.handle);
   const isMe = canEdit || viewingSelfRow;
-  const ghLink = u.github?.url || (u.github?.handle ? 'https://github.com/' + u.github.handle : null);
+  const ghLink = safeLinkUrl(u.github?.url || (u.github?.handle ? 'https://github.com/' + encodeURIComponent(u.github.handle) : ''));
   // Counts come from Supabase via hydrateProfileFollow; the cache returns
   // 0 until then, which is fine — hydrateProfile re-renders after fill.
   const followingN = followingCount(u.handle);
@@ -524,22 +525,22 @@ function renderProfileContent(handle) {
       '<div class="profile-top">' +
         renderAvatar(orgU, { size: 'xl' }) +
         '<div class="profile-top__actions">' +
-          '<a class="btn btn--ghost" href="' + url('/' + u.handle + '/card') + ("\">" + t(currentUser()?.id === u.id ? "名刺を共有" : "名刺を見る") + "</a>") +
+          '<a class="btn btn--ghost" href="' + escAttr(url('/' + encodeURIComponent(u.handle) + '/card')) + ("\">" + t(currentUser()?.id === u.id ? "名刺を共有" : "名刺を見る") + "</a>") +
           // Edit only fires when the row actually belongs to the
           // auth user AND the overlay is off (canEdit).
           // Follow as the selected identity; only hide its own Follow button.
           (canEdit
-            ? '<button class="btn btn--primary" id="edit-profile-btn" data-edit-profile-handle="' + u.handle + '">' + t('profile.btn.edit') + '</button>'
+            ? '<button class="btn btn--primary" id="edit-profile-btn" data-edit-profile-handle="' + escAttr(u.handle) + '">' + t('profile.btn.edit') + '</button>'
             : viewingSelfRow
               ? ''
-              : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + u.handle + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
-                '<button class="btn ' + followBtnCls + ' btn--follow" data-profile-follow="' + u.handle + '" data-target="' + u.handle + '">' +
+              : '<button class="btn btn--ghost" id="profile-more-btn" data-profile-more="' + escAttr(u.handle) + '" aria-haspopup="menu" aria-expanded="false">' + t('profile.btn.more') + '</button>' +
+                '<button class="btn ' + followBtnCls + ' btn--follow" data-profile-follow="' + escAttr(u.handle) + '" data-target="' + escAttr(u.handle) + '">' +
                   followBtnLabel +
                 '</button>') +
         '</div>' +
       '</div>' +
       '<div class="profile-id">' +
-        '<div class="profile-name">' + maskName(u.handle, u.name) +
+        '<div class="profile-name">' + escapeHtml(maskName(u.handle, u.name)) +
           // Unconditional {} for non-org users — the previous
           // role / github-handle gating was hiding it for too many
           // accounts whose DB fields weren't populated as expected.
@@ -551,7 +552,7 @@ function renderProfileContent(handle) {
           // until first fetch resolves so we don't show a placeholder
           // sitting awkwardly next to the name.
           (u.github?.handle && !u.isOrg
-            ? ' <span class="profile-lang-medals" id="profile-lang-medals-' + u.handle + '" data-gh="' + u.github.handle + '">' +
+            ? ' <span class="profile-lang-medals" id="profile-lang-medals-' + escAttr(u.handle) + '" data-gh="' + escAttr(u.github.handle) + '">' +
                 (() => {
                   const c = cachedLanguageStats(u.github.handle);
                   return c ? renderLangMedalStrip(c.langs, c.repoCounts) : '';
@@ -565,24 +566,24 @@ function renderProfileContent(handle) {
               t('profile.badge.org') +
             '</div>'
           : '') +
-        '<div class="profile-handle">@' + maskHandle(u.handle) +
+        '<div class="profile-handle">@' + escapeHtml(maskHandle(u.handle)) +
           (u.isPrivate ? (" <span class=\"profile-lock\" title=\"" + t("非公開アカウント") + "\">") + icon('lock', { size: 12, className: 'icon--inline' }) + '</span>' : '') +
         '</div>' +
       '</div>' +
-      (u.bio ? '<p class="profile-bio">' + u.bio + '</p>' : '') +
+      (u.bio ? '<p class="profile-bio">' + escapeHtml(u.bio) + '</p>' : '') +
       '<div class="profile-meta">' +
-        (u.location ? '<span>' + icon('pin',      { size: 14, className: 'icon--inline' }) + u.location + '</span>' : '') +
-        (u.joined   ? '<span>' + icon('calendar', { size: 14, className: 'icon--inline' }) + t('profile.joined') + u.joined + '</span>' : '') +
-        (ghLink ? '<a class="profile-gh" href="' + ghLink + '" target="_blank" rel="noopener" title="' +
+        (u.location ? '<span>' + icon('pin',      { size: 14, className: 'icon--inline' }) + escapeHtml(u.location) + '</span>' : '') +
+        (u.joined   ? '<span>' + icon('calendar', { size: 14, className: 'icon--inline' }) + t('profile.joined') + escapeHtml(u.joined) + '</span>' : '') +
+        (ghLink ? '<a class="profile-gh" href="' + escAttr(ghLink) + '" target="_blank" rel="noopener" title="' +
                     (u.github?.verified ? t("本人確認済み") : t("未確認")) + '">' +
-                    icon('github', { size: 14, fill: true, className: 'icon--inline' }) + (u.github.handle || '') +
+                    icon('github', { size: 14, fill: true, className: 'icon--inline' }) + escapeHtml(u.github.handle || '') +
                     (u.github?.verified ? (" <span class=\"gh-verified\" title=\"" + t("本人確認済み") + "\">✓</span>") : '') +
                   '</a>' : '') +
       '</div>' +
       renderProfileLinks(u) +
       '<div class="profile-stats">' +
-        '<a href="' + url('/' + u.handle + '/following') + '"><b id="profile-following-count">' + followingN + '</b> ' + t('profile.stat.following') + '</a>' +
-        '<a href="' + url('/' + u.handle + '/followers') + '"><b id="profile-followers-count">' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +
+        '<a href="' + escAttr(url('/' + encodeURIComponent(u.handle) + '/following')) + '"><b id="profile-following-count">' + followingN + '</b> ' + t('profile.stat.following') + '</a>' +
+        '<a href="' + escAttr(url('/' + encodeURIComponent(u.handle) + '/followers')) + '"><b id="profile-followers-count">' + followersN + '</b> ' + t('profile.stat.followers') + '</a>' +
         '<span><b id="profile-postcount">' +
           // Seed from the localStorage posts cache so revisits show
           // an immediate count instead of "…" until the fresh fetch
@@ -595,7 +596,7 @@ function renderProfileContent(handle) {
       '</div>' +
       renderOrgMembers(u) +
       (u.github?.handle
-        ? '<div class="profile-activity" id="profile-activity-' + u.handle + '" data-gh="' + u.github.handle + '">' +
+        ? '<div class="profile-activity" id="profile-activity-' + escAttr(u.handle) + '" data-gh="' + escAttr(u.github.handle) + '">' +
             '<div class="profile-activity__head">' +
               icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
               ' GitHub activity ' +
@@ -617,7 +618,7 @@ function renderProfileContent(handle) {
     '<div class="timeline__head">' +
       TABS.map(key => (
         '<button type="button" class="tab' + (key === activeTab ? ' is-active' : '') + '" ' +
-          'data-profile-tab="' + key + '" data-profile-handle="' + handle + '">' +
+          'data-profile-tab="' + key + '" data-profile-handle="' + escAttr(handle) + '">' +
           tabLabel(key) +
         '</button>'
       )).join('') +
@@ -691,7 +692,7 @@ async function doHydrateProfile(handle) {
       if (app) app.innerHTML = profileBackButton() +
         '<div class="stub">' +
           ("<h2 class=\"stub__title\">" + t("読み込みに失敗しました") + "</h2>") +
-          '<p class="stub__sub">' + (err.message || '') + '</p>' +
+          '<p class="stub__sub">' + escapeHtml(err.message || '') + '</p>' +
           ("<button class=\"btn btn--ghost btn--sm\" data-profile-retry=\"1\">" + t("再試行") + "</button>") +
         '</div>';
       return;
@@ -794,7 +795,7 @@ async function hydrateProfileBody(handle) {
         '<h2 class="stub__title">' + icon('lock', { size: 18, className: 'icon--inline' }) + (t("このアカウントは非公開です") + "</h2>") +
         '<p class="stub__sub">' +
           (requested
-            ? ("<strong>" + t("承認待ち") + "</strong>" + t("です。@")) + handle + t(" が承認すると投稿が見られるようになります。")
+            ? ("<strong>" + t("承認待ち") + "</strong>" + t("です。@")) + escapeHtml(handle) + t(" が承認すると投稿が見られるようになります。")
             : t("フォローして承認されると投稿が見られるようになります。")) +
         '</p>' +
       '</div>';
@@ -840,7 +841,7 @@ async function hydrateProfileBody(handle) {
     if (list) {
       list.innerHTML =
         '<div class="stub">' +
-          ("<p class=\"stub__sub\">" + t("取得に失敗しました: ")) + (err.message || '') + '</p>' +
+          ("<p class=\"stub__sub\">" + t("取得に失敗しました: ")) + escapeHtml(err.message || '') + '</p>' +
           ("<button class=\"btn btn--ghost btn--sm\" data-profile-retry=\"1\">" + t("再試行") + "</button>") +
         '</div>';
     }
@@ -954,6 +955,7 @@ function closeMoreMenu() {
 onRoute(() => closeMoreMenu());
 export function openProfileMore(handle, anchor, mode = 'more') {
   const menu = ensureMoreMenu();
+  const targetId = getUser(handle)?.id;
   menu.innerHTML =
     (currentUser() && currentUser().handle !== handle && !isPostingAsOfficial()
       ? '<button type="button" class="profile-more-menu__item" data-more-action="mute">' + (isUserMuted(handle) ? t("ミュート解除") : t("ミュート")) + '</button>' +
@@ -968,9 +970,9 @@ export function openProfileMore(handle, anchor, mode = 'more') {
     '</button>';
   if (mode === 'following') {
     const me = currentUser();
-    menu.innerHTML = [['friends', 'closeFriends', t("親しい友達")], ['org', 'orgMembers', t("同じ組織")]].map(([kind, field, label]) =>
+    menu.innerHTML = [['friends', 'closeFriendIds', t("親しい友達")], ['org', 'orgMemberIds', t("同じ組織")]].map(([kind, field, label]) =>
       '<button type="button" class="profile-more-menu__item" data-more-action="' + kind + '">' + label +
-      ((me?.[field] || []).includes(handle) ? t("から解除 ✓") : t("に登録")) + '</button>').join('') +
+      ((me?.[field] || []).includes(targetId) ? t("から解除 ✓") : t("に登録")) + '</button>').join('') +
       ("<button type=\"button\" class=\"profile-more-menu__item profile-more-menu__item--bad\" data-more-action=\"unfollow\">" + t("フォロー解除") + "</button>");
   }
   const r = anchor.getBoundingClientRect();
@@ -990,7 +992,7 @@ export function openProfileMore(handle, anchor, mode = 'more') {
         const me = currentUser();
         if (!me || isPostingAsOfficial()) return;
         if (action === 'unfollow') await toggleFollow(me.handle, handle);
-        else await setAudienceMember(handle, action, !(me[action === 'friends' ? 'closeFriends' : 'orgMembers'] || []).includes(handle));
+        else await setAudienceMember(handle, action, !(me[action === 'friends' ? 'closeFriendIds' : 'orgMemberIds'] || []).includes(targetId), targetId);
         refresh();
       } catch (error) { toast(error.message); }
     } else if (action === 'mute' || action === 'block') {

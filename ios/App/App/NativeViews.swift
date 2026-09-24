@@ -430,6 +430,9 @@ struct RootView: View {
             if model.sessionRestorePending { Button(NSLocalizedString("再試行", comment: "")) { Task { await model.bootstrap() } } }
             Button("OK") {}
         } message: { Text(LocalizedStringKey(model.errorMessage ?? "")) }
+        .onChange(of: model.requiresMFA) { required in
+            if required { showAccounts = false; showLogin = true }
+        }
         .onChange(of: model.requiresReauthentication) { required in
             if required && !screenshotMode {
                 showAccounts = false
@@ -638,7 +641,7 @@ private struct DesktopCommunity: View {
 
     private var cities: [(name: String, prefecture: String, posts: [Post])] {
         let visible = spotPosts.filter {
-            !model.blockedAccountIDs.contains($0.authorID) && !model.mutedAccountIDs.contains($0.authorID)
+            model.canReadPostAudience($0) && !model.blockedAccountIDs.contains($0.authorID) && !model.mutedAccountIDs.contains($0.authorID)
                 && $0.spot?.lat.isFinite == true && $0.spot?.lng.isFinite == true
         }
         let groups = Dictionary(grouping: visible, by: { $0.spot?.addressDetails?.canonicalCity ?? "" })
@@ -2795,6 +2798,8 @@ private struct NativeZoomableImage: UIViewRepresentable {
 
 struct PostDetailView: View {
     @Environment(\.appColorTheme) private var appColorTheme
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppModel
     let post: Post
     var onSpotTap: ((Post) -> Void)? = nil
     var onClose: (() -> Void)? = nil
@@ -2802,6 +2807,10 @@ struct PostDetailView: View {
         let _ = appColorTheme
 
         ScrollView { PostRow(post: post, opensDetail: false, onSpotTap: onSpotTap) }
+            .onReceive(model.$deletedPostIDs) { ids in
+                guard ids.contains(post.id) else { return }
+                if let onClose { onClose() } else { dismiss() }
+            }
             .background(SpotcodeTheme.surface).navigationTitle(NSLocalizedString("Post", comment: "")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -3056,7 +3065,7 @@ struct NativeMapView: View {
         let _ = appColorTheme
 
         ZStack(alignment: .trailing) {
-            ClusteredPostMap(posts: posts, region: $region, selectedPosts: $selectedPosts,
+            ClusteredPostMap(posts: posts.filter { model.canReadPostAudience($0) }, region: $region, selectedPosts: $selectedPosts,
                              locationRequestID: locationRequestID, initiallyLocateUser: focusPost == nil && cityDestination == nil,
                              cameraRequestID: cameraRequestID,
                              onLocated: { awaitingCurrentLocation = false })
@@ -3102,7 +3111,7 @@ struct NativeMapView: View {
                 if selection.posts.count == 1, let post = selection.posts.first {
                     PostDetailView(post: post, onSpotTap: showSpotOnMap, onClose: { selectedPosts = nil })
                 } else {
-                    List(selection.posts) { post in
+                    List(selection.posts.filter { model.canReadPostAudience($0) }) { post in
                         NavigationLink(destination: PostDetailView(post: post, onSpotTap: showSpotOnMap, onClose: { selectedPosts = nil })) {
                             // Only public pin metadata here; the detail view
                             // checks the location gate before showing the body.
@@ -3308,7 +3317,7 @@ struct RepositoriesView: View {
     }
 
     @ViewBuilder private func repositoryCard(_ repo: Repository) -> some View {
-        let posts = relatedPosts.filter { repositoryName(for: $0)?.caseInsensitiveCompare(repo.fullName) == .orderedSame }
+        let posts = relatedPosts.filter { model.canReadPostAudience($0) && repositoryName(for: $0)?.caseInsensitiveCompare(repo.fullName) == .orderedSame }
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 Link(destination: repo.htmlURL) {
@@ -3724,6 +3733,11 @@ struct ProfileView: View {
                  profilePosts.remove(at: index)
              }
          }
+         .onReceive(model.$deletedPostIDs) { ids in
+             let removed = profilePosts.filter { ids.contains($0.id) }.count
+             profilePosts.removeAll { ids.contains($0.id) }
+             counts.posts = max(0, counts.posts - removed)
+         }
     }
 
     private func loadProfile() async {
@@ -3759,7 +3773,7 @@ struct ProfileView: View {
         var postsByID: [UUID: Post] = [:]
         for post in fallback { postsByID[post.id] = post }
         for post in primary { postsByID[post.id] = post }
-        return postsByID.values.sorted {
+        return postsByID.values.filter { !model.deletedPostIDs.contains($0.id) }.sorted {
             ($0.createdAt ?? "") > ($1.createdAt ?? "")
         }
     }
@@ -4121,8 +4135,14 @@ private struct FollowAudienceMenu: View {
         } label: { Label(title ?? (friends || organization ? NSLocalizedString("登録済み", comment: "") : NSLocalizedString("リストに登録", comment: "")), systemImage: "person.crop.circle.badge.checkmark").spotcodeFont(12, weight: .regular, fallback: .caption) }
         .disabled(busy)
     }
-    private var friends: Bool { model.me?.closeFriends?.contains(profile.handle) == true }
-    private var organization: Bool { model.me?.orgMembers?.contains(profile.handle) == true }
+    private var friends: Bool {
+        guard let id = profile.id else { return false }
+        return model.me?.closeFriendIDs?.contains(id) == true
+    }
+    private var organization: Bool {
+        guard let id = profile.id else { return false }
+        return model.me?.orgMemberIDs?.contains(id) == true
+    }
     private func change(_ kind: String, enabled: Bool) {
         guard !busy, let id = profile.id else { return }; busy = true
         Task { defer { busy = false }; do { try await model.setAudienceMember(id, kind: kind, enabled: enabled) }
@@ -4235,7 +4255,7 @@ private struct EditProfileView: View {
     }
 
     private var previewProfile: Profile {
-        Profile(id: profile.id, handle: profile.handle, name: name.isEmpty ? profile.name : name, avatarURL: avatarURL, bio: profile.bio, location: profile.location, githubHandle: profile.githubHandle, githubVerified: profile.githubVerified, website: website, twitter: twitter, instagram: instagram, isPrivate: profile.isPrivate, isOrg: profile.isOrg, organization: profile.organization, closeFriends: profile.closeFriends, orgMembers: profile.orgMembers, createdAt: profile.createdAt, avatarShape: avatarShape, isAdmin: profile.isAdmin, isOperator: profile.isOperator)
+        Profile(id: profile.id, handle: profile.handle, name: name.isEmpty ? profile.name : name, avatarURL: avatarURL, bio: profile.bio, location: profile.location, githubHandle: profile.githubHandle, githubVerified: profile.githubVerified, website: website, twitter: twitter, instagram: instagram, isPrivate: profile.isPrivate, isOrg: profile.isOrg, organization: profile.organization, closeFriends: profile.closeFriends, orgMembers: profile.orgMembers, createdAt: profile.createdAt, avatarShape: avatarShape, isAdmin: profile.isAdmin, isOperator: profile.isOperator, closeFriendIDs: profile.closeFriendIDs, orgMemberIDs: profile.orgMemberIDs)
     }
 
     private var normalizedWebsiteValue: String {
@@ -4914,10 +4934,15 @@ private struct AccountSettings: View {
         return NSLocalizedString("通常の投稿・フォロー・スポット機能を利用できます。", comment: "")
     }
     private func saveIdentity() {
+        guard let owner = model.me?.id, let friendIDs = model.me?.closeFriendIDs, let memberIDs = model.me?.orgMemberIDs else {
+            model.errorMessage = NSLocalizedString("公開対象リストを再読み込みしてください。", comment: "")
+            return
+        }
         savingIdentity = true
         Task {
-            _ = await model.updateProfilePreferences(isPrivate: model.me?.isPrivate ?? false, isOrg: isOrg, organization: organization, closeFriends: model.me?.closeFriends ?? [], orgMembers: model.me?.orgMembers ?? [])
-            savingIdentity = false
+            defer { savingIdentity = false }
+            guard model.session?.user.id == owner else { return }
+            _ = await model.updateProfilePreferences(isPrivate: model.me?.isPrivate ?? false, isOrg: isOrg, organization: organization, closeFriendIDs: friendIDs, orgMemberIDs: memberIDs)
         }
     }
 }
@@ -5186,6 +5211,8 @@ private struct PrivacySettings: View {
     @State private var closeFriends = ""
     @State private var orgMembers = ""
     @State private var saving = false
+    @State private var editorOwner: UUID?
+    @State private var audienceBindings = AudienceIdentityBindings()
     var body: some View {
         let _ = appColorTheme
          VStack(spacing: SpotcodeLayout.value(12, 18)) {
@@ -5197,23 +5224,53 @@ private struct PrivacySettings: View {
         }
         SettingsCard(NSLocalizedString("公開対象リスト", comment: "")) {
             Text(NSLocalizedString("「親しい友達」と「同じ組織」の投稿を表示できるユーザーを設定します。", comment: "")).foregroundColor(SpotcodeTheme.muted)
-            TextField(NSLocalizedString("親しい友達（@handle、カンマ区切り）", comment: ""), text: $closeFriends).spotcodeField()
-            TextField(NSLocalizedString("同じ組織（@handle、カンマ区切り）", comment: ""), text: $orgMembers).spotcodeField()
+            TextField(NSLocalizedString("親しい友達（@handle、カンマ区切り）", comment: ""), text: $closeFriends).spotcodeField().disabled(saving)
+            TextField(NSLocalizedString("同じ組織（@handle、カンマ区切り）", comment: ""), text: $orgMembers).spotcodeField().disabled(saving)
             Button(NSLocalizedString("保存", comment: "")) { save() }.buttonStyle(OutlineButtonStyle()).disabled(saving)
         }
     }.onAppear {
+        guard editorOwner != model.me?.id || editorOwner == nil else { return }
+        editorOwner = model.me?.id
+        audienceBindings = AudienceIdentityBindings()
+        audienceBindings.capture(handles: model.me?.closeFriends ?? [], ids: model.me?.closeFriendIDs)
+        audienceBindings.capture(handles: model.me?.orgMembers ?? [], ids: model.me?.orgMemberIDs)
         privateAccount = model.me?.isPrivate ?? false
         closeFriends = (model.me?.closeFriends ?? []).map { "@\($0)" }.joined(separator: ", ")
         orgMembers = (model.me?.orgMembers ?? []).map { "@\($0)" }.joined(separator: ", ")
     }}
     private func handles(_ value: String) -> [String] {
-        value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "^@", with: "", options: .regularExpression) }.filter { !$0.isEmpty }
+        value.split(separator: ",").map { AudienceIdentityBindings.normalized(String($0)) }.filter { !$0.isEmpty }
+    }
+    private func audienceIDs(_ handles: [String], owner: UUID) async throws -> [UUID] {
+        var ids: [UUID] = []
+        for handle in handles {
+            guard model.session?.user.id == owner, editorOwner == owner else { throw CancellationError() }
+            let id: UUID
+            if let existing = try audienceBindings.identity(for: handle) { id = existing }
+            else {
+                id = try await model.resolveAudienceMember(handle: handle, owner: owner)
+                guard editorOwner == owner else { throw CancellationError() }
+                // Store before PATCH so retrying a failed save keeps the same identity.
+                audienceBindings.remember(id, for: handle)
+            }
+            if !ids.contains(id) { ids.append(id) }
+        }
+        return ids
     }
     private func save() {
+        guard !saving, let owner = editorOwner, model.session?.user.id == owner else { return }
+        let friends = handles(closeFriends), members = handles(orgMembers)
         saving = true
         Task {
-            _ = await model.updateProfilePreferences(isPrivate: privateAccount, isOrg: model.me?.isOrg ?? false, organization: model.me?.organization ?? "", closeFriends: handles(closeFriends), orgMembers: handles(orgMembers))
-            saving = false
+            defer { saving = false }
+            do {
+                let friendIDs = try await audienceIDs(friends, owner: owner)
+                let memberIDs = try await audienceIDs(members, owner: owner)
+                guard model.session?.user.id == owner, editorOwner == owner else { return }
+                _ = await model.updateProfilePreferences(isPrivate: privateAccount, isOrg: model.me?.isOrg ?? false, organization: model.me?.organization ?? "", closeFriendIDs: friendIDs, orgMemberIDs: memberIDs)
+            } catch {
+                if model.session?.user.id == owner { model.errorMessage = error.localizedDescription }
+            }
         }
     }
 }

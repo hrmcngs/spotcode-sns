@@ -256,7 +256,7 @@ function shapePost(row) {
     // measurable jank on mobile.
     scheduleUsersPersist();
   }
-  return {
+  const post = {
     id:            row.id,
     authorId:      row.author_id,
     organizationAuthorId: row.organization_author_id || null,
@@ -313,14 +313,18 @@ function shapePost(row) {
       quotes:    row.quotes_count     || 0,
     },
   };
+  postContexts.set(post, captureTimelineContext());
+  return post;
 }
 
 // Insert a quote post. Behaves like addPost but stamps quote_of_post_id
 // so the timeline can render the embedded quoted card. Silently degrades
 // when Stage 11 isn't applied yet (drops the column from the insert).
 export async function addQuote(post, quotedPostId) {
+  const context = captureTimelineContext();
   const supa = await getClient();
   const { data: { user } } = await supa.auth.getUser();
+  assertTimelineContext(context);
   if (!user) throw new Error(t("ログインしていません"));
   const row = {
     author_id:   user.id,
@@ -335,6 +339,7 @@ export async function addQuote(post, quotedPostId) {
   let res = await withResilientCols((cols) =>
     supa.from('posts').insert(row).select(cols).single()
   );
+  assertTimelineContext(context);
   if (res.error && /quote_of_post_id/i.test(res.error.message)) {
     // Schema doesn't have the column yet — fall back to a plain post.
     hasQuoteOf = false;
@@ -344,6 +349,7 @@ export async function addQuote(post, quotedPostId) {
     );
   }
   if (res.error) throw new Error(res.error.message);
+  assertTimelineContext(context);
   return shapePost(res.data);
 }
 
@@ -355,10 +361,14 @@ export async function addQuote(post, quotedPostId) {
 // non-recoverable error. Capped at OPTIONAL.length + 1 so a buggy
 // matcher can't spin forever.
 async function withResilientCols(build) {
+  const context = captureTimelineContext();
   await refreshGithubMembershipsIfNeeded();
+  assertTimelineContext(context);
   let res = await build(postCols());
+  assertTimelineContext(context);
   for (let i = 0; i < OPTIONAL.length && res.error && isMissingOptionalColumn(res.error); i++) {
     res = await build(postCols());
+    assertTimelineContext(context);
   }
   return res;
 }
@@ -376,7 +386,8 @@ async function withResilientCols(build) {
 // time `allPosts` succeeds. Versioned key so a future post shape
 // change doesn't try to render an incompatible snapshot.
 
-const POSTS_CACHE_KEY = 'spotcode:posts-cache:v1';
+const POSTS_CACHE_KEY = 'spotcode:posts-cache:v2';
+const LEGACY_POSTS_CACHE_KEY = 'spotcode:posts-cache:v1';
 export const SPOT_POST_LIMIT = 120;
 const POSTS_CACHE_MAX = 30;          // don't bloat localStorage
 const POSTS_CACHE_TTL_MS = 6 * 3600 * 1000; // 6 hours
@@ -399,12 +410,59 @@ function notifyPostsCacheChange() {
   for (const listener of postsCacheListeners) { try { listener(); } catch {} }
 }
 let postsCacheMem = null;
+let timelineContext = null;
+let timelineGeneration = 0;
+const postContexts = new WeakMap();
+function activeTimelineOwner() {
+  // Developer mode has a wider server audience and must never seed normal mode.
+  return JSON.stringify([currentUser()?.id || null, !!isDevMode()]);
+}
+export function resetTimelineCaches() {
+  const owner = activeTimelineOwner();
+  if (timelineContext === owner) return;
+  const initialized = timelineContext !== null;
+  timelineContext = owner;
+  timelineGeneration++;
+  postsCacheMem = null;
+  optimisticPosts.clear();
+  pendingDeletes.clear();
+  spotsRequest = null;
+  try {
+    localStorage.removeItem(LEGACY_POSTS_CACHE_KEY);
+    if (initialized) localStorage.removeItem(POSTS_CACHE_KEY);
+  } catch {}
+  // Purge mismatched and unowned entries even on the first cold read.
+  postsCacheAll();
+}
+function captureTimelineContext() {
+  resetTimelineCaches();
+  return { owner: timelineContext, generation: timelineGeneration };
+}
+function assertTimelineContext(context) {
+  resetTimelineCaches();
+  if (context.owner !== timelineContext || context.generation !== timelineGeneration) {
+    throw new Error(t("アカウントが変更されました"));
+  }
+}
 function postsCacheAll() {
+  if (timelineContext !== activeTimelineOwner()) resetTimelineCaches();
   if (postsCacheMem) return postsCacheMem;
-  try { postsCacheMem = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}'); }
-  catch { postsCacheMem = {}; }
-  if (!postsCacheMem || typeof postsCacheMem !== 'object') postsCacheMem = {};
+  let stored;
+  try { stored = JSON.parse(localStorage.getItem(POSTS_CACHE_KEY) || '{}'); } catch {}
+  postsCacheMem = {};
+  for (const [scope, entry] of Object.entries(stored && typeof stored === 'object' ? stored : {})) {
+    if (entry?.owner === timelineContext && Array.isArray(entry.posts)) {
+      postsCacheMem[scope] = entry;
+      for (const post of entry.posts) rememberPostContext(post);
+    }
+  }
+  try { localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(postsCacheMem)); } catch {}
   return postsCacheMem;
+}
+function rememberPostContext(post) {
+  if (!post || typeof post !== 'object') return;
+  postContexts.set(post, { owner: timelineContext, generation: timelineGeneration });
+  if (post.quoteOf) rememberPostContext(post.quoteOf);
 }
 function persistPostsCache(all) {
   try {
@@ -432,9 +490,10 @@ function persistPostsCache(all) {
 
 function savePostsCache(scope, posts) {
   const all = postsCacheAll();
+  for (const post of posts) rememberPostContext(post);
   all[scope] = {
     at: Date.now(),
-    owner: scope === 'spots' ? currentUser()?.id || null : undefined,
+    owner: timelineContext,
     posts: posts.slice(0, scope === 'spots' ? SPOT_POST_LIMIT : POSTS_CACHE_MAX),
   };
   persistPostsCache(all);
@@ -467,6 +526,9 @@ const pendingDeletes = new Set();   // post ids
 // The database enforces access. This also hides local snapshots after an
 // account switch, before the next authenticated request replaces the cache.
 export function canDisplayCachedPost(post) {
+  resetTimelineCaches();
+  const context = postContexts.get(post);
+  if (context && (context.owner !== timelineContext || context.generation !== timelineGeneration)) return false;
   if (isHiddenUser(post.authorHandle, post.authorId) || isHiddenUser(null, post.organizationAuthorId)) return false;
   if (post.visibility === 'github_org') return !!currentUser()?.id && (post.authorId === currentUser().id || isDevMode() || canReadGithubOrganization(post.githubOrgId));
   if (post.visibility !== 'only_me') return true;
@@ -475,6 +537,7 @@ export function canDisplayCachedPost(post) {
 }
 
 function optimisticPostsForScope(scope) {
+  resetTimelineCaches();
   const now = Date.now();
   const out = [];
   for (const [id, entry] of optimisticPosts) {
@@ -533,6 +596,10 @@ function mergeOptimistic(fetched, scope) {
 // themselves, and correct if they (or their overlay identity) do.
 export function prependToTimelineCaches(post) {
   if (!post || !post.id) return;
+  resetTimelineCaches();
+  const context = postContexts.get(post);
+  if (context) assertTimelineContext(context);
+  rememberPostContext(post);
   optimisticPosts.set(post.id, { at: Date.now(), post });
   const scopes = ['home'];
   if (Number.isFinite(post.spot?.lat) && Number.isFinite(post.spot?.lng)) scopes.push('spots');
@@ -544,12 +611,12 @@ export function prependToTimelineCaches(post) {
   const all = postsCacheAll();
   for (const scope of scopes) {
     const e = all[scope];
-    const prev = (e && Array.isArray(e.posts) && (scope !== 'spots' || e.owner === (currentUser()?.id || null))) ? e.posts : [];
+    const prev = (e && Array.isArray(e.posts) && e.owner === timelineContext) ? e.posts : [];
     // Dedupe by id — addPost re-running (e.g. on a retry) would
     // otherwise queue the same row twice.
     const next = [post, ...prev.filter((p) => p.id !== post.id)]
       .slice(0, scope === 'spots' ? SPOT_POST_LIMIT : POSTS_CACHE_MAX);
-    all[scope] = { at: Date.now(), owner: scope === 'spots' ? currentUser()?.id || null : undefined, posts: next };
+    all[scope] = { at: Date.now(), owner: timelineContext, posts: next };
   }
   persistPostsCache(all);
 }
@@ -563,10 +630,11 @@ export function prependToTimelineCaches(post) {
 // default paint TTL — e.g. hydrateHome treats a <60s-old cache as
 // "fresh enough to skip the refetch entirely".
 export function cachedPosts(scope, maxAgeMs = POSTS_CACHE_TTL_MS) {
+  resetTimelineCaches();
   if (isDevMode()) return null; // Fetch the expanded audience after enabling developer mode.
   try {
     const e = postsCacheAll()[scope];
-    if (scope === 'spots' && e?.owner !== (currentUser()?.id || null)) return null;
+    if (e?.owner !== timelineContext) return null;
     if (!e || !e.posts) return null;
     if (Date.now() - (e.at || 0) > maxAgeMs) return null;
     return e.posts.filter((p) => !pendingDeletes.has(p.id) && canDisplayCachedPost(p));
@@ -627,18 +695,23 @@ export function probeSchema() {
 // Fetch a single post by id (for /post/<id>). Returns null on 404 or RLS
 // miss so the view can render its own not-found state.
 export async function getPost(id) {
+  const context = captureTimelineContext();
   if (!id) return null;
   const supa = await getClient();
+  assertTimelineContext(context);
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols).eq('id', id).maybeSingle()
   );
+  assertTimelineContext(context);
   if (error) { console.warn('getPost', error); return null; }
   return data ? shapePost(data) : null;
 }
 
 // Stable cursor preserves posts sharing a timestamp and tolerates new inserts.
 export async function forYouPage({ limit = 40, before = null } = {}) {
+  const context = captureTimelineContext();
   const supa = await getClient();
+  assertTimelineContext(context);
   const { data, error } = await withResilientCols(cols => {
     let query = supa.from('posts').select(cols)
       .order('created_at', { ascending: false }).order('id', { ascending: false });
@@ -647,6 +720,7 @@ export async function forYouPage({ limit = 40, before = null } = {}) {
     return query.limit(limit);
   });
   if (error) throw new Error(error.message);
+  assertTimelineContext(context);
   const rows = data || [];
   const last = rows.at(-1);
   const posts = before ? rows.map(shapePost) : mergeOptimistic(rows.map(shapePost), 'home');
@@ -656,12 +730,15 @@ export async function forYouPage({ limit = 40, before = null } = {}) {
 }
 
 export async function allPosts({ limit = 100 } = {}) {
+  const context = captureTimelineContext();
   const supa = await getClient();
+  assertTimelineContext(context);
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols)
       .order('created_at', { ascending: false })
       .limit(limit)
   );
+  assertTimelineContext(context);
   if (error) throw new Error(error.message);
   const shaped = mergeOptimistic((data || []).map(shapePost), 'home');
   savePostsCache('home', shaped);
@@ -674,7 +751,8 @@ export async function allPosts({ limit = 100 } = {}) {
 // "/spots feels heavy". Same shape as allPosts otherwise.
 let spotsRequest = null;
 export function postsWithSpots({ limit = SPOT_POST_LIMIT } = {}) {
-  const owner = currentUser()?.id || null;
+  const context = captureTimelineContext();
+  const owner = context.generation;
   if (spotsRequest?.owner === owner && spotsRequest.limit === limit) return spotsRequest.promise;
   const promise = (async () => {
     const supa = await getClient();
@@ -685,7 +763,7 @@ export function postsWithSpots({ limit = SPOT_POST_LIMIT } = {}) {
         .limit(limit)
     );
     if (error) throw new Error(error.message);
-    if ((currentUser()?.id || null) !== owner) throw new Error(t("アカウントが変更されました"));
+    assertTimelineContext(context);
     const shaped = mergeOptimistic((data || []).map(shapePost), 'spots');
     savePostsCache('spots', shaped);
     return shaped;
@@ -719,13 +797,17 @@ export function trendingCities() {
 // first. Returns [] when not logged in or when the user follows no
 // one (the view shows a "follow someone" empty state in that case).
 export async function followingPosts({ limit = 100 } = {}) {
+  const context = captureTimelineContext();
   const supa = await getClient();
+  assertTimelineContext(context);
   const { data: { user } } = await supa.auth.getUser();
+  assertTimelineContext(context);
   if (!user) return [];
   const { data: follows, error: fErr } = await supa
     .from('follows').select('target_id')
     .eq('follower_id', user.id)
     .eq('status', 'accepted');
+  assertTimelineContext(context);
   if (fErr) throw new Error(fErr.message);
   const targetIds = (follows || []).map(r => r.target_id);
   if (!targetIds.length) return [];
@@ -735,6 +817,7 @@ export async function followingPosts({ limit = 100 } = {}) {
       .order('created_at', { ascending: false })
       .limit(limit)
   );
+  assertTimelineContext(context);
   if (error) throw new Error(error.message);
   const shaped = mergeOptimistic((data || []).map(shapePost), 'following');
   savePostsCache('following', shaped);
@@ -742,8 +825,10 @@ export async function followingPosts({ limit = 100 } = {}) {
 }
 
 export async function postsByHandle(handle) {
+  const context = captureTimelineContext();
   if (!handle) return [];
   const supa = await getClient();
+  assertTimelineContext(context);
   // Fast path: if a previous call (or the profile-view boot flow) has
   // already resolved handle → id, skip the extra Supabase round trip.
   // Cuts the wall-clock in half on slow networks — where two serial
@@ -755,6 +840,7 @@ export async function postsByHandle(handle) {
       .select('id')
       .eq('handle', handle)
       .maybeSingle();
+    assertTimelineContext(context);
     if (profErr) throw new Error(profErr.message);
     if (!prof) return [];
     userId = prof.id;
@@ -765,6 +851,7 @@ export async function postsByHandle(handle) {
       .or('author_id.eq.' + userId + (hasOrganizationAttribution ? ',organization_author_id.eq.' + userId : ''))
       .order('created_at', { ascending: false })
   );
+  assertTimelineContext(context);
   if (error) throw new Error(error.message);
   const shaped = mergeOptimistic((data || []).map(shapePost), 'handle:' + handle);
   savePostsCache('handle:' + handle, shaped);
@@ -773,8 +860,10 @@ export async function postsByHandle(handle) {
 
 // Posts liked by a given handle (for the profile "Likes" tab).
 export async function likedPostsByHandle(handle) {
+  const context = captureTimelineContext();
   if (!handle) return [];
   const supa = await getClient();
+  assertTimelineContext(context);
   let userId = cachedHandleId(handle);
   if (!userId) {
     const { data: prof, error: profErr } = await supa
@@ -782,6 +871,7 @@ export async function likedPostsByHandle(handle) {
       .select('id')
       .eq('handle', handle)
       .maybeSingle();
+    assertTimelineContext(context);
     if (profErr) throw new Error(profErr.message);
     if (!prof) return [];
     userId = prof.id;
@@ -796,6 +886,7 @@ export async function likedPostsByHandle(handle) {
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
   );
+  assertTimelineContext(context);
   if (error) throw new Error(error.message);
   return (data || [])
     .map(r => r.post)
@@ -809,9 +900,11 @@ export async function likedPostsByHandle(handle) {
 // with the id fragment if the exact form varies (older rows saved
 // without the trailing slash).
 export async function postsByEventId(eventId) {
+  const context = captureTimelineContext();
   if (!eventId) return [];
   if (!hasEventUrl) return [];  // schema not migrated yet
   const supa = await getClient();
+  assertTimelineContext(context);
   const canonical = 'https://connpass.com/event/' + eventId + '/';
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols)
@@ -819,18 +912,22 @@ export async function postsByEventId(eventId) {
           ',event_url.ilike.%/event/' + eventId + '/%')
       .order('created_at', { ascending: false })
   );
+  assertTimelineContext(context);
   if (error) {
     if (/event_url/i.test(error.message)) return [];
     throw new Error(error.message);
   }
+  assertTimelineContext(context);
   const shaped = mergeOptimistic((data || []).map(shapePost), 'event:' + eventId);
   savePostsCache('event:' + eventId, shaped);
   return shaped;
 }
 
 export async function postsByCity(city) {
+  const context = captureTimelineContext();
   if (!city) return [];
   const supa = await getClient();
+  assertTimelineContext(context);
   const { data, error } = await withResilientCols((cols) => {
     let query = supa.from('posts').select(cols);
     if (canonicalCity(city) === '世田谷区') {
@@ -840,6 +937,7 @@ export async function postsByCity(city) {
     }
     return query.order('created_at', { ascending: false });
   });
+  assertTimelineContext(context);
   if (error) throw new Error(error.message);
   const shaped = mergeOptimistic((data || []).map(shapePost), 'city:' + city);
   savePostsCache('city:' + city, shaped);
@@ -862,7 +960,9 @@ export async function postsByCity(city) {
 // column is non-null, so the table-scan cost stays bounded even on a
 // large posts table.
 export async function postsWithGithubRefs({ limit = 200 } = {}) {
+  const context = captureTimelineContext();
   const supa = await getClient();
+  assertTimelineContext(context);
   // Only one branch of the OR can use repo_full_name when the column
   // hasn't been migrated yet — drop it from the predicate in that
   // case so the request doesn't 400.
@@ -875,6 +975,7 @@ export async function postsWithGithubRefs({ limit = 200 } = {}) {
       .order('created_at', { ascending: false })
       .limit(limit)
   );
+  assertTimelineContext(context);
   if (error) {
     // Schema mismatch → return empty rather than throwing; the /repos
     // view already degrades to "GitHub data only" in that case.
@@ -890,6 +991,7 @@ export async function postsWithGithubRefs({ limit = 200 } = {}) {
 // Bulk-queried in one round trip per page; safe to call on empty/all-
 // non-quote arrays.
 export async function hydrateQuotedPosts(posts) {
+  const context = captureTimelineContext();
   if (!posts || !posts.length) return;
   const ids = [...new Set(posts.map(p => p.quoteOfPostId).filter(Boolean))];
   if (!ids.length) return;
@@ -897,6 +999,7 @@ export async function hydrateQuotedPosts(posts) {
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').select(cols).in('id', ids)
   );
+  assertTimelineContext(context);
   if (error) { console.warn('hydrateQuotedPosts', error); return; }
   const byId = new Map();
   for (const row of (data || [])) byId.set(row.id, shapePost(row));
@@ -916,7 +1019,9 @@ const POLL_MIGRATION_MSG =
   'created_at timestamptz DEFAULT now(), PRIMARY KEY (post_id, user_id));';
 
 export async function addPost(post) {
+  const context = captureTimelineContext();
   const supa = await getClient();
+  assertTimelineContext(context);
   // currentUser() was established from the active Supabase session during
   // auth boot/login. Do not call auth.getUser() again here: that performs a
   // network round trip before every insert and can hang behind GoTrue's token
@@ -925,7 +1030,7 @@ export async function addPost(post) {
   const me = currentUser();
   if (!me?.id) throw new Error(t("ログイン情報を確認できません。もう一度ログインしてください"));
   await refreshGithubMembershipsIfNeeded({ required: !!me.github?.handle && !!(post.githubLink || post.repoFullName) });
-  if (currentUser()?.id !== me.id) throw new Error(t("アカウントが変更されました"));
+  assertTimelineContext(context);
   const wantsPhotos = Array.isArray(post.photos) && post.photos.length > 0;
   const wantsPoll = post.poll && Array.isArray(post.poll.options) && post.poll.options.length >= 2;
 
@@ -936,6 +1041,7 @@ export async function addPost(post) {
   let authorId = me.id;
   if (isPostingAsOfficial()) {
     const official = await getOfficialAccount();
+    assertTimelineContext(context);
     if (!official) throw new Error(t("公式アカウントが設定されていません (Stage 25 マイグレーション未実行?)"));
     authorId = official.id;
   }
@@ -977,6 +1083,7 @@ export async function addPost(post) {
     if (wantsPoll)   hasPoll   = true;
     const { data, error } = await withResilientCols(cols =>
       supa.from('posts').insert(row).select(cols).single());
+    assertTimelineContext(context);
     if (error) {
       const msg = String(error.message || '').toLowerCase();
       if (wantsPhotos && msg.includes('photos') && msg.includes('does not exist')) {
@@ -997,6 +1104,7 @@ export async function addPost(post) {
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').insert(row).select(cols).single()
   );
+  assertTimelineContext(context);
   if (error) throw new Error(error.message);
   return shapePost(data);
 }
@@ -1006,10 +1114,12 @@ export async function addPost(post) {
 // updated row so an RLS reject (not author / not dev with admin SQL)
 // surfaces as an empty array instead of looking like success.
 export async function updatePost(postId, fields) {
+  const context = captureTimelineContext();
   if (currentUser()?.github?.handle && (fields.githubLink || fields.repoFullName || fields.visibility === 'github_org')) {
     await refreshGithubMembershipsIfNeeded({ required: true });
   }
   const supa = await getClient();
+  assertTimelineContext(context);
   const patch = {};
   if (Object.prototype.hasOwnProperty.call(fields, 'visibility')) {
     if (!['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'github_org', 'restricted'].includes(fields.visibility)) {
@@ -1045,10 +1155,12 @@ export async function updatePost(postId, fields) {
   const { data, error } = await withResilientCols((cols) =>
     supa.from('posts').update(patch).eq('id', postId).select(cols)
   );
+  assertTimelineContext(context);
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) {
     throw new Error(t("編集権限がありません（RLS により拒否）"));
   }
+  assertTimelineContext(context);
   const updated = shapePost(data[0]);
   // Evict old audience/body snapshots so navigation cannot restore stale metadata.
   removeFromTimelineCaches(postId);
@@ -1087,6 +1199,7 @@ export async function removePost(postId) {
 // (success, persistent prune) or `unmarkPendingDelete` (failure,
 // restore) clears it.
 export function markPendingDelete(id) {
+  resetTimelineCaches();
   if (id) { pendingDeletes.add(String(id)); notifyPostsCacheChange(); }
 }
 export function unmarkPendingDelete(id) {

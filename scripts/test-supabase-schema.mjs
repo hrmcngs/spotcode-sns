@@ -7,6 +7,8 @@ const { pgcrypto } = await import(modulePath.includes('/') ? new URL('./contrib/
 const db = new PGlite({ extensions: { pgcrypto } });
 const fixtures = `create role anon; create role authenticated; create role service_role;
 create schema auth;
+create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb) $$;
+create table auth.mfa_factors(id uuid primary key, user_id uuid, status text);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 create table auth.users(id uuid primary key, instance_id uuid, email text, encrypted_password text, email_confirmed_at timestamptz, created_at timestamptz, updated_at timestamptz, aud text, role text, raw_user_meta_data jsonb, raw_app_meta_data jsonb);
 create table auth.identities(user_id uuid, provider text, identity_data jsonb);
@@ -26,7 +28,7 @@ try {
  const policies = async () => (await db.query("select tablename,policyname,roles,cmd,qual,with_check from pg_policies where schemaname='public' order by tablename,policyname")).rows;
  const initialPolicies = await policies();
  const user = '00000000-0000-0000-0000-000000000001';
- await db.query(`insert into auth.users(id,raw_user_meta_data) values($1,'{"handle":"test-person"}')`, [user]);
+ await db.query(`insert into auth.users(id,raw_user_meta_data) values($1,'{"handle":"test_person"}')`, [user]);
  await db.query('update profiles set is_operator=true where id=$1', [user]);
  // Seed an existing organization post without calling external GitHub verification.
  await db.exec('alter table posts disable trigger user');

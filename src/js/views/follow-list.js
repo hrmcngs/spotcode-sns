@@ -139,9 +139,9 @@ function paintFollowUsers(list, users, kind) {
             (u.bio ? '<div class="followlist__bio">' + escape(maskMentionsInText(u.bio)) + '</div>' : '') +
           '</div>' +
           (showBtn && !official && followed && kind === 'following'
-            ? '<div class="followlist__audience">' + [['friends', 'closeFriends', t("親しい友達")], ['org', 'orgMembers', t("同じ組織")]].map(([kind, field, label]) =>
-              '<label><input type="checkbox" data-audience-member="' + escape(u.handle) + '" data-audience-kind="' + kind + '"' +
-              ((me[field] || []).includes(u.handle) ? ' checked' : '') + '> ' + label + '</label>').join('') + '</div>' : '') +
+            ? '<div class="followlist__audience">' + [['friends', 'closeFriendIds', t("親しい友達")], ['org', 'orgMemberIds', t("同じ組織")]].map(([kind, field, label]) =>
+              '<label><input type="checkbox" data-audience-member="' + escape(u.handle) + '" data-audience-id="' + escape(u.id || '') + '" data-audience-kind="' + kind + '"' +
+              ((me[field] || []).includes(u.id) ? ' checked' : '') + '> ' + label + '</label>').join('') + '</div>' : '') +
           (showBtn
             ? '<button class="followlist__follow' + (followed || requested ? ' is-following' : '') + '" data-target="' + escape(u.handle) + '">' +
                 (requested ? t('profile.btn.requested') : followed ? t('profile.btn.following') : t('profile.btn.follow')) +
@@ -158,7 +158,7 @@ document.addEventListener('change', async event => {
   if (!input) return;
   input.disabled = true;
   const enabled = input.checked;
-  try { await setAudienceMember(input.dataset.audienceMember, input.dataset.audienceKind, enabled); }
+  try { await setAudienceMember(input.dataset.audienceMember, input.dataset.audienceKind, enabled, input.dataset.audienceId); }
   catch (error) { input.checked = !enabled; alert(error.message); }
   finally { input.disabled = false; }
 });

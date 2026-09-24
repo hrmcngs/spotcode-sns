@@ -49,7 +49,8 @@ export function renderAvatar(user, {
   const img = safeImageUrl(rawImg);
   const inner = img ? '' : escapeAttr(maskInitial(handle, user?.avatar || '?'));
   const style = img
-    ? ' style="background-image:url(\'' + cssUrlValue(img) + '\');background-size:cover;background-position:center;color:transparent"'
+    // Escape both nested contexts: the CSS string and its HTML attribute.
+    ? ' style="background-image:url(\'' + escapeAttr(cssUrlValue(img)) + '\');background-size:cover;background-position:center;color:transparent"'
     : '';
   // Same guard for the href — accept only http(s)/mailto/tel/relative
   // (so a profile link can't carry a javascript: scheme).

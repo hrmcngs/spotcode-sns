@@ -13,7 +13,7 @@ import { t } from './i18n.js';
 //   updateProfile(patch)  — writes to public.profiles + refreshes cache
 //   fetchGithubProfile(h) — same public GitHub API lookup as before
 
-import { getClient, getConfig } from './supa.js';
+import { getClient, getConfig, loadSdk } from './supa.js';
 import { withTimeout } from './net-utils.js';
 import {
   rememberAccount, forgetAccount, getRefreshToken,
@@ -156,6 +156,8 @@ function projectUser(authUser, profile) {
     // shows on profiles but is NOT used for visibility matching
     // anymore (Stage 19).
     closeFriends: Array.isArray(profile.close_friends) ? profile.close_friends : [],
+    closeFriendIds: Array.isArray(profile.close_friend_ids) ? profile.close_friend_ids : null,
+    orgMemberIds: Array.isArray(profile.org_member_ids) ? profile.org_member_ids : null,
     orgMembers:   Array.isArray(profile.org_members)   ? profile.org_members   : [],
     organization: profile.organization || '',
     // Self-selected language badge ids. Empty array on profiles
@@ -476,22 +478,44 @@ export async function loginWithUsername({ identifier, password }) {
   return cachedUser;
 }
 
-// Re-check the active account's password before sensitive settings changes.
-// A successful sign-in may rotate the session token, so adopt the returned
-// session immediately and keep the saved-account switcher token current.
+// Check the password in an isolated client so a new AAL1 session cannot
+// replace the active AAL2 session used by protected settings operations.
 export async function verifyCurrentPassword(password) {
-  if (!cachedUser?.email) throw new Error(t("ログイン中のメールアドレスを確認できません"));
+  const actor = cachedUser;
+  if (!actor?.id || !actor.email) throw new Error(t("ログイン中のメールアドレスを確認できません"));
   if (!password) throw new Error(t("パスワードを入力してください"));
   const supa = await getClient();
-  const { data, error } = await supa.auth.signInWithPassword({
-    email: cachedUser.email,
-    password: String(password),
-  });
-  if (error || !data?.session) {
-    throw new Error(translateAuthError(error?.message || t("パスワードを確認できませんでした")));
+  const active = (await supa.auth.getSession()).data?.session;
+  if (!active || active.user.id !== actor.id || cachedUser?.id !== actor.id) {
+    throw new Error(t("ログイン状態が変わりました。もう一度お試しください"));
   }
-  await adoptSession(data.session);
-  return true;
+  const config = getConfig();
+  const sdk = await loadSdk();
+  const verifier = sdk.createClient(config.url, config.anonKey, {
+    auth: {
+      persistSession: false, autoRefreshToken: false, detectSessionInUrl: false,
+      storageKey: 'spotcode-password-check-' + crypto.randomUUID(),
+    },
+  });
+  try {
+    const { data, error } = await verifier.auth.signInWithPassword({
+      email: actor.email, password: String(password),
+    });
+    if (error || !data?.session) {
+      throw new Error(translateAuthError(error?.message || t("パスワードを確認できませんでした")));
+    }
+    const latest = (await supa.auth.getSession()).data?.session;
+    const latestConfig = getConfig();
+    if (data.session.user.id !== actor.id || cachedUser?.id !== actor.id
+        || latest?.user.id !== actor.id || latestConfig.url !== config.url
+        || latestConfig.anonKey !== config.anonKey) {
+      throw new Error(t("ログイン状態が変わりました。もう一度お試しください"));
+    }
+    return true;
+  } finally {
+    // Revoke only this throwaway login; never sign out the active account.
+    try { await verifier.auth.signOut({ scope: 'local' }); } catch {}
+  }
 }
 
 // Rotate the password of the currently-signed-in auth user. The
@@ -592,12 +616,24 @@ function parseMissingCol(error) {
 
 export async function updateProfile(patch) {
   if (!cachedUser) throw new Error(t("ログインしていません"));
+  const requestedOwner = cachedUser.id;
   let postingAsOfficial = false;
   try {
     const { isPostingAsOfficial } = await import('./posting-identity.js');
     postingAsOfficial = !!isPostingAsOfficial();
   } catch {}
+  // Audience settings are seeded from the signed-in user's own lists, even
+  // while the composer is posting through the official-account overlay.
+  const audienceFields = new Set(['closeFriendIds', 'orgMemberIds', 'closeFriends', 'orgMembers']);
+  if (Object.keys(patch).length && Object.keys(patch).every(field => audienceFields.has(field))) {
+    postingAsOfficial = false;
+  }
   let targetId = cachedUser.id;
+  const audiencePatch = Object.keys(patch).some(field => audienceFields.has(field));
+  const requireAudienceOwner = () => {
+    if (audiencePatch && cachedUser?.id !== requestedOwner) throw new Error(t("アカウントが変更されました"));
+  };
+  requireAudienceOwner();
   if (postingAsOfficial) {
     const [{ isAdmin, isOperator }, { getOfficialAccount }] = await Promise.all([
       import('./dev-mode.js'), import('./official-account.js'),
@@ -608,6 +644,7 @@ export async function updateProfile(patch) {
     targetId = official.id;
   }
   const supa = await getClient();
+  requireAudienceOwner();
   const db = {};
   if (patch.name != null)              db.name         = String(patch.name).trim();
   if (patch.bio != null)               db.bio          = String(patch.bio).slice(0, 280);
@@ -619,15 +656,22 @@ export async function updateProfile(patch) {
   if (patch.website   != null)         db.website      = String(patch.website).trim().slice(0, 200) || null;
   if (patch.twitter   != null)         db.twitter      = sanitizeHandle(patch.twitter);
   if (patch.instagram != null)         db.instagram    = sanitizeHandle(patch.instagram);
-  if (patch.closeFriends != null)      db.close_friends = (Array.isArray(patch.closeFriends) ? patch.closeFriends : [])
-                                                            .map(h => String(h).trim()).filter(Boolean);
-  if (patch.orgMembers   != null)      db.org_members   = (Array.isArray(patch.orgMembers) ? patch.orgMembers : [])
-                                                            .map(h => String(h).trim()).filter(Boolean);
+  if (patch.closeFriends != null || patch.orgMembers != null) {
+    throw new Error('Audience changes require stable account IDs. Reload settings.');
+  }
+  for (const [field, column] of [['closeFriendIds', 'close_friend_ids'], ['orgMemberIds', 'org_member_ids']]) {
+    if (patch[field] === undefined) continue;
+    if (!Array.isArray(patch[field]) || patch[field].some(id =>
+      typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+      throw new Error('Invalid audience account IDs.');
+    }
+    db[column] = [...new Set(patch[field])];
+  }
   if (patch.organization != null)      db.organization  = String(patch.organization).trim().slice(0, 80) || null;
   if (patch.skills       != null)      db.skills        = (Array.isArray(patch.skills) ? patch.skills : [])
                                                             .map(s => String(s).trim()).filter(Boolean);
 
-  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'close_friends', 'org_members', 'organization', 'is_org', 'skills']);
+  const OPTIONAL_PROFILE_COLS = new Set(['website', 'twitter', 'instagram', 'organization', 'is_org', 'skills']);
   // Track which columns we had to drop so we can surface a real error
   // when the patch was *entirely* dropped — previously the function
   // returned "success" silently, leaving the user with a green
@@ -641,6 +685,7 @@ export async function updateProfile(patch) {
     // user data on a typo / RLS bug).
     let lastErrorMsg = '';
     for (let i = 0; i < 5; i++) {
+      requireAudienceOwner();
       const query = supa.from('profiles').update(db).eq('id', targetId);
       // PostgREST returns 200 + [] when UPDATE is hidden by RLS. Ask for the
       // row while editing the official account so that case is distinguishable

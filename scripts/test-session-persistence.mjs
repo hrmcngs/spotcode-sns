@@ -60,6 +60,7 @@ let testDefaults = UserDefaults(suiteName: "spotcode-session-test-" + UUID().uui
     var session: AuthSession?
     var me: Profile?
     var requiresReauthentication = false
+    var requiresMFA = false
     var persists = 0
     var sessionRestorePending = false
     var errorMessage: String?
