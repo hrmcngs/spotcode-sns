@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>spotcode.ipa</key>
+	<array>
+		<dict>
+			<key>architectures</key>
+			<array>
+				<string>arm64</string>
+			</array>
+			<key>buildNumber</key>
+			<string>20</string>
+			<key>certificate</key>
+			<dict>
+				<key>SHA1</key>
+				<string>90978EE786D0AE5533BF480BA8751629387A375E</string>
+				<key>dateExpires</key>
+				<string>2027/06/13</string>
+				<key>type</key>
+				<string>Cloud Managed Apple Distribution</string>
+			</dict>
+			<key>entitlements</key>
+			<dict>
+				<key>application-identifier</key>
+				<string>3Y8APYUG2G.computer.ngs.hrmc.Spotcode</string>
+				<key>beta-reports-active</key>
+				<true/>
+				<key>com.apple.developer.team-identifier</key>
+				<string>3Y8APYUG2G</string>
+				<key>get-task-allow</key>
+				<false/>
+				<key>keychain-access-groups</key>
+				<array>
+					<string>3Y8APYUG2G.computer.ngs.hrmc.Spotcode</string>
+				</array>
+			</dict>
+			<key>name</key>
+			<string>App.app</string>
+			<key>profile</key>
+			<dict>
+				<key>UUID</key>
+				<string>0a7c6b41-22e7-431f-98b5-c187f87145fd</string>
+				<key>dateExpires</key>
+				<string>2027/06/13</string>
+				<key>name</key>
+				<string>iOS Team Store Provisioning Profile: computer.ngs.hrmc.Spotcode</string>
+			</dict>
+			<key>symbols</key>
+			<true/>
+			<key>team</key>
+			<dict>
+				<key>id</key>
+				<string>3Y8APYUG2G</string>
+				<key>name</key>
+				<string></string>
+			</dict>
+			<key>versionNumber</key>
+			<string>1.0.4</string>
+		</dict>
+	</array>
+</dict>
+</plist>
