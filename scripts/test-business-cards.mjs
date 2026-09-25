@@ -190,3 +190,26 @@ assert.equal(unchangedContent.innerHTML, 'unsaved draft');
 ctx.previousLoad = previousLoad;
 run('loadCard = previousLoad');
 console.log('PASS refresh response does not replace an edit started during loading');
+
+// Every imported preset must survive the legacy SQL theme constraint and reload.
+user = { id: 'me', handle: 'me' };
+response = { data: null };
+const readmeThemes = JSON.parse(fs.readFileSync('src/data/readme-themes.json', 'utf8'));
+for (const name of Object.keys(readmeThemes)) {
+  const key = 'readme-' + name;
+  calls.length = 0;
+  await run(`saveCard({name:'Theme test',theme:${JSON.stringify(key)}})`);
+  const saved = calls.find(c => c[0] === 'upsert')[1];
+  assert.equal(saved.theme, 'midnight');
+  assert.equal(saved.design.themeVariant, key);
+  const restored = run(`normalizeCard(${JSON.stringify(saved)})`);
+  assert.equal(restored.theme, key);
+  for (const field of ['frontColor','backColor','textColor','accentColor']) {
+    assert.match(restored.design[field], /^#[0-9a-f]{6}$/);
+    assert.equal(restored.design[field], run(`defaultDesign(${JSON.stringify(key)}).${field}`));
+  }
+}
+assert.equal(run("defaultDesign('readme-dracula').frontColor"), '#282a36');
+assert.equal(run("defaultDesign('readme-highcontrast').frontColor"), '#000000');
+assert.equal(run("defaultDesign('readme-ambient_gradient').backColor"), '#ffcc70');
+console.log(`PASS all ${Object.keys(readmeThemes).length} Readme themes save and reload with valid card colors`);

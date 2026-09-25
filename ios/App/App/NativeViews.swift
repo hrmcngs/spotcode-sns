@@ -6871,6 +6871,9 @@ private struct BusinessCardView: View {
                 Text(NSLocalizedString("ミッドナイト", comment: "")).tag("midnight"); Text(NSLocalizedString("ペーパー", comment: "")).tag("paper"); Text(NSLocalizedString("オーロラ", comment: "")).tag("aurora")
                 Text(NSLocalizedString("Mono", comment: "")).tag("mono"); Text(NSLocalizedString("Ghost", comment: "")).tag("ghost")
                 Text(NSLocalizedString("春", comment: "")).tag("spring"); Text(NSLocalizedString("夏", comment: "")).tag("summer"); Text(NSLocalizedString("秋", comment: "")).tag("autumn"); Text(NSLocalizedString("冬", comment: "")).tag("winter")
+                ForEach(BusinessCardDesign.readmeCardThemes.keys.sorted(), id: \.self) { key in
+                    Text(String(key.dropFirst(7))).tag(key)
+                }
                 Text(NSLocalizedString("単色", comment: "")).tag("solid")
             }
             Picker(NSLocalizedString("レイアウト", comment: ""), selection: Binding(get: { draft.layout }, set: { layout in

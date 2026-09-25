@@ -132,7 +132,7 @@ export async function hydrateBusinessCard(handle, collection = false, canRefresh
       let selectedTheme = initial.theme;
       const value = () => ({
         ...Object.fromEntries(new FormData(form)), image_url: stagedImage,
-        design: {...initial.design, layers: stagedLayers},
+        design: {...initial.design, layers: stagedLayers, themeVariant: selectedTheme},
         theme: form.elements.theme.value === 'solid' ? selectedTheme : form.elements.theme.value
       });
       let savedValue = JSON.stringify(value());
