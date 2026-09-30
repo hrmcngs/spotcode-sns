@@ -15,6 +15,7 @@ const ctx = vm.createContext({
   cachedLanguageStats: () => null, cachedPosts: () => null,
   cachedContributions: () => null, renderGrass: () => '',
   cachedTasks: () => null, tasksHidden: () => false,
+  renderProjectArt: () => '',
   renderTimelineSkeleton: () => '', quickNavLinks: () => '',
 });
 vm.runInContext(stripModules(fs.readFileSync('src/js/safe-url.js', 'utf8')), ctx);

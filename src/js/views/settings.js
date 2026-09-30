@@ -1,3 +1,4 @@
+import { renderTaskTemplates, bindTaskTemplates } from './task-templates.js';
 import { applyTheme, themePreference, applyColorTheme, colorThemePreference, COLOR_THEMES, COLOR_THEME_LABELS } from '../theme.js';
 import { followedPostScope, setFollowedPostScope } from '../push-notify.js';
 import { githubRepositories } from '../github-repositories.js';
@@ -543,6 +544,7 @@ function displaySection() {
       '<div class="settings-form__actions"><button type="button" class="btn btn--ghost" id="private-tasks-toggle">' +
         (privateTasksEnabled() ? t("非公開Issue表示をOFF") : t("非公開Issueを表示する（GitHub再認証）")) +
       '</button></div>' +
+      renderTaskTemplates() +
       privateStatus +
     '</section>' +
     '<section class="settings-card">' +
@@ -718,6 +720,7 @@ export function renderSettings() {
 }
 
 export function bindSettings() {
+  bindTaskTemplates();
   document.getElementById('settings-color-theme')?.addEventListener('change', event => applyColorTheme(event.target.value));
   document.getElementById('settings-theme')?.addEventListener('change', event => applyTheme(event.target.value));
   document.getElementById('followed-post-scope')?.addEventListener('change', event => setFollowedPostScope(event.target.value));

@@ -22,6 +22,7 @@ import { getLanguageStats, cachedLanguageStats, langColor, langAbbr, langTextCol
 import { maskHandle, maskName } from '../privacy-mode.js';
 import { withTimeout } from '../net-utils.js';
 import { fetchTasks, cachedTasks } from '../github-tasks.js';
+import { renderProjectArt, hydrateProjectArt } from './project-art.js';
 import { renderMarkdown } from '../markdown.js';
 import { tasksHidden, selectedTaskRepos, privateTasksEnabled } from '../display-prefs.js';
 
@@ -611,6 +612,7 @@ function renderProfileContent(handle) {
       // refilled by hydrateProfileTasks. Empty when the user hasn't
       // linked GitHub.
       (u.github?.handle ? renderTasksCard(u.github.handle, cachedTasks(u.github.handle)) : '') +
+      (u.github?.handle ? renderProjectArt() : '') +
     '</header>'
   );
 
@@ -1196,6 +1198,7 @@ if (typeof window !== 'undefined') {
 }
 
 export async function hydrateProfileTasks(handle) {
+  hydrateProjectArt();
   const u = getUser(handle);
   const gh = u?.github?.handle;
   if (!gh) return;
