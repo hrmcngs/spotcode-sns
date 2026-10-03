@@ -1447,6 +1447,7 @@ private struct ComposerChip: View {
 private final class ComposerLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var spot: Spot?
     @Published private(set) var errorMessage: String?
+    @Published private(set) var isLocating = false
     private let manager = CLLocationManager()
     private var requested = false
     private var timeout: DispatchWorkItem?
@@ -1458,7 +1459,10 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
     }
     func request() {
         requested = true
+        isLocating = true
         errorMessage = nil
+        timeout?.cancel()
+        timeout = nil
         updateAuthorization()
     }
     func clear() { spot = nil }
@@ -1482,27 +1486,37 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
         guard requested else { return }
         updateAuthorization()
     }
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        guard requested else { return }
+        updateAuthorization()
+    }
     private func updateAuthorization() {
         switch manager.authorizationStatus {
-        case .notDetermined: manager.requestWhenInUseAuthorization()
+        case .notDetermined:
+            startTimeout()
+            manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways:
-            timeout?.cancel()
             manager.startUpdatingLocation()
-            let work = DispatchWorkItem { [weak self] in
-                guard let self, self.requested else { return }
-                self.finish()
-                self.errorMessage = NSLocalizedString("現在地を取得できませんでした。位置情報の設定を確認して再試行してください。", comment: "")
-            }
-            timeout = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
+            startTimeout()
         case .denied, .restricted:
             finish()
             errorMessage = NSLocalizedString("現在地を表示するには、システム設定でspotcodeの位置情報を許可してください。", comment: "")
         @unknown default: finish()
         }
     }
+    private func startTimeout() {
+        timeout?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.requested else { return }
+            self.finish()
+            self.errorMessage = NSLocalizedString("現在地を取得できませんでした。位置情報の設定を確認して再試行してください。", comment: "")
+        }
+        timeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
+    }
     private func finish() {
         requested = false
+        isLocating = false
         timeout?.cancel()
         timeout = nil
         manager.stopUpdatingLocation()
@@ -1855,6 +1869,9 @@ private struct LocationPickerSheet: View {
                 locating = false
                 reverseGeocode(value.coordinate)
             }
+            .onChange(of: location.isLocating) { value in
+                locating = value
+            }
             .onChange(of: coordinate.map { "\($0.latitude),\($0.longitude)" }) { _ in
                 if let coordinate { reverseGeocode(coordinate) }
             }
@@ -1867,6 +1884,7 @@ private struct LocationPickerSheet: View {
 
     private var statusText: String {
         if developerMode && model.me?.isAdmin == true { return NSLocalizedString("開発者モード: 地図上の任意の場所を選択できます。", comment: "") }
+        if let message = location.errorMessage { return message }
         if locating { return NSLocalizedString("現在地を取得中… 取れるまで投稿はできません。", comment: "") }
         if adjustmentDenied { return NSLocalizedString("現在地から300mを超えています。半径300m以内を選んでください。", comment: "") }
         if coordinate != nil { return NSLocalizedString("現在地を基準に、地図タップで半径300m以内のポイントを調整できます。", comment: "") }
