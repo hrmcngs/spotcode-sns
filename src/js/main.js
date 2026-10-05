@@ -561,6 +561,18 @@ let pendingKind = null; // null | 'idea' | 'bug'
 // The actual gating happens server-side via Stage 18 RLS — this
 // value just rides on the addPost payload.
 let pendingVisibility = 'public';
+let pendingPinColor = 'pink';
+const PIN_COLORS = {
+  pink:   '#f91880',
+  blue:   '#1d9bf0',
+  green:  '#2ea043',
+  amber:  '#febc2e',
+  violet: '#8957e5',
+  slate:  '#64748b',
+};
+function normalizePinColor(value) {
+  return Object.prototype.hasOwnProperty.call(PIN_COLORS, value) ? value : 'pink';
+}
 // Map each audience to one of the SVG icons from icons.js so the
 // composer pill and the post-card hint badge share visuals (and so
 // the design stays icon-consistent with the rest of the app instead
@@ -850,6 +862,7 @@ function readComposerState() {
     spot:       pendingSpot,
     kind:       pendingKind,
     visibility: form.elements.namedItem('visibility')?.value || pendingVisibility,
+    pinColor:   pendingPinColor,
   };
 }
 
@@ -885,6 +898,8 @@ function clearComposerUI() {
   syncKindToggle();
   pendingVisibility = 'public';
   syncVisToggle();
+  pendingPinColor = 'pink';
+  syncPinColorPicker();
   hideDraftBanner();
 }
 
@@ -905,6 +920,15 @@ function syncVisToggle() {
   sel.value = pendingVisibility;
   const iconEl  = document.querySelector('[data-vis-icon]');
   if (iconEl) iconEl.innerHTML = icon(VIS_ICONS[pendingVisibility] || 'globe', { size: 12, className: 'icon--inline' });
+}
+
+function syncPinColorPicker() {
+  pendingPinColor = normalizePinColor(pendingPinColor);
+  const sel = document.getElementById('compose-pin-color');
+  if (sel) sel.value = pendingPinColor;
+  document.querySelectorAll('.compose-pin-color').forEach((el) => {
+    el.style.setProperty('--pin-color', PIN_COLORS[pendingPinColor]);
+  });
 }
 
 // Re-render the small pill that announces an attached poll in the
@@ -958,6 +982,13 @@ document.addEventListener('change', async (e) => {
     syncVisToggle();
     autosaveComposerDraft();
     // A navigation immediately after choosing must preserve the new audience.
+    autosaveComposerDraft.flush();
+    return;
+  }
+  if (e.target?.id === 'compose-pin-color') {
+    pendingPinColor = normalizePinColor(e.target.value);
+    syncPinColorPicker();
+    autosaveComposerDraft();
     autosaveComposerDraft.flush();
     return;
   }
@@ -1030,9 +1061,9 @@ document.addEventListener('visibilitychange', () => {
 function restoreComposerDraft() {
   const handle = draftHandle();
   const d = loadDraft(handle);
-  if (!d) return;
   const form = document.querySelector('.idea-form');
   if (!form) return;
+  if (!d) { syncPinColorPicker(); return; }
   const ta = form.querySelector('textarea[name="text"]');
   if (ta && d.body) {
     ta.value = d.body;
@@ -1067,6 +1098,8 @@ function restoreComposerDraft() {
   pendingVisibility = ['public', 'mutuals', 'following', 'friends', 'org', 'only_me', 'github_org'].includes(d.visibility)
     ? d.visibility : 'public';
   syncVisToggle();
+  pendingPinColor = normalizePinColor(d.pinColor || d.spot?.pinColor);
+  syncPinColorPicker();
   showDraftBanner();
 }
 
@@ -2162,6 +2195,7 @@ document.addEventListener('submit', (e) => {
         lat: pendingSpot.lat,
         lng: pendingSpot.lng,
         label: pendingSpot.label || '',
+        pinColor: pendingPinColor,
         ...(pendingSpot.address ? { address: pendingSpot.address } : {}),
         ...(pendingSpot.addressDetails ? { addressDetails: pendingSpot.addressDetails } : {}),
       }

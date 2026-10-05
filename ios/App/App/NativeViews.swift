@@ -1136,6 +1136,7 @@ private struct InlineComposer: View {
     @State private var showEvent = false
     @State private var postKind: String? = nil
     @State private var visibility = "public"
+    @State private var pinColor = "pink"
     @State private var photos: [String] = []
     @State private var poll: PostPoll?
     @State private var showPhotoPicker = false
@@ -1211,10 +1212,10 @@ private struct InlineComposer: View {
 
     @ViewBuilder private var composerChips: some View {
         if horizontalSizeClass == .regular && dynamicTypeSize <= .large {
-            HStack(spacing: 8) { locationChip; linkChip; eventChip; kindChip; audienceChip }
+            HStack(spacing: 8) { locationChip; pinColorChip; linkChip; eventChip; kindChip; audienceChip }
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) { locationChip; linkChip }
+                HStack(spacing: 8) { locationChip; pinColorChip; linkChip }
                 HStack(spacing: 8) { eventChip; kindChip }
                 audienceChip
             }
@@ -1230,6 +1231,7 @@ private struct InlineComposer: View {
     private var eventChip: some View { Button { showEvent.toggle() } label: { ComposerChip(icon: "calendar", title: NSLocalizedString("イベントを追加", comment: ""), active: showEvent) } }
     private var kindChip: some View { PostKindPicker(kind: $postKind) }
     private var audienceChip: some View { PostAudiencePicker(visibility: $visibility) }
+    private var pinColorChip: some View { PinColorPicker(pinColor: $pinColor) }
 
     private var composerTools: some View {
         HStack(spacing: SpotcodeLayout.value(16, 24)) {
@@ -1258,10 +1260,10 @@ private struct InlineComposer: View {
     private func publish() {
         sending = true
         Task {
-            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, repoFullName: repoFullName.isEmpty ? nil : repoFullName, eventURL: eventURL.isEmpty ? nil : eventURL, eventDays: eventDays, spot: selectedSpot, kind: postKind, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
+            if await model.publish(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), githubLink: githubLink.isEmpty ? nil : githubLink, repoFullName: repoFullName.isEmpty ? nil : repoFullName, eventURL: eventURL.isEmpty ? nil : eventURL, eventDays: eventDays, spot: spotWithPinColor(selectedSpot, pinColor), kind: postKind, visibility: visibility, photos: photos.isEmpty ? nil : photos, poll: poll) {
                 NativeDraftStore.completePublishing(draftSnapshot, account: draftAccount, slot: "inline")
                 draft = ""; githubLink = ""; repoFullName = ""; eventURL = ""; eventDays = []; showLink = false; showEvent = false
-                postKind = nil; visibility = "public"; selectedSpot = nil
+                postKind = nil; visibility = "public"; pinColor = "pink"; selectedSpot = nil
                 photos = []; poll = nil
             }
             sending = false
@@ -1285,12 +1287,12 @@ private struct InlineComposer: View {
 
     private var draftAccount: String { model.displayProfile?.id?.uuidString ?? model.session?.user.id.uuidString ?? "guest" }
     private var draftSnapshot: NativeComposerDraft {
-        NativeComposerDraft(body: draft, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, eventDays: eventDays.isEmpty ? nil : eventDays, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: selectedSpot)
+        NativeComposerDraft(body: draft, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, eventDays: eventDays.isEmpty ? nil : eventDays, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: spotWithPinColor(selectedSpot, pinColor))
     }
     private func restoreDraft(_ value: NativeComposerDraft) {
         draft = value.body; githubLink = value.githubLink; repoFullName = value.repoFullName
         eventURL = value.eventURL; eventDays = value.eventDays ?? []; postKind = value.kind; visibility = value.visibility
-        photos = value.photos; poll = value.poll; selectedSpot = value.spot
+        photos = value.photos; poll = value.poll; selectedSpot = value.spot; pinColor = PinColorOption.normalized(value.spot?.pinColor)
         showLink = !githubLink.isEmpty || !repoFullName.isEmpty; showEvent = !eventURL.isEmpty || !eventDays.isEmpty
     }
 }
@@ -1426,6 +1428,59 @@ private struct PostKindPicker: View {
                          active: kind != nil)
         }
     }
+}
+
+private struct PinColorOption: Identifiable {
+    let id: String
+    let label: String
+    let color: Color
+    let uiColor: UIColor
+
+    static let all: [PinColorOption] = [
+        .init(id: "pink", label: NSLocalizedString("ピンク", comment: ""), color: Color(red: 249/255, green: 24/255, blue: 128/255), uiColor: UIColor(red: 249/255, green: 24/255, blue: 128/255, alpha: 1)),
+        .init(id: "blue", label: NSLocalizedString("ブルー", comment: ""), color: Color(red: 29/255, green: 155/255, blue: 240/255), uiColor: UIColor(red: 29/255, green: 155/255, blue: 240/255, alpha: 1)),
+        .init(id: "green", label: NSLocalizedString("グリーン", comment: ""), color: Color(red: 46/255, green: 160/255, blue: 67/255), uiColor: UIColor(red: 46/255, green: 160/255, blue: 67/255, alpha: 1)),
+        .init(id: "amber", label: NSLocalizedString("アンバー", comment: ""), color: Color(red: 254/255, green: 188/255, blue: 46/255), uiColor: UIColor(red: 254/255, green: 188/255, blue: 46/255, alpha: 1)),
+        .init(id: "violet", label: NSLocalizedString("バイオレット", comment: ""), color: Color(red: 137/255, green: 87/255, blue: 229/255), uiColor: UIColor(red: 137/255, green: 87/255, blue: 229/255, alpha: 1)),
+        .init(id: "slate", label: NSLocalizedString("スレート", comment: ""), color: Color(red: 100/255, green: 116/255, blue: 139/255), uiColor: UIColor(red: 100/255, green: 116/255, blue: 139/255, alpha: 1)),
+    ]
+    static func normalized(_ value: String?) -> String { all.contains { $0.id == value } ? value! : "pink" }
+    static func option(_ value: String?) -> PinColorOption { all.first { $0.id == normalized(value) } ?? all[0] }
+    static func uiColor(_ value: String?) -> UIColor { option(value).uiColor }
+}
+
+private struct PinColorPicker: View {
+    @Environment(\.appColorTheme) private var appColorTheme
+    @Binding var pinColor: String
+
+    var body: some View {
+        let _ = appColorTheme
+        let selected = PinColorOption.option(pinColor)
+
+        Menu {
+            ForEach(PinColorOption.all) { option in
+                Button { pinColor = option.id } label: {
+                    Label(option.label, systemImage: option.id == selected.id ? "checkmark.circle.fill" : "circle.fill")
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Circle().fill(selected.color).frame(width: 11, height: 11)
+                Text(NSLocalizedString("ピンの色", comment: ""))
+            }
+            .spotcodeFont(12, weight: .semibold, fallback: .caption.weight(.semibold))
+            .foregroundColor(SpotcodeTheme.muted)
+            .padding(.horizontal, 10).padding(.vertical, SpotcodeLayout.value(8, 7))
+            .overlay(Capsule().stroke(SpotcodeTheme.border, style: StrokeStyle(lineWidth: 1, dash: [5])))
+        }
+        .accessibilityLabel(NSLocalizedString("ピンの色", comment: ""))
+    }
+}
+
+private func spotWithPinColor(_ spot: Spot?, _ pinColor: String) -> Spot? {
+    guard var spot else { return nil }
+    spot.pinColor = PinColorOption.normalized(pinColor)
+    return spot
 }
 
 private struct ComposerChip: View {
@@ -2867,6 +2922,7 @@ struct ComposeView: View {
     @State private var showEvent = false
     @State private var postKind: String? = nil
     @State private var visibility = "public"
+    @State private var pinColor = "pink"
     @State private var selectedSpot: Spot?
     @State private var photos: [String] = []
     @State private var poll: PostPoll?
@@ -2906,6 +2962,7 @@ struct ComposeView: View {
                             Button { showLocationPicker = true } label: {
                                 ComposerChip(icon: "mappin", title: selectedSpot?.label ?? NSLocalizedString("場所を追加", comment: ""), active: selectedSpot != nil)
                             }
+                            PinColorPicker(pinColor: $pinColor)
                             Button { showLink.toggle() } label: { ComposerChip(icon: "link", title: NSLocalizedString("リンクを追加", comment: ""), active: showLink) }
                         }
                         HStack(spacing: 8) {
@@ -3005,13 +3062,13 @@ struct ComposeView: View {
 
     private var draftAccount: String { model.displayProfile?.id?.uuidString ?? model.session?.user.id.uuidString ?? "guest" }
     private var draftSnapshot: NativeComposerDraft {
-        NativeComposerDraft(body: bodyText, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, eventDays: eventDays.isEmpty ? nil : eventDays, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: selectedSpot)
+        NativeComposerDraft(body: bodyText, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, eventDays: eventDays.isEmpty ? nil : eventDays, kind: postKind, visibility: visibility, photos: photos, poll: poll, spot: spotWithPinColor(selectedSpot, pinColor))
     }
     private func restoreDraft(_ value: NativeComposerDraft) {
         bodyText = value.body
         githubLink = value.githubLink; repoFullName = value.repoFullName
         eventURL = value.eventURL; eventDays = value.eventDays ?? []; postKind = value.kind; visibility = value.visibility
-        photos = value.photos; poll = value.poll; selectedSpot = value.spot
+        photos = value.photos; poll = value.poll; selectedSpot = value.spot; pinColor = PinColorOption.normalized(value.spot?.pinColor)
         showLink = !githubLink.isEmpty || !repoFullName.isEmpty; showEvent = !eventURL.isEmpty || !eventDays.isEmpty
     }
 
@@ -3034,7 +3091,7 @@ struct ComposeView: View {
                 githubLink: link.isEmpty ? nil : link,
                 repoFullName: repository.isEmpty ? nil : repository,
                 eventURL: event.isEmpty ? nil : event, eventDays: eventDays,
-                spot: selectedSpot,
+                spot: spotWithPinColor(selectedSpot, pinColor),
                 kind: postKind,
                 visibility: visibility,
                 photos: photos.isEmpty ? nil : photos,
@@ -3042,7 +3099,7 @@ struct ComposeView: View {
             ) {
                 NativeDraftStore.completePublishing(draftSnapshot, account: draftAccount, slot: "sheet")
                 bodyText = ""; githubLink = ""; repoFullName = ""; eventURL = ""; eventDays = []
-                photos = []; poll = nil; selectedSpot = nil; postKind = nil; visibility = "public"
+                photos = []; poll = nil; selectedSpot = nil; postKind = nil; visibility = "public"; pinColor = "pink"
                 NativeDraftStore.save(draftSnapshot, account: draftAccount, slot: "sheet")
                 isPresented = false
             }
@@ -3249,7 +3306,7 @@ private struct ClusteredPostMap: UIViewRepresentable {
             }
             guard let postAnnotation = annotation as? PostMapAnnotation else { return nil }
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "post", for: postAnnotation) as! MKMarkerAnnotationView
-            view.markerTintColor = UIColor(red: 29/255, green: 155/255, blue: 240/255, alpha: 1)
+            view.markerTintColor = PinColorOption.uiColor(postAnnotation.post.spot?.pinColor)
             view.glyphImage = UIImage(systemName: "lightbulb.fill")
             view.clusteringIdentifier = "spotcode-post"
             view.canShowCallout = true

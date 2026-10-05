@@ -612,6 +612,30 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   background: transparent; color: var(--text);
   font: inherit; cursor: pointer;
 }
+.compose-pin-color {
+  display: inline-flex; align-items: center; gap: .35em;
+  background: transparent; border: 1px dashed var(--border);
+  color: var(--muted); cursor: pointer;
+  padding: .15em .55em; border-radius: 999px;
+  font-size: .78rem; font-weight: 600;
+}
+.compose-pin-color:focus-within {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.compose-pin-color__dot {
+  width: .85em; height: .85em; border-radius: 50%;
+  background: var(--pin-color, #f91880);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pin-color, #f91880) 25%, transparent);
+  flex: 0 0 auto;
+}
+.compose-pin-color select {
+  position: relative;
+  max-width: 100%;
+  margin: 0; padding: .1em .2em; border: 0;
+  background: transparent; color: var(--text);
+  font: inherit; cursor: pointer;
+}
 .post__edit-vis-input {
   padding: .35em .5em;
   color: var(--text); background: var(--surface);

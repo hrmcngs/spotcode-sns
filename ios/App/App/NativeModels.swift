@@ -115,6 +115,7 @@ struct Spot: Codable, Hashable {
     let lng: Double
     let label: String?
     let address: String?
+    var pinColor: String? = nil
     var addressDetails: SpotAddressDetails? = nil
 
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lng) }

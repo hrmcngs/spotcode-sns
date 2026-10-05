@@ -23,6 +23,15 @@ let mapInst = null;
 let markerLayer = null;
 
 const TOKYO = { lat: 35.681236, lng: 139.767125 };
+const MAX_VISIBLE_MARKERS = 80;
+const PIN_COLORS = {
+  pink:   '#f91880',
+  blue:   '#1d9bf0',
+  green:  '#2ea043',
+  amber:  '#febc2e',
+  violet: '#8957e5',
+  slate:  '#64748b',
+};
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -73,6 +82,10 @@ function pinPopupHtml(post) {
     '</div>';
 }
 
+function pinColor(spot) {
+  return PIN_COLORS[spot?.pinColor] || PIN_COLORS.pink;
+}
+
 export async function hydrateMap(city, focus = null) {
   const myVersion = renderVersion;
   const canvas = document.getElementById('map-canvas');
@@ -116,10 +129,12 @@ export async function hydrateMap(city, focus = null) {
   }
   if (myVersion !== renderVersion) return;
 
-  const [posts, here, approxIp] = await Promise.all([
-    postsPromise, herePromise, approxPromise,
+  const [posts, approxIp] = await Promise.all([
+    postsPromise, approxPromise,
   ]);
   if (myVersion !== renderVersion) return;
+  let here = cachedLocation();
+  const hadInitialHere = !!here;
 
   // `postsWithSpots` already filters server-side (`spot is not null`)
   // so this defensive re-filter only catches lat/lng shape drift.
@@ -208,6 +223,19 @@ export async function hydrateMap(city, focus = null) {
       mapInst.fitBounds(ring.getBounds(), { padding: [4, 4], maxZoom: 19, animate: false });
     }
   }
+  herePromise.then((loc) => {
+    if (myVersion !== renderVersion || !mapInst || !loc || hadInitialHere) return;
+    here = loc;
+    const ring = L.circle([loc.lat, loc.lng], {
+      radius: getRadius(), color: '#1d9bf0', weight: 1, fillOpacity: 0.08,
+    }).addTo(mapInst);
+    L.circleMarker([loc.lat, loc.lng], { radius: 6, color: '#1d9bf0', fillColor: '#1d9bf0', fillOpacity: 1 }).addTo(mapInst);
+    if (!hasFocus && !(cityFiltered && cityFiltered.length)) {
+      mapInst.fitBounds(ring.getBounds(), { padding: [4, 4], maxZoom: 19, animate: false });
+      refreshVisibleMarkers(true);
+    }
+    if (status) status.textContent = t('map.subtitle_with_loc', { n: spotted.length, r: getRadius() });
+  }).catch(() => {});
 
   // Use circleMarker instead of marker:
   //   - pure SVG, no per-pin image asset to lay out
@@ -220,9 +248,11 @@ export async function hydrateMap(city, focus = null) {
   // to the first popupopen event per marker.
   markerLayer = L.layerGroup().addTo(mapInst);
   let focusedMarker = null;
-  for (const p of spotted) {
+  let lastMarkerRefresh = 0;
+  const makeMarker = (p) => {
+    const color = pinColor(p.spot);
     const m = L.circleMarker([p.spot.lat, p.spot.lng], {
-      radius: 7, weight: 2, color: '#f91880', fillColor: '#f91880', fillOpacity: 0.85,
+      radius: 7, weight: 2, color, fillColor: color, fillOpacity: 0.85,
     });
     m.bindPopup(() => {
       const content = document.createElement('div');
@@ -241,18 +271,38 @@ export async function hydrateMap(city, focus = null) {
       });
       return content;
     }, { className: 'map-popup', maxWidth: 280, maxHeight: 360 });
-    markerLayer.addLayer(m);
     if (hasFocus && (
       (focus.postId && p.id === focus.postId) ||
       (!focus.postId && Number(p.spot.lat) === focus.lat && Number(p.spot.lng) === focus.lng)
     )) focusedMarker = m;
-  }
+    return m;
+  };
+  const refreshVisibleMarkers = (force = false) => {
+    if (!mapInst || !markerLayer) return;
+    const now = Date.now();
+    if (!force && now - lastMarkerRefresh < 120) return;
+    lastMarkerRefresh = now;
+    const bounds = mapInst.getBounds()?.pad(0.18);
+    let next = bounds
+      ? spotted.filter(p => bounds.contains([p.spot.lat, p.spot.lng]))
+      : spotted.slice();
+    if (hasFocus) {
+      const focusedPost = spotted.find(p =>
+        (focus.postId && p.id === focus.postId) ||
+        (!focus.postId && Number(p.spot.lat) === focus.lat && Number(p.spot.lng) === focus.lng)
+      );
+      if (focusedPost && !next.includes(focusedPost)) next.unshift(focusedPost);
+    }
+    next = next.slice(0, MAX_VISIBLE_MARKERS);
+    markerLayer.clearLayers();
+    focusedMarker = null;
+    next.forEach((p) => markerLayer.addLayer(makeMarker(p)));
+  };
 
   // A location link from a post should land on that exact pin rather
   // than being reframed around the user's current-location radius.
   if (hasFocus) {
     mapInst.setView([focus.lat, focus.lng], 17, { animate: false });
-    if (focusedMarker) focusedMarker.openPopup();
   }
 
   // City-scoped framing: fit the canvas to just this 市区町村's pins so
@@ -267,6 +317,10 @@ export async function hydrateMap(city, focus = null) {
       mapInst.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
   }
+
+  refreshVisibleMarkers(true);
+  if (hasFocus && focusedMarker) focusedMarker.openPopup();
+  mapInst.on('moveend zoomend', () => refreshVisibleMarkers());
 
   if (status) {
     if (cachedLocation()) {
@@ -300,6 +354,7 @@ export async function hydrateMap(city, focus = null) {
       const bounds = L.latLngBounds(cityFiltered.map(p => [p.spot.lat, p.spot.lng]));
       mapInst.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
+    refreshVisibleMarkers(true);
   };
   // Two size re-checks are enough: one right after paint (60ms) for
   // the initial-mount 0×0 case, one after the URL bar likely settled
@@ -309,7 +364,11 @@ export async function hydrateMap(city, focus = null) {
   // (orientation flip, keyboard).
   [60, 400].forEach(ms => setTimeout(recompute, ms));
   if (typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver(() => mapInst && mapInst.invalidateSize());
+    const ro = new ResizeObserver(() => {
+      if (!mapInst) return;
+      mapInst.invalidateSize();
+      refreshVisibleMarkers();
+    });
     ro.observe(canvas);
   }
 }
