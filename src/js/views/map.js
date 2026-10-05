@@ -208,6 +208,47 @@ export async function hydrateMap(city, focus = null) {
     if (status) status.textContent = t("モバイル回線向けの代替地図に切り替えました");
   });
 
+  let hereLayer = null;
+  const drawHere = (loc) => {
+    if (!mapInst || !loc) return null;
+    if (hereLayer) { try { mapInst.removeLayer(hereLayer); } catch {} }
+    const ring = L.circle([loc.lat, loc.lng], {
+      radius: getRadius(), color: '#1d9bf0', weight: 1, fillOpacity: 0.08,
+    });
+    const dot = L.circleMarker([loc.lat, loc.lng], { radius: 6, color: '#1d9bf0', fillColor: '#1d9bf0', fillOpacity: 1 });
+    hereLayer = L.layerGroup([ring, dot]).addTo(mapInst);
+    return ring;
+  };
+  const flyToHere = async () => {
+    if (!mapInst) return;
+    const loc = cachedLocation() || await withTimeout(getMyLocation(), 8000, t("現在地取得")).catch(() => null);
+    if (!loc || !mapInst) {
+      if (status) status.textContent = permissionDenied() ? t('map.subtitle_denied', { n: spotted.length }) : t('map.subtitle_no_loc', { n: spotted.length });
+      return;
+    }
+    here = loc;
+    const ring = drawHere(loc);
+    if (ring) mapInst.fitBounds(ring.getBounds(), { padding: [4, 4], maxZoom: 19, animate: true });
+    refreshVisibleMarkers(true);
+    if (status) status.textContent = t('map.subtitle_with_loc', { n: spotted.length, r: getRadius() });
+  };
+  const locateControl = L.control({ position: 'topleft' });
+  locateControl.onAdd = () => {
+    const wrap = L.DomUtil.create('div', 'leaflet-bar map-locate-control');
+    const btn = L.DomUtil.create('button', 'map-locate-control__btn', wrap);
+    btn.type = 'button';
+    btn.title = t('map.locate_me');
+    btn.setAttribute('aria-label', t('map.locate_me'));
+    btn.innerHTML = '<span aria-hidden="true"></span>';
+    L.DomEvent.disableClickPropagation(wrap);
+    L.DomEvent.on(btn, 'click', (event) => {
+      L.DomEvent.preventDefault(event);
+      void flyToHere();
+    });
+    return wrap;
+  };
+  locateControl.addTo(mapInst);
+
   if (here) {
     // User position + unlock-radius ring. fitBounds() to the ring so
     // its edge touches the canvas edge regardless of viewport size —
@@ -215,10 +256,7 @@ export async function hydrateMap(city, focus = null) {
     // circle to read the body" rule the geo-gate enforces.
     // In city-scoped mode we still draw the ring (the gate is still
     // active) but defer the framing to the city-pins fitBounds below.
-    const ring = L.circle([here.lat, here.lng], {
-      radius: getRadius(), color: '#1d9bf0', weight: 1, fillOpacity: 0.08,
-    }).addTo(mapInst);
-    L.circleMarker([here.lat, here.lng], { radius: 6, color: '#1d9bf0', fillColor: '#1d9bf0', fillOpacity: 1 }).addTo(mapInst);
+    const ring = drawHere(here);
     if (!(cityFiltered && cityFiltered.length)) {
       mapInst.fitBounds(ring.getBounds(), { padding: [4, 4], maxZoom: 19, animate: false });
     }
@@ -226,10 +264,7 @@ export async function hydrateMap(city, focus = null) {
   herePromise.then((loc) => {
     if (myVersion !== renderVersion || !mapInst || !loc || hadInitialHere) return;
     here = loc;
-    const ring = L.circle([loc.lat, loc.lng], {
-      radius: getRadius(), color: '#1d9bf0', weight: 1, fillOpacity: 0.08,
-    }).addTo(mapInst);
-    L.circleMarker([loc.lat, loc.lng], { radius: 6, color: '#1d9bf0', fillColor: '#1d9bf0', fillOpacity: 1 }).addTo(mapInst);
+    const ring = drawHere(loc);
     if (!hasFocus && !(cityFiltered && cityFiltered.length)) {
       mapInst.fitBounds(ring.getBounds(), { padding: [4, 4], maxZoom: 19, animate: false });
       refreshVisibleMarkers(true);

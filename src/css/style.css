@@ -2382,6 +2382,29 @@ a.trend-item:hover { background: var(--surface-2); }
   height: 70dvh;
   background: var(--bg);
 }
+.map-locate-control__btn {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border: 0; padding: 0; margin: 0;
+  background: #fff; color: #1d9bf0;
+  cursor: pointer;
+}
+.map-locate-control__btn:hover { background: #f4f7fb; }
+.map-locate-control__btn span {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid currentColor;
+  position: relative;
+}
+.map-locate-control__btn span::before,
+.map-locate-control__btn span::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+}
+.map-locate-control__btn span::before { width: 2px; height: 20px; }
+.map-locate-control__btn span::after { width: 20px; height: 2px; }
 .leaflet-popup-content-wrapper.map-popup,
 .map-popup .leaflet-popup-content-wrapper {
   background: var(--surface); color: var(--text);
