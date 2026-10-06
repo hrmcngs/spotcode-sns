@@ -150,18 +150,17 @@ export async function hydrateMap(city, focus = null) {
     : null;
   const spotted = (cityFiltered && cityFiltered.length) ? cityFiltered : allSpotted;
 
-  // Center: in city mode prefer the city's spots (fitBounds below
-  // handles real positioning); otherwise prefer the exact GPS fix,
-  // then the first spotted post. IP approximation is only a last
-  // visual fallback when there are no pins yet; framing the map around
-  // IP while pins exist makes /spots look like it "moved" to Tokyo.
   const hasFocus = focus && Number.isFinite(focus.lat) && Number.isFinite(focus.lng);
+  const preferViewerLocation = !hasFocus && !city;
+  // Center: post-focus links and city-scoped maps stay on their target.
+  // The plain Spots tab is location-first: exact GPS, then IP estimate,
+  // then pins as a fallback if location is unavailable.
   const center = hasFocus ? [focus.lat, focus.lng]
                 : (cityFiltered && cityFiltered.length)
                 ? [cityFiltered[0].spot.lat, cityFiltered[0].spot.lng]
                 : here       ? [here.lat, here.lng]
-                : spotted[0] ? [spotted[0].spot.lat, spotted[0].spot.lng]
                 : approxIp  ? [approxIp.lat, approxIp.lng]
+                : spotted[0] ? [spotted[0].spot.lat, spotted[0].spot.lng]
                 : [TOKYO.lat, TOKYO.lng];
 
   mapInst = L.map(canvas, { zoomControl: true }).setView(center, hasFocus ? 17 : (here ? 15 : 13));
@@ -355,7 +354,7 @@ export async function hydrateMap(city, focus = null) {
       const bounds = L.latLngBounds(cityFiltered.map(p => [p.spot.lat, p.spot.lng]));
       mapInst.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
-  } else if (!hasFocus && !here && spotted.length) {
+  } else if (!hasFocus && !preferViewerLocation && !here && spotted.length) {
     if (spotted.length === 1) {
       mapInst.setView([spotted[0].spot.lat, spotted[0].spot.lng], 14);
     } else {
