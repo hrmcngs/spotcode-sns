@@ -1,4 +1,3 @@
-import { renderBusinessCard, hydrateBusinessCard } from './views/business-card.js';
 import { githubAuthorizationReturnPath } from './github-oauth.js';
 import { hydrateSocialControls } from './social-controls.js';
 import { renderKindBadge, renderVisibilityBadge } from './post.js';
@@ -7,9 +6,7 @@ import { renderGrass }     from './grass.js';
 import { onRoute, url, refresh, navigate, currentPath } from './router.js';
 import { renderHome, hydrateHome } from './views/home.js';
 import { renderProfile, hydrateProfileActivity, hydrateProfileLanguages, hydrateProfileTasks, hydrateProfile, setProfileTab, openProfileMore, handleTasksClick } from './views/profile.js';
-import { renderRepos, hydrateRepos } from './views/repos.js';
 import { renderSpot, hydrateSpot } from './views/spot.js';
-import { renderMap, hydrateMap }  from './views/map.js';
 // /requests folded into /notifications (follow_request rows have
 // inline Accept/Deny). Old `requests.js` is dead weight kept only for
 // the off chance someone re-introduces a dedicated requests page.
@@ -17,7 +14,6 @@ import { renderNotifications, hydrateNotifications, handleNotifAction } from './
 import { renderPostDetail, hydratePostDetail, handleCommentDelete } from './views/post-detail.js';
 import { renderPostAnalytics, hydratePostAnalytics } from './views/post-analytics.js';
 import { renderFollowList, hydrateFollowList } from './views/follow-list.js';
-import { renderSettings, bindSettings } from './views/settings.js';
 import { pickSpot }        from './views/spot-picker.js';
 import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
@@ -39,7 +35,7 @@ import { toggleLike, isLiked, likeCount,
 import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
 import { openPostCamera } from './post-camera.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
-import { applyDisplayPrefs, hydrateIssueDisplayPrefs } from './display-prefs.js';
+import { applyDisplayPrefs, hydrateIssueDisplayPrefs, defaultPinColor, normalizePinColor, PIN_COLOR_OPTIONS } from './display-prefs.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
@@ -561,18 +557,7 @@ let pendingKind = null; // null | 'idea' | 'bug'
 // The actual gating happens server-side via Stage 18 RLS — this
 // value just rides on the addPost payload.
 let pendingVisibility = 'public';
-let pendingPinColor = 'pink';
-const PIN_COLORS = {
-  pink:   '#f91880',
-  blue:   '#1d9bf0',
-  green:  '#2ea043',
-  amber:  '#febc2e',
-  violet: '#8957e5',
-  slate:  '#64748b',
-};
-function normalizePinColor(value) {
-  return Object.prototype.hasOwnProperty.call(PIN_COLORS, value) ? value : 'pink';
-}
+let pendingPinColor = defaultPinColor();
 // Map each audience to one of the SVG icons from icons.js so the
 // composer pill and the post-card hint badge share visuals (and so
 // the design stays icon-consistent with the rest of the app instead
@@ -630,8 +615,15 @@ function dispatch(path) {
     hydrateHome('following');
   } else if (path === '/settings' || /^\/settings\/[a-z]+$/.test(path)) {
     document.title = t('Settings') + ' / spotcode-sns';
-    app.innerHTML = renderSettings();
-    bindSettings();
+    app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込み中…") + "</p></div>");
+    import('./views/settings.js').then(({ renderSettings, bindSettings }) => {
+      if (currentPath() !== path) return;
+      app.innerHTML = renderSettings();
+      bindSettings();
+    }).catch((err) => {
+      console.warn('settings view load', err);
+      app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込みに失敗しました") + "</p></div>");
+    });
   } else if (spotMatch) {
     // Accept either the JP city name (/spot/世田谷区) or a romaji slug
     // (/spot/setagaya). The view always queries Supabase with the JP
@@ -643,8 +635,15 @@ function dispatch(path) {
     hydrateSpot(city);
   } else if (cardMatch) {
     document.title = t("名刺 / spotcode-sns");
-    app.innerHTML = renderBusinessCard(cardMatch[1], cardMatch[2] === 'cards');
-    hydrateBusinessCard(cardMatch[1], cardMatch[2] === 'cards');
+    app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込み中…") + "</p></div>");
+    import('./views/business-card.js').then(({ renderBusinessCard, hydrateBusinessCard }) => {
+      if (currentPath() !== path) return;
+      app.innerHTML = renderBusinessCard(cardMatch[1], cardMatch[2] === 'cards');
+      hydrateBusinessCard(cardMatch[1], cardMatch[2] === 'cards');
+    }).catch((err) => {
+      console.warn('business card view load', err);
+      app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込みに失敗しました") + "</p></div>");
+    });
   } else if (followMatch) {
     const handle = followMatch[1];
     const kind   = followMatch[2]; // 'following' | 'followers'
@@ -658,10 +657,17 @@ function dispatch(path) {
       postId: mapFocusMatch[3] || null,
     };
     document.title = t('Spot') + ' / spotcode-sns';
-    app.innerHTML = renderMap();
-    restoreComposerDraft();
-    if (pendingSpot) syncSpotChip(pendingSpot);
-    hydrateMap(null, focus);
+    app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込み中…") + "</p></div>");
+    import('./views/map.js').then(({ renderMap, hydrateMap }) => {
+      if (currentPath() !== path) return;
+      app.innerHTML = renderMap();
+      restoreComposerDraft();
+      if (pendingSpot) syncSpotChip(pendingSpot);
+      hydrateMap(null, focus);
+    }).catch((err) => {
+      console.warn('map view load', err);
+      app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込みに失敗しました") + "</p></div>");
+    });
   } else if (mapCityMatch) {
     // City-scoped map view — reached from the right-rail "Trending spots"
     // card. Same canvas as /spots, but filtered and fit-bounded to a
@@ -669,16 +675,30 @@ function dispatch(path) {
     const raw = decodeURIComponent(mapCityMatch[1]);
     const city = romajiToJp(raw) || raw;
     document.title = city + ' / spotcode-sns';
-    app.innerHTML = renderMap(city);
-    restoreComposerDraft();
-    if (pendingSpot) syncSpotChip(pendingSpot);
-    hydrateMap(city);
+    app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込み中…") + "</p></div>");
+    import('./views/map.js').then(({ renderMap, hydrateMap }) => {
+      if (currentPath() !== path) return;
+      app.innerHTML = renderMap(city);
+      restoreComposerDraft();
+      if (pendingSpot) syncSpotChip(pendingSpot);
+      hydrateMap(city);
+    }).catch((err) => {
+      console.warn('map view load', err);
+      app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込みに失敗しました") + "</p></div>");
+    });
   } else if (mapMatch) {
     document.title = t('Map') + ' / spotcode-sns';
-    app.innerHTML = renderMap();
-    restoreComposerDraft();
-    if (pendingSpot) syncSpotChip(pendingSpot);
-    hydrateMap();
+    app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込み中…") + "</p></div>");
+    import('./views/map.js').then(({ renderMap, hydrateMap }) => {
+      if (currentPath() !== path) return;
+      app.innerHTML = renderMap();
+      restoreComposerDraft();
+      if (pendingSpot) syncSpotChip(pendingSpot);
+      hydrateMap();
+    }).catch((err) => {
+      console.warn('map view load', err);
+      app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込みに失敗しました") + "</p></div>");
+    });
   } else if (analyticsMatch) {
     const pid = analyticsMatch[1];
     document.title = t('Analytics') + ' / spotcode-sns';
@@ -699,8 +719,15 @@ function dispatch(path) {
     hydrateNotifications();
   } else if (reposMatch) {
     document.title = t('Repos') + ' / spotcode-sns';
-    app.innerHTML = renderRepos();
-    hydrateRepos();
+    app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込み中…") + "</p></div>");
+    import('./views/repos.js').then(({ renderRepos, hydrateRepos }) => {
+      if (currentPath() !== path) return;
+      app.innerHTML = renderRepos();
+      hydrateRepos();
+    }).catch((err) => {
+      console.warn('repos view load', err);
+      app.innerHTML = ("<div class=\"stub\"><p class=\"stub__sub\">" + t("読み込みに失敗しました") + "</p></div>");
+    });
   } else if (eventMatch) {
     const eid = eventMatch[1];
     document.title = 'event #' + eid + ' / spotcode-sns';
@@ -898,7 +925,7 @@ function clearComposerUI() {
   syncKindToggle();
   pendingVisibility = 'public';
   syncVisToggle();
-  pendingPinColor = 'pink';
+  pendingPinColor = defaultPinColor();
   syncPinColorPicker();
   hideDraftBanner();
 }
@@ -924,10 +951,11 @@ function syncVisToggle() {
 
 function syncPinColorPicker() {
   pendingPinColor = normalizePinColor(pendingPinColor);
-  const sel = document.getElementById('compose-pin-color');
-  if (sel) sel.value = pendingPinColor;
-  document.querySelectorAll('.compose-pin-color').forEach((el) => {
-    el.style.setProperty('--pin-color', PIN_COLORS[pendingPinColor]);
+  document.querySelectorAll('[data-pin-color-option]').forEach((btn) => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.pinColorOption === pendingPinColor));
+  });
+  document.querySelectorAll('.compose-pin-palette').forEach((el) => {
+    el.style.setProperty('--pin-color', PIN_COLOR_OPTIONS[pendingPinColor]);
   });
 }
 
@@ -969,6 +997,31 @@ function renderPhotoPreviews() {
   )).join('');
 }
 
+function photoErrorMessage(err) {
+  return (
+    err.message === 'NOT_IMAGE' ? t("画像ファイルだけ選んでください")
+    : err.message === 'TOO_LARGE' ? t("画像が大きすぎます（20MB まで）")
+    : err.message === 'IMAGE_DECODE' ? t("画像を読み込めませんでした")
+    : err.message
+  );
+}
+
+async function attachPhotoFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  const room = Math.max(0, PHOTO_CAP - pendingPhotos.length);
+  if (!room) { alert(t("写真は最大 {n} 枚までです", { n: PHOTO_CAP })); return; }
+  const toProcess = files.slice(0, room);
+  try {
+    const urls = await Promise.all(toProcess.map(f => fileToPhotoDataUrl(f)));
+    pendingPhotos.push(...urls.slice(0, Math.max(0, PHOTO_CAP - pendingPhotos.length)));
+    renderPhotoPreviews();
+    autosaveComposerDraft();
+  } catch (err) {
+    alert(t("写真の処理に失敗: ") + photoErrorMessage(err));
+  }
+}
+
 // File-input change → resize each picked file in parallel and append
 // to pendingPhotos (capped). Sourced from the composer-injected
 // hidden <input type="file">; we wire it once at document level so
@@ -985,33 +1038,33 @@ document.addEventListener('change', async (e) => {
     autosaveComposerDraft.flush();
     return;
   }
-  if (e.target?.id === 'compose-pin-color') {
-    pendingPinColor = normalizePinColor(e.target.value);
-    syncPinColorPicker();
-    autosaveComposerDraft();
-    autosaveComposerDraft.flush();
-    return;
-  }
   if (e.target?.id !== 'compose-photo-input') return;
   const files = Array.from(e.target.files || []);
   e.target.value = ''; // allow re-picking the same file later
-  if (!files.length) return;
-  const room = Math.max(0, PHOTO_CAP - pendingPhotos.length);
-  if (!room) { alert(t("写真は最大 {n} 枚までです", { n: PHOTO_CAP })); return; }
-  const toProcess = files.slice(0, room);
-  try {
-    const urls = await Promise.all(toProcess.map(f => fileToPhotoDataUrl(f)));
-    pendingPhotos.push(...urls.slice(0, Math.max(0, PHOTO_CAP - pendingPhotos.length)));
-    renderPhotoPreviews();
-    autosaveComposerDraft();
-  } catch (err) {
-    const reason =
-      err.message === 'NOT_IMAGE' ? t("画像ファイルだけ選んでください")
-      : err.message === 'TOO_LARGE' ? t("画像が大きすぎます（20MB まで）")
-      : err.message === 'IMAGE_DECODE' ? t("画像を読み込めませんでした")
-      : err.message;
-    alert(t("写真の処理に失敗: ") + reason);
-  }
+  attachPhotoFiles(files);
+});
+
+document.addEventListener('dragover', (e) => {
+  const form = e.target.closest('.idea-form');
+  if (!form || !e.dataTransfer?.types?.includes('Files')) return;
+  e.preventDefault();
+  form.classList.add('is-dragging-photo');
+  e.dataTransfer.dropEffect = 'copy';
+});
+
+document.addEventListener('dragleave', (e) => {
+  const form = e.target.closest('.idea-form');
+  if (!form || form.contains(e.relatedTarget)) return;
+  form.classList.remove('is-dragging-photo');
+});
+
+document.addEventListener('drop', (e) => {
+  const form = e.target.closest('.idea-form');
+  if (!form) return;
+  e.preventDefault();
+  form.classList.remove('is-dragging-photo');
+  const files = Array.from(e.dataTransfer?.files || []).filter((file) => /^image\//.test(file.type));
+  attachPhotoFiles(files);
 });
 
 function showDraftBanner(message) {
@@ -2110,6 +2163,15 @@ document.addEventListener('click', (e) => {
         return true;
       },
     });
+    return;
+  }
+  const pinColorBtn = e.target.closest('[data-pin-color-option]');
+  if (pinColorBtn) {
+    e.preventDefault();
+    pendingPinColor = normalizePinColor(pinColorBtn.dataset.pinColorOption);
+    syncPinColorPicker();
+    autosaveComposerDraft();
+    autosaveComposerDraft.flush();
     return;
   }
   // Remove a single queued photo from the preview row.

@@ -23,6 +23,32 @@ const TIMELINE_TIMEOUT_MS = 45 * 1000;
 let renderVersion = 0;
 let timelineObserver = null;
 
+function afterFirstPaint(fn) {
+  const run = () => {
+    if ('requestIdleCallback' in window) requestIdleCallback(fn, { timeout: 1800 });
+    else setTimeout(fn, 120);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(run));
+}
+
+function hydratePostExtras(posts, active, repaint) {
+  const ids = posts.map(p => p.id);
+  if (!ids.length) return;
+  afterFirstPaint(() => {
+    if (!active()) return;
+    Promise.allSettled([
+      hydratePostLikes(ids),
+      hydrateRepostsMine(ids),
+      hydrateBookmarksMine(ids),
+      hydrateQuotedPosts(posts),
+    ]).then(() => {
+      if (!active()) return;
+      repaint();
+      hydratePolls(posts).catch(() => {});
+    }).catch(() => {});
+  });
+}
+
 // Per-tab cache scope keys for the timeline localStorage cache.
 const SCOPE = { foryou: 'home', following: 'following' };
 
@@ -130,18 +156,8 @@ export async function hydrateHome(tab = 'foryou') {
     const posts = await withTimeout(followingPosts({ limit: 40 }), TIMELINE_TIMEOUT_MS, t("タイムライン取得"));
     if (!active()) return;
     paint(posts);
-    const ids = posts.map(p => p.id);
     // Supplementary requests must never prevent the timeline from displaying.
-    Promise.allSettled([
-      hydratePostLikes(ids), hydrateRepostsMine(ids),
-      hydrateBookmarksMine(ids), hydrateQuotedPosts(posts),
-    ]).then(() => {
-      if (!active()) return;
-      paint(posts);
-      hydratePolls(posts).catch(() => {});
-    }).catch(err => {
-      if (active()) showTimelineError(list, err, () => hydrateHome(tab));
-    });
+    hydratePostExtras(posts, active, () => paint(posts));
   } catch (err) {
     if (active()) showTimelineError(list, err, () => hydrateHome(tab));
   }
@@ -180,10 +196,9 @@ async function hydrateForYou(list, version, owner) {
       status.textContent = '';
       sentinel.hidden = !hasMore;
       // Update only this page so editing/expanded content in older pages survives.
-      const ids = added.map(p => p.id);
-      Promise.all([hydratePostLikes(ids), hydrateRepostsMine(ids), hydrateBookmarksMine(ids), hydrateQuotedPosts(added)])
-        .then(() => { if (active() && batch.isConnected) { batch.innerHTML = added.map(renderPost).join(''); hydratePolls(added).catch(() => {}); } })
-        .catch(() => {});
+      hydratePostExtras(added, () => active() && batch.isConnected, () => {
+        batch.innerHTML = added.map(renderPost).join('');
+      });
     } catch (error) {
       if (!active()) return;
       if (first) { showTimelineError(list, error, load); return; }

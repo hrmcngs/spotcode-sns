@@ -18,8 +18,22 @@ const KEY = 'spotcode:hide-badges';
 const KEY_TASKS_HIDDEN = 'spotcode:hide-tasks';
 const KEY_TASK_REPOS = 'spotcode:hidden-task-repos';
 const KEY_PRIVATE_TASKS = 'spotcode:private-tasks';
+const KEY_DEFAULT_PIN_COLOR = 'spotcode:default-pin-color';
 let preferenceWrites = Promise.resolve();
 let selectionRevision = 0;
+
+export const PIN_COLOR_OPTIONS = {
+  pink:   '#f91880',
+  blue:   '#1d9bf0',
+  green:  '#2ea043',
+  amber:  '#febc2e',
+  violet: '#8957e5',
+  slate:  '#64748b',
+};
+
+export function normalizePinColor(value) {
+  return Object.prototype.hasOwnProperty.call(PIN_COLOR_OPTIONS, value) ? value : 'pink';
+}
 
 export async function hydrateIssueDisplayPrefs(userId) {
   if (!userId) return;
@@ -118,6 +132,17 @@ export function privateTasksEnabled() {
 export function setPrivateTasksEnabled(enabled) {
   try { enabled ? localStorage.setItem(KEY_PRIVATE_TASKS, '1') : localStorage.removeItem(KEY_PRIVATE_TASKS); } catch {}
   persistIssueDisplayPrefs();
+}
+
+export function defaultPinColor() {
+  try { return normalizePinColor(localStorage.getItem(KEY_DEFAULT_PIN_COLOR)); }
+  catch { return 'pink'; }
+}
+
+export function setDefaultPinColor(value) {
+  const color = normalizePinColor(value);
+  try { localStorage.setItem(KEY_DEFAULT_PIN_COLOR, color); } catch {}
+  return color;
 }
 
 // Apply every display-pref attribute on <html>. Call once on boot

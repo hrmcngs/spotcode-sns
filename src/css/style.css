@@ -612,29 +612,35 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   background: transparent; color: var(--text);
   font: inherit; cursor: pointer;
 }
-.compose-pin-color {
+.compose-pin-palette {
   display: inline-flex; align-items: center; gap: .35em;
   background: transparent; border: 1px dashed var(--border);
   color: var(--muted); cursor: pointer;
   padding: .15em .55em; border-radius: 999px;
   font-size: .78rem; font-weight: 600;
 }
-.compose-pin-color:focus-within {
+.compose-pin-palette:focus-within {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
-.compose-pin-color__dot {
-  width: .85em; height: .85em; border-radius: 50%;
+.compose-pin-swatch,
+.settings-pin-swatch {
+  width: 22px; height: 22px; border-radius: 50%;
   background: var(--pin-color, #f91880);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pin-color, #f91880) 25%, transparent);
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pin-color, #f91880) 35%, transparent);
   flex: 0 0 auto;
+  cursor: pointer;
 }
-.compose-pin-color select {
-  position: relative;
-  max-width: 100%;
-  margin: 0; padding: .1em .2em; border: 0;
-  background: transparent; color: var(--text);
-  font: inherit; cursor: pointer;
+.compose-pin-swatch[aria-pressed="true"],
+.settings-pin-swatch[aria-pressed="true"] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pin-color, #f91880) 38%, transparent);
+}
+.settings-pin-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
 }
 .post__edit-vis-input {
   padding: .35em .5em;
@@ -1071,6 +1077,25 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   cursor: pointer;
 }
 .compose-photo__remove:hover { background: rgba(0,0,0,.85); }
+.idea-form.is-dragging-photo .composer-body {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.idea-form.is-dragging-photo textarea {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.compose-drop-hint {
+  display: none;
+  align-items: center;
+  gap: .4rem;
+  margin-top: .5rem;
+  color: var(--muted);
+  font-size: .84rem;
+}
+.compose-drop-hint .icon { stroke: currentColor; fill: none; }
+@media (hover: hover) and (pointer: fine) {
+  .compose-drop-hint { display: inline-flex; }
+}
 
 /* Rendered photos in a post — 1 photo full-width; 2 side-by-side;
    3 = 1 big left + 2 stacked right; 4 = 2x2. Max height clamps tall
