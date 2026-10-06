@@ -150,14 +150,16 @@ export async function hydrateMap(city, focus = null) {
 
   // Center: in city mode prefer the city's spots (fitBounds below
   // handles real positioning); otherwise prefer the exact GPS fix,
-  // then IP approx, then the first spotted post, then a Tokyo default.
+  // then the first spotted post. IP approximation is only a last
+  // visual fallback when there are no pins yet; framing the map around
+  // IP while pins exist makes /spots look like it "moved" to Tokyo.
   const hasFocus = focus && Number.isFinite(focus.lat) && Number.isFinite(focus.lng);
   const center = hasFocus ? [focus.lat, focus.lng]
                 : (cityFiltered && cityFiltered.length)
                 ? [cityFiltered[0].spot.lat, cityFiltered[0].spot.lng]
                 : here       ? [here.lat, here.lng]
-                : approxIp  ? [approxIp.lat, approxIp.lng]
                 : spotted[0] ? [spotted[0].spot.lat, spotted[0].spot.lng]
+                : approxIp  ? [approxIp.lat, approxIp.lng]
                 : [TOKYO.lat, TOKYO.lng];
 
   mapInst = L.map(canvas, { zoomControl: true }).setView(center, hasFocus ? 17 : (here ? 15 : 13));
@@ -351,6 +353,13 @@ export async function hydrateMap(city, focus = null) {
       const bounds = L.latLngBounds(cityFiltered.map(p => [p.spot.lat, p.spot.lng]));
       mapInst.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
+  } else if (!hasFocus && !here && spotted.length) {
+    if (spotted.length === 1) {
+      mapInst.setView([spotted[0].spot.lat, spotted[0].spot.lng], 14);
+    } else {
+      const bounds = L.latLngBounds(spotted.map(p => [p.spot.lat, p.spot.lng]));
+      mapInst.fitBounds(bounds, { padding: [32, 32], maxZoom: 15, animate: false });
+    }
   }
 
   refreshVisibleMarkers(true);
@@ -360,11 +369,13 @@ export async function hydrateMap(city, focus = null) {
   if (status) {
     if (cachedLocation()) {
       status.textContent = t('map.subtitle_with_loc', { n: spotted.length, r: getRadius() });
-    } else if (approxIp) {
+    } else if (approxIp && !spotted.length) {
       // IP-only fix — show the city name so the user knows the
       // centering is approximate and that the unlock gate is inactive.
       const where = approxIp.city || approxIp.country || t("推定位置");
       status.textContent = t("{n} 件のピン · 地図はおおよそ {where} 中心 (IP 推定)", { n: spotted.length, where });
+    } else if (spotted.length) {
+      status.textContent = t('map.subtitle_no_loc', { n: spotted.length });
     } else if (permissionDenied()) {
       status.textContent = t('map.subtitle_denied', { n: spotted.length });
     } else {

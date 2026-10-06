@@ -3933,6 +3933,7 @@ html[data-theme="dark"] body { --text: #ededed; --muted: #b3b3b3; }
 .notif { padding: 20px 16px; background: var(--surface); }
 .profile-name { font-size: 28px; letter-spacing: normal; }
 .right-rail { display: none; }
+.native-compose-modal { z-index: 1700; }
 .native-compose-modal .modal__card { width: min(640px, calc(100% - 32px)); padding: 16px; background: var(--bg); }
 .compose-dialog-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; margin-bottom: 20px; }
 .compose-dialog-head h2 { font-size: 17px; margin: 0; }
