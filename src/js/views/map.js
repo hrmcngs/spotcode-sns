@@ -93,6 +93,8 @@ export async function hydrateMap(city, focus = null) {
   const canvas = document.getElementById('map-canvas');
   const status = document.getElementById('map-status');
   if (!canvas) return;
+  const hasFocus = focus && Number.isFinite(focus.lat) && Number.isFinite(focus.lng);
+  const preferViewerLocation = !hasFocus && !city;
 
   // Free any prior Leaflet instance BEFORE we potentially recreate
   // one. Otherwise a return-visit to /spots leaves the old map bound
@@ -113,6 +115,9 @@ export async function hydrateMap(city, focus = null) {
     return cachedForPaint;
   });
   const herePromise = withTimeout(getMyLocation(), 8000, t("現在地取得")).catch(() => null);
+  if (preferViewerLocation && status && !cachedLocation()) {
+    status.textContent = t("現在地を取得中…");
+  }
   // Coarse IP fix only when the exact fix isn't already sitting in
   // the module-level cache. Fires in parallel so it's ready by the
   // time we know `here` is null.
@@ -131,11 +136,13 @@ export async function hydrateMap(city, focus = null) {
   }
   if (myVersion !== renderVersion) return;
 
-  const [posts, approxIp] = await Promise.all([
-    postsPromise, approxPromise,
+  const [posts, approxIp, initialHere] = await Promise.all([
+    postsPromise,
+    approxPromise,
+    preferViewerLocation ? herePromise : Promise.resolve(cachedLocation()),
   ]);
   if (myVersion !== renderVersion) return;
-  let here = cachedLocation();
+  let here = cachedLocation() || initialHere;
   const hadInitialHere = !!here;
 
   // `postsWithSpots` already filters server-side (`spot is not null`)
@@ -150,8 +157,6 @@ export async function hydrateMap(city, focus = null) {
     : null;
   const spotted = (cityFiltered && cityFiltered.length) ? cityFiltered : allSpotted;
 
-  const hasFocus = focus && Number.isFinite(focus.lat) && Number.isFinite(focus.lng);
-  const preferViewerLocation = !hasFocus && !city;
   // Center: post-focus links and city-scoped maps stay on their target.
   // The plain Spots tab is location-first: exact GPS, then IP estimate,
   // then pins as a fallback if location is unavailable.
