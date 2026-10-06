@@ -19,7 +19,7 @@ import { openAuth }        from './views/auth-modal.js';
 import { openEditProfile } from './views/edit-profile-modal.js';
 import { openReport }      from './views/report-modal.js';
 import { initSearch }      from './views/search-dropdown.js';
-import { allUsers, getUser, postsWithSpots, trendingCities, onPostsCacheChange, cachedPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
+import { allUsers, getUser, getPost, postsWithSpots, trendingCities, onPostsCacheChange, cachedPosts, addPost, removePost, updatePost, probeSchema, prependToTimelineCaches,
          markPendingDelete, unmarkPendingDelete, resetTimelineCaches } from './data.js';
 import { currentUser, logout, onAuthChange, initAuth, listSavedAccounts, switchAccount } from './auth.js';
 import { getOfficialAccount, cachedOfficialAccount, OFFICIAL_HANDLE } from './official-account.js';
@@ -1569,6 +1569,8 @@ document.addEventListener('click', (e) => {
     const ghLink = post.querySelector('.post__meta .post__link')?.getAttribute('href') || '';
     const repoFullName = post.getAttribute('data-repo-full-name') || '';
     const visibility = post.getAttribute('data-visibility') || 'public';
+    const hasSpot = post.getAttribute('data-has-spot') === '1';
+    const spotPinColor = normalizePinColor(post.getAttribute('data-spot-pin-color'));
     const escAttr = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
       '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
     }[c]));
@@ -1601,6 +1603,15 @@ document.addEventListener('click', (e) => {
           '<textarea rows="1" class="post__edit-repo-input" placeholder="owner/repository" ' +
             'autocomplete="off" autocapitalize="off" spellcheck="false">' + escAttr(repoFullName) + '</textarea>' +
         '</label>' +
+        (hasSpot
+          ? '<div class="post__edit-pin-palette" role="group" aria-label="' + escape(t('compose.pin_color')) + '">' +
+              Object.entries(PIN_COLOR_OPTIONS).map(([value, hex]) =>
+                '<button type="button" class="post__edit-pin-swatch act--edit-pin-color" data-edit-pin-color="' + value + '" ' +
+                  'style="--pin-color:' + hex + '" aria-label="' + escape(t('compose.pin_color.' + value)) + '" ' +
+                  'title="' + escape(t('compose.pin_color.' + value)) + '" aria-pressed="' + (spotPinColor === value ? 'true' : 'false') + '"></button>'
+              ).join('') +
+            '</div>'
+          : '') +
       '</div>' +
       '<div class="post__edit-actions">' +
         '<button type="button" class="btn btn--ghost btn--sm act--edit-cancel">' + escape(t('common.cancel')) + '</button>' +
@@ -1620,6 +1631,14 @@ document.addEventListener('click', (e) => {
       const selected = btn === kindToggleBtn && active;
       btn.classList.toggle('is-active', selected);
       btn.setAttribute('aria-pressed', String(selected));
+    });
+    return;
+  }
+  const editPinColorBtn = e.target.closest('.act--edit-pin-color');
+  if (editPinColorBtn) {
+    e.preventDefault();
+    editPinColorBtn.closest('.post__edit-pin-palette')?.querySelectorAll('.act--edit-pin-color').forEach((btn) => {
+      btn.setAttribute('aria-pressed', String(btn === editPinColorBtn));
     });
     return;
   }
@@ -1654,21 +1673,34 @@ document.addEventListener('click', (e) => {
     const newRepo = repoInput ? repoInput.value.trim() : '';
     const visInput = body.querySelector('.post__edit-vis-input');
     const newVisibility = visInput.value;
+    const pinColorInput = body.querySelector('.act--edit-pin-color[aria-pressed="true"]');
+    const newPinColor = pinColorInput ? normalizePinColor(pinColorInput.dataset.editPinColor) : null;
     saveBtn.disabled = true;
     ta.disabled = true;
     if (linkInput) linkInput.disabled = true;
     if (repoInput) repoInput.disabled = true;
     visInput.disabled = true;
-    updatePost(post.getAttribute('data-post-id'), {
-      body:       newBody,
-      kind:       selectedKind,
-      visibility: newVisibility,
-      githubLink: newLink || null,
-      repoFullName: newRepo || null,
+    const postId = post.getAttribute('data-post-id');
+    Promise.resolve().then(async () => {
+      const patch = {
+        body:       newBody,
+        kind:       selectedKind,
+        visibility: newVisibility,
+        githubLink: newLink || null,
+        repoFullName: newRepo || null,
+      };
+      if (newPinColor) {
+        const current = await getPost(postId);
+        if (current?.spot && typeof current.spot === 'object') {
+          patch.spot = { ...current.spot, pinColor: newPinColor };
+        }
+      }
+      return updatePost(postId, patch);
     })
       .then((updated) => {
         post.setAttribute('data-repo-full-name', newRepo);
         post.setAttribute('data-visibility', updated.visibility);
+        if (updated.spot?.pinColor) post.setAttribute('data-spot-pin-color', updated.spot.pinColor);
         // Re-render the body inline — keep the post card in place so
         // scroll position / surrounding cards don't jump.
         // inlineFormat lives in post.js; cheaper than a full refresh().

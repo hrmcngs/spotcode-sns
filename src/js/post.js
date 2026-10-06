@@ -251,7 +251,7 @@ export function renderPost(p) {
   const displayName   = maskName(u.handle, u.name);
   const displayHandle = maskHandle(u.handle);
   return (
-    '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '" data-visibility="' + escape(p.visibility || 'public') + '" data-repo-full-name="' + escape(p.repoFullName || '') + '">' +
+    '<article class="post' + (locked ? ' post--locked' : '') + '" data-post-id="' + escape(p.id) + '" data-visibility="' + escape(p.visibility || 'public') + '" data-repo-full-name="' + escape(p.repoFullName || '') + '" data-has-spot="' + (p.spot ? '1' : '0') + '" data-spot-pin-color="' + escape(p.spot?.pinColor || 'pink') + '">' +
       '<div class="post__main">' +
         '<div class="post__head">' +
           renderAvatar(u, { tag: 'a', href: profileUrl, title: displayName, extra: 'post__avatar' }) +

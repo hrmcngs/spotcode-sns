@@ -1008,6 +1008,27 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
+.post__edit-pin-palette {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .2rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.post__edit-pin-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--pin-color, #f91880);
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pin-color, #f91880) 35%, transparent);
+  cursor: pointer;
+}
+.post__edit-pin-swatch[aria-pressed="true"] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pin-color, #f91880) 38%, transparent);
+}
 .post__edit-link {
   display: inline-flex; align-items: center; gap: .35rem;
   font-size: .8rem; color: var(--muted);
