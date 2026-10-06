@@ -9,7 +9,8 @@ import { icon } from './icons.js';
 import { renderAvatar } from './avatar.js';
 import { t } from './i18n.js';
 import { isPostingAsOfficial } from './posting-identity.js';
-import { defaultPinColor, PIN_COLOR_OPTIONS } from './display-prefs.js';
+import { defaultPinColor } from './display-prefs.js';
+import { pinColorButtonHtml } from './pin-color-picker.js';
 
 export function renderIdeaForm({ user = null } = {}) {
   if (!user) {
@@ -50,13 +51,7 @@ export function renderIdeaForm({ user = null } = {}) {
             '<span data-spot-text>' + t('home.composer.add_spot') + '</span>' +
           '</button>' +
           '<button type="button" class="spot-chip-clear" id="compose-spot-clear" hidden title="' + t('composer.clear_spot') + '">×</button>' +
-          '<div class="compose-pin-palette" role="group" aria-label="' + t('compose.pin_color') + '">' +
-            Object.entries(PIN_COLOR_OPTIONS).map(([value, hex]) =>
-              '<button type="button" class="compose-pin-swatch" data-pin-color-option="' + value + '" ' +
-                'style="--pin-color:' + hex + '" aria-label="' + t('compose.pin_color.' + value) + '" ' +
-                'title="' + t('compose.pin_color.' + value) + '" aria-pressed="' + (defaultPinColor() === value ? 'true' : 'false') + '"></button>'
-            ).join('') +
-          '</div>' +
+          pinColorButtonHtml(defaultPinColor(), 'data-pin-color-option') +
           '<button type="button" class="compose-link-toggle" id="compose-link-toggle" aria-expanded="false">' +
             icon('github', { size: 12, fill: true, className: 'icon--inline' }) +
             '<span>' + t('home.composer.add_url') + '</span>' +

@@ -32,7 +32,10 @@ export const PIN_COLOR_OPTIONS = {
 };
 
 export function normalizePinColor(value) {
-  return Object.prototype.hasOwnProperty.call(PIN_COLOR_OPTIONS, value) ? value : 'pink';
+  const raw = String(value || '').trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(PIN_COLOR_OPTIONS, raw)) return PIN_COLOR_OPTIONS[raw];
+  const expanded = raw.replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i, '#$1$1$2$2$3$3');
+  return /^#[0-9a-f]{6}$/i.test(expanded) ? expanded : PIN_COLOR_OPTIONS.pink;
 }
 
 export async function hydrateIssueDisplayPrefs(userId) {
@@ -136,7 +139,7 @@ export function setPrivateTasksEnabled(enabled) {
 
 export function defaultPinColor() {
   try { return normalizePinColor(localStorage.getItem(KEY_DEFAULT_PIN_COLOR)); }
-  catch { return 'pink'; }
+  catch { return PIN_COLOR_OPTIONS.pink; }
 }
 
 export function setDefaultPinColor(value) {

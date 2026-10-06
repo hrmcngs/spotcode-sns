@@ -214,6 +214,7 @@ export const UI_EN = {
   "リポジトリの取得件数が上限を超えました。": "The repository result limit was exceeded.",
   "写真を追加": "Add photos",
   "画像をドロップして添付": "Drop images to attach",
+  "Colour picker": "Colour picker",
   "対象ユーザーが見つかりません": "User not found",
   "自分自身はフォローできません": "You cannot follow yourself",
   "そのユーザーが見つかりません": "User not found",

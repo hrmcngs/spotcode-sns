@@ -11,7 +11,8 @@ import { isPrivacyMode, setPrivacyMode, canUsePrivacyMode, maskHandle, maskName 
 import { getLang, setLang, t } from '../i18n.js';
 import { currentUser, updateProfile, listSavedAccounts, removeSavedAccount, switchAccount, onAuthChange, verifyCurrentPassword, mfaStatus, beginMfaEnrollment, confirmMfaEnrollment, disableMfa } from '../auth.js';
 import { openAuth } from './auth-modal.js';
-import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, selectedTaskRepos, setTaskRepoVisible, privateTasksEnabled, setPrivateTasksEnabled, defaultPinColor, setDefaultPinColor, PIN_COLOR_OPTIONS } from '../display-prefs.js';
+import { badgesHidden, setBadgesHidden, tasksHidden, setTasksHidden, selectedTaskRepos, setTaskRepoVisible, privateTasksEnabled, setPrivateTasksEnabled, defaultPinColor, setDefaultPinColor } from '../display-prefs.js';
+import { openPinColorPicker, pinColorButtonHtml } from '../pin-color-picker.js';
 import { linkGithubForPrivateIssues, getGithubToken, githubTokenCanReadPrivateRepos } from '../github-oauth.js';
 import { cachedTasks, fetchTasks } from '../github-tasks.js';
 import { setGithubApiToken } from '../language-stats.js';
@@ -503,13 +504,7 @@ function displaySection() {
     '<section class="settings-card">' +
       '<h2>' + t('settings.pin.title') + '</h2>' +
       '<p class="settings__hint">' + t('settings.pin.hint') + '</p>' +
-      '<div class="settings-pin-palette" role="group" aria-label="' + t('compose.pin_color') + '">' +
-        Object.entries(PIN_COLOR_OPTIONS).map(([value, hex]) =>
-          '<button type="button" class="settings-pin-swatch" data-default-pin-color="' + value + '" ' +
-            'style="--pin-color:' + hex + '" aria-label="' + t('compose.pin_color.' + value) + '" ' +
-            'title="' + t('compose.pin_color.' + value) + '" aria-pressed="' + (defaultPinColor() === value ? 'true' : 'false') + '"></button>'
-        ).join('') +
-      '</div>' +
+      pinColorButtonHtml(defaultPinColor(), 'data-default-pin-color') +
     '</section>' +
     '<section class="settings-card">' +
       '<h2>' + t('settings.lang.title') + '</h2>' +
@@ -737,9 +732,11 @@ export function bindSettings() {
   document.getElementById('followed-post-scope')?.addEventListener('change', event => setFollowedPostScope(event.target.value));
   document.querySelectorAll('[data-default-pin-color]').forEach((button) => {
     button.addEventListener('click', () => {
-      const color = setDefaultPinColor(button.dataset.defaultPinColor);
-      document.querySelectorAll('[data-default-pin-color]').forEach((el) => {
-        el.setAttribute('aria-pressed', String(el.dataset.defaultPinColor === color));
+      openPinColorPicker(button.dataset.pinColorValue || defaultPinColor(), (color) => {
+        setDefaultPinColor(color);
+        button.dataset.pinColorValue = color;
+        button.style.setProperty('--pin-color', color);
+        button.querySelector('code').textContent = color;
       });
     });
   });

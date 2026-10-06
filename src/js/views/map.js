@@ -83,7 +83,9 @@ function pinPopupHtml(post) {
 }
 
 function pinColor(spot) {
-  return PIN_COLORS[spot?.pinColor] || PIN_COLORS.pink;
+  const raw = String(spot?.pinColor || '').trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
+  return PIN_COLORS[raw] || PIN_COLORS.pink;
 }
 
 export async function hydrateMap(city, focus = null) {

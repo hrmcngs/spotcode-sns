@@ -35,7 +35,8 @@ import { toggleLike, isLiked, likeCount,
 import { renderAvatar, fileToPhotoDataUrl } from './avatar.js';
 import { openPostCamera } from './post-camera.js';
 import { initDevMode, isDevMode } from './dev-mode.js';
-import { applyDisplayPrefs, hydrateIssueDisplayPrefs, defaultPinColor, normalizePinColor, PIN_COLOR_OPTIONS } from './display-prefs.js';
+import { applyDisplayPrefs, hydrateIssueDisplayPrefs, defaultPinColor, normalizePinColor } from './display-prefs.js';
+import { openPinColorPicker, pinColorButtonHtml } from './pin-color-picker.js';
 import { romajiToJp, jpToRomaji } from './jp-romaji.js';
 import { initI18n, t }            from './i18n.js';
 import { initIosZoomGuard }       from './ios-zoom.js';
@@ -952,10 +953,9 @@ function syncVisToggle() {
 function syncPinColorPicker() {
   pendingPinColor = normalizePinColor(pendingPinColor);
   document.querySelectorAll('[data-pin-color-option]').forEach((btn) => {
-    btn.setAttribute('aria-pressed', String(btn.dataset.pinColorOption === pendingPinColor));
-  });
-  document.querySelectorAll('.compose-pin-palette').forEach((el) => {
-    el.style.setProperty('--pin-color', PIN_COLOR_OPTIONS[pendingPinColor]);
+    btn.dataset.pinColorValue = pendingPinColor;
+    btn.style.setProperty('--pin-color', pendingPinColor);
+    btn.querySelector('code').textContent = pendingPinColor;
   });
 }
 
@@ -1603,15 +1603,7 @@ document.addEventListener('click', (e) => {
           '<textarea rows="1" class="post__edit-repo-input" placeholder="owner/repository" ' +
             'autocomplete="off" autocapitalize="off" spellcheck="false">' + escAttr(repoFullName) + '</textarea>' +
         '</label>' +
-        (hasSpot
-          ? '<div class="post__edit-pin-palette" role="group" aria-label="' + escape(t('compose.pin_color')) + '">' +
-              Object.entries(PIN_COLOR_OPTIONS).map(([value, hex]) =>
-                '<button type="button" class="post__edit-pin-swatch act--edit-pin-color" data-edit-pin-color="' + value + '" ' +
-                  'style="--pin-color:' + hex + '" aria-label="' + escape(t('compose.pin_color.' + value)) + '" ' +
-                  'title="' + escape(t('compose.pin_color.' + value)) + '" aria-pressed="' + (spotPinColor === value ? 'true' : 'false') + '"></button>'
-              ).join('') +
-            '</div>'
-          : '') +
+        (hasSpot ? pinColorButtonHtml(spotPinColor, 'data-edit-pin-color', 'act--edit-pin-color') : '') +
       '</div>' +
       '<div class="post__edit-actions">' +
         '<button type="button" class="btn btn--ghost btn--sm act--edit-cancel">' + escape(t('common.cancel')) + '</button>' +
@@ -1637,8 +1629,10 @@ document.addEventListener('click', (e) => {
   const editPinColorBtn = e.target.closest('.act--edit-pin-color');
   if (editPinColorBtn) {
     e.preventDefault();
-    editPinColorBtn.closest('.post__edit-pin-palette')?.querySelectorAll('.act--edit-pin-color').forEach((btn) => {
-      btn.setAttribute('aria-pressed', String(btn === editPinColorBtn));
+    openPinColorPicker(editPinColorBtn.dataset.pinColorValue, (color) => {
+      editPinColorBtn.dataset.pinColorValue = color;
+      editPinColorBtn.style.setProperty('--pin-color', color);
+      editPinColorBtn.querySelector('code').textContent = color;
     });
     return;
   }
@@ -1673,8 +1667,8 @@ document.addEventListener('click', (e) => {
     const newRepo = repoInput ? repoInput.value.trim() : '';
     const visInput = body.querySelector('.post__edit-vis-input');
     const newVisibility = visInput.value;
-    const pinColorInput = body.querySelector('.act--edit-pin-color[aria-pressed="true"]');
-    const newPinColor = pinColorInput ? normalizePinColor(pinColorInput.dataset.editPinColor) : null;
+    const pinColorInput = body.querySelector('.act--edit-pin-color');
+    const newPinColor = pinColorInput ? normalizePinColor(pinColorInput.dataset.pinColorValue) : null;
     saveBtn.disabled = true;
     ta.disabled = true;
     if (linkInput) linkInput.disabled = true;
@@ -2200,10 +2194,12 @@ document.addEventListener('click', (e) => {
   const pinColorBtn = e.target.closest('[data-pin-color-option]');
   if (pinColorBtn) {
     e.preventDefault();
-    pendingPinColor = normalizePinColor(pinColorBtn.dataset.pinColorOption);
-    syncPinColorPicker();
-    autosaveComposerDraft();
-    autosaveComposerDraft.flush();
+    openPinColorPicker(pendingPinColor, (color) => {
+      pendingPinColor = normalizePinColor(color);
+      syncPinColorPicker();
+      autosaveComposerDraft();
+      autosaveComposerDraft.flush();
+    });
     return;
   }
   // Remove a single queued photo from the preview row.

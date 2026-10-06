@@ -612,35 +612,34 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   background: transparent; color: var(--text);
   font: inherit; cursor: pointer;
 }
-.compose-pin-palette {
-  display: inline-flex; align-items: center; gap: .35em;
-  background: transparent; border: 1px dashed var(--border);
-  color: var(--muted); cursor: pointer;
-  padding: .15em .55em; border-radius: 999px;
-  font-size: .78rem; font-weight: 600;
-}
-.compose-pin-palette:focus-within {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-.compose-pin-swatch,
-.settings-pin-swatch {
-  width: 22px; height: 22px; border-radius: 50%;
-  background: var(--pin-color, #f91880);
-  border: 2px solid transparent;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pin-color, #f91880) 35%, transparent);
-  flex: 0 0 auto;
+.pin-color-button {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .18rem .6rem;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 600;
   cursor: pointer;
 }
-.compose-pin-swatch[aria-pressed="true"],
-.settings-pin-swatch[aria-pressed="true"] {
-  border-color: var(--text);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pin-color, #f91880) 38%, transparent);
+.pin-color-button:hover,
+.pin-color-button:focus-visible {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--pin-color, #f91880) 60%, var(--border));
+  outline: none;
 }
-.settings-pin-palette {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .6rem;
+.pin-color-button__swatch {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--pin-color, #f91880);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pin-color, #f91880) 30%, transparent);
+}
+.pin-color-button code {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: .78em;
 }
 .post__edit-vis-input {
   padding: .35em .5em;
@@ -1007,27 +1006,6 @@ html[data-dev="1"] .dev-chip { display: inline-flex; align-items: center; }
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-}
-.post__edit-pin-palette {
-  display: inline-flex;
-  align-items: center;
-  gap: .35rem;
-  padding: .2rem .55rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-}
-.post__edit-pin-swatch {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--pin-color, #f91880);
-  border: 2px solid transparent;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pin-color, #f91880) 35%, transparent);
-  cursor: pointer;
-}
-.post__edit-pin-swatch[aria-pressed="true"] {
-  border-color: var(--text);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pin-color, #f91880) 38%, transparent);
 }
 .post__edit-link {
   display: inline-flex; align-items: center; gap: .35rem;
@@ -3935,6 +3913,84 @@ html[data-theme="dark"] body { --text: #ededed; --muted: #b3b3b3; }
 .right-rail { display: none; }
 .native-compose-modal { z-index: 1700; }
 .native-compose-modal .modal__card { width: min(640px, calc(100% - 32px)); padding: 16px; background: var(--bg); }
+.pin-color-modal { z-index: 1800; }
+.pin-color-card {
+  width: min(720px, calc(100vw - 24px));
+  padding: 0;
+  overflow: hidden;
+  background: #22252b;
+}
+.pin-color-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid #3b4049;
+}
+.pin-color-head h2 { margin: 0; font-size: 1.5rem; color: #f1f5f9; }
+.pin-color-head button {
+  border: 0; background: transparent; color: #c8ced8;
+  font: inherit; font-size: 1.6rem; cursor: pointer;
+}
+.pin-color-main {
+  display: grid;
+  grid-template-columns: minmax(140px, 32%) 1fr;
+  height: 260px;
+}
+.pin-color-preview { background: var(--pin-color, #4287f5); }
+.pin-color-field {
+  position: relative;
+  background:
+    linear-gradient(180deg, transparent, #000),
+    linear-gradient(90deg, #fff, var(--pin-hue, #4287f5));
+  touch-action: none;
+  cursor: crosshair;
+}
+.pin-color-field span {
+  position: absolute;
+  width: 24px; height: 24px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #0008;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.pin-color-hue {
+  display: block;
+  width: calc(100% - 64px);
+  margin: 24px 32px 18px;
+  accent-color: #4287f5;
+}
+.pin-color-hex {
+  display: grid;
+  gap: 4px;
+  margin: 0 24px 18px;
+  padding: 0 12px;
+  border: 1px solid #555b65;
+  border-radius: 8px;
+  color: #f1f5f9;
+}
+.pin-color-hex span {
+  justify-self: center;
+  padding: 0 10px;
+  transform: translateY(-50%);
+  background: #22252b;
+  color: #f1f5f9;
+  font-weight: 700;
+}
+.pin-color-hex input {
+  margin-top: -8px;
+  padding: 0 0 14px;
+  border: 0;
+  background: transparent;
+  color: #f1f5f9;
+  text-align: center;
+  font: inherit;
+  font-family: var(--mono);
+}
+.pin-color-hex input:focus { outline: none; }
+.pin-color-actions {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 0 24px 20px;
+}
 .compose-dialog-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; margin-bottom: 20px; }
 .compose-dialog-head h2 { font-size: 17px; margin: 0; }
 .compose-dialog-head button { justify-self: start; border: 0; padding: 10px 4px; min-height: 44px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
