@@ -1506,6 +1506,11 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
     private let manager = CLLocationManager()
     private var requested = false
     private var timeout: DispatchWorkItem?
+    #if targetEnvironment(macCatalyst)
+    private let requestTimeout: TimeInterval = 45
+    #else
+    private let requestTimeout: TimeInterval = 20
+    #endif
 
     override init() {
         super.init()
@@ -1518,16 +1523,16 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
         errorMessage = nil
         timeout?.cancel()
         timeout = nil
+        if let location = manager.location, Self.isUsable(location) {
+            setSpot(from: location)
+        }
         updateAuthorization()
     }
     func clear() { spot = nil }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard requested, let latest = locations.last(where: {
-            $0.horizontalAccuracy >= 0 && abs($0.timestamp.timeIntervalSinceNow) < 120
-        }) else { return }
-        let coordinate = latest.coordinate
+        guard requested, let latest = locations.last(where: Self.isUsable) else { return }
+        setSpot(from: latest)
         finish()
-        spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude, label: NSLocalizedString("現在地", comment: ""), address: nil)
     }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         guard requested else { return }
@@ -1567,7 +1572,15 @@ private final class ComposerLocationProvider: NSObject, ObservableObject, CLLoca
             self.errorMessage = NSLocalizedString("現在地を取得できませんでした。位置情報の設定を確認して再試行してください。", comment: "")
         }
         timeout = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + requestTimeout, execute: work)
+    }
+    private static func isUsable(_ location: CLLocation) -> Bool {
+        CLLocationCoordinate2DIsValid(location.coordinate) &&
+        location.horizontalAccuracy >= 0 && abs(location.timestamp.timeIntervalSinceNow) < 120
+    }
+    private func setSpot(from location: CLLocation) {
+        let coordinate = location.coordinate
+        spot = Spot(lat: coordinate.latitude, lng: coordinate.longitude, label: NSLocalizedString("現在地", comment: ""), address: nil)
     }
     private func finish() {
         requested = false
@@ -1870,9 +1883,19 @@ private struct LocationPickerSheet: View {
                     Button {
                         locating = true
                         location.request()
-                    } label: { Label(NSLocalizedString("現在地を使う", comment: ""), systemImage: "location") }
+                    } label: {
+                        HStack(spacing: 7) {
+                            if location.isLocating {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "location")
+                            }
+                            Text(NSLocalizedString("現在地を使う", comment: ""))
+                        }
+                    }
                         .spotcodeFont(15, weight: .semibold, fallback: .subheadline.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, SpotcodeLayout.value(8, 9))
                         .overlay(Capsule().stroke(SpotcodeTheme.border))
+                        .disabled(location.isLocating)
                     TextField(NSLocalizedString("ラベル（任意・建物名や店名）", comment: ""), text: $label).spotcodeURLField()
                 }.padding(14)
                 HStack(spacing: 8) {
