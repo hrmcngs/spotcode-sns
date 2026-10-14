@@ -1452,18 +1452,13 @@ private struct PinColorOption: Identifiable {
 private struct PinColorPicker: View {
     @Environment(\.appColorTheme) private var appColorTheme
     @Binding var pinColor: String
+    @State private var showingColors = false
 
     var body: some View {
         let _ = appColorTheme
         let selected = PinColorOption.option(pinColor)
 
-        Menu {
-            ForEach(PinColorOption.all) { option in
-                Button { pinColor = option.id } label: {
-                    Label(option.label, systemImage: option.id == selected.id ? "checkmark.circle.fill" : "circle.fill")
-                }
-            }
-        } label: {
+        Button { showingColors = true } label: {
             HStack(spacing: 6) {
                 Circle().fill(selected.color).frame(width: 11, height: 11)
                 Text(NSLocalizedString("ピンの色", comment: ""))
@@ -1472,6 +1467,33 @@ private struct PinColorPicker: View {
             .foregroundColor(SpotcodeTheme.muted)
             .padding(.horizontal, 10).padding(.vertical, SpotcodeLayout.value(8, 7))
             .overlay(Capsule().stroke(SpotcodeTheme.border, style: StrokeStyle(lineWidth: 1, dash: [5])))
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showingColors) {
+            VStack(spacing: 4) {
+                ForEach(PinColorOption.all) { option in
+                    Button {
+                        pinColor = option.id
+                        showingColors = false
+                    } label: {
+                        HStack(spacing: 10) {
+                            Circle().fill(option.color).frame(width: 16, height: 16)
+                            Text(option.label)
+                            Spacer(minLength: 16)
+                            Image(systemName: "checkmark")
+                                .opacity(option.id == selected.id ? 1 : 0)
+                        }
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(option.id == selected.id ? [.isSelected] : [])
+                }
+            }
+            .padding(8)
+            .frame(minWidth: 190)
         }
         .accessibilityLabel(NSLocalizedString("ピンの色", comment: ""))
     }
