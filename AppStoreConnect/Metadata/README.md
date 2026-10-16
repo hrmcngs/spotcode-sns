@@ -1,5 +1,17 @@
 # App Store Connect掲載文言
 
+## 1.0.5（ビルド24）
+
+iOS・iPadOS・macOS共通のRepo検索、ラベル複数選択付きIssue作成、Spotcode表示設定を追加しました。
+
+- 日本語の更新説明: [ja/whats-new-1.0.5.txt](ja/whats-new-1.0.5.txt)
+- 英語の更新説明: [en/whats-new-1.0.5.txt](en/whats-new-1.0.5.txt)
+- 審査向け操作説明: [en/review-notes-1.0.5.txt](en/review-notes-1.0.5.txt)
+
+審査用アカウント情報は既存のApp Store Connect設定を使用します。上記ファイルには認証情報を含めていません。
+
+## 過去の掲載文言（1.0.3）
+
 1.0.3向け。変更点は1.0.2からの差分です。日本語・英語ともiOS／macOS共通で使用できます。
 
 | 項目 | 日本語 | 英語 |
@@ -13,12 +25,3 @@
 
 接近通知は実機での移動による到着確認が未完了です。macOSではアプリ終了中・スリープ中の通知に対応していないため、その条件を変更点に明記しています。
 
-## 1.0.4（ビルド23）
-
-iOS・iPadOS・macOS共通のRepo検索、ラベル複数選択付きIssue作成、Spotcode表示設定を追加しました。
-
-- 日本語の更新説明: [ja/whats-new-1.0.4.txt](ja/whats-new-1.0.4.txt)
-- 英語の更新説明: [en/whats-new-1.0.4.txt](en/whats-new-1.0.4.txt)
-- 審査向け操作説明: [en/review-notes-1.0.4.txt](en/review-notes-1.0.4.txt)
-
-審査用アカウント情報は既存のApp Store Connect設定を使用します。上記ファイルには認証情報を含めていません。
