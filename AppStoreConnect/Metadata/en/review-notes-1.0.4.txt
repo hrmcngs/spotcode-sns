@@ -1,0 +1,8 @@
+Repository workflow update for iOS, iPadOS, and macOS:
+1. Sign in using the review account already provided in App Store Connect.
+2. Open Repos. Search by repository name or description.
+3. Choose Create Issue on GitHub on a repository card.
+4. Enter a task title. Expand Options to choose multiple existing GitHub labels, an optional assignee, and Spotcode visibility.
+5. Choose Create Issue on GitHub. The app opens GitHub with the selected values. The user reviews and submits the Issue on GitHub.
+
+Repository labels are fetched from GitHub. Label and assignee application require the appropriate GitHub repository permissions. Spotcode visibility is written to the Issue body and does not change the GitHub repository's privacy.

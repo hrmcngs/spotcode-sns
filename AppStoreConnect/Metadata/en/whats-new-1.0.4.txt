@@ -1,0 +1,3 @@
+Search repositories by name or description.
+Open GitHub Issue creation from a repository with a task title, assignee, multiple labels, and Spotcode visibility preferences.
+Expand Options to change labels and visibility. Review and create the Issue on GitHub.

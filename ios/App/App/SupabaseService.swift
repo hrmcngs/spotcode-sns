@@ -531,6 +531,23 @@ actor SupabaseService {
         return try decoder.decode(T.self, from: payload)
     }
 
+    func githubLabels(repository: String, githubToken: String?) async throws -> [String] {
+        guard repository.range(of: #"^[\w.-]+/[\w.-]+$"#, options: .regularExpression) != nil else { throw URLError(.badURL) }
+        var labels: [String] = []
+        for page in 1...100 {
+            var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repository)/labels?per_page=100&page=\(page)")!)
+            request.timeoutInterval = 15
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            if let githubToken, !githubToken.isEmpty { request.setValue("Bearer \(githubToken)", forHTTPHeaderField: "Authorization") }
+            let (payload, response) = try await data(for: request, retryable: true)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+            let batch = try decoder.decode([GitHubIssue.Label].self, from: payload)
+            labels.append(contentsOf: batch.map(\.name))
+            if batch.count < 100 { return labels }
+        }
+        throw URLError(.dataLengthExceedsMaximum)
+    }
+
     func authorizedGithubRepositories(handle: String, githubToken: String) async throws -> [Repository] {
         let user: GitHubRepositoryOwner = try await githubRepositoryRequest("/user", githubToken: githubToken)
         guard user.login.lowercased() == handle.lowercased() else {

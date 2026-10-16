@@ -900,3 +900,23 @@
 "カメラの接続が中断されました。再接続して再試行してください。" = "The camera was interrupted. Reconnect it and try again.";
 
 "写真を添付できませんでした。添付は4枚までです。" = "Unable to attach this photo. You can attach up to four photos.";
+
+"一致するリポジトリがありません" = "No matching repositories";
+
+"追加設定（ラベル・表示／非表示）" = "Options (labels and visibility)";
+
+"ラベル（複数選択可）" = "Labels (select multiple)";
+
+"ラベルを取得できませんでした。GitHubの接続・権限を確認して再試行してください。" = "Could not load labels. Check your GitHub connection and permissions, then retry.";
+
+"ラベルはありません" = "No labels available";
+
+"選択した内容をGitHubへ引き継ぎます。GitHubで確認してIssueを作成してください。" = "Your selections will be passed to GitHub. Review and create the Issue there.";
+
+"GitHubでIssueを作成" = "Create Issue on GitHub";
+
+"タスク名" = "Task title";
+
+"担当者のGitHubユーザー名" = "Assignee GitHub username";
+
+"spotcodeに表示" = "Show on spotcode";

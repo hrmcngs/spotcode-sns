@@ -3401,6 +3401,89 @@ private final class PostMapAnnotation: NSObject, MKAnnotation {
     init(post: Post, coordinate: CLLocationCoordinate2D) { self.post = post; self.coordinate = coordinate }
 }
 
+private struct RepositoryIssueComposer: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    let repository: Repository
+    @State private var title = ""
+    @State private var assignee = ""
+    @State private var visible = true
+    @State private var optionsExpanded = false
+    @State private var labels: [String] = []
+    @State private var selectedLabels: Set<String> = []
+    @State private var loading = false
+    @State private var labelError = false
+    @State private var owner: UUID?
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text(repository.fullName)) {
+                    TextField(NSLocalizedString("タスク名", comment: ""), text: $title)
+                }
+                DisclosureGroup(NSLocalizedString("追加設定（ラベル・表示／非表示）", comment: ""), isExpanded: $optionsExpanded) {
+                    TextField(NSLocalizedString("担当者のGitHubユーザー名", comment: ""), text: $assignee)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled(true)
+                    Toggle(NSLocalizedString("spotcodeに表示", comment: ""), isOn: $visible)
+                    Text(NSLocalizedString("ラベル（複数選択可）", comment: ""))
+                    if loading { ProgressView() }
+                    if labelError {
+                        Text(NSLocalizedString("ラベルを取得できませんでした。GitHubの接続・権限を確認して再試行してください。", comment: ""))
+                        Button(NSLocalizedString("再試行", comment: "")) { Task { await loadLabels() } }
+                    } else if !loading && labels.isEmpty {
+                        Text(NSLocalizedString("ラベルはありません", comment: "")).foregroundColor(.secondary)
+                    }
+                    ForEach(labels, id: \.self) { label in
+                        Toggle(label, isOn: Binding(get: { selectedLabels.contains(label) }, set: { selected in
+                            if selected { selectedLabels.insert(label) } else { selectedLabels.remove(label) }
+                        }))
+                    }
+                }
+                Section {
+                    Text(NSLocalizedString("選択した内容をGitHubへ引き継ぎます。GitHubで確認してIssueを作成してください。", comment: ""))
+                    Button(NSLocalizedString("GitHubでIssueを作成", comment: "")) { createIssue() }
+                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || owner != model.session?.user.id)
+                }
+            }
+            .navigationTitle(NSLocalizedString("GitHubでIssueを作成", comment: ""))
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("Close", comment: "")) { dismiss() } } }
+        }.navigationViewStyle(.stack).task { owner = model.session?.user.id; await loadLabels() }
+    }
+
+    private func loadLabels() async {
+        guard !loading, let owner, owner == model.session?.user.id else { return }
+        loading = true; labelError = false
+        defer { loading = false }
+        do {
+            let token = await model.hydrateSharedPrivateIssueToken()
+            guard !Task.isCancelled, owner == model.session?.user.id else { return }
+            let fetched = try await SupabaseService.shared.githubLabels(repository: repository.fullName, githubToken: token)
+            guard !Task.isCancelled, owner == model.session?.user.id else { return }
+            labels = Array(Set(fetched)).sorted()
+        } catch {
+            if !Task.isCancelled && owner == model.session?.user.id { labelError = true }
+        }
+    }
+
+    private func createIssue() {
+        guard owner == model.session?.user.id else { return }
+        let text = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        var components = URLComponents(string: "https://github.com/\(repository.fullName)/issues/new")!
+        components.queryItems = [URLQueryItem(name: "title", value: text),
+            URLQueryItem(name: "body", value: "**spotcode表示**: \(visible ? "する" : "しない")\n\n- [ ] " + text)]
+        if !assignee.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            components.queryItems?.append(URLQueryItem(name: "assignees", value: assignee.trimmingCharacters(in: .whitespacesAndNewlines)))
+        }
+        if !selectedLabels.isEmpty {
+            components.queryItems?.append(URLQueryItem(name: "labels", value: selectedLabels.sorted().joined(separator: ",")))
+        }
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        if let url = components.url { openURL(url) }
+    }
+}
+
 struct RepositoriesView: View {
     @Environment(\.appColorTheme) private var appColorTheme
     @EnvironmentObject private var model: AppModel
@@ -3411,6 +3494,13 @@ struct RepositoriesView: View {
     @State private var relatedPosts: [Post] = []
     @State private var loading = false
     @State private var loadGeneration = UUID()
+    @State private var search = ""
+    @State private var issueRepository: Repository?
+    private var filteredRepositories: [Repository] {
+        guard repositoryOwner == model.session?.user.id else { return [] }
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return repositories.filter { query.isEmpty || $0.fullName.localizedCaseInsensitiveContains(query) || ($0.description ?? "").localizedCaseInsensitiveContains(query) }
+    }
     var body: some View {
         let _ = appColorTheme
 
@@ -3422,18 +3512,26 @@ struct RepositoriesView: View {
                     Text(NSLocalizedString("自分と許可済みOrganizationのリポジトリ", comment: ""))
                         .spotcodeFont(15, weight: .regular, fallback: .subheadline).foregroundColor(SpotcodeTheme.muted)
                 }.frame(maxWidth: .infinity).padding(.vertical, 22)
+                TextField(NSLocalizedString("リポジトリを検索", comment: ""), text: $search)
+                    .textFieldStyle(.roundedBorder).padding(.horizontal, 10).padding(.bottom, 12)
+                if !search.isEmpty && filteredRepositories.isEmpty && !loading {
+                    Text(NSLocalizedString("一致するリポジトリがありません", comment: "")).foregroundColor(SpotcodeTheme.muted).padding()
+                }
                 if !repositoryNotice.isEmpty { Text(repositoryNotice).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted).padding(.horizontal) }
                 if loading && repositories.isEmpty { ProgressView(NSLocalizedString("リポジトリを読み込み中…", comment: "")).padding(.top, 50) }
             else if model.me?.githubHandle == nil { Spacer(); ContentUnavailableViewCompat(title: NSLocalizedString("GitHubをプロフィールに連携してください", comment: ""), icon: "link"); Spacer() }
             else {
                 LazyVStack(spacing: 12) {
-                    ForEach(repositoryOwner == model.session?.user.id ? repositories : []) { repo in
+                    ForEach(filteredRepositories) { repo in
                         repositoryCard(repo)
                     }
                 }.padding(.horizontal, 10).padding(.bottom, 20)
             }
             }.refreshable { await load() }
-        }.background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task(id: model.session?.user.id) { await load() }
+        }.sheet(item: $issueRepository) { repo in
+            RepositoryIssueComposer(repository: repo).environmentObject(model)
+        }.onChange(of: model.session?.user.id) { _ in issueRepository = nil }
+        .background(SpotcodeTheme.surface).foregroundColor(SpotcodeTheme.text).navigationBarHidden(true).task(id: model.session?.user.id) { await load() }
     }
 
     @ViewBuilder private func repositoryCard(_ repo: Repository) -> some View {
@@ -3467,6 +3565,9 @@ struct RepositoriesView: View {
                 if repo.stars > 0 { Label("\(repo.stars)", systemImage: "star") }
                 if let pushedAt = repo.pushedAt { Text(relativeTime(pushedAt)) }
             }.spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)
+            Button { issueRepository = repo } label: {
+                Label(NSLocalizedString("GitHubでIssueを作成", comment: ""), systemImage: "plus.circle")
+            }.buttonStyle(.bordered)
             Divider().overlay(SpotcodeTheme.border)
             if posts.isEmpty {
                 Text(NSLocalizedString("関連投稿はありません", comment: "")).spotcodeFont(12, weight: .regular, fallback: .caption).foregroundColor(SpotcodeTheme.muted)

@@ -12,3 +12,13 @@
 イベント日程の保存には、[052-event-days.sql](../../docs/migrations/052-event-days.sql)を本番DBへ適用する必要があります。掲載文言は日程機能を有効にしたリリース向けです。今回の作業ではSQLのローカル検証まで完了しており、本番適用とApp Store Connectへの文言登録は行っていません。
 
 接近通知は実機での移動による到着確認が未完了です。macOSではアプリ終了中・スリープ中の通知に対応していないため、その条件を変更点に明記しています。
+
+## 1.0.4（ビルド23）
+
+iOS・iPadOS・macOS共通のRepo検索、ラベル複数選択付きIssue作成、Spotcode表示設定を追加しました。
+
+- 日本語の更新説明: [ja/whats-new-1.0.4.txt](ja/whats-new-1.0.4.txt)
+- 英語の更新説明: [en/whats-new-1.0.4.txt](en/whats-new-1.0.4.txt)
+- 審査向け操作説明: [en/review-notes-1.0.4.txt](en/review-notes-1.0.4.txt)
+
+審査用アカウント情報は既存のApp Store Connect設定を使用します。上記ファイルには認証情報を含めていません。
