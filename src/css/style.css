@@ -4156,3 +4156,12 @@ body { font-size: 18px; }
 .task-templates__item h4 { margin: 0 0 8px; font-size: 13px; }
 .task-templates__item textarea { display: block; box-sizing: border-box; width: 100%; resize: vertical; padding: 8px; margin-bottom: 8px; background: var(--input-surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font: 12px/1.6 monospace; }
 .task-templates__item [role="status"] { display: block; margin-top: 6px; font-size: 12px; }
+
+.repos-search { display: grid; gap: .5rem; margin: 1rem; }
+.repos-search input { width: 100%; padding: .65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
+.repo-card[hidden] { display: none; }
+.repo-card__issue { margin: .75rem 0; }
+.repo-card__issue summary { cursor: pointer; padding: .5rem 0; }
+.repo-card__issue fieldset { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: .75rem; }
+.repo-card__issue .repo-card__label { display: flex; align-items: center; gap: .5rem; overflow-wrap: anywhere; }
+.repo-card__issue input[type="checkbox"] { width: auto; }

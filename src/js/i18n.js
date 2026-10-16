@@ -12,6 +12,16 @@ const DEFAULT_LANG = 'en';
 
 const DICT = {
   ja: {
+    'repoIssue.search': 'リポジトリを検索',
+    'repoIssue.noMatches': '一致するリポジトリがありません',
+    'repoIssue.options': '追加設定（ラベル・表示／非表示）',
+    'repoIssue.labels': 'ラベル（複数選択可）',
+    'repoIssue.loadLabels': 'ラベルを取得・再試行',
+    'repoIssue.loading': 'ラベルを取得中…',
+    'repoIssue.noLabels': 'ラベルはありません',
+    'repoIssue.error': 'ラベルを取得できませんでした。GitHubの接続・権限を確認して再試行してください。',
+    'repoIssue.confirm': '選択した内容をGitHubへ引き継ぎます。GitHubで確認してIssueを作成してください。',
+
     "templates.title": "Issueテンプレートをコピー",
     "templates.hint": "各テンプレートをコピーしてIssue本文へ貼り付けてください。YYYY・MM・DD・HH・MMは実際の期限に置き換え、担当者はGitHubのAssigneesで指定してください。GitHub常設用は指定のファイルに保存します。",
     "templates.todo": "やること",
@@ -456,6 +466,16 @@ const DICT = {
   },
 
   en: {
+    'repoIssue.search': 'Search repositories',
+    'repoIssue.noMatches': 'No matching repositories',
+    'repoIssue.options': 'Options (labels and visibility)',
+    'repoIssue.labels': 'Labels (select multiple)',
+    'repoIssue.loadLabels': 'Load labels / retry',
+    'repoIssue.loading': 'Loading labels…',
+    'repoIssue.noLabels': 'No labels available',
+    'repoIssue.error': 'Could not load labels. Check your GitHub connection and permissions, then retry.',
+    'repoIssue.confirm': 'Your selections will be passed to GitHub. Review and create the Issue there.',
+
     "templates.title": "Copy issue templates",
     "templates.hint": "Copy a template into your issue body. Replace date and time placeholders with the actual deadline and set assignees on GitHub. Save the repository template at the indicated file path.",
     "templates.todo": "Tasks",

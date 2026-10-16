@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { githubLabels, issueCreationUrl } from '../src/js/github-issue-options.js';
+const calls = [];
+const labels = await githubLabels('owner/repo', 'test-token', async (url, options) => {
+  calls.push({ url, options });
+  return { ok: true, json: async () => calls.length === 1 ? Array.from({ length: 100 }, (_, i) => ({ name: 'label-' + i })) : [{ name: '日本語 & help' }] };
+});
+assert.equal(labels.length, 101);
+assert.match(calls[1].url, /page=2$/);
+assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
+await assert.rejects(githubLabels('../bad', null));
+await assert.rejects(githubLabels('owner/repo', null, async () => ({ ok: false })));
+await assert.rejects(githubLabels('owner/repo', null, async () => ({ ok: true, json: async () => ({}) })));
+const url = new URL(issueCreationUrl('owner/repo', { title: ' 日本語 & task ', assignee: 'octocat', visible: false, labels: ['bug', '日本語 & help', 'bug'] }));
+assert.equal(url.searchParams.get('labels'), 'bug,日本語 & help');
+assert.equal(url.searchParams.get('title'), '日本語 & task');
+assert.equal(url.searchParams.get('assignees'), 'octocat');
+assert.match(url.searchParams.get('body'), /spotcode表示\*\*: しない/);
+assert.equal(new URL(issueCreationUrl('owner/repo', { title: 'Task' })).searchParams.has('labels'), false);
+console.log('github issue options: passed');

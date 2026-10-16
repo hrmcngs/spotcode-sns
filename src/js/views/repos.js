@@ -1,6 +1,7 @@
 import { syncGithubOrganizations } from '../github-organizations.js';
 import { publicRepositories } from '../task-repositories.js';
 import { githubRepositories } from '../github-repositories.js';
+import { githubLabels, issueCreationUrl } from '../github-issue-options.js';
 import { getGithubToken } from '../github-oauth.js';
 // /repos — GitHub repositories owned by the signed-in user,
 // merged into one timeline-style list sorted by most-recently-pushed.
@@ -158,6 +159,21 @@ function renderRepoCard(repo) {
         '</a>' +
         composeBtn +
       '</header>' +
+      `<details class="repo-card__issue" data-issue-repo="${escape(repo.fullName)}">
+        <summary>${t('art.create')}</summary>
+        <form class="auth-form" data-repo-issue>
+          <label>${t('art.task')}<input name="title" required maxlength="256"></label>
+          <details><summary>${t('repoIssue.options')}</summary>
+            <label>${t('art.assignee')}<input name="assignee" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,38}" placeholder="octocat"></label>
+            <label><input type="checkbox" name="visible" checked> ${t('templates.visible')}</label>
+            <fieldset><legend>${t('repoIssue.labels')}</legend><div data-repo-labels aria-live="polite"></div>
+              <button type="button" class="btn btn--ghost" data-label-retry>${t('repoIssue.loadLabels')}</button>
+            </fieldset>
+          </details>
+          <p>${t('repoIssue.confirm')}</p>
+          <button type="submit" class="btn btn--primary">${t('art.create')}</button>
+        </form>
+      </details>` +
       desc +
       '<footer class="repo-card__meta">' + lang + stars + pushed + '</footer>' +
       '<section class="repo-card__posts" data-repo-posts="' + escape(repo.fullName) + '">' +
@@ -186,6 +202,8 @@ export function renderRepos() {
       '<h2 class="repos-head__title">' + t('repos.title') + '</h2>' +
       '<p class="repos-head__sub">' + t('repos.subtitle') + '</p>' +
     '</div>' +
+    '<label class="repos-search">' + t('repoIssue.search') + '<input type="search" data-repos-search placeholder="' + t('repoIssue.search') + '"></label>' +
+    '<p data-repos-search-empty hidden role="status">' + t('repoIssue.noMatches') + '</p>' +
     '<div id="repos-list" class="repos-list">' +
       '<p class="stub__sub">' + t('repos.loading') + '</p>' +
     '</div>'
@@ -236,6 +254,7 @@ function schedulePaint(list, workingMap) {
     if (!l || !l.isConnected) return;
     const sorted = Array.from(m.values()).sort((a, b) => b.pushedAt - a.pushedAt);
     l.innerHTML = sorted.map(renderRepoCard).join('');
+    filterRepos(l);
   });
 }
 
@@ -244,6 +263,7 @@ function schedulePaint(list, workingMap) {
 // the streaming-fetch loop go through schedulePaint.
 function paintListNow(list, working) {
   list.innerHTML = working.map(renderRepoCard).join('');
+  filterRepos(list);
 }
 
 // Refresh just the posts sections of every visible repo card. Called
@@ -254,6 +274,61 @@ function refreshAllPostsSections(list) {
   list.querySelectorAll('[data-repo-posts]').forEach((slot) => {
     const fullName = slot.getAttribute('data-repo-posts');
     slot.innerHTML = renderPostsSection(fullName);
+  });
+}
+
+function filterRepos(list) {
+  const query = (document.querySelector('[data-repos-search]')?.value || '').trim().toLowerCase();
+  const cards = [...list.querySelectorAll('[data-repo]')];
+  for (const card of cards) card.hidden = !card.dataset.repo.toLowerCase().includes(query) &&
+    !(card.querySelector('.repo-card__desc')?.textContent || '').toLowerCase().includes(query);
+  const empty = document.querySelector('[data-repos-search-empty]');
+  if (empty) empty.hidden = !cards.length || cards.some(card => !card.hidden);
+}
+
+function bindRepoIssues(list, owner) {
+  document.querySelector('[data-repos-search]')?.addEventListener('input', () => filterRepos(list));
+  const loadLabels = async details => {
+    if (details.dataset.loading || details.dataset.loaded) return;
+    details.dataset.loading = '1';
+    const slot = details.querySelector('[data-repo-labels]');
+    const retry = details.querySelector('[data-label-retry]');
+    retry.disabled = true;
+    slot.textContent = t('repoIssue.loading');
+    try {
+      const token = await getGithubToken();
+      if (currentUser()?.id !== owner || !details.isConnected) return;
+      const labels = await githubLabels(details.dataset.issueRepo, token);
+      if (currentUser()?.id !== owner || !details.isConnected) return;
+      slot.innerHTML = labels.length ? labels.map(label =>
+        `<label class="repo-card__label"><input type="checkbox" name="labels" value="${escape(label.name)}">${escape(label.name)}</label>`
+      ).join('') : escape(t('repoIssue.noLabels'));
+      details.dataset.loaded = '1';
+      retry.hidden = true;
+    } catch {
+      if (currentUser()?.id === owner && details.isConnected) slot.textContent = t('repoIssue.error');
+    } finally {
+      delete details.dataset.loading;
+      retry.disabled = false;
+    }
+  };
+  list.addEventListener('toggle', event => {
+    if (event.target.matches('[data-issue-repo]') && event.target.open) loadLabels(event.target);
+  }, true);
+  list.addEventListener('click', event => {
+    if (event.target.closest('[data-label-retry]')) loadLabels(event.target.closest('[data-issue-repo]'));
+  });
+  list.addEventListener('submit', event => {
+    if (!event.target.matches('[data-repo-issue]')) return;
+    event.preventDefault();
+    if (currentUser()?.id !== owner) return;
+    const form = event.target;
+    const title = form.elements.title.value.trim();
+    if (!title) { form.elements.title.focus(); return; }
+    const values = new FormData(form);
+    window.open(issueCreationUrl(form.closest('[data-issue-repo]').dataset.issueRepo, {
+      title, assignee: values.get('assignee'), visible: values.has('visible'), labels: values.getAll('labels'),
+    }), '_blank', 'noopener,noreferrer');
   });
 }
 
@@ -268,6 +343,8 @@ export async function hydrateRepos() {
     list.innerHTML = '<div class="stub"><p class="stub__sub">' + t('repos.signin') + '</p></div>';
     return;
   }
+
+  bindRepoIssues(list, me.id);
 
   // Authenticated repository results can include private organization repos.
   // Keep them out of the public per-handle localStorage cache.

@@ -61,6 +61,7 @@ const SHELL = [
   './js/skeleton.js',
   './js/github-activity.js',
   './js/github-oauth.js',
+  './js/github-issue-options.js',
   './js/github-tasks.js',
   './js/connpass.js',
   './js/i18n.js',
