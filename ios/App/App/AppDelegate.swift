@@ -95,7 +95,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
 
     func makeWindow(for scene: UIWindowScene) -> UIWindow {
         let model = AppModel()
+        #if targetEnvironment(macCatalyst)
         let root = RootView().environmentObject(model)
+        #else
+        let root = LiveWebAppView().environmentObject(model)
+        #endif
         let window = UIWindow(windowScene: scene)
         #if DEBUG && targetEnvironment(macCatalyst)
         // Verify both appearances without changing the user's macOS settings.

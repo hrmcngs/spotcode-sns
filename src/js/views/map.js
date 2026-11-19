@@ -7,6 +7,7 @@
 
 import { renderPostPhotos } from '../post.js';
 import { loadMaps } from '../gmap.js';
+import { attachWalkingRoutes } from '../walking-route-control.js';
 import { postsWithSpots, cachedPosts, canDisplayCachedPost, canonicalCity } from '../data.js';
 import { t }        from '../i18n.js';
 import { icon }     from '../icons.js';
@@ -21,6 +22,7 @@ import { withTimeout } from '../net-utils.js';
 let renderVersion = 0;
 let mapInst = null;
 let markerLayer = null;
+let disposeWalkingRoutes = null;
 
 const TOKYO = { lat: 35.681236, lng: 139.767125 };
 const MAX_VISIBLE_MARKERS = 80;
@@ -41,6 +43,8 @@ function escape(s) {
 
 export function renderMap(city) {
   renderVersion++;
+  disposeWalkingRoutes?.();
+  disposeWalkingRoutes = null;
   const title = city ? escape(city) : t('map.title');
   return (
     // Same For you / Following / Spots tab bar as Home so the user
@@ -53,6 +57,17 @@ export function renderMap(city) {
         '<p class="map-head__sub" id="map-status">' + t('map.loading') + '</p>' +
       '</div>' +
     '</div>' +
+    '<section class="walking-route" id="walking-route" aria-label="' + t("徒歩ルート") + '">' +
+      '<strong>' + t("徒歩・距離優先") + '</strong>' +
+      '<div class="walking-route__actions">' +
+        '<button type="button" class="btn" data-walk-start aria-pressed="false">' + t("出発地を選択") + '</button>' +
+        '<button type="button" class="btn" data-walk-end aria-pressed="false">' + t("目的地を選択") + '</button>' +
+        '<button type="button" class="btn" data-walk-retry disabled>' + t("再探索") + '</button>' +
+        '<button type="button" class="btn" data-walk-clear>' + t("クリア") + '</button>' +
+      '</div>' +
+      '<p data-walk-status role="status">' + t("出発地と目的地を地図で選択してください。") + '</p>' +
+      '<small>' + t("試験版・直線距離5km以内。OSMの歩行可能な道路を探索します。データの欠落や現地の通行状況は反映できない場合があります。危険度による回避は未対応です。") + '</small>' +
+    '</section>' +
     '<div id="map-canvas" class="map-canvas"></div>'
   );
 }
@@ -168,7 +183,9 @@ export async function hydrateMap(city, focus = null) {
                 : spotted[0] ? [spotted[0].spot.lat, spotted[0].spot.lng]
                 : [TOKYO.lat, TOKYO.lng];
 
+  disposeWalkingRoutes?.();
   mapInst = L.map(canvas, { zoomControl: true }).setView(center, hasFocus ? 17 : (here ? 15 : 13));
+  disposeWalkingRoutes = attachWalkingRoutes(L, mapInst, document.getElementById('walking-route'));
 
   // ---- Base layers ----
   // Default: OSM standard map. Two aerial options behind a layer

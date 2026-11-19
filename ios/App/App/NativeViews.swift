@@ -2595,6 +2595,7 @@ private struct EditPostView: View {
     @State private var eventDays: [PostEventDay]
     @State private var postKind: String?
     @State private var visibility: String
+    @State private var pinColor: String
     @State private var saving = false
     @State private var editorFocused = false
 
@@ -2608,6 +2609,7 @@ private struct EditPostView: View {
         _eventDays = State(initialValue: post.eventDays ?? [])
         _postKind = State(initialValue: post.kind)
         _visibility = State(initialValue: post.visibility ?? "public")
+        _pinColor = State(initialValue: PinColorOption.normalized(post.spot?.pinColor))
     }
 
     var body: some View {
@@ -2632,6 +2634,7 @@ private struct EditPostView: View {
                 HStack(spacing: 10) {
                     PostKindPicker(kind: $postKind)
                     PostAudiencePicker(visibility: $visibility)
+                    if post.spot != nil { PinColorPicker(pinColor: $pinColor) }
                     Spacer()
                 }
                 HStack {
@@ -2659,7 +2662,7 @@ private struct EditPostView: View {
                                 post, body: text, githubLink: link.isEmpty ? nil : link,
                                 repoFullName: repository.isEmpty ? nil : repository,
                                 eventURL: event.isEmpty ? nil : event, eventDays: eventDays,
-                                kind: postKind, visibility: visibility
+                                kind: postKind, visibility: visibility, spot: spotWithPinColor(post.spot, pinColor)
                             ) != nil {
                                 isPresented = false
                             }

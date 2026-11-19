@@ -1,4 +1,8 @@
-Repository workflow update for iOS, iPadOS, and macOS:
+iPhone and iPad now display the live Spotcode website in WKWebView for everyday screens. The fixed HTTPS origin is https://hrmcngs.github.io/spotcode-sns/. This does not download or replace native executable bundles. Changes to native device capabilities still require an App Store update.
+
+Open Menu > Device features to access the existing native interface, including device-specific features and settings. Website and native authentication use separate session stores; sign in with the existing review account in the interface being reviewed. On connection failure, Retry and Device features remain available. Refresh asks for confirmation if inputs or attachments are in progress. Mac Catalyst continues to use the native interface.
+
+Repository workflow update:
 1. Sign in using the review account already provided in App Store Connect.
 2. Open Repos. Search by repository name or description.
 3. Choose Create Issue on GitHub on a repository card.

@@ -920,3 +920,17 @@
 "担当者のGitHubユーザー名" = "Assignee GitHub username";
 
 "spotcodeに表示" = "Show on spotcode";
+
+"接続できませんでした" = "Unable to connect";
+
+"端末の機能を開く" = "Device features";
+
+"更新する" = "Refresh";
+
+"Safariで開く" = "Open in Safari";
+
+"メニュー" = "Menu";
+
+"画面を更新しますか？" = "Refresh this screen?";
+
+"編集中の内容を保存してから更新してください。" = "Save your changes before refreshing.";

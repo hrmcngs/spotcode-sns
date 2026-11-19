@@ -1,3 +1,4 @@
 Search repositories by name or description.
 Open GitHub Issue creation from a repository with a task title, assignee, multiple labels, and Spotcode visibility preferences.
 Expand Options to change labels and visibility. Review and create the Issue on GitHub.
+On iPhone and iPad, everyday screens now use the live Spotcode website. Website improvements become available on a subsequent launch or refresh without a new App Store download. Device features remain available from the app menu.

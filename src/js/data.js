@@ -1130,6 +1130,7 @@ export async function updatePost(postId, fields) {
     hasVisibility = true;
   }
   if (typeof fields.body === 'string') patch.body = fields.body;
+  if (Object.prototype.hasOwnProperty.call(fields, 'spot')) patch.spot = fields.spot;
   // `kind` accepts 'idea' or 'bug' to tag, or null to untag.
   if (['idea', 'bug'].includes(fields.kind) || fields.kind === null) {
     if (hasKind) patch.kind = fields.kind;

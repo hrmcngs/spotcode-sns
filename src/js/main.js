@@ -44,11 +44,13 @@ import { lockBodyScroll, unlockBodyScroll, forceUnlockBodyScroll } from './body-
 import { fetchContributions, cachedContributions } from './github-activity.js';
 import { recommendedProfiles } from './profiles.js';
 import { saveDraft, loadDraft, clearDraft, debounce } from './drafts.js';
+import { installPostEditState } from './post-edit-state.js';
 import { quickNavLinks } from './quick-nav.js';
 import { initMentionAutocomplete } from './mention-autocomplete.js';
 import { parseConnpassUrl } from './connpass.js';
 
 const app  = document.getElementById('app');
+const postEditState = installPostEditState(app, () => currentUser()?.id || null);
 const rail = document.getElementById('rail');
 
 function escape(s) {
@@ -551,6 +553,10 @@ let pendingPhotos = [];
 // pendingPhotos — lives in memory while composing, included on
 // addPost, cleared on submit / discard.
 let pendingPoll = null;
+// The iPhone shell consults this before a user-requested refresh. Attachments
+// can remain in memory while another route is visible, so DOM checks alone
+// would miss them.
+window.__spotcodeHasUnsavedAttachments = () => pendingPhotos.length > 0 || !!pendingPoll;
 // Post kind toggles. Mirror the .compose-kind-toggle button states and
 // rides on addPost / updatePost.
 let pendingKind = null; // null | 'idea' | 'bug'
@@ -584,6 +590,7 @@ headerSizeObserver.observe(document.querySelector('.topbar'));
 let observedTimelineToolbar = null;
 
 function dispatch(path) {
+  postEditState.capture();
   // If a modal closed without unlocking (uncaught error path, navigation
   // mid-animation, …) the body would still be position:fixed and the
   // next page would render shifted. Force-clear once on every nav.
@@ -1641,6 +1648,7 @@ document.addEventListener('click', (e) => {
     e.preventDefault();
     const body = cancelBtn.closest('.post__body');
     if (!body) return;
+    postEditState.forget(cancelBtn.closest('[data-post-id]').dataset.postId);
     if (body.dataset.originalHtml != null) {
       body.innerHTML = body.dataset.originalHtml;
       delete body.dataset.originalHtml;
@@ -1692,6 +1700,7 @@ document.addEventListener('click', (e) => {
       return updatePost(postId, patch);
     })
       .then((updated) => {
+        postEditState.forget(postId);
         post.setAttribute('data-repo-full-name', newRepo);
         post.setAttribute('data-visibility', updated.visibility);
         if (updated.spot?.pinColor) post.setAttribute('data-spot-pin-color', updated.spot.pinColor);
@@ -2382,7 +2391,7 @@ document.addEventListener('keydown', (e) => {
 // Register only on http(s); file:// (Electron) doesn't support SW.
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then((reg) => {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
       // SPA navigation is client-side (pushState + dispatch), so the
       // browser never re-fetches HTML and never notices when a new
       // sw.js is deployed. Poll for an update on route changes so a
@@ -2392,10 +2401,14 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       // per-page lag on slow connections.
       const SW_CHECK_MS = 10 * 60 * 1000;
       let lastSwCheck = Date.now(); // register() itself just checked
-      onRoute(() => {
+      const checkForUpdate = () => {
         if (Date.now() - lastSwCheck < SW_CHECK_MS) return;
         lastSwCheck = Date.now();
         reg.update().catch(() => {});
+      };
+      onRoute(checkForUpdate);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkForUpdate();
       });
       // Do not force-reload an active mobile session when a deploy lands.
       // Existing modules remain valid; the new worker will serve the fresh

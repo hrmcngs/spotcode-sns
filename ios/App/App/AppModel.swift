@@ -865,7 +865,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func editPost(_ post: Post, body: String, githubLink: String?, repoFullName: String?, eventURL: String?, eventDays: [PostEventDay] = [], kind: String?, visibility: String) async -> Post? {
+    func editPost(_ post: Post, body: String, githubLink: String?, repoFullName: String?, eventURL: String?, eventDays: [PostEventDay] = [], kind: String?, visibility: String, spot: Spot? = nil) async -> Post? {
         let mayModerate = UserDefaults.standard.bool(forKey: "spotcode.native.dev-mode") && (me?.isAdmin == true || me?.isOperator == true)
         guard let session, post.authorID == displayProfile?.id || mayModerate else { return nil }
         do {
@@ -875,7 +875,7 @@ final class AppModel: ObservableObject {
             guard self.session?.user.id == session.user.id else { return nil }
             let updated = try await SupabaseService.shared.updatePost(
                 id: post.id, body: body, githubLink: githubLink, repoFullName: repoFullName, eventURL: eventURL, eventDays: eventDays,
-                kind: kind, visibility: visibility, token: session.accessToken
+                kind: kind, visibility: visibility, spot: spot, token: session.accessToken
             )
             if let index = posts.firstIndex(where: { $0.id == post.id }) { posts[index] = updated }
             lastUpdatedPost = updated

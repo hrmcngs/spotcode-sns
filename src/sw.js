@@ -3,7 +3,8 @@
 //
 // Strategy:
 //   - precache the app shell on install
-//   - cache-first for same-origin GET requests
+//   - network-first for HTML / JS / CSS so web updates reach installed apps
+//   - cache-first for other same-origin assets
 //   - never intercept POSTs or cross-origin (Maps tiles, GitHub API, ...)
 //   - CACHE is stamped to the deploy commit by .github/workflows/pages.yml;
 //     never edit the placeholder in PRs — it would just cause merge conflicts.
@@ -47,6 +48,8 @@ const SHELL = [
   './js/icons.js',
   './js/badges.js',
   './js/gmap.js',
+  './js/walking-route.js',
+  './js/walking-route-control.js',
   './js/interactions.js',
   './js/theme.js',
   './js/dev-mode.js',
@@ -54,6 +57,7 @@ const SHELL = [
   './js/ios-zoom.js',
   './js/body-scroll-lock.js',
   './js/drafts.js',
+  './js/post-edit-state.js',
   './js/quick-nav.js',
   './js/mention-autocomplete.js',
   './js/markdown.js',
@@ -131,26 +135,30 @@ self.addEventListener('fetch', (event) => {
   // Returning a stale cached entry for /spot/<city> would otherwise pin
   // an old HTML snapshot that references files that no longer exist.
   const isAppRoute = req.mode === 'navigate' && req.destination === 'document';
+  const revalidate = isAppRoute || /\.(?:js|css|html|json)$/.test(url.pathname);
 
   event.respondWith(
     caches.match(req).then((cached) => {
-      if (cached && !isAppRoute) return cached;
-      return fetch(req).then((res) => {
+      if (cached && !revalidate) return cached;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      return fetch(req, { cache: revalidate ? 'no-cache' : 'default', signal: controller.signal }).then((res) => {
         // Opportunistically cache successful same-origin responses so
         // newly-touched paths become offline-available too.
-        if (res && res.status === 200 && res.type === 'basic' && !isAppRoute) {
+        if (res && res.status === 200 && res.type === 'basic') {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         }
         return res;
       }).catch(() => {
+        if (cached) return cached;
         // Only fall back to the cached index.html for actual document
         // navigations. Returning HTML when the browser asked for a JS
         // module or CSS file silently breaks the whole page (parser
         // chokes on the HTML, module never loads, no JS runs).
         if (isAppRoute) return caches.match('./index.html');
         return new Response('', { status: 504, statusText: 'offline' });
-      });
+      }).finally(() => clearTimeout(timer));
     })
   );
 });

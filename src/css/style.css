@@ -4165,3 +4165,9 @@ body { font-size: 18px; }
 .repo-card__issue fieldset { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: .75rem; }
 .repo-card__issue .repo-card__label { display: flex; align-items: center; gap: .5rem; overflow-wrap: anywhere; }
 .repo-card__issue input[type="checkbox"] { width: auto; }
+
+.walking-route { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.walking-route__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.walking-route button[aria-pressed="true"] { outline: 2px solid var(--accent); }
+.walking-route p { margin: 8px 0; font-size: .85rem; }
+.walking-route small { color: var(--muted); }

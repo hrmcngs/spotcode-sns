@@ -53,6 +53,8 @@ npm run cap:open:ios
 ## macOS アプリ
 
 Mac App Store用のネイティブ版は [提出手順](docs/macos-app-store.md) を参照してください。
+
+iPhone/iPad版の通常画面は公開中のWeb版を読み込みます。初回のアプリ更新後は、Web側の改善を次回起動・画面更新で反映できます。従来画面はメニューの「端末の機能を開く」から利用します。ログインの移行・配信・オフライン時の動作は [iOSセットアップ](docs/ios-setup.md) を参照してください。
 `bash scripts/build-macos.sh` でMac CatalystのArchiveを作成できます。
 提出用PKG・Archive・スクリーンショットは、プロジェクト直下の [`macos/`](macos/) にまとめています。
 
@@ -113,3 +115,15 @@ devアカウントから手動で作成した通常の投稿は削除しませ�
 利用前に、GitHub リポジトリの **Settings → Secrets and variables → Actions** で
 Repository secret `DEV_ACCOUNT_PASSWORD` にdevテストアカウントのパスワードを登録してください。
 登録後は **Actions → Supabase keep alive → Run workflow** で手動実行し、初回の動作を確認できます。
+
+## 徒歩の距離優先ルート（試験版）
+
+Spotsの地図で「出発地を選択」「目的地を選択」を押し、それぞれ地図上をクリックするとルートを描画します。選択し直し・再探索・クリアに対応しています。
+
+- Overpass APIからOSMの道路データを取得し、Dijkstra法で道路区間の距離合計を最小化します。APIキーは不要です。
+- 出発地・目的地の直線距離は5km以内。周囲に余白を含む道路網を取得し、その範囲内で最短経路を探します。範囲外を経由するルートとの比較は行いません。
+- 選択地点は150m以内の最寄り道路区間に接続します。道路までの区間は経路・距離に含まず、画面に別途表示します。
+- 歩行禁止・私有地・歩行者向け一方通行などの基本タグを考慮します。時間条件付き道路や許可不明の障害物は除外します。国ごとの全通行規則、現地状況、危険度回避、音声案内、移動中の再探索には未対応です。
+- 公開Overpass APIの稼働状況・利用制限に依存します。詳細は[Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API)を参照してください。継続的な大規模利用には専用の道路データ配信・経路サーバーが必要です。
+
+検証: `node scripts/test-walking-route.mjs`

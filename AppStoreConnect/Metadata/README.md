@@ -1,8 +1,10 @@
 # App Store Connect掲載文言
 
-## 1.0.5（ビルド24）
+## 1.0.5（ビルド26）
 
 iOS・iPadOS・macOS共通のRepo検索、ラベル複数選択付きIssue作成、Spotcode表示設定を追加しました。
+
+iPhone/iPadの通常画面をWeb配信へ切り替えました。従来画面はメニューから利用できます。Webの公開後、次回起動・画面更新で変更が反映されます。この構成への移行には一度アプリ更新が必要です。ネイティブ機能の変更は引き続きApp Storeで配布します。
 
 - 日本語の更新説明: [ja/whats-new-1.0.5.txt](ja/whats-new-1.0.5.txt)
 - 英語の更新説明: [en/whats-new-1.0.5.txt](en/whats-new-1.0.5.txt)

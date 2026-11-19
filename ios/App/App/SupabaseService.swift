@@ -367,10 +367,10 @@ actor SupabaseService {
         }
     }
 
-    func updatePost(id: UUID, body text: String, githubLink: String?, repoFullName: String?, eventURL: String?, eventDays: [PostEventDay] = [], kind: String?, visibility: String, token: String) async throws -> Post {
+    func updatePost(id: UUID, body text: String, githubLink: String?, repoFullName: String?, eventURL: String?, eventDays: [PostEventDay] = [], kind: String?, visibility: String, spot: Spot? = nil, token: String) async throws -> Post {
         try PostEventDay.validate(eventDays)
         if !eventDays.isEmpty && !supportedPostMetadata.contains("event_days") { throw eventDaysSchemaError }
-        let original: [String: Any] = [
+        var original: [String: Any] = [
             "event_days": try JSONSerialization.jsonObject(with: JSONEncoder().encode(eventDays)),
             "body": text,
             "github_link": (githubLink as Any?) ?? NSNull(),
@@ -379,6 +379,7 @@ actor SupabaseService {
             "kind": (kind as Any?) ?? NSNull(),
             "visibility": visibility
         ]
+        if let spot { original["spot"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(spot)) }
         while true {
             var payload = original
             for column in ["repo_full_name", "kind", "visibility", "github_org_id", "event_url", "event_days", "poll"] where !supportedPostMetadata.contains(column) {
